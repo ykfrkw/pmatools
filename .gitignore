@@ -1,0 +1,15 @@
+# RStudio project files (personal IDE config — not code)
+.Rproj.user/
+pmatools.Rproj
+*.Rproj
+
+# R session artifacts
+.Rhistory
+.RData
+.Ruserdata
+
+# Generated output (reproduced by sample.R)
+outputs/
+
+# R binary data objects (regenerated via data-raw/cbti_depression.R)
+data/*.rda

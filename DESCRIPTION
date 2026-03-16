@@ -1,0 +1,29 @@
+Package: pmatools
+Title: GRADE Certainty Assessment from Meta-Analysis Objects
+Version: 0.1.0
+Authors@R: person("Yuki", "Furukawa", role = c("aut", "cre"))
+Description: Assess certainty of evidence (GRADE) from meta-analysis objects
+    produced by the {meta} package, following the BMJ 2025 Core GRADE series
+    (Guyatt et al.). Automatically evaluates inconsistency (I², tau², Q-test),
+    imprecision (CI width, OIS), and publication bias (Egger's test / registry
+    check). Risk of bias (weight-based domination flowchart) and indirectness
+    are provided as per-study or overall inputs. Outputs a pmatools object, a
+    multi-outcome Summary of Findings table, and a full Appendix GRADE report
+    in docx / html / pdf / md formats.
+License: CC BY 4.0 + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.1
+Depends:
+    R (>= 4.1.0)
+Imports:
+    meta (>= 6.0),
+    flextable (>= 0.9.0),
+    officer (>= 0.6.0),
+    tibble,
+    dplyr,
+    rlang
+Suggests:
+    rmarkdown,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
