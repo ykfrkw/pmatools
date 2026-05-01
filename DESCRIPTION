@@ -1,19 +1,24 @@
 Package: pmatools
-Title: GRADE Certainty Assessment from Meta-Analysis Objects
-Version: 0.1.0
-Authors@R: person("Yuki", "Furukawa", role = c("aut", "cre"))
-Description: Assess certainty of evidence (GRADE) from meta-analysis objects
-    produced by the {meta} package, following the BMJ 2025 Core GRADE series
-    (Guyatt et al.). Automatically evaluates inconsistency (I², tau², Q-test),
-    imprecision (CI width, OIS), and publication bias (Egger's test / registry
-    check). Risk of bias (weight-based domination flowchart) and indirectness
-    are provided as per-study or overall inputs. Outputs a pmatools object, a
-    multi-outcome Summary of Findings table, and a full Appendix GRADE report
-    in docx / html / pdf / md formats.
+Title: Pairwise Meta-Analysis with GRADE Certainty Assessment
+Version: 0.2.0
+Authors@R: person("Yuki", "Furukawa", email = "furukawa.yuki@gmail.com",
+                  role = c("aut", "cre"))
+Description: End-to-end pairwise meta-analysis pipeline with GRADE certainty
+    assessment, Summary of Findings table, and reproducible export bundle.
+    Wraps the {meta} package for data ingestion (long/wide), random- or
+    common-effect pooling, contour-enhanced funnel plots with Egger's test,
+    and auto-laid-out forest plots. GRADE follows the BMJ 2025 Core GRADE
+    series (Guyatt et al.): Risk of Bias (BMJ Fig 2 weight-based dominance
+    plus inflation threshold), Inconsistency (BMJ Fig 2 flowchart with MID
+    threshold for clinical decision), Indirectness (manual), Imprecision
+    (CI vs null + Optimal Information Size from MID), and Publication Bias
+    (Egger / unpublished-studies flowchart). Outputs SoF flextable, multi-
+    outcome GRADE table, and Appendix report (docx/html/pdf/md), and
+    bundles everything plus a reproducible analysis.R into a ZIP archive.
 License: CC BY 4.0 + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.1
+RoxygenNote: 7.3.3
 Depends:
     R (>= 4.1.0)
 Imports:
@@ -22,8 +27,14 @@ Imports:
     officer (>= 0.6.0),
     tibble,
     dplyr,
-    rlang
+    rlang,
+    glue,
+    zip
 Suggests:
     rmarkdown,
-    testthat (>= 3.0.0)
+    testthat (>= 3.0.0),
+    readxl,
+    DT,
+    here
 Config/testthat/edition: 3
+LazyData: true

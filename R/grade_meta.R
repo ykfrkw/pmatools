@@ -4,6 +4,10 @@
 
 #' Assess GRADE certainty of evidence from a meta-analysis object
 #'
+#' @description
+#' Run the BMJ 2025 Core GRADE assessment on a meta-analysis object and
+#' return per-domain judgments and final certainty.
+#'
 #' @param meta_obj A meta-analysis object from the \{meta\} package
 #'   (\code{metabin}, \code{metacont}, \code{metagen}, etc.).
 #' @param study_design Starting certainty. \code{"RCT"} (default, starts at High)
@@ -21,6 +25,12 @@
 #' @param rob_dominant_threshold Proportion of total random-effects weight attributable
 #'   to high-RoB studies above which evidence is considered "dominated."
 #'   Default 0.60. Only used when \code{rob} is a vector or column name.
+#' @param rob_inflation_threshold (v0.2) Minimum *relative* inflation
+#'   \eqn{(|TE_{all}| - |TE_{low}|) / |TE_{low}|} required to rate down for
+#'   risk of bias when the evidence is dominated. Default \code{0.10}
+#'   (10 percent). Set to \code{0} to restore v0.1.0 behaviour (any direction-
+#'   consistent change rates down). Only used when \code{rob} is a vector
+#'   or column name.
 #' @param small_values Are small outcome values desirable?
 #'   \code{"desirable"} if small values are good (eg, mortality, symptom severity) or
 #'   \code{"undesirable"} if small values are bad (eg, response rate, remission OR > 1).
@@ -42,6 +52,24 @@
 #' @param inconsistency_subgroup_explained Required when
 #'   \code{inconsistency_threshold_side = "opposite_sides"}.
 #'   \code{"yes"} / \code{"no"}: is the inconsistency explained by a credible subgroup?
+#' @param mid (v0.2) Numeric minimally important difference. Used as the
+#'   clinical decision threshold in Inconsistency Step 2 (3-zone
+#'   classification of point estimates around \eqn{\pm}MID), and also
+#'   feeds the OIS calculation in Imprecision when explicit OIS values
+#'   are not supplied. The same MID is used for both domains.
+#' @param mid_scale (v0.2) How to interpret \code{mid}. One of:
+#'   \itemize{
+#'     \item \code{"auto"} (default): infer from \code{meta_obj$sm}
+#'       (OR/RR/HR/RoM \eqn{\to} ratio scale; SMD/MD \eqn{\to} TE scale;
+#'       ARD \eqn{\to} ARD scale).
+#'     \item \code{"te_scale"}: \code{mid} is already on the same scale as
+#'       \code{meta_obj$TE} (log scale for ratios, raw for MD/SMD).
+#'     \item \code{"ratio"}: \code{mid} is supplied as a ratio (e.g.,
+#'       \code{1.25} for a 25 percent relative effect); internally
+#'       converted to \code{log(mid)}.
+#'     \item \code{"ard"}: \code{mid} is an absolute risk difference
+#'       (binary outcomes only).
+#'   }
 #' @param outcome_name Optional label for the outcome (used in SoF table).
 #' @param outcome_type \code{"relative"} (RR/OR/HR, null = 1) or
 #'   \code{"absolute"} (MD/SMD, null = 0). Default \code{"relative"}.
@@ -50,7 +78,7 @@
 #' @param ois_n For continuous outcomes: target total sample size for OIS.
 #'   Takes precedence over auto-calculated OIS.
 #' @param ois_alpha Type I error rate for OIS calculation (default 0.05, two-sided).
-#' @param ois_beta Type II error rate for OIS calculation (default 0.20, ie 80\% power).
+#' @param ois_beta Type II error rate for OIS calculation (default 0.20, ie 80 percent power).
 #' @param ois_p0 For binary outcomes: baseline (control) event rate for OIS calculation.
 #'   Used with \code{ois_p1} to auto-compute target events.
 #' @param ois_p1 For binary outcomes: experimental arm event rate for OIS calculation.
@@ -60,7 +88,7 @@
 #' @param baseline_risk Baseline (control-arm) event rate used for computing
 #'   absolute risk differences (ARD per 1,000) in the SoF table. Accepts:
 #'   \itemize{
-#'     \item A numeric scalar in [0,1]: used directly.
+#'     \item A numeric scalar in \code{[0, 1]}: used directly.
 #'     \item \code{"simple"}: pooled control-arm proportion
 #'       (\eqn{\sum events_c / \sum n_c}).
 #'     \item \code{"metaprop"}: GLMM-pooled proportion via
@@ -107,12 +135,15 @@ grade_meta <- function(meta_obj,
                        study_design                     = c("RCT", "obs"),
                        rob                              = NULL,
                        rob_dominant_threshold           = 0.60,
+                       rob_inflation_threshold          = 0.10,
                        small_values                     = NULL,
                        indirectness                     = "no",
                        inconsistency                    = NULL,
                        inconsistency_ci_diff            = NULL,
                        inconsistency_threshold_side     = NULL,
                        inconsistency_subgroup_explained = NULL,
+                       mid                              = NULL,
+                       mid_scale                        = "auto",
                        outcome_name                     = NULL,
                        outcome_type                     = c("relative", "absolute"),
                        ois_events                       = NULL,
@@ -128,21 +159,27 @@ grade_meta <- function(meta_obj,
                        pubias_funnel_asymmetry          = NULL,
                        pubias_unpublished               = NULL) {
 
-  # --- 入力チェック ---
+  # --- input check ---
   if (!inherits(meta_obj, "meta")) {
     rlang::abort("meta_obj must be an object of class 'meta' (from the {meta} package).")
   }
   study_design <- match.arg(study_design)
   outcome_type <- match.arg(outcome_type)
 
-  # --- 開始確実性 ---
+  # --- starting certainty ---
   start_score     <- if (study_design == "RCT") 4L else 2L
   starting_quality <- score_to_certainty(start_score)
 
-  # --- 各ドメイン評価 ---
+  # --- resolve MID to TE scale (used by Inconsistency and Imprecision) ---
+  mid_resolved <- mid_to_te_scale(mid, mid_scale, meta_obj$sm)
+  mid_internal <- mid_resolved$mid_internal
+  mid_kind     <- mid_resolved$mid_kind
+
+  # --- domain assessments ---
   d_rob   <- assess_rob(rob, meta_obj,
-                        rob_dominant_threshold = rob_dominant_threshold,
-                        small_values           = small_values)
+                        rob_dominant_threshold  = rob_dominant_threshold,
+                        rob_inflation_threshold = rob_inflation_threshold,
+                        small_values            = small_values)
 
   d_indir <- assess_indirectness(indirectness, meta_obj)
 
@@ -151,7 +188,8 @@ grade_meta <- function(meta_obj,
     inconsistency                    = inconsistency,
     inconsistency_ci_diff            = inconsistency_ci_diff,
     inconsistency_threshold_side     = inconsistency_threshold_side,
-    inconsistency_subgroup_explained = inconsistency_subgroup_explained
+    inconsistency_subgroup_explained = inconsistency_subgroup_explained,
+    mid_internal                     = mid_internal
   )
 
   d_impre <- assess_imprecision(
@@ -164,7 +202,9 @@ grade_meta <- function(meta_obj,
     ois_p0       = ois_p0,
     ois_p1       = ois_p1,
     ois_delta    = ois_delta,
-    ois_sd       = ois_sd
+    ois_sd       = ois_sd,
+    mid_internal = mid_internal,
+    mid_kind     = mid_kind
   )
 
   d_pubias <- assess_pubias(
@@ -181,7 +221,7 @@ grade_meta <- function(meta_obj,
   final_score     <- max(1L, start_score + total_downgrade)
   certainty       <- score_to_certainty(final_score)
 
-  # --- 出力オブジェクト ---
+  # --- output object ---
   structure(
     list(
       domain_assessments = domains,
@@ -192,6 +232,9 @@ grade_meta <- function(meta_obj,
       outcome_name       = if (is.null(outcome_name)) "Outcome" else outcome_name,
       outcome_type       = outcome_type,
       baseline_risk      = .resolve_baseline_risk(baseline_risk, meta_obj, ois_p0),
+      mid                = mid,
+      mid_scale          = mid_scale,
+      mid_internal       = mid_internal,
       meta               = meta_obj
     ),
     class = "pmatools"

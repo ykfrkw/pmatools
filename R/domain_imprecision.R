@@ -35,7 +35,9 @@ assess_imprecision <- function(meta_obj,
                                ois_p0       = NULL,
                                ois_p1       = NULL,
                                ois_delta    = NULL,
-                               ois_sd       = NULL) {
+                               ois_sd       = NULL,
+                               mid_internal = NULL,
+                               mid_kind     = NULL) {
   lower <- meta_obj$lower.random
   upper <- meta_obj$upper.random
 
@@ -52,13 +54,41 @@ assess_imprecision <- function(meta_obj,
   null_val    <- 0.0
   crosses_null <- (lower < null_val) && (upper > null_val)
 
-  # OIS 自動計算（直接指定が優先）
+  # v0.2: derive ois_p1/ois_delta from mid_internal when not explicitly provided
+  mid_used_note <- ""
+  if (is.null(ois_events) && is.null(ois_n) &&
+      !is.null(mid_internal) && !is.na(mid_internal) && mid_internal != 0) {
+    if (outcome_type == "relative") {
+      # Binary outcomes
+      if (is.null(ois_p1) && !is.null(ois_p0)) {
+        if (identical(mid_kind, "ard")) {
+          ois_p1 <- ois_p0 + mid_internal
+        } else {
+          ois_p1 <- ois_p0 * exp(mid_internal)
+        }
+        ois_p1 <- max(min(ois_p1, 1 - 1e-6), 1e-6)
+        mid_used_note <- sprintf(
+          " (ois_p1 derived from MID: ois_p1 = %.4f)", ois_p1
+        )
+      }
+    } else {
+      # Continuous outcomes
+      if (is.null(ois_delta)) {
+        ois_delta <- mid_internal
+        mid_used_note <- sprintf(
+          " (ois_delta = MID = %.4f)", ois_delta
+        )
+      }
+    }
+  }
+
+  # OIS auto-calculation (explicit ois_events/ois_n take precedence)
   ois_calc_note <- ""
   if (is.null(ois_events) && is.null(ois_n)) {
     auto_ois <- .calc_ois(outcome_type, ois_alpha, ois_beta,
                           ois_p0, ois_p1, ois_delta, ois_sd)
     if (!is.null(auto_ois)) {
-      ois_calc_note <- auto_ois$formula
+      ois_calc_note <- paste0(auto_ois$formula, mid_used_note)
       if (auto_ois$type == "events") ois_events <- auto_ois$value
       if (auto_ois$type == "n")      ois_n      <- auto_ois$value
     }

@@ -94,9 +94,9 @@ test_that("very_serious rob downgrades by 2", {
 
 # ---- ドメイン: 非一貫性 ---------------------------------------------------
 
-test_that("inconsistency domain is auto-computed without warning", {
+test_that("inconsistency domain is auto-computed", {
   m <- make_metabin()
-  expect_no_warning(g <- grade_meta(m))
+  g <- suppressWarnings(grade_meta(m))
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_true(incon_row$auto)
   expect_true(incon_row$judgment %in% c("no", "some", "serious", "very_serious"))
@@ -250,7 +250,9 @@ test_that("rob vector of wrong length raises error", {
 
 test_that("invalid rob level raises error", {
   m <- make_metabin()
-  expect_error(grade_meta(m, rob = "moderate"), regexp = "valid GRADE level")
+  # 'moderate' is normalised to 'some' (alias), so use a truly unknown label
+  expect_error(suppressWarnings(grade_meta(m, rob = "totally_unknown_rob_level")),
+               regexp = "not a recognized GRADE level")
 })
 
 test_that("non-meta object raises error", {

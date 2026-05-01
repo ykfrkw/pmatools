@@ -11,6 +11,10 @@
 #'   \code{"pastel"} (default) uses soft backgrounds with coloured text.
 #'   \code{"classic"} uses saturated backgrounds with white text.
 #' @param show_domains Logical (default \code{TRUE}). Add domain symbol columns.
+#' @param per Denominator for SoF rate columns. \code{1000} (default) or
+#'   \code{100}.
+#' @param prediction Logical (default \code{FALSE}); when \code{TRUE}, the
+#'   95 percent prediction interval is shown in the Effect column.
 #'
 #' @return A \code{flextable} object.
 #'

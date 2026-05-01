@@ -20,6 +20,9 @@
 #' @param output_file Base filename without extension. Default \code{"grade_report"}.
 #' @param title Report title. Default \code{"GRADE Certainty of Evidence Assessment"}.
 #' @param show_domains Logical. Show per-domain columns in the SoF table (default TRUE).
+#' @param per Denominator for SoF rate columns (default 1000).
+#' @param prediction Logical. Show 95 percent prediction interval in the Effect column
+#'   (default FALSE).
 #'
 #' @return Invisibly returns a character vector of output file paths.
 #'

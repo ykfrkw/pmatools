@@ -1,40 +1,36 @@
-# domain_rob.R — Risk of Bias ドメイン処理
+# domain_rob.R - Risk of Bias domain assessment
 #
-# BMJ 2025 Core GRADE 4, Fig 2 フローチャートに準拠:
+# BMJ 2025 Core GRADE 4, Fig 2 flowchart:
 #
 #   Step 1. Is evidence DOMINATED by high-RoB studies?
-#     Threshold (注釈): >65% = dominating; ≥55% = possibly dominating
-#     rob_dominant_threshold: デフォルト 0.60
+#     Threshold: rob_dominant_threshold (default 0.60)
 #
-#   YES → Step 2. Check direction of bias（自動判定）
-#     high-RoB 除外後の TE_low と全研究の TE_all を比較:
-#       small_values = "undesirable": TE_all > TE_low → 高RoB が有利方向に誇張 → Rate down
-#       small_values = "desirable"  : TE_all < TE_low → 高RoB が有利方向に誇張 → Rate down
-#     逆方向の場合 → 効果を保守的にしている → Do not rate down
+#   YES -> Step 2. Direction-and-magnitude check (auto)
+#     inflation_ratio = (|TE_all| - |TE_low|) / |TE_low|
+#     direction_ok    = (depends on small_values)
+#     rate_down       = direction_ok AND (inflation_ratio > rob_inflation_threshold)
 #
-#   NO  → Appreciable low-RoB evidence exists
-#         → Do not rate down (judgment = "no")
-#         ※ NO 分岐の sub-question（高/低 RoB 間の効果差）はスキップ
+#   NO  -> Appreciable low-RoB evidence; do not rate down.
 #
-# 入力形式:
-#   (a) スカラ: "no" / "some" / "serious" / "very_serious"
-#       → フローチャートをスキップ、ユーザー判定をそのまま使用
-#   (b) 長さ k のベクタ: 各研究の RoB 判定 → フローチャート適用
-#   (c) 文字列 (列名): meta_obj$data 内の列を参照 → フローチャート適用
+# Inputs:
+#   (a) scalar GRADE level: bypass flowchart
+#   (b) length-k vector: apply flowchart
+#   (c) column name in meta_obj$data: expand to vector and apply flowchart
 #
-# small_values の説明 (netmetaviz と統一):
-#   "undesirable" : 小さい値が undesirable（例: response rate, OR for beneficial treatment）
-#                    大きい値が好ましい。TE_all > TE_low で誇張と判定。
-#   "desirable"   : 小さい値が desirable（例: mortality rate, symptom severity score）
-#                    小さい値が好ましい。TE_all < TE_low で誇張と判定。
-#   NULL          : 未指定。dominated の場合は保守的に rate down + 警告
+# small_values:
+#   "undesirable": small values are bad (e.g., response rate, OR for benefit)
+#                  TE_all > TE_low indicates inflation toward favorable
+#   "desirable"  : small values are good (e.g., mortality, severity)
+#                  TE_all < TE_low indicates inflation toward favorable
+#   NULL         : direction unknown; use |TE_all| > |TE_low| (further from null)
 
 assess_rob <- function(rob, meta_obj,
-                       rob_dominant_threshold = 0.60,
-                       small_values           = NULL) {
+                       rob_dominant_threshold  = 0.60,
+                       rob_inflation_threshold = 0.10,
+                       small_values            = NULL) {
   k <- meta_obj$k
 
-  # NULL → デフォルト "no"
+  # NULL -> default "no"
   if (is.null(rob)) {
     return(make_domain_row(
       domain   = "Risk of bias",
@@ -44,8 +40,7 @@ assess_rob <- function(rob, meta_obj,
     ))
   }
 
-  # ベクタ / 列名の場合は RoB level を正規化
-  # スカラ GRADE level かチェック（正規化後）
+  # Scalar GRADE level (after normalisation): bypass flowchart
   if (length(rob) == 1 && is.character(rob)) {
     rob_norm <- .normalize_rob_level(rob)
     if (rob_norm %in% GRADE_LEVELS) {
@@ -56,7 +51,7 @@ assess_rob <- function(rob, meta_obj,
         notes    = "Overall judgment provided by user (scalar; flowchart not applied)."
       ))
     }
-    # 列名参照 → ベクタに展開
+    # Treat as column name
     col  <- rob
     data <- meta_obj$data
     if (is.null(data) || !col %in% names(data)) {
@@ -68,7 +63,7 @@ assess_rob <- function(rob, meta_obj,
     rob <- as.character(data[[col]])
   }
 
-  # ベクタ: 正規化 + 長さ k チェック
+  # Vector: normalise + length check
   rob <- .normalize_rob_levels(rob)
   if (length(rob) != k) {
     rlang::abort(paste0(
@@ -78,20 +73,24 @@ assess_rob <- function(rob, meta_obj,
   }
 
   validate_grade_level(rob, "rob")
-  .flowchart_rob(rob, meta_obj, rob_dominant_threshold, small_values)
+  .flowchart_rob(rob, meta_obj,
+                 threshold           = rob_dominant_threshold,
+                 inflation_threshold = rob_inflation_threshold,
+                 small_values        = small_values)
 }
 
 # --------------------------------------------------------------------------
-# フローチャート判定
+# Flowchart
 # --------------------------------------------------------------------------
-.flowchart_rob <- function(rob_vec, meta_obj, threshold, small_values) {
+.flowchart_rob <- function(rob_vec, meta_obj, threshold,
+                           inflation_threshold = 0.10, small_values = NULL) {
 
-  # 高 RoB = "serious" または "very_serious"
+  # high-RoB = "serious" or "very_serious"
   high_idx <- rob_vec %in% c("serious", "very_serious")
   n_high   <- sum(high_idx)
   n_total  <- length(rob_vec)
 
-  # --- ランダム効果重みによる支配度計算 ---
+  # Random-effects weight share
   weights <- meta_obj$w.random
   if (!is.null(weights) && length(weights) == n_total && sum(weights) > 0) {
     pct_high_w <- sum(weights[high_idx]) / sum(weights)
@@ -114,7 +113,7 @@ assess_rob <- function(rob, meta_obj,
     collapse = "; "
   )
 
-  # ─── NO 分岐: dominated でない → rate down しない ──────────────────────
+  # NO branch: not dominated -> do not rate down
   if (!dominated) {
     return(make_domain_row(
       domain   = "Risk of bias",
@@ -122,19 +121,20 @@ assess_rob <- function(rob, meta_obj,
       auto     = FALSE,
       notes    = paste0(
         "FLOWCHART: Not dominated (threshold ", round(threshold * 100), "%). ",
-        weight_note, ". \u2192 Do not rate down. | ",
+        weight_note, ". -> Do not rate down. | ",
         tbl_note
       )
     ))
   }
 
-  # ─── YES 分岐: dominated → バイアス方向を自動判定 ──────────────────────
+  # YES branch: dominated -> direction-and-magnitude check
   dir <- .assess_bias_direction(
-    te_all       = meta_obj$TE.random,
-    te_vec       = meta_obj$TE,
-    se_vec       = meta_obj$seTE,
-    low_idx      = !high_idx,
-    small_values = small_values
+    te_all              = meta_obj$TE.random,
+    te_vec              = meta_obj$TE,
+    se_vec              = meta_obj$seTE,
+    low_idx             = !high_idx,
+    small_values        = small_values,
+    inflation_threshold = inflation_threshold
   )
 
   judgment <- if (dir$inflates) "serious" else "no"
@@ -153,40 +153,18 @@ assess_rob <- function(rob, meta_obj,
 }
 
 # --------------------------------------------------------------------------
-# バイアス方向の自動判定
-#
-# Logic:
-#   高RoB 研究を除外した推定値 (TE_low) と全研究の TE_all を比較する。
-#   TE_all が TE_low より「好ましい方向」に偏っていれば、高RoB が効果を誇張している。
-#     small_values = "undesirable": TE_all > TE_low → 誇張 → inflates = TRUE
-#     small_values = "desirable"  : TE_all < TE_low → 誇張 → inflates = TRUE
-#   逆方向: 高RoB が効果を保守的にしている → inflates = FALSE → rate down しない
+# Direction-and-magnitude check (v0.2)
 # --------------------------------------------------------------------------
-.assess_bias_direction <- function(te_all, te_vec, se_vec, low_idx, small_values) {
+.assess_bias_direction <- function(te_all, te_vec, se_vec, low_idx,
+                                   small_values, inflation_threshold = 0.10) {
 
   n_low <- sum(low_idx)
 
-  # small_values 未指定 → 保守的に rate down
-  if (is.null(small_values)) {
-    rlang::warn(paste0(
-      "small_values is NULL; conservatively rating down RoB when dominated. ",
-      "Specify small_values = 'desirable' or 'undesirable' for automatic direction check ",
-      "(e.g., 'desirable' for mortality/severity; 'undesirable' for response/remission)."
-    ))
-    return(list(
-      inflates = TRUE,
-      note     = paste0(
-        "small_values not specified; conservative rate-down applied. ",
-        "TE(all) = ", round(te_all, 3), "."
-      )
-    ))
-  }
-
-  if (!small_values %in% c("desirable", "undesirable")) {
+  if (!is.null(small_values) && !small_values %in% c("desirable", "undesirable")) {
     rlang::abort("small_values must be 'desirable' or 'undesirable'.")
   }
 
-  # low-RoB 研究が存在しない場合 → 保守的に rate down
+  # No low/some-RoB studies -> conservative rate-down
   if (n_low == 0 || is.null(te_vec) || is.null(se_vec)) {
     return(list(
       inflates = TRUE,
@@ -197,31 +175,52 @@ assess_rob <- function(rob, meta_obj,
     ))
   }
 
-  # TE_low: high-RoB 除外後の inverse-variance 加重平均（fixed-effects プーリング）
+  # TE_low: inverse-variance weighted mean of low-RoB studies
   w_low  <- 1 / se_vec[low_idx]^2
   te_low <- sum(w_low * te_vec[low_idx]) / sum(w_low)
 
+  # |TE_low| approx 0 -> ratio undefined -> conservative rate-down
+  if (abs(te_low) < 1e-9) {
+    return(list(
+      inflates = TRUE,
+      note     = paste0(
+        "TE(excl. high-RoB) approx 0; relative inflation undefined; ",
+        "conservative rate-down applied. ",
+        sprintf("TE(all) = %.3f, TE(low) = %.3f.", te_all, te_low)
+      )
+    ))
+  }
+
+  inflation_ratio <- (abs(te_all) - abs(te_low)) / abs(te_low)
+
+  direction_ok <- if (is.null(small_values)) {
+    abs(te_all) > abs(te_low)
+  } else if (small_values == "undesirable") {
+    te_all > te_low
+  } else {
+    te_all < te_low
+  }
+
+  inflates <- isTRUE(direction_ok) && (inflation_ratio > inflation_threshold)
+
+  sv_desc <- if (is.null(small_values)) {
+    "small_values = NULL (using |TE| comparison)"
+  } else {
+    sprintf("small_values = '%s'", small_values)
+  }
+
   diff_note <- sprintf(
-    "TE(all studies) = %.3f; TE(excl. high-RoB) = %.3f; small_values = '%s'",
-    te_all, te_low, small_values
+    "TE(all) = %.3f; TE(excl. high-RoB) = %.3f; |TE_all| = %.3f, |TE_low| = %.3f; relative inflation = %.1f%% (threshold %.0f%%); %s",
+    te_all, te_low, abs(te_all), abs(te_low),
+    100 * inflation_ratio, 100 * inflation_threshold, sv_desc
   )
 
-  if (small_values == "undesirable") {
-    # 大きい値が desirable（response rate など）: TE_all > TE_low → 誇張
-    inflates <- te_all > te_low
-    dir_desc <- if (inflates) {
-      "TE(all) > TE(excl. high-RoB) \u2192 high-RoB inflates toward favorable \u2192 rate down"
-    } else {
-      "TE(all) \u2264 TE(excl. high-RoB) \u2192 high-RoB does not inflate effect \u2192 do not rate down"
-    }
+  dir_desc <- if (inflates) {
+    "high-RoB inflates effect beyond threshold -> rate down"
+  } else if (!isTRUE(direction_ok)) {
+    "high-RoB does NOT inflate (direction check failed) -> do not rate down"
   } else {
-    # 小さい値が desirable（mortality など）: TE_all < TE_low → 誇張
-    inflates <- te_all < te_low
-    dir_desc <- if (inflates) {
-      "TE(all) < TE(excl. high-RoB) \u2192 high-RoB inflates toward favorable \u2192 rate down"
-    } else {
-      "TE(all) \u2265 TE(excl. high-RoB) \u2192 high-RoB does not inflate effect \u2192 do not rate down"
-    }
+    "inflation below threshold; treated as random variation -> do not rate down"
   }
 
   list(
@@ -231,8 +230,8 @@ assess_rob <- function(rob, meta_obj,
 }
 
 # --------------------------------------------------------------------------
-# RoB level 正規化ヘルパー
-# Cochrane RoB2 / 平語 → 内部 GRADE level ("no"/"some"/"serious"/"very_serious")
+# RoB level normalisation
+# Cochrane RoB2 / plain English -> internal GRADE level
 # --------------------------------------------------------------------------
 .normalize_rob_level <- function(x) {
   aliases <- c(
@@ -241,6 +240,13 @@ assess_rob <- function(rob, meta_obj,
     "Some concerns"     = "some",
     "Serious concerns"  = "serious",
     "Critical concerns" = "very_serious",
+    # Single-letter shortcuts
+    "L" = "no", "l" = "no",
+    "S" = "some", "s" = "some",
+    "M" = "some", "m" = "some",
+    "H" = "serious", "h" = "serious",
+    "C" = "very_serious", "c" = "very_serious",
+    "*" = "some",
     # Plain / alternate capitalisation
     "low"          = "no",    "Low"          = "no",
     "moderate"     = "some",  "Moderate"     = "some",

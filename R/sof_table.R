@@ -1,4 +1,4 @@
-# sof_table.R — Summary of Findings テーブル（flextable 出力）
+# sof_table.R - Summary of Findings flextable
 
 #' Generate a Summary of Findings (SoF) table as a flextable
 #'
@@ -10,8 +10,20 @@
 #'   \code{100}. Controls the scale of the "Control rate" and "Exp. rate"
 #'   columns.
 #' @param prediction Logical. If \code{TRUE} (default \code{FALSE}), the
-#'   Effect column also shows the 95\% prediction interval on a second line,
+#'   Effect column also shows the 95 percent prediction interval on a second line,
 #'   provided the meta object was run with \code{prediction = TRUE}.
+#' @param convert_smd_to_or (v0.2) Logical. If \code{TRUE} and the meta
+#'   object uses \code{sm = "SMD"} or \code{"MD"}, the Control rate /
+#'   Exp. rate columns display dichotomised event rates derived via Chinn's
+#'   formula (\eqn{\log OR = SMD \times \pi / \sqrt{3}}). Requires
+#'   \code{baseline_risk} (numeric in (0,1)) representing the proportion
+#'   of control patients meeting the threshold of clinical interest.
+#' @param baseline_risk Numeric in (0,1), required when
+#'   \code{convert_smd_to_or = TRUE}. Otherwise inherited from the
+#'   pmatools object.
+#' @param threshold_label (v0.2) Optional free-text label for the
+#'   dichotomisation threshold (e.g., \code{">=50 percent reduction in PHQ-9"}).
+#'   Shown in the table footer when \code{convert_smd_to_or = TRUE}.
 #' @param ... Additional arguments (currently unused).
 #'
 #' @return A \code{flextable} object suitable for printing, Word export, etc.
@@ -28,7 +40,11 @@
 #'
 #' @export
 sof_table <- function(x, palette = c("pastel", "classic"),
-                      per = 1000, prediction = FALSE, ...) {
+                      per = 1000, prediction = FALSE,
+                      convert_smd_to_or = FALSE,
+                      baseline_risk     = NULL,
+                      threshold_label   = NULL,
+                      ...) {
   if (!inherits(x, "pmatools")) {
     rlang::abort("x must be a pmatools object from grade_meta().")
   }
@@ -37,10 +53,34 @@ sof_table <- function(x, palette = c("pastel", "classic"),
 
   meta_obj <- x$meta
 
+  # v0.2 Chinn conversion path
+  chinn_active <- FALSE
+  if (isTRUE(convert_smd_to_or)) {
+    sm <- meta_obj$sm
+    if (is.null(sm) || !sm %in% c("SMD", "MD")) {
+      rlang::abort(
+        "convert_smd_to_or = TRUE requires meta_obj$sm in c('SMD','MD')."
+      )
+    }
+    if (is.null(baseline_risk) || !is.numeric(baseline_risk) ||
+        length(baseline_risk) != 1 || baseline_risk <= 0 || baseline_risk >= 1) {
+      rlang::abort(
+        "convert_smd_to_or = TRUE requires baseline_risk as a single numeric in (0, 1)."
+      )
+    }
+    chinn_active <- TRUE
+  }
+
+  baseline_for_display <- if (chinn_active) baseline_risk else x$baseline_risk
+
   k           <- meta_obj$k
   n_total     <- .total_n(meta_obj)
-  cer_str     <- .format_cer(x$baseline_risk, per)
-  ier_str     <- .format_ier(meta_obj, x$baseline_risk, per)
+  cer_str     <- .format_cer(baseline_for_display, per)
+  ier_str     <- if (chinn_active) {
+    .format_ier_chinn(meta_obj, baseline_risk, per)
+  } else {
+    .format_ier(meta_obj, x$baseline_risk, per)
+  }
   effect_str  <- .format_effect(meta_obj, x$outcome_type,
                                 prediction = prediction)
 
@@ -72,7 +112,7 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   names(df) <- headers
 
   ft <- flextable::flextable(df)
-  ft <- flextable::set_header_labels(ft, .list = setNames(as.list(headers), headers))
+  ft <- flextable::set_header_labels(ft, .list = stats::setNames(as.list(headers), headers))
   ft <- flextable::theme_vanilla(ft)
   ft <- flextable::fontsize(ft, size = 10, part = "all")
   ft <- flextable::font(ft, fontname = "Arial", part = "all")
@@ -99,12 +139,23 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   ft <- flextable::bold(ft,  part = "header")
 
   pi_note <- if (prediction) " PI = 95% prediction interval." else ""
+  chinn_note <- if (chinn_active) {
+    paste0(
+      " Continuous outcome dichotomised via Chinn's formula ",
+      "(log OR = SMD x pi/sqrt(3)); control event rate user-specified",
+      if (!is.null(threshold_label) && nzchar(threshold_label)) {
+        paste0(" (threshold: ", threshold_label, ")")
+      } else "",
+      "."
+    )
+  } else ""
   footnote_text <- paste0(
     "GRADE certainty: ", certainty_label, ". ",
     "Assessment based on BMJ 2025 Core GRADE series (Guyatt et al.). ",
     "CI = confidence interval.", pi_note, " ",
     "Exp. rate = experimental (intervention) arm event rate computed from ",
-    "baseline risk and pooled relative effect."
+    "baseline risk and pooled relative effect.",
+    chinn_note
   )
   ft <- flextable::add_footer_lines(ft, values = footnote_text)
   ft <- flextable::fontsize(ft, size = 8, part = "footer")
@@ -174,6 +225,32 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   p1_est <- .p1(baseline_risk, meta_obj$TE.random,    sm)
   p1_lo  <- .p1(baseline_risk, meta_obj$lower.random, sm)
   p1_hi  <- .p1(baseline_risk, meta_obj$upper.random, sm)
+
+  if (is.null(p1_est)) return("\u2014")
+
+  per_str <- format(per, big.mark = ",", scientific = FALSE)
+  sprintf("%d per %s\n(%d; %d)",
+          round(p1_est * per), per_str,
+          round(p1_lo  * per),
+          round(p1_hi  * per))
+}
+
+# Experimental rate via Chinn (SMD/MD -> OR -> p1)
+.format_ier_chinn <- function(meta_obj, baseline_risk, per = 1000) {
+  if (is.null(baseline_risk)) return("\u2014")
+  est <- meta_obj$TE.random
+  lo  <- meta_obj$lower.random
+  hi  <- meta_obj$upper.random
+  if (is.null(est) || is.na(est)) return("\u2014")
+
+  conv <- chinn_smd_to_or(est, ci_lower = lo, ci_upper = hi)
+  log_or_est <- log(conv$or)
+  log_or_lo  <- log(conv$or_lower)
+  log_or_hi  <- log(conv$or_upper)
+
+  p1_est <- .p1(baseline_risk, log_or_est, "OR")
+  p1_lo  <- .p1(baseline_risk, log_or_lo,  "OR")
+  p1_hi  <- .p1(baseline_risk, log_or_hi,  "OR")
 
   if (is.null(p1_est)) return("\u2014")
 

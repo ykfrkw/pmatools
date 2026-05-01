@@ -1,42 +1,82 @@
 # pmatools
 
-**GRADE certainty of evidence assessment from {meta} objects**
+**End-to-end pairwise meta-analysis with GRADE certainty assessment**
 
-`pmatools` is an R package that automates GRADE (Grading of Recommendations Assessment, Development and Evaluation) certainty evaluation from meta-analysis objects produced by the [{meta}](https://cran.r-project.org/package=meta) package, following the **BMJ 2025 Core GRADE series** (Guyatt G et al., BMJ 2025).
+`pmatools` is an R package that runs the full pairwise meta-analysis pipeline — from data ingestion (long or wide format) through pooled effect estimation (binary or continuous) and forest/funnel plots — and rates the resulting evidence with the **GRADE** approach following the **BMJ 2025 Core GRADE series** (Guyatt G et al., BMJ 2025). It produces a Summary of Findings flextable, a multi-outcome GRADE table, and a full Appendix report (docx/html/pdf/md), and bundles every artifact plus a reproducible `analysis.R` script into a single ZIP.
+
+A wizard-style Shiny front-end lives in the companion repository [pairwise_meta_analysis](https://yuki-furukawa.shinyapps.io/pairwise_meta_analysis/) (deployed on shinyapps.io).
 
 ---
 
 ## Installation
 
 ```r
-# Open pmatools.Rproj in RStudio, then:
-devtools::load_all(".", reset = TRUE)   # picks up any edits immediately
+# From GitHub
+remotes::install_github("ykfrkw/pmatools")
+library(pmatools)
+
+# Local development (open pmatools.Rproj in RStudio)
+devtools::load_all(".", reset = TRUE)
 ```
 
 ---
 
 ## Quick start
 
+End-to-end: data -> meta-analysis -> GRADE -> SoF -> ZIP.
+
 ```r
-library(meta)
-devtools::load_all(".", reset = TRUE)
+library(pmatools)
 
-m <- metabin(event.e = c(10,15,20), n.e = c(50,60,70),
-             event.c = c(15,20,25), n.c = c(50,60,70),
-             studlab = c("A","B","C"), sm = "OR",
-             prediction = TRUE)
+# 1. Ingest study data (long or wide; auto-detected)
+data <- ingest_data(system.file("extdata/cbti_depression.csv", package = "pmatools"))
 
-g <- grade_meta(m,
-  study_design  = "RCT",
-  rob           = "some",
-  small_values  = "undesirable",   # large OR = desirable (eg, response rate)
-  indirectness  = "no",
-  outcome_name  = "My Outcome")
+# 2. Run meta-analysis
+ma <- run_ma(data,
+             outcome_type       = "binary",
+             sm                 = "OR",
+             experimental_label = "CBT-I",
+             control_label      = "Control")
+
+# 3. Plots (auto-laid-out; funnel includes Egger when k >= 10)
+plot_forest(ma, title = "CBT-I for depression")
+plot_funnel(ma)
+
+# 4. GRADE certainty (per-study RoB; MID drives both Inconsistency Step 2 and OIS)
+g <- grade_meta(ma,
+                study_design = "RCT",
+                rob          = data$rob[data$treat == "CBT-I"],
+                small_values = "undesirable",
+                mid          = 1.25,    # OR-scale MID (auto-detected)
+                ois_p0       = 0.25,
+                outcome_name = "Depression response")
 
 print(g)
-sof_table(g)                        # pastel palette, per 1,000
-sof_table(g, per = 100)             # per 100 patients
-sof_table(g, prediction = TRUE)     # show 95% prediction interval
+sof_table(g)                 # pastel palette, rates per 1,000
+sof_table(g, per = 100)
+sof_table(g, prediction = TRUE)
+
+# 5. Reproducible ZIP bundle
+export_bundle(ma, g, output_dir = "outputs", bundle_name = "cbti_depression")
+```
+
+`outputs/cbti_depression.zip` contains: `data_long.csv`, `analysis.R` (re-runs the
+analysis with `library(pmatools)`), `results.txt`, forest/funnel PDF+PNG, the SoF
+docx, and the GRADE Appendix docx.
+
+### Shorter version: GRADE-only on an existing meta object
+
+```r
+m <- meta::metabin(event.e = c(10,15,20), n.e = c(50,60,70),
+                   event.c = c(15,20,25), n.c = c(50,60,70),
+                   studlab = c("A","B","C"), sm = "OR",
+                   prediction = TRUE)
+
+g <- grade_meta(m, study_design = "RCT", rob = "some",
+                small_values = "undesirable", indirectness = "no",
+                outcome_name = "My Outcome")
+print(g)
+sof_table(g)
 ```
 
 ---

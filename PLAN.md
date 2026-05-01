@@ -2,10 +2,11 @@
 
 ## 概要
 
-{meta} の meta オブジェクトから BMJ 2025 Core GRADE に準拠した確実性評価を行う R パッケージ。
+データ取込 → メタアナリシス（{meta}）→ GRADE 確実性評価（BMJ 2025 Core GRADE 準拠）→ SoF/Appendix → 再現性 ZIP までを一気通貫で行う R パッケージ。Shiny UI は別リポジトリ `pairwise_meta_analysis`（shinyapps.io 公開済み）。
 
-**バージョン**: 0.1.0
-**作成日**: 2026-03-16
+**バージョン**: 0.2.0
+**仕様書**: [SPEC.md](SPEC.md)
+**作成日**: 2026-03-16（v0.1.0）／2026-05-01（v0.2.0）
 
 ---
 
@@ -18,8 +19,9 @@
 
 ---
 
-## 実装ステータス
+## 実装ステータス（v0.2.0）
 
+### v0.1.0 既存
 - [x] パッケージ骨格（DESCRIPTION, NAMESPACE）
 - [x] utils.R（共通ユーティリティ）
 - [x] domain_rob.R（Risk of Bias 入力処理）
@@ -28,8 +30,22 @@
 - [x] domain_imprecision.R（不精確性自動計算）
 - [x] domain_pubias.R（出版バイアス自動計算）
 - [x] grade_meta.R（メイン関数）
-- [x] sof_table.R（SoF テーブル flextable 出力）
+- [x] sof_table.R / grade_table.R / grade_report.R
 - [x] tests/testthat/test-grade_meta.R
+
+### v0.2.0 追加
+- [x] data_ingest.R（long/wide 両対応 + alias mapping）
+- [x] run_ma.R（{meta} ラッパー、binary/continuous）
+- [x] plot_forest.R（auto_layout, log/linear 自動）
+- [x] plot_funnel.R（contour + Egger 注釈）
+- [x] export_bundle.R + inst/templates/analysis_script.R.tpl（ZIP 一括出力）
+- [x] utils.R 拡張（chinn_smd_to_or, suggest_mid, compute_pooled_sd, mid_to_te_scale）
+- [x] grade_meta() に rob_inflation_threshold, mid, mid_scale 引数
+- [x] sof_table() に convert_smd_to_or, baseline_risk, threshold_label
+- [x] domain_rob.R: inflation 閾値（既定 10%）+ small_values=NULL の |TE| ロジック
+- [x] domain_inconsistency.R: Step 2 で MID-3-zone（auto）、Q-test 駆動撤去
+- [x] domain_imprecision.R: MID から ois_p1/ois_delta 自動派生
+- [x] tests: test-data_ingest, test-run_ma, test-domain_rob, test-inconsistency_mid, test-chinn, test-export_bundle
 
 ---
 
@@ -77,9 +93,10 @@ sof_table(pmatools_obj, language = "en")  # "en" | "ja"
 
 ---
 
-## 今後の拡張（v0.2）
+## 今後の拡張（v0.3+）
 
 - Upgrade ドメイン（large effect, dose-response, plausible confounding）
 - 複数アウトカムの一括処理（`grade_meta_list()`）
-- GRADEpro CSV インポート・エクスポート
-- R Markdown / Quarto テンプレート
+- GRADEpro JSON インポート・エクスポート
+- 多言語対応（日本語ラベル）
+- shinyapps.io 公開ガイド（`pairwise_meta_analysis` 側）
