@@ -1,7 +1,19 @@
 # utils.R — 共通ユーティリティ
 
-GRADE_LEVELS <- c("no", "some", "serious", "very_serious")
-GRADE_DOWNGRADE <- c(no = 0, some = -1, serious = -1, very_serious = -2)
+# 3-level system (v0.3+): -1 = "some_concerns", -2 = "serious".
+# Legacy names ("some", "very_serious") are accepted via .normalize_grade_level()
+# below for backward compatibility.
+GRADE_LEVELS <- c("no", "some_concerns", "serious")
+GRADE_DOWNGRADE <- c(no = 0, some_concerns = -1, serious = -2)
+
+# Map legacy / synonym labels to canonical ones.
+.normalize_grade_level <- function(x) {
+  if (is.null(x)) return(x)
+  out <- as.character(x)
+  out[out == "some"]         <- "some_concerns"
+  out[out == "very_serious"] <- "serious"
+  out
+}
 CERTAINTY_LABELS <- c("Very Low", "Low", "Moderate", "High")
 CERTAINTY_SYMBOLS <- c(
   "High"       = "++++",
@@ -44,14 +56,14 @@ score_to_certainty <- function(score) {
     (\(.) CERTAINTY_LABELS[. == score])()
 }
 
-# GRADE 判定の検証
+# GRADE 判定の検証 (legacy "some" / "very_serious" も受け入れて正規化する)
 validate_grade_level <- function(x, arg = "argument") {
-  valid <- c("no", "some", "serious", "very_serious")
+  valid <- c("no", "some", "some_concerns", "serious", "very_serious")
   bad <- setdiff(x, valid)
   if (length(bad) > 0) {
     rlang::abort(
       paste0(arg, " contains invalid GRADE level(s): ", paste(bad, collapse = ", "),
-             ". Use one of: ", paste(valid, collapse = ", "))
+             ". Use one of: 'no', 'some_concerns', 'serious'.")
     )
   }
   invisible(x)
@@ -124,6 +136,7 @@ validate_grade_level <- function(x, arg = "argument") {
 
 # 確実性ドメイン判定をサマリ tibble にまとめる
 make_domain_row <- function(domain, judgment, auto, notes = NA_character_) {
+  judgment <- .normalize_grade_level(judgment)
   tibble::tibble(
     domain    = domain,
     judgment  = judgment,

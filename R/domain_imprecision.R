@@ -221,8 +221,12 @@ assess_imprecision <- function(meta_obj,
 # 判定分類
 # --------------------------------------------------------------------------
 .classify_imprecision <- function(crosses_null, ois_met) {
-  if (isTRUE(crosses_null) && isFALSE(ois_met)) return("very_serious")
-  if (isTRUE(crosses_null))  return("serious")
-  if (isFALSE(ois_met))      return("serious")
+  # 3-level mapping (v0.3+):
+  #   both fail (CI crosses null AND OIS not met) -> serious        (-2)
+  #   one fails                                    -> some_concerns (-1)
+  #   neither fails                                -> no
+  if (isTRUE(crosses_null) && isFALSE(ois_met)) return("serious")
+  if (isTRUE(crosses_null))  return("some_concerns")
+  if (isFALSE(ois_met))      return("some_concerns")
   "no"
 }

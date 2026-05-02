@@ -55,6 +55,7 @@ export_bundle <- function(ma,
                           convert_smd_to_or = FALSE,
                           baseline_risk     = NULL,
                           threshold_label   = NULL,
+                          chinn_invert      = FALSE,
                           data               = NULL,
                           grade_args         = NULL,
                           ma_args            = NULL,
@@ -157,7 +158,8 @@ export_bundle <- function(ma,
     ft <- sof_table(grade, per = per, prediction = prediction,
                     convert_smd_to_or = convert_smd_to_or,
                     baseline_risk     = baseline_risk,
-                    threshold_label   = threshold_label)
+                    threshold_label   = threshold_label,
+                    chinn_invert      = isTRUE(chinn_invert))
     docx_path <- file.path(work_dir, "grade_table.docx")
     flextable::save_as_docx(ft, path = docx_path)
     files_in_zip <- c(files_in_zip, docx_path)
