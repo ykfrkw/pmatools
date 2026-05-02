@@ -52,12 +52,9 @@ data_raw <- read.csv(
 )
 
 ## ── 実データへの切り替え（論文再現時）────────────────────────────────────────
-## data_path <- file.path(
-##   here::here(),
-##   "..", "..", "100_SLEEPI", "R_I4D",
-##   "data", "data.csv"
+## data_raw <- read.csv(
+##   "~/Library/CloudStorage/OneDrive-Personal/mMEDICI/supplements/R_pairwise_meta_analysis/data/data.csv"
 ## )
-## data_raw <- read.csv(normalizePath(data_path, mustWork = FALSE))
 
 cbti <- data_raw |>
   filter(treatment == "CBT-I", !is.na(d_r)) |>

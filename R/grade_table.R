@@ -211,10 +211,10 @@ grade_table <- function(outcomes,
 
 .domain_symbol <- function(judgment) {
   switch(judgment,
-    "no"           = "\u2714",       # ✔ no concern
-    "some"         = "\u25b2",       # ▲ some concern
-    "serious"      = "\u2193",       # ↓ serious
-    "very_serious" = "\u2193\u2193", # ↓↓ very serious
+    "no"           = "OK",     # no concern
+    "some"         = "!",      # some concern
+    "serious"      = "!!",     # serious
+    "very_serious" = "!!!",    # very serious
     "?"
   )
 }
