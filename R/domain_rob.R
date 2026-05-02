@@ -95,7 +95,8 @@ assess_rob <- function(rob, meta_obj,
 .flowchart_rob <- function(rob_vec, meta_obj, threshold,
                            inflation_threshold = 0.10, small_values = NULL) {
 
-  # high-RoB = "serious" or "very_serious"
+  # high-RoB = "serious" (collapsed from old "serious" + "very_serious" in v0.3+;
+  # legacy "very_serious" still recognised after .normalize_rob_levels)
   high_idx <- rob_vec %in% c("serious", "very_serious")
   n_high   <- sum(high_idx)
   n_total  <- length(rob_vec)
@@ -177,7 +178,13 @@ assess_rob <- function(rob, meta_obj,
     inflation_threshold = inflation_threshold
   )
 
-  judgment <- if (dir$inflates) "serious" else "no"
+  judgment <- if (isTRUE(dir$sign_flips)) {
+    "serious"        # -2: removing high-RoB studies flips the pooled TE direction
+  } else if (isTRUE(dir$inflates)) {
+    "some_concerns"  # -1: dominated + inflation beyond threshold
+  } else {
+    "no"
+  }
 
   make_domain_row(
     domain   = "Risk of bias",
@@ -243,6 +250,13 @@ assess_rob <- function(rob, meta_obj,
 
   inflates <- isTRUE(direction_ok) && (inflation_ratio > inflation_threshold)
 
+  # -2 trigger: removing high-RoB studies flips the sign of the pooled TE.
+  # (Treat |TE_all| / |TE_low| close to 0 as a non-flip to avoid spurious
+  # serious downgrade from negligible effects on either side.)
+  sign_flips <- (sign(te_all) != sign(te_low)) &&
+                (abs(te_all) > 1e-6) &&
+                (abs(te_low) > 1e-6)
+
   sv_desc <- if (is.null(small_values)) {
     "small_values = NULL (using |TE| comparison)"
   } else {
@@ -255,8 +269,10 @@ assess_rob <- function(rob, meta_obj,
     100 * inflation_ratio, 100 * inflation_threshold, sv_desc
   )
 
-  dir_desc <- if (inflates) {
-    "high-RoB inflates effect beyond threshold -> rate down"
+  dir_desc <- if (sign_flips) {
+    "DIRECTION FLIPS when high-RoB studies are removed -> rate down 2 (serious)"
+  } else if (inflates) {
+    "high-RoB inflates effect beyond threshold -> rate down 1 (some_concerns)"
   } else if (!isTRUE(direction_ok)) {
     "high-RoB does NOT inflate (direction check failed) -> do not rate down"
   } else {
@@ -264,8 +280,9 @@ assess_rob <- function(rob, meta_obj,
   }
 
   list(
-    inflates = inflates,
-    note     = paste0(diff_note, ". ", dir_desc)
+    inflates   = inflates,
+    sign_flips = sign_flips,
+    note       = paste0(diff_note, ". ", dir_desc)
   )
 }
 
@@ -275,28 +292,29 @@ assess_rob <- function(rob, meta_obj,
 # --------------------------------------------------------------------------
 .normalize_rob_level <- function(x) {
   aliases <- c(
-    # Cochrane RoB2
+    # Cochrane RoB2 (3-level mapping: critical -> serious in v0.3+)
     "No concerns"       = "no",
-    "Some concerns"     = "some",
+    "Some concerns"     = "some_concerns",
     "Serious concerns"  = "serious",
-    "Critical concerns" = "very_serious",
+    "Critical concerns" = "serious",
     # Single-letter shortcuts
     "L" = "no", "l" = "no",
-    "S" = "some", "s" = "some",
-    "M" = "some", "m" = "some",
+    "S" = "some_concerns", "s" = "some_concerns",
+    "M" = "some_concerns", "m" = "some_concerns",
     "H" = "serious", "h" = "serious",
-    "C" = "very_serious", "c" = "very_serious",
-    "*" = "some",
+    "C" = "serious", "c" = "serious",
+    "*" = "some_concerns",
     # Plain / alternate capitalisation
-    "low"          = "no",    "Low"          = "no",
-    "moderate"     = "some",  "Moderate"     = "some",
-    "high"         = "serious", "High"       = "serious",
-    "very high"    = "very_serious", "Very high" = "very_serious",
-    # Internal (pass-through)
-    "no"           = "no",
-    "some"         = "some",
-    "serious"      = "serious",
-    "very_serious" = "very_serious"
+    "low"          = "no",            "Low"          = "no",
+    "moderate"     = "some_concerns", "Moderate"     = "some_concerns",
+    "high"         = "serious",       "High"         = "serious",
+    "very high"    = "serious",       "Very high"    = "serious",
+    # Internal (pass-through + legacy)
+    "no"            = "no",
+    "some"          = "some_concerns",   # legacy alias
+    "some_concerns" = "some_concerns",
+    "serious"       = "serious",
+    "very_serious"  = "serious"           # legacy alias
   )
   if (x %in% names(aliases)) aliases[[x]] else x
 }

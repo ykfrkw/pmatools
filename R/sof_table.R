@@ -44,6 +44,7 @@ sof_table <- function(x, palette = c("pastel", "classic"),
                       convert_smd_to_or = FALSE,
                       baseline_risk     = NULL,
                       threshold_label   = NULL,
+                      chinn_invert      = FALSE,
                       ...) {
   if (!inherits(x, "pmatools")) {
     rlang::abort("x must be a pmatools object from grade_meta().")
@@ -77,9 +78,14 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   n_total     <- .total_n(meta_obj)
   cer_str     <- .format_cer(baseline_for_display, per)
   ier_str     <- if (chinn_active) {
-    .format_ier_chinn(meta_obj, baseline_risk, per)
+    .format_ier_chinn(meta_obj, baseline_risk, per, invert = isTRUE(chinn_invert))
   } else {
     .format_ier(meta_obj, x$baseline_risk, per)
+  }
+  # Asterisk-mark CER/EER when Chinn dichotomisation is active
+  if (chinn_active) {
+    if (cer_str != "-") cer_str <- paste0(cer_str, " *")
+    if (ier_str != "-") ier_str <- paste0(ier_str, " *")
   }
   effect_str  <- .format_effect(meta_obj, x$outcome_type,
                                 prediction = prediction)
@@ -139,25 +145,41 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   ft <- flextable::bold(ft,  part = "header")
 
   pi_note <- if (prediction) " PrI = 95 percent prediction interval." else ""
-  chinn_note <- if (chinn_active) {
-    paste0(
-      " Continuous outcome dichotomised via Chinn's formula ",
-      "(log OR = SMD x pi/sqrt(3)); control event rate user-specified",
-      if (!is.null(threshold_label) && nzchar(threshold_label)) {
-        paste0(" (threshold: ", threshold_label, ")")
-      } else "",
-      "."
-    )
-  } else ""
-  footnote_text <- paste0(
+
+  base_note <- paste0(
     "GRADE certainty: ", certainty_label, ". ",
     "Assessment based on BMJ 2025 Core GRADE series (Guyatt et al.). ",
     "CI = confidence interval.", pi_note, " ",
     "Exp. rate = experimental (intervention) arm event rate computed from ",
-    "baseline risk and pooled relative effect.",
-    chinn_note
+    "baseline risk and pooled relative effect."
   )
-  ft <- flextable::add_footer_lines(ft, values = footnote_text)
+  ft <- flextable::add_footer_lines(ft, values = base_note)
+
+  # Chinn-specific footnote with explicit '*' link and citations
+  if (chinn_active) {
+    invert_str <- if (isTRUE(chinn_invert)) {
+      " (OR direction inverted: OR > 1 = treatment better)"
+    } else {
+      " (OR direction as given: positive SMD -> OR > 1)"
+    }
+    threshold_str <- if (!is.null(threshold_label) && nzchar(threshold_label)) {
+      paste0(" Threshold definition: ", threshold_label, ".")
+    } else ""
+
+    chinn_note <- paste0(
+      "* Continuous outcome dichotomised via Chinn's formula ",
+      "(log OR = SMD x pi / sqrt(3))", invert_str,
+      ". Control event rate user-specified.", threshold_str,
+      " Recommended reading: ",
+      "Chinn S. Stat Med 2000;19:3127-3131. ",
+      "doi:10.1002/1097-0258(20001130)19:22<3127::aid-sim784>3.0.co;2-m. ",
+      "Heimke F, Furukawa Y, Siafis S, et al. ",
+      "BMJ Ment Health 2024;27:e300978. ",
+      "doi:10.1136/bmjment-2023-300978."
+    )
+    ft <- flextable::add_footer_lines(ft, values = chinn_note)
+  }
+
   ft <- flextable::fontsize(ft, size = 8, part = "footer")
   ft <- flextable::color(ft, color = "#555555", part = "footer")
 
@@ -236,14 +258,25 @@ sof_table <- function(x, palette = c("pastel", "classic"),
 }
 
 # Experimental rate via Chinn (SMD/MD -> OR -> p1)
-.format_ier_chinn <- function(meta_obj, baseline_risk, per = 1000) {
+# `invert = TRUE` flips the SMD sign before applying the formula, so a
+# negative-is-better SMD (e.g., depression severity reduction) yields OR > 1.
+.format_ier_chinn <- function(meta_obj, baseline_risk, per = 1000, invert = FALSE) {
   if (is.null(baseline_risk)) return("-")
   est <- meta_obj$TE.random
   lo  <- meta_obj$lower.random
   hi  <- meta_obj$upper.random
   if (is.null(est) || is.na(est)) return("-")
 
-  conv <- chinn_smd_to_or(est, ci_lower = lo, ci_upper = hi)
+  if (isTRUE(invert)) {
+    est_eff <- -est
+    lo_eff  <- -hi
+    hi_eff  <- -lo
+  } else {
+    est_eff <- est
+    lo_eff  <- lo
+    hi_eff  <- hi
+  }
+  conv <- chinn_smd_to_or(est_eff, ci_lower = lo_eff, ci_upper = hi_eff)
   log_or_est <- log(conv$or)
   log_or_lo  <- log(conv$or_lower)
   log_or_hi  <- log(conv$or_upper)

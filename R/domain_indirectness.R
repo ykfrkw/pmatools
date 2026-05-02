@@ -49,7 +49,8 @@ assess_indirectness <- function(indirectness, meta_obj) {
 
 .aggregate_indirectness <- function(ind_vec) {
   validate_grade_level(ind_vec, "indirectness")
-  order_map <- c(no = 1, some = 2, serious = 3, very_serious = 4)
+  ind_vec <- .normalize_grade_level(ind_vec)
+  order_map <- c(no = 1, some_concerns = 2, serious = 3)
   worst <- names(which.max(order_map[ind_vec]))
   n <- length(ind_vec)
   tbl <- table(ind_vec)
