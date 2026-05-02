@@ -52,7 +52,17 @@ ingest_data <- function(data,
     long_df <- .normalise_long(df, experimental_label, control_label)
   }
 
-  # 5. Validate
+  # 5. Combine duplicate (studlab, treat) rows (Cochrane Handbook 6.5.2.10)
+  n_before <- nrow(long_df)
+  long_df  <- .combine_arms(long_df)
+  if (nrow(long_df) < n_before) {
+    message(sprintf(
+      "Combined %d duplicate (studlab, treat) rows using Cochrane Handbook 6.5.2.10.",
+      n_before - nrow(long_df)
+    ))
+  }
+
+  # 6. Validate
   .validate_long(long_df)
 
   tibble::as_tibble(long_df)
@@ -183,7 +193,15 @@ ingest_data <- function(data,
     ))
   }
 
-  per_study_cols <- intersect(c("rob", "indirectness", "subgroup"), names(df))
+  # Canonical wide-only columns get pivoted; everything else is treated as
+  # per-study extra and copied into both arm rows so Step 2 column mapping can
+  # see them.
+  canonical_wide <- c("studlab",
+                      "n_e", "n_c",
+                      "event_e", "event_c",
+                      "mean_e", "mean_c",
+                      "sd_e", "sd_c")
+  extra_cols <- setdiff(names(df), canonical_wide)
 
   rows_e <- data.frame(
     studlab = df$studlab,
@@ -207,7 +225,7 @@ ingest_data <- function(data,
     rows_c$mean <- df$mean_c
     rows_c$sd   <- df$sd_c
   }
-  for (col in per_study_cols) {
+  for (col in extra_cols) {
     rows_e[[col]] <- df[[col]]
     rows_c[[col]] <- df[[col]]
   }
@@ -278,14 +296,14 @@ ingest_data <- function(data,
 
   if ("event" %in% names(df)) {
     if (!is.numeric(df$event)) df$event <- suppressWarnings(as.numeric(df$event))
-    if (any(is.na(df$event)) || any(df$event < 0)) {
-      rlang::abort("'event' must be non-negative integers.")
+    if (any(!is.na(df$event) & df$event < 0)) {
+      rlang::abort("'event' must be non-negative integers (NA permitted).")
     }
   }
   if ("sd" %in% names(df)) {
     if (!is.numeric(df$sd)) df$sd <- suppressWarnings(as.numeric(df$sd))
-    if (any(is.na(df$sd)) || any(df$sd < 0)) {
-      rlang::abort("'sd' must be non-negative.")
+    if (any(!is.na(df$sd) & df$sd < 0)) {
+      rlang::abort("'sd' must be non-negative (NA permitted).")
     }
   }
 

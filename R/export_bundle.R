@@ -28,6 +28,17 @@
 #'   specifications with `value`/`origin`/`col` slots, used to render
 #'   `analysis.R` faithfully. See SPEC.md.
 #' @param ma_args Optional named list of `run_ma()` argument specifications.
+#' @param forest_display Optional named list of arguments forwarded to
+#'   \code{\link{plot_forest}} when rendering the bundled forest plot.
+#'   Recognised names: `title`, `label_e`, `label_c`, `xlim`,
+#'   `favors_left`, `favors_right`, `show_n`, `show_events`,
+#'   `addrow_above`, `addrow_below`.
+#' @param rob Optional character vector of per-study Risk-of-Bias labels
+#'   (length \code{length(meta_obj$studlab)} or \code{meta_obj$k}). Required
+#'   when `"forest_rob"` is in `include` to render the stratified forest plot.
+#' @param forest_display_rob Optional named list of `plot_forest` arguments
+#'   for the RoB-stratified forest plot bundled when `"forest_rob"` is in
+#'   `include`. Same recognised names as `forest_display`.
 #'
 #' @return Character. Absolute path to the created ZIP file.
 #'
@@ -37,16 +48,19 @@ export_bundle <- function(ma,
                           output_dir   = ".",
                           bundle_name  = "pmatools_results",
                           include      = c("data", "script", "results",
-                                           "forest", "funnel",
+                                           "forest", "forest_rob", "funnel",
                                            "grade_table", "grade_appendix"),
                           per          = 1000,
                           prediction   = FALSE,
                           convert_smd_to_or = FALSE,
                           baseline_risk     = NULL,
                           threshold_label   = NULL,
-                          data         = NULL,
-                          grade_args   = NULL,
-                          ma_args      = NULL) {
+                          data               = NULL,
+                          grade_args         = NULL,
+                          ma_args            = NULL,
+                          forest_display     = NULL,
+                          rob                = NULL,
+                          forest_display_rob = NULL) {
   if (!inherits(ma, "meta")) {
     rlang::abort("export_bundle: 'ma' must be a meta object.")
   }
@@ -96,11 +110,32 @@ export_bundle <- function(ma,
   if ("forest" %in% include) {
     pdf_path <- file.path(work_dir, "forest_plot.pdf")
     png_path <- file.path(work_dir, "forest_plot.png")
+    fd <- if (is.list(forest_display)) forest_display else list()
+    if (is.null(fd$title) || !nzchar(fd$title %||% "")) fd$title <- grade$outcome_name
     .save_plot_pdf_png(
-      function() plot_forest(ma, title = grade$outcome_name),
+      function() do.call(plot_forest, c(list(meta_obj = ma), fd)),
       pdf_path, png_path,
       width = max(7, 3 + 0.3 * ma$k),
       height = max(5, 1.5 + 0.35 * ma$k)
+    )
+    files_in_zip <- c(files_in_zip, pdf_path, png_path)
+  }
+
+  # 4b. forest plot stratified by RoB
+  if ("forest_rob" %in% include && !is.null(rob)) {
+    pdf_path <- file.path(work_dir, "forest_plot_rob.pdf")
+    png_path <- file.path(work_dir, "forest_plot_rob.png")
+    fdr <- if (is.list(forest_display_rob)) forest_display_rob else list()
+    if (is.null(fdr$title) || !nzchar(fdr$title %||% "")) {
+      fdr$title <- paste0(grade$outcome_name, " (stratified by RoB)")
+    }
+    k_extra <- if (!is.null(ma$k)) ma$k else 0L
+    .save_plot_pdf_png(
+      function() do.call(plot_forest_rob,
+                         c(list(meta_obj = ma, rob = rob), fdr)),
+      pdf_path, png_path,
+      width  = max(8, 3 + 0.3 * k_extra),
+      height = max(7, 3 + 0.4 * (k_extra + 4))
     )
     files_in_zip <- c(files_in_zip, pdf_path, png_path)
   }

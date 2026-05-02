@@ -192,22 +192,29 @@ assess_inconsistency <- function(meta_obj,
   te_vec <- te_vec[!is.na(te_vec)]
 
   if (!is.null(mid_internal) && !is.na(mid_internal) && mid_internal > 0) {
-    # 3-zone classification around +/-MID
+    # 3-zone classification around +/-Threshold
     M <- mid_internal
     n_above   <- sum(te_vec > +M)
     n_below   <- sum(te_vec < -M)
     n_trivial <- length(te_vec) - n_above - n_below
 
-    pct_one_side <- max(
-      (n_above + n_trivial) / length(te_vec),
-      (n_below + n_trivial) / length(te_vec)
-    )
+    n_total      <- length(te_vec)
+    pct_above    <- n_above / n_total
+    pct_below    <- n_below / n_total
+    pct_one_side <- max(pct_above, pct_below)
 
-    threshold_side <- if (pct_one_side >= 0.75) "majority_one_side" else "opposite_sides"
-    threshold_label <- sprintf("vs +/-MID = +/-%g", M)
+    has_opposite <- (n_above > 0 && n_below > 0)
+
+    threshold_side <- if (has_opposite && pct_one_side < 0.75) {
+      "opposite_sides"
+    } else {
+      "majority_one_side"
+    }
+
+    threshold_label <- sprintf("vs +/-Threshold = +/-%g", M)
     side_note <- sprintf(
-      "AUTO Step 2 (%s): zone counts (k = %d): above_mid = %d, trivial = %d, below_mid = %d; max one-side proportion = %.0f%% -> '%s'.",
-      threshold_label, length(te_vec),
+      "AUTO Step 2 (%s): zone counts (k = %d): above_threshold = %d, trivial = %d, below_threshold = %d; max one-side proportion = %.0f%% -> '%s'.",
+      threshold_label, n_total,
       n_above, n_trivial, n_below,
       pct_one_side * 100, threshold_side
     )
@@ -219,7 +226,7 @@ assess_inconsistency <- function(meta_obj,
     } else {
       "opposite_sides"
     }
-    threshold_label <- "vs null = 0 (MID not specified)"
+    threshold_label <- "vs null = 0 (Threshold not specified)"
     side_note <- sprintf(
       "AUTO Step 2 (%s): %.0f%% of study-level TEs > 0 -> '%s'.",
       threshold_label, pct_positive * 100, threshold_side
@@ -229,13 +236,13 @@ assess_inconsistency <- function(meta_obj,
   if (threshold_side == "majority_one_side") {
     return(make_domain_row(
       domain   = "Inconsistency",
-      judgment = "some",
+      judgment = "no",
       auto     = TRUE,
       notes    = paste0(
         "AUTO Step 1: I2 > 25% -> important heterogeneity detected. ",
         side_note,
-        " Auto path is conservative ('some' instead of BMJ-faithful 'no'); ",
-        "supply manual flowchart parameters for BMJ-faithful judgment. | ",
+        " Direction of effect is consistent (majority on one side of threshold) ",
+        "-> do not rate down per BMJ Core GRADE 3 flowchart. | ",
         stat_note
       )
     ))

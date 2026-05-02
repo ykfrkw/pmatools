@@ -85,7 +85,7 @@ sof_table <- function(x, palette = c("pastel", "classic"),
                                 prediction = prediction)
 
   certainty_label <- x$certainty
-  certainty_sym   <- CERTAINTY_SYMBOLS[[certainty_label]]
+  certainty_sym   <- CERTAINTY_SYMBOLS_UNICODE[[certainty_label]]
   cell_colors     <- pal[[certainty_label]]
 
   per_str <- format(per, big.mark = ",", scientific = FALSE)
@@ -138,7 +138,7 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   ft <- flextable::color(ft, color = "white", part = "header")
   ft <- flextable::bold(ft,  part = "header")
 
-  pi_note <- if (prediction) " PI = 95% prediction interval." else ""
+  pi_note <- if (prediction) " PrI = 95 percent prediction interval." else ""
   chinn_note <- if (chinn_active) {
     paste0(
       " Continuous outcome dichotomised via Chinn's formula ",
@@ -202,7 +202,7 @@ sof_table <- function(x, palette = c("pastel", "classic"),
           sm %in% c("RR", "OR", "HR", "IRR")) {
         pi_lo <- exp(pi_lo); pi_hi <- exp(pi_hi)
       }
-      s <- paste0(s, sprintf("\nPI (%.2f; %.2f)", pi_lo, pi_hi))
+      s <- paste0(s, sprintf("\nPrI (%.2f; %.2f)", pi_lo, pi_hi))
     }
   }
 
@@ -211,22 +211,22 @@ sof_table <- function(x, palette = c("pastel", "classic"),
 
 # Control event rate: baseline_risk displayed per 'per' units (no CI)
 .format_cer <- function(baseline_risk, per = 1000) {
-  if (is.null(baseline_risk)) return("\u2014")
+  if (is.null(baseline_risk)) return("-")
   per_str <- format(per, big.mark = ",", scientific = FALSE)
   sprintf("%d per %s", round(baseline_risk * per), per_str)
 }
 
 # Experimental (intervention) event rate: derived from baseline + relative effect
 .format_ier <- function(meta_obj, baseline_risk, per = 1000) {
-  if (is.null(baseline_risk)) return("\u2014")
+  if (is.null(baseline_risk)) return("-")
   sm <- meta_obj$sm
-  if (is.null(sm) || !sm %in% c("RR", "OR", "HR", "IRR")) return("\u2014")
+  if (is.null(sm) || !sm %in% c("RR", "OR", "HR", "IRR")) return("-")
 
   p1_est <- .p1(baseline_risk, meta_obj$TE.random,    sm)
   p1_lo  <- .p1(baseline_risk, meta_obj$lower.random, sm)
   p1_hi  <- .p1(baseline_risk, meta_obj$upper.random, sm)
 
-  if (is.null(p1_est)) return("\u2014")
+  if (is.null(p1_est)) return("-")
 
   per_str <- format(per, big.mark = ",", scientific = FALSE)
   sprintf("%d per %s\n(%d; %d)",
@@ -237,11 +237,11 @@ sof_table <- function(x, palette = c("pastel", "classic"),
 
 # Experimental rate via Chinn (SMD/MD -> OR -> p1)
 .format_ier_chinn <- function(meta_obj, baseline_risk, per = 1000) {
-  if (is.null(baseline_risk)) return("\u2014")
+  if (is.null(baseline_risk)) return("-")
   est <- meta_obj$TE.random
   lo  <- meta_obj$lower.random
   hi  <- meta_obj$upper.random
-  if (is.null(est) || is.na(est)) return("\u2014")
+  if (is.null(est) || is.na(est)) return("-")
 
   conv <- chinn_smd_to_or(est, ci_lower = lo, ci_upper = hi)
   log_or_est <- log(conv$or)
@@ -252,7 +252,7 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   p1_lo  <- .p1(baseline_risk, log_or_lo,  "OR")
   p1_hi  <- .p1(baseline_risk, log_or_hi,  "OR")
 
-  if (is.null(p1_est)) return("\u2014")
+  if (is.null(p1_est)) return("-")
 
   per_str <- format(per, big.mark = ",", scientific = FALSE)
   sprintf("%d per %s\n(%d; %d)",
