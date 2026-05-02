@@ -1,35 +1,37 @@
-study,arm,year,treatment,n_randomized,d_r,rob_d
-Smith2008,CBT-I,2008,CBT-I,15,6,L
-Smith2008,Control,2008,Control,15,3,L
-Jones2010,CBT-I,2010,CBT-I,20,8,S
-Jones2010,Control,2010,Control,20,4,S
-Brown2011,CBT-I,2011,CBT-I,18,7,L
-Brown2011,Control,2011,Control,18,4,L
-Taylor2012,CBT-I,2012,CBT-I,25,9,H
-Taylor2012,Control,2012,Control,25,5,H
-Wilson2013,CBT-I,2013,CBT-I,30,13,S
-Wilson2013,Control,2013,Control,30,7,S
-Johnson2014,CBT-I,2014,CBT-I,22,9,L
-Johnson2014,Control,2014,Control,22,5,L
-Davis2015,CBT-I,2015,CBT-I,28,11,H
-Davis2015,Control,2015,Control,28,6,H
-Miller2015,CBT-I,2015,CBT-I,35,15,S
-Miller2015,Control,2015,Control,35,8,S
-Moore2016,CBT-I,2016,CBT-I,40,17,H
-Moore2016,Control,2016,Control,40,9,H
-Thomas2016,CBT-I,2016,CBT-I,45,19,S
-Thomas2016,Control,2016,Control,45,10,S
-Jackson2017,CBT-I,2017,CBT-I,32,13,H
-Jackson2017,Control,2017,Control,32,7,H
-White2017,CBT-I,2017,CBT-I,38,16,S
-White2017,Control,2017,Control,38,8,S
-Harris2018,CBT-I,2018,CBT-I,50,21,L
-Harris2018,Control,2018,Control,50,11,L
-Martin2019,CBT-I,2019,CBT-I,42,18,S
-Martin2019,Control,2019,Control,42,9,S
-Thompson2019,CBT-I,2019,CBT-I,55,22,H
-Thompson2019,Control,2019,Control,55,12,H
-Garcia2020,CBT-I,2020,CBT-I,1800,756,S
-Garcia2020,Control,2020,Control,1552,388,S
-Martinez2021,CBT-I,2021,CBT-I,60,26,L
-Martinez2021,Control,2021,Control,60,14,L
+study,arm,year,age_n,age_mean,age_sd,n_female,n_hypnotic,treatment,group1,group2,severity_scale,insomnia_diagnosis,mdd_diagnosis,n_randomized,n_remission,severity_baseline_n,severity_baseline_mean,severity_baseline_sd,severity_endpoint_n,severity_endpoint_mean,severity_endpoint_sd,n_dropout,PHQ9,d_r,d_bl_n,d_bl_m,d_bl_sd,d_response,d_ep_n,d_ep_m,d_ep_sd,sr,sc,cr,th,duration_weeks,rob_d,rob_i,rob_dropout
+Manber2008,EsCIT+CBTI,2008,15,49.5,13.6,8,0,CBT-I,Active,In-person,ISI,1. formal_DSM,1. formal (DSM ICD),15,5,13,23.1,2.4,13,9.5,6.3,5,17,9,14,15.5,3.8,NA,14,5.8,5.6,1,1,1,0,9,L,L,L
+Manber2008,EsCIT+CTRL,2008,15,47.8,13.4,10,0,Control,Active,In-person,ISI,1. formal_DSM,1. formal (DSM ICD),15,1,15,21.5,5,15,14.3,5.1,3,17,7,14,16.7,5.2,NA,14,8.8,7.3,0,0,0,0,9,L,L,L
+Watanabe2011,BBTI+TAU,2011,20,52.9,11.6,15,NA,CBT-I,Active,In-person,ISI,2. informal_ISI,1. formal (DSM ICD),20,8,20,15.3,4.7,20,10.6,4.91934955,0,13,8,20,11.2,3.7,NA,20,7.6,6.708203932,1,1,0,0,4,S,S,L
+Watanabe2011,TAU,2011,17,47.8,10.1,8,NA,Control,Active,In-person,ISI,2. informal_ISI,1. formal (DSM ICD),17,1,17,17.4,3.3,17,15.9,4.947726751,0,13,2,17,12.3,3.5,NA,17,14.5,7.009279564,0,0,0,0,4,S,S,L
+Wagley2013,Treatment,2013,20,43.6,10.40519325,14,8,CBT-I,Waitlist,In-person,PSQI,2. informal (elevated score),2. informal (elevated scores),21,2,20,13.78,5.12,20,11.57,4.95,1,16.13,7,20,16.13,7.21,NA,20,10.87,7.41,1,1,1,0,4,S,S,S
+Wagley2013,Waitlist,2013,10,48.2,10.40519325,7,2,Control,Waitlist,In-person,PSQI,2. informal (elevated score),2. informal (elevated scores),10,0,10,15.29,3.55,10,15,4.04,0,20.14,0,10,20.14,3.76,NA,10,19.86,3.24,0,0,0,0,4,S,S,S
+NorellClarke2015,CBT-I,2015,NA,NA,NA,NA,NA,CBT-I,Active,In-person,*,1. formal_DSM,1. formal (DSM ICD),19,NA,NA,NA,NA,NA,NA,NA,NA,15,7,19,27.7,10.5,NA,19,17.7,13.3,1,1,1,0,8,H,*,*
+NorellClarke2015,RT,2015,NA,NA,NA,NA,NA,Control,Active,In-person,*,1. formal_DSM,1. formal (DSM ICD),22,NA,NA,NA,NA,NA,NA,NA,NA,12,6,22,23.1,6.6,NA,22,19.5,12.1,0,0,0,0,8,H,*,*
+Manber2016,CBTI,2016,75,48.3,12.7,53,0,CBT-I,Active,In-person,ISI,1. formal_DSM,1. formal (DSM ICD),75,31,75,19.4,4.3,56,8,6,17,18,28,75,17,4,NA,51,7.5,7,1,1,1,0,16,H,H,L
+Manber2016,CTRL,2016,75,45,12.3,57,0,Control,Active,In-person,ISI,1. formal_DSM,1. formal (DSM ICD),75,15,75,18.3,3.9,48,11,8,24,18,26,75,17,4,NA,47,7.5,7,0,0,0,0,16,H,H,L
+Carney2017,CBT+AD,2017,36,44.97,9.38,20,0,CBT-I,Active,In-person,ISI,1. formal_Edinger2004,1. formal (DSM ICD),36,8,36,26.21,8.61,36,13.23,9.9,10,21,12,36,24.13,6.55,NA,26,13.03,8.72,1,1,1,0,8,H,H,S
+Carney2017,AD+SH,2017,35,40.11,11.41,22,0,Control,Active,In-person,ISI,1. formal_Edinger2004,1. formal (DSM ICD),35,2,35,30.8,9.81,35,15.3,9.03,15,21,11,35,24.88,6.58,NA,20,11.24,6.4,0,0,0,0,8,H,H,S
+Pigeon2017,CBT-I,2017,13,56.9,10,1,0,CBT-I,Active,In-person,ISI,2. informal_ISI,1. formal (DSM ICD),18,2,13,21.5,3.7,13,13.9,6.1,5,17,4,13,14,5.3,NA,13,9.9,5.4,1,1,1,0,4,S,S,S
+Pigeon2017,SH,2017,14,59.9,9.3,2,0,Control,Active,In-person,ISI,2. informal_ISI,1. formal (DSM ICD),18,2,14,18.2,3.5,14,15.2,7,4,17,4,14,15,5,NA,14,10.8,5.4,0,0,0,0,4,S,S,S
+Sadler2018,CBT-I,2018,24,74.7,7.1,15,3,CBT-I,Active,In-person,ISI,1. formal_DSM,1. formal (DSM ICD),24,7,24,17,4.898979486,24,10.21,4.996959075,1,NA,10,24,17.17,5.829785588,NA,24,9.92,5.829785588,1,1,1,0,8,L,L,L
+Sadler2018,PCG,2018,23,72.3,7.6,12,2,Control,Active,In-person,ISI,1. formal_DSM,1. formal (DSM ICD),23,1,23,16.8,4.795831523,22,15.19,4.924936548,1,NA,3,23,16.52,5.850914458,NA,23,15.08,6.15,0,0,0,0,8,L,L,L
+Gebara2019,Immediate BBTI,2019,6,64,2.53,2,4,CBT-I,Waitlist,In-person,ISI,1. formal_DSM,1. formal (DSM ICD),6,1,5,18.6,3.577708764,5,12.8,5.590169944,1,16,2,6,15.75,NA,2,6,12,8.5732141,1,1,0,0,4,S,S,S
+Gebara2019,Delayed BBTI,2019,5,66.2,5.4,1,3,Control,Waitlist,In-person,ISI,1. formal_DSM,1. formal (DSM ICD),5,1,5,18,3.354101966,5,14.8,6.037383539,0,16,1,5,13.4,NA,1,5,11,4.91934955,0,0,0,0,4,S,S,S
+Glozier2019,SHUTi,2019,45,58.6,6.3,0,0,CBT-I,Active,App,ISI,2. informal_ISI,1. formal (DSM ICD),45,14,40,17.5,4.5,40,10.2,5.5,4,12,14,41,26.7,9.6,NA,41,18.5,12,1,1,1,0,12,L,L,L
+Glozier2019,Control,2019,42,58.1,6.1,0,0,Control,Active,App,ISI,2. informal_ISI,1. formal (DSM ICD),42,6,35,16.8,4,35,12.3,5.1,4,12,9,38,24.8,10.8,NA,38,20.9,11.8,0,0,0,0,12,L,L,L
+Lopez2019,eCBT-I,2019,NA,NA,NA,NA,NA,CBT-I,Active,App,ISI,1. formal_DSM,2. informal (elevated scores),23,NA,10,NA,NA,10,-11,5.846898367,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,1,1,1,1,12,*,H,*
+Lopez2019,mPT,2019,NA,NA,NA,NA,NA,Control,Active,App,ISI,1. formal_DSM,2. informal (elevated scores),23,NA,11,NA,NA,11,-1,5.846898367,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,0,0,0,0,12,*,H,*
+VanDerZweerde2019,i-Sleep,2019,52,44.64,13.12420664,43,15,CBT-I,Waitlist,App,ISI,1. formal_DSM,2. informal (elevated scores),52,28,52,19.63,3.53344025,52,9.57,5.696771015,7,10,29,52,7.58,3.99,29,45,3.07,3.09,1,1,1,0,5,S,S,S
+VanDerZweerde2019,Sdiary,2019,52,46.29,15.07120433,42,15,Control,Waitlist,App,ISI,1. formal_DSM,2. informal (elevated scores),52,4,52,20,3.461329224,52,18.14,5.480437939,5,10,14,52,7.1,3.44,14,47,5.74,4.22,0,0,0,0,5,S,S,S
+Henry2020,Intervention,2020,1696,29.6,13,1289,NA,CBT-I,Active,App,SCI,2. informal (elevated score),2. informal (elevated scores),1696,848,1696,8.05,4.01,1696,-16.5,6.73,NA,15,609,1696,15.3,4.2,NA,1696,9.81,5.98,1,1,1,1,10,S,S,*
+Henry2020,Control,2020,1656,29.4,13,1259,NA,Control,Active,App,SCI,2. informal (elevated score),2. informal (elevated scores),1656,341,1656,8.04,4.2,1656,-11.5,6.1,NA,15,305,1656,15.2,4.3,NA,1656,13.16,6.18,0,0,0,0,10,S,S,*
+Chan2021,Tx,2021,167,27.28,7.25,109,0,CBT-I,Waitlist,App,ISI,1. formal_ICD,1. formal (DSM ICD),167,25,167,18.41,4.28,102,12.25,4.5,65,16,21,167,36.88,8.06,NA,108,27.62,10.53,1,1,1,0,6,H,H,L
+Chan2021,WL,2021,153,27.26,7.22,124,0,Control,Waitlist,App,ISI,1. formal_ICD,1. formal (DSM ICD),153,6,153,18.52,4.46,138,16.99,4.89,15,16,2,153,37.78,7.8,NA,138,35.36,7.62,0,0,0,0,6,H,H,L
+Dyrberg2022,CBT-I,2022,22,36.05,10.40519325,14,NA,CBT-I,Waitlist,In-person,ISI,1. formal_DSM,1. formal (DSM ICD),23,3,22,20.6,2.7,16,12.1,4.7,7,17,7,22,21.2,2.1,NA,22,13.8,7,1,1,1,0,6,S,S,S
+Dyrberg2022,TAU,2022,19,38.26,10.40519325,14,NA,Control,Waitlist,In-person,ISI,1. formal_DSM,1. formal (DSM ICD),24,2,19,21,3.1,19,17.7,7.3,5,17,3,19,21.4,2.9,NA,19,19.9,9.4,0,0,0,0,6,S,S,S
+Pigeon2022,CBTI+CPT,2022,56,34.21,10.81,54,0,CBT-I,Active,In-person,ISI,2. informal (elevated score),2. informal (elevated scores),56,8,56,20.91,3.8,36,12.04,6.09,20,21,21,56,20.59,4.39,NA,56,11.93,5.29,1,1,1,0,4,H,H,S
+Pigeon2022,Control+CPT,2022,54,36.8,10.92,53,0,Control,Active,In-person,ISI,2. informal (elevated score),2. informal (elevated scores),54,1,54,20.7,4.45,47,18.41,5.34,7,21,5,54,18.42,4.96,NA,54,16.3,5.56,0,0,0,0,4,H,H,S
+Chung2023,CBTI,2023,102,47.95,11.63,78,56,CBT-I,Active,In-person,ISI,1. formal_DSM,1. formal (DSM ICD),102,9,102,17.3,5.352737617,102,14,5.857712864,25,8,10,102,12.2,5.352737617,10,102,11.24,5.756717815,1,1,1,0,8,S,S,S
+Chung2023,No CBTI,2023,98,45.63,11.75,66,56,Control,Active,In-person,ISI,1. formal_DSM,1. formal (DSM ICD),98,9,98,17.9,5.246732316,98,15.5,5.741707063,17,10,10,98,13.05,5.345727266,10,98,11.23,5.642712114,0,0,0,0,8,S,S,S
+Rotger2024,dCBT-I,2024,40,42.98,14.67,31,15,CBT-I,Waitlist,App,ISI,1. formal_DSM,2. informal (elevated scores),40,11,40,18.95,4,33,9.39,5.06,7,NA,12,40,23.28,4.12,NA,33,14.64,8.3,1,1,1,0,8,H,H,L
+Rotger2024,WLC,2024,48,41.63,14.08,34,25,Control,Waitlist,App,ISI,1. formal_DSM,2. informal (elevated scores),48,0,48,18.42,3.04,46,17.76,3.61,2,NA,4,48,22.27,4.44,NA,46,20.61,6.96,0,0,0,0,8,H,H,L

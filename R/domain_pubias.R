@@ -3,28 +3,28 @@
 # BMJ 2025 Core GRADE 4, Fig 5 フローチャートに準拠:
 #
 #   Step 1. Are most or all studies small and industry sponsored?
-#     YES → Rate down (judgment = "serious")
-#     NO  → Step 2
+#     YES -> Rate down (judgment = "serious")
+#     NO  -> Step 2
 #
 #   Step 2. Is statistical analysis of publication bias feasible?
-#           (ie, meta-analysis performed, ≥10 studies)
+#           (ie, meta-analysis performed, >=10 studies)
 #
-#     YES (k ≥ 10) → Visual asymmetry of funnel plot AND/OR statistical test
+#     YES (k >= 10) -> Visual asymmetry of funnel plot AND/OR statistical test
 #                    strongly suggests publication bias?
-#       YES → Rate down (judgment = "serious")
-#       NO  → Do not rate down
+#       YES -> Rate down (judgment = "serious")
+#       NO  -> Do not rate down
 #
-#     NO (k < 10)  → Documentation of unpublished studies
+#     NO (k < 10)  -> Documentation of unpublished studies
 #                    (eg, in registry or FDA)?
-#       YES → Rate down (judgment = "serious")
-#       NO  → Do not rate down
+#       YES -> Rate down (judgment = "serious")
+#       NO  -> Do not rate down
 #
 # 引数:
 #   pubias_small_industry   : "yes" / "no" / NULL (デフォルト = "no"として扱う)
 #   pubias_funnel_asymmetry : "yes" / "no" / NULL
-#       NULL かつ k ≥ 10 → Egger 検定を自動実施し、p < 0.10 で asymmetry 判定
+#       NULL かつ k >= 10 -> Egger 検定を自動実施し、p < 0.10 で asymmetry 判定
 #   pubias_unpublished      : "yes" / "no" / NULL
-#       NULL かつ k < 10  → "no" と仮定（注記付き）
+#       NULL かつ k < 10  -> "no" と仮定（注記付き）
 
 assess_pubias <- function(meta_obj,
                           pubias_small_industry   = NULL,
@@ -33,7 +33,7 @@ assess_pubias <- function(meta_obj,
   k <- meta_obj$k
   if (is.null(k) || is.na(k)) k <- 0L
 
-  # ─── Step 1: Small + industry-sponsored ────────────────────────────────
+  # --- Step 1: Small + industry-sponsored --------------------------------
   if (!is.null(pubias_small_industry)) {
     if (!pubias_small_industry %in% c("yes", "no")) {
       rlang::abort("pubias_small_industry must be 'yes' or 'no'.")
@@ -45,17 +45,17 @@ assess_pubias <- function(meta_obj,
         auto     = FALSE,
         notes    = paste0(
           "FLOWCHART Step 1: Most/all studies are small AND industry-sponsored ",
-          "\u2192 rate down."
+          "-> rate down."
         )
       ))
     }
-    # "no" → proceed to Step 2
+    # "no" -> proceed to Step 2
     step1_note <- "FLOWCHART Step 1: Not dominated by small industry-sponsored studies. "
   } else {
     step1_note <- "FLOWCHART Step 1: pubias_small_industry not specified; assumed 'no'. "
   }
 
-  # ─── Step 2: Statistical feasibility (k ≥ 10) ──────────────────────────
+  # --- Step 2: Statistical feasibility (k >= 10) --------------------------
   if (k >= 10) {
     # Statistical analysis feasible
     return(.pubias_statistical(
@@ -65,7 +65,7 @@ assess_pubias <- function(meta_obj,
       step1_note              = step1_note
     ))
   } else {
-    # Statistical analysis NOT feasible → check registry / unpublished
+    # Statistical analysis NOT feasible -> check registry / unpublished
     return(.pubias_registry(
       k                  = k,
       pubias_unpublished = pubias_unpublished,
@@ -75,7 +75,7 @@ assess_pubias <- function(meta_obj,
 }
 
 # --------------------------------------------------------------------------
-# k ≥ 10: funnel plot / statistical test branch
+# k >= 10: funnel plot / statistical test branch
 # --------------------------------------------------------------------------
 .pubias_statistical <- function(meta_obj, k, pubias_funnel_asymmetry, step1_note) {
 
@@ -110,15 +110,15 @@ assess_pubias <- function(meta_obj,
 
   if (asymmetry == "yes") {
     judgment <- "serious"
-    asym_desc <- "funnel plot asymmetry / statistical test strongly suggests bias \u2192 rate down"
+    asym_desc <- "funnel plot asymmetry / statistical test strongly suggests bias -> rate down"
   } else {
     judgment <- "no"
-    asym_desc <- "no strong evidence of funnel plot asymmetry \u2192 do not rate down"
+    asym_desc <- "no strong evidence of funnel plot asymmetry -> do not rate down"
   }
 
   notes <- paste0(
     step1_note,
-    sprintf("Step 2: Statistical analysis feasible (k = %d \u2265 10). ", k),
+    sprintf("Step 2: Statistical analysis feasible (k = %d >= 10). ", k),
     asym_desc, ". ",
     if (!is.na(egger_note)) egger_note else "",
     " [", judgment_src, "]"
@@ -161,11 +161,11 @@ assess_pubias <- function(meta_obj,
     judgment  <- "serious"
     unpub_desc <- paste0(
       "Documentation of unpublished studies identified (registry/FDA) ",
-      "\u2192 rate down."
+      "-> rate down."
     )
   } else {
     judgment  <- "no"
-    unpub_desc <- "No documentation of unpublished studies \u2192 do not rate down."
+    unpub_desc <- "No documentation of unpublished studies -> do not rate down."
   }
 
   notes <- paste0(

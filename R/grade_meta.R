@@ -45,7 +45,7 @@
 #'   If provided, flowchart parameters are ignored.
 #' @param inconsistency_ci_diff \code{"yes"} / \code{"no"}: Are there important
 #'   differences in point estimates AND limited CI overlap? (BMJ Core GRADE 3 Fig 2
-#'   Step 1). Required for flowchart; if NULL, falls back to I²-based assessment.
+#'   Step 1). Required for flowchart; if NULL, falls back to I^2-based assessment.
 #' @param inconsistency_threshold_side Required when \code{inconsistency_ci_diff = "yes"}.
 #'   \code{"majority_one_side"} or \code{"opposite_sides"}: are most estimates on one
 #'   side of the clinical threshold, or spread across both sides?
@@ -243,7 +243,7 @@ grade_meta <- function(meta_obj,
 
 #' @export
 print.pmatools <- function(x, ...) {
-  cat("\n\u2500\u2500 GRADE Certainty Assessment \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n")
+  cat("\n-- GRADE Certainty Assessment ---------------------------\n")
   cat(sprintf(" Outcome      : %s\n", x$outcome_name))
   cat(sprintf(" Study design : %s  (starting quality: %s)\n",
               x$study_design, x$starting_quality))
@@ -253,14 +253,13 @@ print.pmatools <- function(x, ...) {
   for (i in seq_len(nrow(d))) {
     row <- d[i, ]
     dg  <- if (row$downgrade < 0) sprintf(" [%d]", row$downgrade) else "    "
-    src <- if (row$auto) "(auto)" else "(manual)"
-    cat(sprintf("  %-20s %-14s %s %s\n",
-                row$domain, row$judgment, dg, src))
+    cat(sprintf("  %-20s %-14s %s\n",
+                row$domain, row$judgment, dg))
   }
 
   cat(sprintf("\n Final certainty : %s  %s\n",
               x$certainty, CERTAINTY_SYMBOLS[[x$certainty]]))
-  cat("\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n")
+  cat("----------------------------------------------------------\n\n")
   invisible(x)
 }
 

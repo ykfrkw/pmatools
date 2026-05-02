@@ -40,6 +40,16 @@ assess_rob <- function(rob, meta_obj,
     ))
   }
 
+  # Defensive: coerce data.frame / tibble (1-col) or list inputs to plain vector
+  if (is.data.frame(rob)) {
+    if (ncol(rob) == 1) rob <- rob[[1]]
+    else rlang::abort("rob must be a single column, not a multi-column data.frame.")
+  }
+  if (is.list(rob) && !is.data.frame(rob)) {
+    rob <- unlist(rob, use.names = FALSE)
+  }
+  if (is.factor(rob)) rob <- as.character(rob)
+
   # Scalar GRADE level (after normalisation): bypass flowchart
   if (length(rob) == 1 && is.character(rob)) {
     rob_norm <- .normalize_rob_level(rob)
@@ -90,8 +100,25 @@ assess_rob <- function(rob, meta_obj,
   n_high   <- sum(high_idx)
   n_total  <- length(rob_vec)
 
-  # Random-effects weight share
+  # Random-effects weight share. meta keeps studlab/w.random at the original
+  # length (incl. excluded NA studies); align by selecting positions with
+  # finite TE so the resulting weight vector matches rob_vec (length k).
   weights <- meta_obj$w.random
+  te_vec  <- meta_obj$TE
+  if (!is.null(weights) && !is.null(te_vec) &&
+      length(weights) == length(te_vec)) {
+    keep <- is.finite(te_vec) & is.finite(weights)
+    if (sum(keep) == n_total) {
+      weights <- weights[keep]
+    } else if (length(weights) == n_total) {
+      # already matches (no excluded studies)
+    } else {
+      weights <- NULL
+    }
+  } else {
+    weights <- NULL
+  }
+
   if (!is.null(weights) && length(weights) == n_total && sum(weights) > 0) {
     pct_high_w <- sum(weights[high_idx]) / sum(weights)
     weight_note <- sprintf(
@@ -128,10 +155,23 @@ assess_rob <- function(rob, meta_obj,
   }
 
   # YES branch: dominated -> direction-and-magnitude check
+  # Align TE / seTE to length k so logical indexing with high_idx is correct.
+  te_vec  <- meta_obj$TE
+  se_vec  <- meta_obj$seTE
+  if (!is.null(te_vec) && length(te_vec) != n_total) {
+    keep <- is.finite(te_vec)
+    if (sum(keep) == n_total) {
+      te_vec <- te_vec[keep]
+      if (!is.null(se_vec) && length(se_vec) == length(meta_obj$TE)) {
+        se_vec <- se_vec[keep]
+      }
+    }
+  }
+
   dir <- .assess_bias_direction(
     te_all              = meta_obj$TE.random,
-    te_vec              = meta_obj$TE,
-    se_vec              = meta_obj$seTE,
+    te_vec              = te_vec,
+    se_vec              = se_vec,
     low_idx             = !high_idx,
     small_values        = small_values,
     inflation_threshold = inflation_threshold

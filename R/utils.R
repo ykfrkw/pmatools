@@ -4,6 +4,15 @@ GRADE_LEVELS <- c("no", "some", "serious", "very_serious")
 GRADE_DOWNGRADE <- c(no = 0, some = -1, serious = -1, very_serious = -2)
 CERTAINTY_LABELS <- c("Very Low", "Low", "Moderate", "High")
 CERTAINTY_SYMBOLS <- c(
+  "High"       = "++++",
+  "Moderate"   = "+++o",
+  "Low"        = "++oo",
+  "Very Low"   = "+ooo"
+)
+
+# Unicode rendering for SoF flextable / browser HTML (rich output targets)
+# Use \u escapes so source is ASCII-safe regardless of file encoding.
+CERTAINTY_SYMBOLS_UNICODE <- c(
   "High"       = "\u2295\u2295\u2295\u2295",
   "Moderate"   = "\u2295\u2295\u2295\u25cb",
   "Low"        = "\u2295\u2295\u25cb\u25cb",
@@ -71,7 +80,7 @@ validate_grade_level <- function(x, arg = "argument") {
   if (is.character(baseline_risk) && baseline_risk %in% c("simple", "metaprop")) {
     return(.compute_control_risk(meta_obj, method = baseline_risk))
   }
-  # 3. NULL → fallback to ois_p0, then simple auto-compute
+  # 3. NULL -> fallback to ois_p0, then simple auto-compute
   if (is.null(baseline_risk)) {
     if (!is.null(ois_p0) && is.numeric(ois_p0)) return(ois_p0)
     return(.compute_control_risk(meta_obj, method = "simple"))
