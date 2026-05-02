@@ -179,11 +179,11 @@ assess_inconsistency <- function(meta_obj,
   if (is.null(te_vec) || length(te_vec) < 2) {
     return(make_domain_row(
       domain   = "Inconsistency",
-      judgment = "some",
+      judgment = "some_concerns",
       auto     = TRUE,
       notes    = paste0(
         "AUTO Step 1: I2 > 25%; AUTO Step 2 not assessable (study-level TEs unavailable); ",
-        "judgment = 'some' (conservative). | ", stat_note
+        "judgment = 'some_concerns' (conservative). | ", stat_note
       )
     ))
   }
@@ -191,49 +191,76 @@ assess_inconsistency <- function(meta_obj,
   k <- length(te_vec)
   te_vec <- te_vec[!is.na(te_vec)]
 
+  # 3-level inconsistency classification:
+  #   max single-zone share >= 80%               -> "no" (consistent direction)
+  #   both directions have substantial mass      -> "serious" (-2)
+  #     (n_above/k >= 20% AND n_below/k >= 20%)
+  #   else                                       -> "some_concerns" (-1)
+  #
+  # Reference: CINeMA (Nikolakopoulou 2020) for the 80% one-side threshold;
+  # the substantial-both-directions criterion captures clinically opposite
+  # effects across studies, which corresponds to BMJ Core GRADE 3's
+  # "point estimates on opposite sides of threshold" qualitative trigger.
+  ZONE_MAJORITY    <- 0.80
+  OPPOSITE_EACH    <- 0.20
+
   if (!is.null(mid_internal) && !is.na(mid_internal) && mid_internal > 0) {
-    # 3-zone classification around +/-Threshold
     M <- mid_internal
     n_above   <- sum(te_vec > +M)
     n_below   <- sum(te_vec < -M)
     n_trivial <- length(te_vec) - n_above - n_below
+  } else {
+    # Fallback: null = 0 (no MID supplied). "trivial" zone collapses to 0.
+    M <- 0
+    n_above   <- sum(te_vec > 0)
+    n_below   <- sum(te_vec < 0)
+    n_trivial <- 0L
+  }
 
-    n_total      <- length(te_vec)
-    pct_above    <- n_above / n_total
-    pct_below    <- n_below / n_total
-    pct_one_side <- max(pct_above, pct_below)
+  n_total       <- length(te_vec)
+  zone_counts   <- c(n_above, n_trivial, n_below)
+  pct_max_zone  <- max(zone_counts) / n_total
+  pct_each_side <- min(n_above, n_below) / n_total
 
-    has_opposite <- (n_above > 0 && n_below > 0)
+  threshold_label <- if (M > 0) {
+    sprintf("vs +/-Threshold = +/-%g", M)
+  } else {
+    "vs null = 0 (Threshold not specified)"
+  }
 
-    threshold_side <- if (has_opposite && pct_one_side < 0.75) {
-      "opposite_sides"
-    } else {
-      "majority_one_side"
-    }
-
-    threshold_label <- sprintf("vs +/-Threshold = +/-%g", M)
-    side_note <- sprintf(
-      "AUTO Step 2 (%s): zone counts (k = %d): above_threshold = %d, trivial = %d, below_threshold = %d; max one-side proportion = %.0f%% -> '%s'.",
-      threshold_label, n_total,
-      n_above, n_trivial, n_below,
-      pct_one_side * 100, threshold_side
+  if (pct_max_zone >= ZONE_MAJORITY) {
+    threshold_side <- "majority_one_side"
+    judgment_auto  <- "no"
+    decision_note  <- sprintf(
+      "Largest single-zone share %.0f%% >= %.0f%% -> direction consistent, do not rate down.",
+      pct_max_zone * 100, ZONE_MAJORITY * 100
+    )
+  } else if (pct_each_side >= OPPOSITE_EACH) {
+    threshold_side <- "opposite_substantial"
+    judgment_auto  <- "serious"
+    decision_note  <- sprintf(
+      "Both directions have substantial mass: n_above = %d (%.0f%%) AND n_below = %d (%.0f%%) >= %.0f%% each -> rate down 2 (clinically opposite).",
+      n_above, n_above / n_total * 100,
+      n_below, n_below / n_total * 100,
+      OPPOSITE_EACH * 100
     )
   } else {
-    # Fallback: null=0 (v0.1.0 behavior)
-    pct_positive <- mean(te_vec > 0)
-    threshold_side <- if (pct_positive >= 0.75 || pct_positive <= 0.25) {
-      "majority_one_side"
-    } else {
-      "opposite_sides"
-    }
-    threshold_label <- "vs null = 0 (Threshold not specified)"
-    side_note <- sprintf(
-      "AUTO Step 2 (%s): %.0f%% of study-level TEs > 0 -> '%s'.",
-      threshold_label, pct_positive * 100, threshold_side
+    threshold_side <- "heterogeneous"
+    judgment_auto  <- "some_concerns"
+    decision_note  <- sprintf(
+      "Largest single-zone share %.0f%% < %.0f%% but neither direction reaches %.0f%% -> rate down 1 (heterogeneous magnitude).",
+      pct_max_zone * 100, ZONE_MAJORITY * 100, OPPOSITE_EACH * 100
     )
   }
 
-  if (threshold_side == "majority_one_side") {
+  side_note <- sprintf(
+    "AUTO Step 2 (%s): zone counts (k = %d): above_threshold = %d, trivial = %d, below_threshold = %d. %s",
+    threshold_label, n_total,
+    n_above, n_trivial, n_below,
+    decision_note
+  )
+
+  if (judgment_auto == "no") {
     return(make_domain_row(
       domain   = "Inconsistency",
       judgment = "no",
@@ -241,24 +268,34 @@ assess_inconsistency <- function(meta_obj,
       notes    = paste0(
         "AUTO Step 1: I2 > 25% -> important heterogeneity detected. ",
         side_note,
-        " Direction of effect is consistent (majority on one side of threshold) ",
-        "-> do not rate down per BMJ Core GRADE 3 flowchart. | ",
+        " | ", stat_note
+      )
+    ))
+  }
+
+  if (judgment_auto == "serious") {
+    return(make_domain_row(
+      domain   = "Inconsistency",
+      judgment = "serious",
+      auto     = TRUE,
+      notes    = paste0(
+        "AUTO Step 1: I2 > 25% -> important heterogeneity detected. ",
+        side_note,
+        " Subgroup explanation not auto-detectable; supply ",
+        "inconsistency_subgroup_explained = 'yes' to override. | ",
         stat_note
       )
     ))
   }
 
-  # opposite_sides
+  # some_concerns
   make_domain_row(
     domain   = "Inconsistency",
-    judgment = "serious",
+    judgment = "some_concerns",
     auto     = TRUE,
     notes    = paste0(
       "AUTO Step 1: I2 > 25% -> important heterogeneity detected. ",
-      side_note,
-      " Subgroup explanation not auto-detectable; supply ",
-      "inconsistency_subgroup_explained = 'yes' to override. | ",
-      stat_note
+      side_note, " | ", stat_note
     )
   )
 }

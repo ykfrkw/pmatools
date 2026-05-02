@@ -41,11 +41,11 @@ assess_pubias <- function(meta_obj,
     if (pubias_small_industry == "yes") {
       return(make_domain_row(
         domain   = "Publication bias",
-        judgment = "serious",
+        judgment = "some_concerns",
         auto     = FALSE,
         notes    = paste0(
           "FLOWCHART Step 1: Most/all studies are small AND industry-sponsored ",
-          "-> rate down."
+          "-> rate down 1 (some_concerns)."
         )
       ))
     }
@@ -108,11 +108,40 @@ assess_pubias <- function(meta_obj,
 
   auto_flag <- (judgment_src == "auto (Egger's test)")
 
+  # Trim-and-fill direction-flip check: if asymmetry exists and the adjusted
+  # pooled TE flips sign relative to the unadjusted estimate, downgrade by 2.
+  tf_note    <- ""
+  sign_flips <- FALSE
   if (asymmetry == "yes") {
-    judgment <- "serious"
-    asym_desc <- "funnel plot asymmetry / statistical test strongly suggests bias -> rate down"
+    tf <- tryCatch(
+      suppressWarnings(meta::trimfill(meta_obj)),
+      error = function(e) NULL
+    )
+    if (!is.null(tf) && !is.null(tf$TE.random) && !is.na(tf$TE.random) &&
+        !is.null(meta_obj$TE.random) && !is.na(meta_obj$TE.random)) {
+      te_orig <- meta_obj$TE.random
+      te_adj  <- tf$TE.random
+      sign_flips <- (sign(te_orig) != sign(te_adj)) &&
+                    (abs(te_orig) > 1e-6) &&
+                    (abs(te_adj)  > 1e-6)
+      tf_note <- sprintf(
+        "Trim-and-fill: TE.random = %.3f -> %.3f after adjustment%s.",
+        te_orig, te_adj,
+        if (sign_flips) " (DIRECTION FLIPS)" else ""
+      )
+    } else {
+      tf_note <- "Trim-and-fill could not be computed."
+    }
+  }
+
+  if (asymmetry == "yes" && sign_flips) {
+    judgment  <- "serious"
+    asym_desc <- "trim-and-fill flips the pooled TE direction -> rate down 2 (serious)"
+  } else if (asymmetry == "yes") {
+    judgment  <- "some_concerns"
+    asym_desc <- "funnel plot asymmetry / statistical test suggests bias -> rate down 1 (some_concerns)"
   } else {
-    judgment <- "no"
+    judgment  <- "no"
     asym_desc <- "no strong evidence of funnel plot asymmetry -> do not rate down"
   }
 
@@ -121,6 +150,7 @@ assess_pubias <- function(meta_obj,
     sprintf("Step 2: Statistical analysis feasible (k = %d >= 10). ", k),
     asym_desc, ". ",
     if (!is.na(egger_note)) egger_note else "",
+    if (nzchar(tf_note)) paste0(" ", tf_note) else "",
     " [", judgment_src, "]"
   )
 
@@ -158,10 +188,10 @@ assess_pubias <- function(meta_obj,
   }
 
   if (unpublished == "yes") {
-    judgment  <- "serious"
+    judgment  <- "some_concerns"
     unpub_desc <- paste0(
       "Documentation of unpublished studies identified (registry/FDA) ",
-      "-> rate down."
+      "-> rate down 1 (some_concerns)."
     )
   } else {
     judgment  <- "no"
