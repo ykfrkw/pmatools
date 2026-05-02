@@ -282,6 +282,14 @@ export_bundle <- function(ma,
       writeLines(sprintf("- [%s] %s", d$domain[i], d$notes[i]), con)
     }
   }
+  writeLines("", con)
+
+  writeLines("================================================================", con)
+  writeLines("[ Software versions ]", con)
+  writeLines("================================================================", con)
+  writeLines(sprintf("pmatools : %s", utils::packageVersion("pmatools")), con)
+  writeLines(sprintf("meta     : %s", utils::packageVersion("meta")), con)
+  writeLines(sprintf("R        : %s", paste(R.version$major, R.version$minor, sep = ".")), con)
 
   invisible(path)
 }
