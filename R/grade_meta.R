@@ -22,9 +22,10 @@
 #'       — same flowchart logic applied.
 #'     \item \code{NULL} (default): treated as \code{"no"}.
 #'   }
-#' @param rob_dominant_threshold Proportion of total random-effects weight attributable
-#'   to high-RoB studies above which evidence is considered "dominated."
-#'   Default 0.60. Only used when \code{rob} is a vector or column name.
+#' @param rob_dominant_threshold Deprecated (v0.3.1+; accepted but ignored).
+#'   The Risk-of-Bias flowchart no longer uses a weight-share dominance gate;
+#'   the direction-and-magnitude check is now run whenever at least one
+#'   high-RoB study is present.
 #' @param rob_inflation_threshold (v0.2) Minimum *relative* inflation
 #'   \eqn{(|TE_{all}| - |TE_{low}|) / |TE_{low}|} required to rate down for
 #'   risk of bias when the evidence is dominated. Default \code{0.10}
