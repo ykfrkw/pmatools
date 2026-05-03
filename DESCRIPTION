@@ -1,6 +1,6 @@
 Package: pmatools
 Title: Pairwise Meta-Analysis with GRADE Certainty Assessment
-Version: 0.3.0
+Version: 0.3.1
 Authors@R: person("Yuki", "Furukawa", email = "furukawa.y.psy@gmail.com",
                   role = c("aut", "cre"))
 Description: End-to-end pairwise meta-analysis pipeline with GRADE certainty

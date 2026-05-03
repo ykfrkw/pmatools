@@ -1,16 +1,15 @@
 # domain_rob.R - Risk of Bias domain assessment
 #
-# BMJ 2025 Core GRADE 4, Fig 2 flowchart:
+# v0.3.1+: dominance-threshold gate removed. Direction-and-magnitude check
+# is always run regardless of how much weight high-RoB studies carry.
 #
-#   Step 1. Is evidence DOMINATED by high-RoB studies?
-#     Threshold: rob_dominant_threshold (default 0.60)
+#   sign(TE_all) != sign(TE_low) (sign flips when high-RoB removed)
+#                                          -> "serious"      (-2)
+#   else, |TE_all| / |TE_low| inflated > rob_inflation_threshold (default 0.10)
+#                                          -> "some_concerns" (-1)
+#   else                                   -> "no"
 #
-#   YES -> Step 2. Direction-and-magnitude check (auto)
-#     inflation_ratio = (|TE_all| - |TE_low|) / |TE_low|
-#     direction_ok    = (depends on small_values)
-#     rate_down       = direction_ok AND (inflation_ratio > rob_inflation_threshold)
-#
-#   NO  -> Appreciable low-RoB evidence; do not rate down.
+# `rob_dominant_threshold` is accepted but ignored for backward compatibility.
 #
 # Inputs:
 #   (a) scalar GRADE level: bypass flowchart
@@ -25,7 +24,7 @@
 #   NULL         : direction unknown; use |TE_all| > |TE_low| (further from null)
 
 assess_rob <- function(rob, meta_obj,
-                       rob_dominant_threshold  = 0.60,
+                       rob_dominant_threshold  = NULL,   # accepted but ignored (deprecated)
                        rob_inflation_threshold = 0.10,
                        small_values            = NULL) {
   k <- meta_obj$k
@@ -84,79 +83,47 @@ assess_rob <- function(rob, meta_obj,
 
   validate_grade_level(rob, "rob")
   .flowchart_rob(rob, meta_obj,
-                 threshold           = rob_dominant_threshold,
                  inflation_threshold = rob_inflation_threshold,
                  small_values        = small_values)
 }
 
 # --------------------------------------------------------------------------
-# Flowchart
+# Flowchart (v0.3.1+: dominance gate removed; always run direction check)
 # --------------------------------------------------------------------------
-.flowchart_rob <- function(rob_vec, meta_obj, threshold,
+.flowchart_rob <- function(rob_vec, meta_obj,
                            inflation_threshold = 0.10, small_values = NULL) {
 
-  # high-RoB = "serious" (collapsed from old "serious" + "very_serious" in v0.3+;
-  # legacy "very_serious" still recognised after .normalize_rob_levels)
+  # high-RoB = "serious" (legacy "very_serious" still recognised after
+  # .normalize_rob_levels)
   high_idx <- rob_vec %in% c("serious", "very_serious")
   n_high   <- sum(high_idx)
   n_total  <- length(rob_vec)
 
-  # Random-effects weight share. meta keeps studlab/w.random at the original
-  # length (incl. excluded NA studies); align by selecting positions with
-  # finite TE so the resulting weight vector matches rob_vec (length k).
-  weights <- meta_obj$w.random
-  te_vec  <- meta_obj$TE
-  if (!is.null(weights) && !is.null(te_vec) &&
-      length(weights) == length(te_vec)) {
-    keep <- is.finite(te_vec) & is.finite(weights)
-    if (sum(keep) == n_total) {
-      weights <- weights[keep]
-    } else if (length(weights) == n_total) {
-      # already matches (no excluded studies)
-    } else {
-      weights <- NULL
-    }
-  } else {
-    weights <- NULL
-  }
-
-  if (!is.null(weights) && length(weights) == n_total && sum(weights) > 0) {
-    pct_high_w <- sum(weights[high_idx]) / sum(weights)
-    weight_note <- sprintf(
-      "High-RoB studies: %d/%d (%.1f%% of random-effects weight)",
-      n_high, n_total, pct_high_w * 100
-    )
-    dominated <- pct_high_w >= threshold
-  } else {
-    pct_high_w <- n_high / n_total
-    weight_note <- sprintf(
-      "High-RoB studies: %d/%d (%.1f%% by count; weights unavailable)",
-      n_high, n_total, pct_high_w * 100
-    )
-    dominated <- pct_high_w >= threshold
-  }
+  weight_note <- sprintf("High-RoB studies: %d/%d (%.0f%% by count)",
+                         n_high, n_total,
+                         100 * (n_high / max(1L, n_total)))
 
   tbl_note <- paste(
     paste0(names(table(rob_vec)), ": n=", as.integer(table(rob_vec))),
     collapse = "; "
   )
 
-  # NO branch: not dominated -> do not rate down
-  if (!dominated) {
+  # If no high-RoB studies at all, no possibility of bias-driven inflation.
+  if (n_high == 0) {
     return(make_domain_row(
       domain   = "Risk of bias",
       judgment = "no",
       auto     = FALSE,
       notes    = paste0(
-        "FLOWCHART: Not dominated (threshold ", round(threshold * 100), "%). ",
-        weight_note, ". -> Do not rate down. | ",
+        "No high-RoB studies. ", weight_note, ". -> Do not rate down. | ",
         tbl_note
       )
     ))
   }
 
-  # YES branch: dominated -> direction-and-magnitude check
-  # Align TE / seTE to length k so logical indexing with high_idx is correct.
+  # Direction-and-magnitude check (always run when at least one high-RoB
+  # study is present). Align TE / seTE to length k so logical indexing with
+  # high_idx is correct.
   te_vec  <- meta_obj$TE
   se_vec  <- meta_obj$seTE
   if (!is.null(te_vec) && length(te_vec) != n_total) {
@@ -181,7 +148,7 @@ assess_rob <- function(rob, meta_obj,
   judgment <- if (isTRUE(dir$sign_flips)) {
     "serious"        # -2: removing high-RoB studies flips the pooled TE direction
   } else if (isTRUE(dir$inflates)) {
-    "some_concerns"  # -1: dominated + inflation beyond threshold
+    "some_concerns"  # -1: inflation beyond threshold
   } else {
     "no"
   }
@@ -191,7 +158,6 @@ assess_rob <- function(rob, meta_obj,
     judgment = judgment,
     auto     = FALSE,
     notes    = paste0(
-      "FLOWCHART: Dominated (threshold ", round(threshold * 100), "%). ",
       weight_note, ". ",
       dir$note, " | ",
       tbl_note
