@@ -49,13 +49,15 @@ export_bundle <- function(ma,
                           bundle_name  = "pmatools_results",
                           include      = c("data", "script", "results",
                                            "forest", "forest_rob", "funnel",
-                                           "grade_table", "grade_appendix"),
+                                           "grade_table"),
                           per          = 1000,
                           prediction   = FALSE,
                           convert_smd_to_or = FALSE,
                           baseline_risk     = NULL,
                           threshold_label   = NULL,
                           chinn_invert      = FALSE,
+                          other_text         = NULL,
+                          other_downgrade    = 0L,
                           data               = NULL,
                           grade_args         = NULL,
                           ma_args            = NULL,
@@ -153,16 +155,35 @@ export_bundle <- function(ma,
     files_in_zip <- c(files_in_zip, pdf_path, png_path)
   }
 
-  # 6. grade_table.docx (single-outcome SoF)
+  # Helper: write a flextable into a landscape-orientation .docx using
+  # officer directly. Avoids flextable::save_as_docx(pr_section = ...),
+  # whose argument is not present in older flextable versions.
+  .save_landscape_docx <- function(ft, path) {
+    doc <- officer::read_docx()
+    doc <- flextable::body_add_flextable(doc, ft)
+    doc <- officer::body_end_section_landscape(doc, w = 11, h = 8.5)
+    print(doc, target = path)
+    invisible(path)
+  }
+
+  # 6a. grade_table.docx — GRADE Evidence Profile
   if ("grade_table" %in% include) {
-    ft <- sof_table(grade, per = per, prediction = prediction,
-                    convert_smd_to_or = convert_smd_to_or,
-                    baseline_risk     = baseline_risk,
-                    threshold_label   = threshold_label,
-                    chinn_invert      = isTRUE(chinn_invert))
-    docx_path <- file.path(work_dir, "grade_table.docx")
-    flextable::save_as_docx(ft, path = docx_path)
-    files_in_zip <- c(files_in_zip, docx_path)
+    ep_ft <- evidence_profile(grade,
+                              other_text      = other_text,
+                              other_downgrade = other_downgrade)
+    ep_path <- file.path(work_dir, "grade_table.docx")
+    .save_landscape_docx(ep_ft, ep_path)
+    files_in_zip <- c(files_in_zip, ep_path)
+
+    # 6b. sof_table.docx — Summary of Findings
+    sof_ft <- sof_table(grade, per = per, prediction = prediction,
+                        convert_smd_to_or = convert_smd_to_or,
+                        baseline_risk     = baseline_risk,
+                        threshold_label   = threshold_label,
+                        chinn_invert      = isTRUE(chinn_invert))
+    sof_path <- file.path(work_dir, "sof_table.docx")
+    .save_landscape_docx(sof_ft, sof_path)
+    files_in_zip <- c(files_in_zip, sof_path)
   }
 
   # 7. grade_appendix.docx
@@ -286,11 +307,15 @@ export_bundle <- function(ma,
   }
   writeLines("", con)
 
+  .safe_ver <- function(pkg, fallback = "(vendored)") {
+    tryCatch(as.character(utils::packageVersion(pkg)),
+             error = function(e) fallback)
+  }
   writeLines("================================================================", con)
   writeLines("[ Software versions ]", con)
   writeLines("================================================================", con)
-  writeLines(sprintf("pmatools : %s", utils::packageVersion("pmatools")), con)
-  writeLines(sprintf("meta     : %s", utils::packageVersion("meta")), con)
+  writeLines(sprintf("pmatools : %s", .safe_ver("pmatools", "0.3.0 (vendored)")), con)
+  writeLines(sprintf("meta     : %s", .safe_ver("meta")), con)
   writeLines(sprintf("R        : %s", paste(R.version$major, R.version$minor, sep = ".")), con)
 
   invisible(path)
@@ -322,7 +347,10 @@ export_bundle <- function(ma,
 
   values <- list(
     timestamp        = format(Sys.time()),
-    pmatools_version = as.character(utils::packageVersion("pmatools")),
+    pmatools_version = tryCatch(
+      as.character(utils::packageVersion("pmatools")),
+      error = function(e) "0.3.0 (vendored)"
+    ),
     outcome_type     = outcome_type_ma,
     sm               = sm,
     method_arg       = .arg_lit(ma_args$method,     fallback = if (outcome_type_ma == "binary")
