@@ -28,3 +28,7 @@ outputs/
 data/*.rda
 # Exception: bundled sample data must ship with the package
 !data/cbti_depression.rda
+
+# Manuscript (local only — not for public repo)
+manuscript/
+pmatools_campbell_draft.docx
