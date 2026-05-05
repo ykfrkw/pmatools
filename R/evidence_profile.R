@@ -122,7 +122,7 @@ evidence_profile <- function(grade,
   headers <- c(
     "Outcome", "No of studies (N)", "Design",
     "Risk of bias", "Inconsistency", "Indirectness",
-    "Imprecision", "Other considerations", "Quality of evidence"
+    "Imprecision", "Other considerations", "Certainty of evidence"
   )
 
   df <- data.frame(

@@ -185,7 +185,8 @@ assess_rob <- function(rob, meta_obj,
     se_vec              = se_vec,
     low_idx             = !high_idx,
     small_values        = small_values,
-    inflation_threshold = inflation_threshold
+    inflation_threshold = inflation_threshold,
+    sm                  = meta_obj$sm
   )
 
   judgment <- dir$judgment
@@ -216,7 +217,8 @@ assess_rob <- function(rob, meta_obj,
 # CINeMA within-study bias logic (judge_rob_direct_sens_v).
 # --------------------------------------------------------------------------
 .assess_bias_direction <- function(te_all, se_all, te_vec, se_vec, low_idx,
-                                   small_values, inflation_threshold = 0.10) {
+                                   small_values, inflation_threshold = 0.10,
+                                   sm = NULL) {
 
   n_low <- sum(low_idx)
 
@@ -224,13 +226,18 @@ assess_rob <- function(rob, meta_obj,
     rlang::abort("small_values must be 'desirable' or 'undesirable'.")
   }
 
+  # Determine display label and back-transform for ratio measures
+  log_scale <- !is.null(sm) && sm %in% c("OR", "RR", "HR", "RoM")
+  sm_label  <- if (!is.null(sm) && nzchar(sm)) sm else "TE"
+  .disp <- function(x) if (log_scale) round(exp(x), 3) else round(x, 3)
+
   # No low/some-RoB studies -> conservative rate-down
   if (n_low == 0 || is.null(te_vec) || is.null(se_vec)) {
     return(list(
       judgment = "some_concerns",
       note     = paste0(
         "No low/some-RoB studies to compare with; conservative rate-down applied. ",
-        "TE(all) = ", round(te_all, 3), "."
+        sm_label, "(all) = ", .disp(te_all), "."
       )
     ))
   }
@@ -245,9 +252,10 @@ assess_rob <- function(rob, meta_obj,
     return(list(
       judgment = "some_concerns",
       note     = paste0(
-        "TE(excl. high-RoB) approx 0; relative inflation undefined; ",
+        sm_label, "(excl. high-RoB) approx 0; relative inflation undefined; ",
         "conservative rate-down applied. ",
-        sprintf("TE(all) = %.3f, TE(low) = %.3f.", te_all, te_low)
+        sprintf("%s(all) = %.3f, %s(excl. high-RoB) = %.3f.",
+                sm_label, .disp(te_all), sm_label, .disp(te_low))
       )
     ))
   }
@@ -317,10 +325,11 @@ assess_rob <- function(rob, meta_obj,
     "CI overlap = unavailable"
   }
 
+  scale_note <- if (log_scale) paste0("log ", sm_label, " scale") else sm_label
   diff_note <- sprintf(
-    "TE(all) = %.3f; TE(excl. high-RoB) = %.3f; relative inflation = %.1f%% (threshold %.0f%%); %s; %s",
-    te_all, te_low,
-    100 * inflation_ratio, 100 * inflation_threshold, sv_desc, overlap_desc
+    "%s(all) = %.3f; %s(excl. high-RoB) = %.3f; relative inflation = %.1f%% (%s; threshold %.0f%%); %s; %s",
+    sm_label, .disp(te_all), sm_label, .disp(te_low),
+    100 * inflation_ratio, scale_note, 100 * inflation_threshold, sv_desc, overlap_desc
   )
 
   dir_desc <- if (sign_flips) {
