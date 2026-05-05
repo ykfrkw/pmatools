@@ -99,27 +99,36 @@ assess_rob <- function(rob, meta_obj,
   n_high   <- sum(high_idx)
   n_total  <- length(rob_vec)
 
-  # IV weight share carried by high-RoB studies. Prefer meta's pre-computed
-  # weights (random > common > legacy fixed). Fall back to 1/seTE^2 (the basic
-  # inverse-variance weights), which {meta} always exposes via `seTE`. This
-  # keeps the weight % visible even when a slot is missing or zero-filled.
-  pick_weights <- function(meta_obj, n) {
+  # IV weight share carried by high-RoB studies. {meta} can drop studies (e.g.,
+  # double-zero events with method = "Inverse") so $TE/$seTE/$w.random retain
+  # the original length while $k counts only valid rows; align by `is.finite`
+  # before indexing with `high_idx` (which has length n_total = k).
+  pick_weights <- function(meta_obj, n_total) {
+    align <- function(v) {
+      if (is.null(v)) return(NULL)
+      if (length(v) == n_total) return(v)
+      keep <- is.finite(v) & v > 0
+      if (sum(keep) == n_total) return(v[keep])
+      keep_te <- is.finite(meta_obj$TE)
+      if (length(keep_te) == length(v) && sum(keep_te) == n_total) return(v[keep_te])
+      NULL
+    }
     for (slot in c("w.random", "w.common", "w.fixed")) {
-      v <- meta_obj[[slot]]
-      if (!is.null(v) && length(v) == n) {
+      v <- align(meta_obj[[slot]])
+      if (!is.null(v)) {
         ok <- is.finite(v) & v > 0
         if (any(ok) && sum(v[ok]) > 0) return(v)
       }
     }
-    se <- meta_obj$seTE
-    if (!is.null(se) && length(se) == n) {
-      v  <- 1 / se^2
+    se <- align(meta_obj$seTE)
+    if (!is.null(se)) {
+      v <- 1 / se^2
       if (any(is.finite(v) & v > 0)) return(v)
     }
     NULL
   }
   w_vec <- pick_weights(meta_obj, n_total)
-  w_high_pct <- if (!is.null(w_vec)) {
+  w_high_pct <- if (!is.null(w_vec) && length(w_vec) == n_total) {
     ok <- is.finite(w_vec)
     w_total <- sum(w_vec[ok], na.rm = TRUE)
     if (w_total > 0) {
