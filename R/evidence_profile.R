@@ -116,7 +116,7 @@ evidence_profile <- function(grade,
   cert_score   <- max(1L, 4L + effective_dg)
   cert_label   <- c("Very Low", "Low", "Moderate", "High")[cert_score]
   cert_symbol  <- CERTAINTY_SYMBOLS_UNICODE[[cert_label]] %||% ""
-  cert_str     <- paste0(cert_symbol, " ", toupper(cert_label))
+  cert_str     <- paste0(cert_symbol, " ", cert_label)
   cert_colors  <- pal[[cert_label]]
 
   headers <- c(

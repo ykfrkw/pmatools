@@ -93,15 +93,28 @@ assess_rob <- function(rob, meta_obj,
 .flowchart_rob <- function(rob_vec, meta_obj,
                            inflation_threshold = 0.10, small_values = NULL) {
 
-  # high-RoB = "serious" (legacy "very_serious" still recognised after
+  # high-RoB = "serious" (legacy "very_serious" still recognized after
   # .normalize_rob_levels)
   high_idx <- rob_vec %in% c("serious", "very_serious")
   n_high   <- sum(high_idx)
   n_total  <- length(rob_vec)
 
-  weight_note <- sprintf("High-RoB studies: %d/%d (%.0f%% by count)",
-                         n_high, n_total,
-                         100 * (n_high / max(1L, n_total)))
+  # IV weight share carried by high-RoB studies (random-effects weights when
+  # available, common-effect weights otherwise).
+  w_vec <- if (!is.null(meta_obj$w.random)) meta_obj$w.random else meta_obj$w.common
+  w_total <- if (!is.null(w_vec)) sum(w_vec, na.rm = TRUE) else 0
+  w_high_pct <- if (!is.null(w_vec) && length(w_vec) == n_total && w_total > 0) {
+    100 * sum(w_vec[high_idx], na.rm = TRUE) / w_total
+  } else NA_real_
+
+  count_pct <- 100 * (n_high / max(1L, n_total))
+  weight_note <- if (is.finite(w_high_pct)) {
+    sprintf("High-RoB studies: %d/%d (%.0f%% by count, %.0f%% by weight)",
+            n_high, n_total, count_pct, w_high_pct)
+  } else {
+    sprintf("High-RoB studies: %d/%d (%.0f%% by count)",
+            n_high, n_total, count_pct)
+  }
 
   tbl_note <- paste(
     paste0(names(table(rob_vec)), ": n=", as.integer(table(rob_vec))),
@@ -138,6 +151,7 @@ assess_rob <- function(rob, meta_obj,
 
   dir <- .assess_bias_direction(
     te_all              = meta_obj$TE.random,
+    se_all              = meta_obj$seTE.random,
     te_vec              = te_vec,
     se_vec              = se_vec,
     low_idx             = !high_idx,
@@ -145,13 +159,7 @@ assess_rob <- function(rob, meta_obj,
     inflation_threshold = inflation_threshold
   )
 
-  judgment <- if (isTRUE(dir$sign_flips)) {
-    "serious"        # -2: removing high-RoB studies flips the pooled TE direction
-  } else if (isTRUE(dir$inflates)) {
-    "some_concerns"  # -1: inflation beyond threshold
-  } else {
-    "no"
-  }
+  judgment <- dir$judgment
 
   make_domain_row(
     domain   = "Risk of bias",
@@ -166,9 +174,19 @@ assess_rob <- function(rob, meta_obj,
 }
 
 # --------------------------------------------------------------------------
-# Direction-and-magnitude check (v0.2)
+# Direction-and-magnitude check (v0.3.2+)
+#
+# Decision tree:
+#   sign(TE_all) != sign(TE_low)      -> "serious"        (-2)
+#   else CI overlap ratio >= 0.8      -> "no"             (absorbed by uncertainty)
+#   else sig(TE_all) != sig(TE_low)   -> "some_concerns"  (-1)
+#   else inflation > threshold        -> "some_concerns"  (-1)
+#   else                              -> "no"
+#
+# Overlap-aware and significance-change branches adapted from nmatools'
+# CINeMA within-study bias logic (judge_rob_direct_sens_v).
 # --------------------------------------------------------------------------
-.assess_bias_direction <- function(te_all, te_vec, se_vec, low_idx,
+.assess_bias_direction <- function(te_all, se_all, te_vec, se_vec, low_idx,
                                    small_values, inflation_threshold = 0.10) {
 
   n_low <- sum(low_idx)
@@ -180,7 +198,7 @@ assess_rob <- function(rob, meta_obj,
   # No low/some-RoB studies -> conservative rate-down
   if (n_low == 0 || is.null(te_vec) || is.null(se_vec)) {
     return(list(
-      inflates = TRUE,
+      judgment = "some_concerns",
       note     = paste0(
         "No low/some-RoB studies to compare with; conservative rate-down applied. ",
         "TE(all) = ", round(te_all, 3), "."
@@ -191,11 +209,12 @@ assess_rob <- function(rob, meta_obj,
   # TE_low: inverse-variance weighted mean of low-RoB studies
   w_low  <- 1 / se_vec[low_idx]^2
   te_low <- sum(w_low * te_vec[low_idx]) / sum(w_low)
+  se_low <- sqrt(1 / sum(w_low))
 
   # |TE_low| approx 0 -> ratio undefined -> conservative rate-down
   if (abs(te_low) < 1e-9) {
     return(list(
-      inflates = TRUE,
+      judgment = "some_concerns",
       note     = paste0(
         "TE(excl. high-RoB) approx 0; relative inflation undefined; ",
         "conservative rate-down applied. ",
@@ -223,20 +242,64 @@ assess_rob <- function(rob, meta_obj,
                 (abs(te_all) > 1e-6) &&
                 (abs(te_low) > 1e-6)
 
+  # 95% CIs on the analysis scale (log scale for ratio measures, raw for MD/SMD).
+  # null = 0 on this scale for all common GRADE outcomes, so significance is
+  # "CI does not contain 0".
+  has_ci <- !is.null(se_all) && is.finite(se_all) && se_all > 0 && is.finite(se_low) && se_low > 0
+  if (has_ci) {
+    ci_all_lo <- te_all - 1.96 * se_all
+    ci_all_hi <- te_all + 1.96 * se_all
+    ci_low_lo <- te_low - 1.96 * se_low
+    ci_low_hi <- te_low + 1.96 * se_low
+    overlap_len <- max(0, min(ci_all_hi, ci_low_hi) - max(ci_all_lo, ci_low_lo))
+    mean_width  <- ((ci_all_hi - ci_all_lo) + (ci_low_hi - ci_low_lo)) / 2
+    overlap_ratio <- if (mean_width > 0) overlap_len / mean_width else 0
+    sig_all <- (ci_all_lo > 0) || (ci_all_hi < 0)
+    sig_low <- (ci_low_lo > 0) || (ci_low_hi < 0)
+    sig_changed <- (sig_all != sig_low)
+  } else {
+    overlap_ratio <- NA_real_
+    sig_changed   <- FALSE
+  }
+
+  # Combined decision tree
+  judgment <- if (sign_flips) {
+    "serious"
+  } else if (isTRUE(overlap_ratio >= 0.8)) {
+    "no"
+  } else if (isTRUE(sig_changed)) {
+    "some_concerns"
+  } else if (inflates) {
+    "some_concerns"
+  } else {
+    "no"
+  }
+
   sv_desc <- if (is.null(small_values)) {
     "small_values = NULL (using |TE| comparison)"
   } else {
     sprintf("small_values = '%s'", small_values)
   }
 
+  overlap_desc <- if (is.finite(overlap_ratio)) {
+    sprintf("CI overlap = %.0f%%; CI-significance change = %s",
+            100 * overlap_ratio, if (sig_changed) "yes" else "no")
+  } else {
+    "CI overlap = unavailable"
+  }
+
   diff_note <- sprintf(
-    "TE(all) = %.3f; TE(excl. high-RoB) = %.3f; |TE_all| = %.3f, |TE_low| = %.3f; relative inflation = %.1f%% (threshold %.0f%%); %s",
-    te_all, te_low, abs(te_all), abs(te_low),
-    100 * inflation_ratio, 100 * inflation_threshold, sv_desc
+    "TE(all) = %.3f; TE(excl. high-RoB) = %.3f; relative inflation = %.1f%% (threshold %.0f%%); %s; %s",
+    te_all, te_low,
+    100 * inflation_ratio, 100 * inflation_threshold, sv_desc, overlap_desc
   )
 
   dir_desc <- if (sign_flips) {
     "DIRECTION FLIPS when high-RoB studies are removed -> rate down 2 (serious)"
+  } else if (isTRUE(overlap_ratio >= 0.8)) {
+    "CIs substantially overlap (>=80%); difference absorbed by uncertainty -> do not rate down"
+  } else if (isTRUE(sig_changed)) {
+    "CI-significance changes when high-RoB studies are removed -> rate down 1 (some_concerns)"
   } else if (inflates) {
     "high-RoB inflates effect beyond threshold -> rate down 1 (some_concerns)"
   } else if (!isTRUE(direction_ok)) {
@@ -246,9 +309,12 @@ assess_rob <- function(rob, meta_obj,
   }
 
   list(
-    inflates   = inflates,
-    sign_flips = sign_flips,
-    note       = paste0(diff_note, ". ", dir_desc)
+    judgment      = judgment,
+    sign_flips    = sign_flips,
+    inflates      = inflates,
+    overlap_ratio = overlap_ratio,
+    sig_changed   = sig_changed,
+    note          = paste0(diff_note, ". ", dir_desc)
   )
 }
 

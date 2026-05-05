@@ -21,8 +21,8 @@ Names become the outcome labels.}
 primary outcomes. All others are treated as secondary.
 If \code{NULL} (default), no grouping header is added.}
 
-\item{palette}{Colour palette for certainty cells.
-\code{"pastel"} (default) uses soft backgrounds with coloured text.
+\item{palette}{Color palette for certainty cells.
+\code{"pastel"} (default) uses soft backgrounds with colored text.
 \code{"classic"} uses saturated backgrounds with white text.}
 
 \item{show_domains}{Logical (default \code{TRUE}). Add domain symbol columns.}

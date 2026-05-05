@@ -29,16 +29,20 @@ make_metabin_high_i2 <- function() {
 }
 
 # Mock meta object with controlled weights and TEs for domination tests
-make_mock_dominated <- function(te_all, te_low_only) {
+make_mock_dominated <- function(te_all, te_low_only,
+                                seTE.random = 0.05,
+                                seTE        = c(0.05, 0.20, 0.20)) {
   # Large-A dominates weight (80%), has te_all
   # Small-B, C share remaining weight, have te_low_only
-  # seTE chosen so IV-weighted mean of B+C = te_low_only
+  # Default CIs are tight so the overlap branch (>=0.8) does not fire and tests
+  # exercise the inflation / sign-flip paths predictably.
   m <- list(
     k           = 3L,
-    w.random    = c(80, 10, 10),           # Study A: 80% weight
+    w.random    = c(80, 10, 10),
     TE          = c(te_all, te_low_only, te_low_only),
-    seTE        = c(0.10, 0.45, 0.45),     # A precise, B/C imprecise
-    TE.random   = te_all,                  # overall dominated by A
+    seTE        = seTE,
+    TE.random   = te_all,
+    seTE.random = seTE.random,
     lower.random = te_all - 0.4,
     upper.random = te_all + 0.4,
     sm          = "RR",
@@ -197,45 +201,42 @@ test_that("pubias_unpublished = 'yes' rates down when k < 10", {
 
 # ---- RoB ベクタ入力 -------------------------------------------------------
 
-test_that("rob vector: not dominated returns no concern", {
-  # 3 studies with roughly equal weights → high-RoB weight ~33% < 60% → not dominated
+test_that("rob vector: vector mode reports count and weight % (v0.3.1+: dominance gate removed)", {
   m <- make_metabin()
   g <- grade_meta(m, rob = c("no", "some", "serious"))
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "no")
-  expect_true(grepl("Not dominated", rob_row$notes))
+  # Only one high-RoB study among 3, with similar weights -> direction check
+  # runs but inflation typically below threshold.
+  expect_match(rob_row$notes, "by count")
+  expect_match(rob_row$notes, "by weight")
 })
 
-test_that("rob vector: dominated + inflating small_values=undesirable rates down", {
-  # Mock: Study A has 80% weight, is high-RoB, and has higher TE than low-RoB studies
-  # small_values = "undesirable": TE_all > TE_low → inflates → serious
+test_that("rob vector: inflating small_values=undesirable rates down (some_concerns; sign-flip required for serious)", {
+  # te_all=1.4 > te_low=0.3, both positive (no flip) -> some_concerns via inflation.
   m <- make_mock_dominated(te_all = 1.4, te_low_only = 0.3)
   g <- grade_meta(m, rob = c("serious", "no", "no"),
-                  rob_dominant_threshold = 0.60,
                   small_values           = "undesirable")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "serious")
-  expect_true(grepl("Dominated", rob_row$notes))
+  expect_equal(rob_row$judgment, "some_concerns")
 })
 
-test_that("rob vector: dominated + NOT inflating small_values=undesirable does not rate down", {
+test_that("rob vector: NOT inflating small_values=undesirable does not rate down", {
   # TE_all < TE_low → high-RoB pulls toward null → conservative (doesn't inflate)
   m <- make_mock_dominated(te_all = 0.2, te_low_only = 1.1)
   g <- grade_meta(m, rob = c("serious", "no", "no"),
-                  rob_dominant_threshold = 0.60,
                   small_values           = "undesirable")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   expect_equal(rob_row$judgment, "no")
 })
 
-test_that("rob vector: dominated + inflating small_values=desirable rates down", {
-  # small_values = "desirable": TE_all < TE_low → inflates toward favorable → serious
+test_that("rob vector: inflating small_values=desirable rates down (some_concerns)", {
+  # te_all=-1.5 < te_low=-0.2 (more negative is more "favorable" when small is good).
+  # Both negative, no sign flip -> some_concerns.
   m <- make_mock_dominated(te_all = -1.5, te_low_only = -0.2)
   g <- grade_meta(m, rob = c("serious", "no", "no"),
-                  rob_dominant_threshold = 0.60,
                   small_values           = "desirable")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "serious")
+  expect_equal(rob_row$judgment, "some_concerns")
 })
 
 test_that("rob vector of wrong length raises error", {

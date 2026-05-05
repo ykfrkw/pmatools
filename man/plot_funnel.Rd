@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_funnel.R
 \name{plot_funnel}
 \alias{plot_funnel}
-\title{Contour-enhanced funnel plot with Egger's test annotation}
+\title{Contour-enhanced funnel plot with annotated legend}
 \usage{
 plot_funnel(
   meta_obj,
@@ -13,23 +13,22 @@ plot_funnel(
 )
 }
 \arguments{
-\item{meta_obj}{A \code{meta} object (from \code{\link{run_ma}} or
-\code{\link[meta]{metabin}}/\code{\link[meta]{metacont}}).}
+\item{meta_obj}{A \code{meta} object.}
 
-\item{contour}{Numeric vector of significance levels for contour shading.
-Default \code{c(0.9, 0.95, 0.99)}.}
+\item{contour}{Numeric vector of (1 - alpha) significance levels for
+contour boundaries. Default \code{c(0.9, 0.95, 0.99)} produces 4 zones:
+p > 0.10, 0.05-0.10, 0.01-0.05, < 0.01.}
 
-\item{show_egger}{Annotate with Egger's regression test result when k >= 10
-(default TRUE).}
+\item{show_egger}{Annotate with Egger's regression test result inside the
+legend box (default TRUE).}
 
-\item{auto_layout}{Reserve top margin for the Egger annotation
-(default TRUE).}
+\item{auto_layout}{Tight margins (default TRUE).}
 
 \item{...}{Additional arguments passed to \code{\link[meta]{funnel}}.}
 }
 \value{
-Invisibly NULL. Side effect: draws on the active graphics device.
+Invisibly NULL.
 }
 \description{
-Contour-enhanced funnel plot with Egger's test annotation
+Contour-enhanced funnel plot with annotated legend
 }

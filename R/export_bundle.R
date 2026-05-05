@@ -38,7 +38,7 @@
 #'   when `"forest_rob"` is in `include` to render the stratified forest plot.
 #' @param forest_display_rob Optional named list of `plot_forest` arguments
 #'   for the RoB-stratified forest plot bundled when `"forest_rob"` is in
-#'   `include`. Same recognised names as `forest_display`.
+#'   `include`. Same recognized names as `forest_display`.
 #'
 #' @return Character. Absolute path to the created ZIP file.
 #'

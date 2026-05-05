@@ -94,7 +94,7 @@ ingest_data <- function(data,
         }
         return(as.data.frame(readxl::read_excel(data), stringsAsFactors = FALSE))
       }
-      rlang::abort(paste0("Unrecognised file extension: '", ext, "'."))
+      rlang::abort(paste0("Unrecognized file extension: '", ext, "'."))
     }
     # Multi-line text (clipboard paste)
     return(.parse_pasted_text(data))
@@ -247,7 +247,7 @@ ingest_data <- function(data,
     event   = c("events", "d_r", "responders", "n_events"),
     mean    = c("means"),
     sd      = c("stdev", "stddev"),
-    rob     = c("risk_of_bias", "rob_d", "rob_overall", "rob_judgement"),
+    rob     = c("risk_of_bias", "rob_d", "rob_overall", "rob_judgment", "rob_judgement"),
     indirectness = c("indir"),
     subgroup = c("group", "stratum")
   )

@@ -4,15 +4,15 @@
 #'
 #' Re-runs the meta-analysis with a Risk-of-Bias subgroup and draws a forest
 #' plot showing the overall pooled estimate alongside the per-stratum pooled
-#' estimates. Useful for visualising whether high-RoB studies inflate the
+#' estimates. Useful for visualizing whether high-RoB studies inflate the
 #' apparent effect.
 #'
 #' @param meta_obj A `meta` object (from \code{\link{run_ma}} or
 #'   \code{\link[meta]{metabin}}/\code{\link[meta]{metacont}}).
 #' @param rob A character vector of length \code{meta_obj$k}, with values in
 #'   \code{c("L","S","H","low","some","high")} (case-insensitive) or other
-#'   recognisable aliases. NA values are tolerated (kept as their own group
-#'   labelled \code{"unknown"}).
+#'   recognizable aliases. NA values are tolerated (kept as their own group
+#'   labeled \code{"unknown"}).
 #'
 #' @return Invisibly NULL. Side effect: draws on the active graphics device.
 #'

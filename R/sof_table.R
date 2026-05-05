@@ -3,8 +3,8 @@
 #' Generate a Summary of Findings (SoF) table as a flextable
 #'
 #' @param x A \code{pmatools} object (from \code{\link{grade_meta}}).
-#' @param palette Colour palette for the certainty cell.
-#'   \code{"pastel"} (default) uses soft backgrounds with coloured text.
+#' @param palette Color palette for the certainty cell.
+#'   \code{"pastel"} (default) uses soft backgrounds with colored text.
 #'   \code{"classic"} uses saturated backgrounds with white text.
 #' @param per Denominator for event rate columns. \code{1000} (default) or
 #'   \code{100}. Controls the scale of the "Control rate" and "Exp. rate"

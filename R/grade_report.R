@@ -13,7 +13,7 @@
 #'
 #' @param outcomes A named list of \code{pmatools} objects.
 #' @param primary Character vector of primary outcome names (passed to \code{grade_table}).
-#' @param palette Colour palette: \code{"pastel"} (default) or \code{"classic"}.
+#' @param palette Color palette: \code{"pastel"} (default) or \code{"classic"}.
 #' @param format Output format(s): one or more of \code{"docx"}, \code{"html"},
 #'   \code{"pdf"}, \code{"md"}. Default \code{"docx"}.
 #' @param output_dir Directory for output files. Default \code{getwd()}.
@@ -122,7 +122,7 @@ grade_report <- function(outcomes,
     "",
     "## Summary of Findings",
     "",
-    "*See Word/HTML output for the full colour-coded flextable.*",
+    "*See Word/HTML output for the full color-coded flextable.*",
     "",
     .md_sof_table(outcomes, primary, nms, prim_lbl, sec_lbl, per, prediction),
     "",
@@ -147,19 +147,18 @@ grade_report <- function(outcomes,
         g$starting_quality, g$study_design
       ),
       "",
-      "| Domain | Judgment | Downgrade | Source | Notes |",
-      "|--------|----------|-----------|--------|-------|"
+      "| Domain | Judgment | Downgrade | Notes |",
+      "|--------|----------|-----------|-------|"
     )
 
     d <- g$domain_assessments
     for (j in seq_len(nrow(d))) {
       row <- d[j, ]
       dg  <- if (row$downgrade < 0) as.character(row$downgrade) else "0"
-      src <- if (row$auto) "auto" else "manual"
       note_clean <- gsub("\\|", "\\\\|", if (is.na(row$notes)) "" else row$notes)
       lines <- c(lines,
-        sprintf("| %s | %s | %s | %s | %s |",
-                row$domain, row$judgment, dg, src, note_clean))
+        sprintf("| %s | %s | %s | %s |",
+                row$domain, row$judgment, dg, note_clean))
     }
     lines <- c(lines, "")
   }
@@ -255,7 +254,6 @@ grade_report <- function(outcomes,
       Domain    = d$domain,
       Judgment  = d$judgment,
       Downgrade = as.character(d$downgrade),
-      Source    = ifelse(d$auto, "auto", "manual"),
       Notes     = ifelse(is.na(d$notes), "", d$notes),
       stringsAsFactors = FALSE
     )
@@ -265,8 +263,7 @@ grade_report <- function(outcomes,
     ft_detail <- flextable::width(ft_detail, j = 1, width = 1.2)
     ft_detail <- flextable::width(ft_detail, j = 2, width = 1.0)
     ft_detail <- flextable::width(ft_detail, j = 3, width = 0.8)
-    ft_detail <- flextable::width(ft_detail, j = 4, width = 0.7)
-    ft_detail <- flextable::width(ft_detail, j = 5, width = 3.3)
+    ft_detail <- flextable::width(ft_detail, j = 4, width = 4.0)
     ft_detail <- flextable::bg(ft_detail,   bg = "#F0F0F0", part = "header")
     ft_detail <- flextable::bold(ft_detail, part = "header")
     doc <- flextable::body_add_flextable(doc, ft_detail)

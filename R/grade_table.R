@@ -7,8 +7,8 @@
 #' @param primary Character vector of outcome names that are classified as
 #'   primary outcomes. All others are treated as secondary.
 #'   If \code{NULL} (default), no grouping header is added.
-#' @param palette Colour palette for certainty cells.
-#'   \code{"pastel"} (default) uses soft backgrounds with coloured text.
+#' @param palette Color palette for certainty cells.
+#'   \code{"pastel"} (default) uses soft backgrounds with colored text.
 #'   \code{"classic"} uses saturated backgrounds with white text.
 #' @param show_domains Logical (default \code{TRUE}). Add domain symbol columns.
 #' @param per Denominator for SoF rate columns. \code{1000} (default) or
@@ -123,7 +123,7 @@ grade_table <- function(outcomes,
     ft <- flextable::align(ft,    i = lr, align = "left",  part = "body")
   }
 
-  # Certainty cell colour per outcome row
+  # Certainty cell color per outcome row
   cert_col <- "Certainty"
   for (ri in names(outcome_map)) {
     i  <- as.integer(ri)

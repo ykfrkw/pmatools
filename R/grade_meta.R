@@ -29,7 +29,7 @@
 #' @param rob_inflation_threshold (v0.2) Minimum *relative* inflation
 #'   \eqn{(|TE_{all}| - |TE_{low}|) / |TE_{low}|} required to rate down for
 #'   risk of bias when the evidence is dominated. Default \code{0.10}
-#'   (10 percent). Set to \code{0} to restore v0.1.0 behaviour (any direction-
+#'   (10 percent). Set to \code{0} to restore v0.1.0 behavior (any direction-
 #'   consistent change rates down). Only used when \code{rob} is a vector
 #'   or column name.
 #' @param small_values Are small outcome values desirable?

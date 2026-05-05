@@ -52,14 +52,15 @@ Fig 2 flowchart applied: domination check then direction-of-bias check.
 \item \code{NULL} (default): treated as \code{"no"}.
 }}
 
-\item{rob_dominant_threshold}{Proportion of total random-effects weight attributable
-to high-RoB studies above which evidence is considered "dominated."
-Default 0.60. Only used when \code{rob} is a vector or column name.}
+\item{rob_dominant_threshold}{Deprecated (v0.3.1+; accepted but ignored).
+The Risk-of-Bias flowchart no longer uses a weight-share dominance gate;
+the direction-and-magnitude check is now run whenever at least one
+high-RoB study is present.}
 
 \item{rob_inflation_threshold}{(v0.2) Minimum \emph{relative} inflation
 \eqn{(|TE_{all}| - |TE_{low}|) / |TE_{low}|} required to rate down for
 risk of bias when the evidence is dominated. Default \code{0.10}
-(10 percent). Set to \code{0} to restore v0.1.0 behaviour (any direction-
+(10 percent). Set to \code{0} to restore v0.1.0 behavior (any direction-
 consistent change rates down). Only used when \code{rob} is a vector
 or column name.}
 
@@ -80,7 +81,7 @@ If provided, flowchart parameters are ignored.}
 
 \item{inconsistency_ci_diff}{\code{"yes"} / \code{"no"}: Are there important
 differences in point estimates AND limited CI overlap? (BMJ Core GRADE 3 Fig 2
-Step 1). Required for flowchart; if NULL, falls back to I²-based assessment.}
+Step 1). Required for flowchart; if NULL, falls back to I^2-based assessment.}
 
 \item{inconsistency_threshold_side}{Required when \code{inconsistency_ci_diff = "yes"}.
 \code{"majority_one_side"} or \code{"opposite_sides"}: are most estimates on one

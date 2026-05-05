@@ -12,14 +12,15 @@ sof_table(
   convert_smd_to_or = FALSE,
   baseline_risk = NULL,
   threshold_label = NULL,
+  chinn_invert = FALSE,
   ...
 )
 }
 \arguments{
 \item{x}{A \code{pmatools} object (from \code{\link{grade_meta}}).}
 
-\item{palette}{Colour palette for the certainty cell.
-\code{"pastel"} (default) uses soft backgrounds with coloured text.
+\item{palette}{Color palette for the certainty cell.
+\code{"pastel"} (default) uses soft backgrounds with colored text.
 \code{"classic"} uses saturated backgrounds with white text.}
 
 \item{per}{Denominator for event rate columns. \code{1000} (default) or

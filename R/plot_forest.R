@@ -171,7 +171,7 @@ plot_forest <- function(meta_obj,
     }
   )
 
-  # Fallback: draw MID lines via abline if xline was not honoured
+  # Fallback: draw MID lines via abline if xline was not honored
   if (!is.null(mid_lines) && is.numeric(mid_lines) &&
       length(mid_lines) == 1 && is.finite(mid_lines) && mid_lines > 0) {
     v <- if (is_ratio) c(exp(-mid_lines), exp(mid_lines))

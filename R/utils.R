@@ -31,8 +31,8 @@ CERTAINTY_SYMBOLS_UNICODE <- c(
   "Very Low"   = "\u2295\u25cb\u25cb\u25cb"
 )
 
-# Certainty colour palettes (bg + text colour pairs)
-# pastel: soft backgrounds, coloured text — readable on screen and in print
+# Certainty color palettes (bg + text color pairs)
+# pastel: soft backgrounds, colored text — readable on screen and in print
 # classic: saturated backgrounds, white text — matches netmetaviz classic palette
 CERTAINTY_PALETTES <- list(
   pastel = list(

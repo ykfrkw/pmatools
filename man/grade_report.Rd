@@ -22,7 +22,7 @@ grade_report(
 
 \item{primary}{Character vector of primary outcome names (passed to \code{grade_table}).}
 
-\item{palette}{Colour palette: \code{"pastel"} (default) or \code{"classic"}.}
+\item{palette}{Color palette: \code{"pastel"} (default) or \code{"classic"}.}
 
 \item{format}{Output format(s): one or more of \code{"docx"}, \code{"html"},
 \code{"pdf"}, \code{"md"}. Default \code{"docx"}.}

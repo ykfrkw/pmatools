@@ -1,6 +1,6 @@
 #' CBT-I for Depression Response: 17-trial dataset
 #'
-#' Per-arm aggregated dataset for 17 randomised trials of cognitive
+#' Per-arm aggregated dataset for 17 randomized trials of cognitive
 #' behavioral therapy for insomnia (CBT-I) as adjunct treatment for major
 #' depressive disorder (MDD) with comorbid insomnia, with depression
 #' response (>= 50 percent reduction on a depression severity scale) as
@@ -20,7 +20,7 @@
 #'   \item{arm}{Arm label within the study (mirrors \code{treatment}).}
 #'   \item{year}{Publication year.}
 #'   \item{treatment}{\code{"CBT-I"} or \code{"Control"}.}
-#'   \item{n_randomized}{Number of participants randomised to this arm.}
+#'   \item{n_randomized}{Number of participants randomized to this arm.}
 #'   \item{d_r}{Number of depression responders (binary outcome).}
 #'   \item{rob_d}{Cochrane RoB 2.0 judgment for the depression outcome:
 #'     \code{"L"} low, \code{"S"} some concerns, \code{"H"} serious concerns.}

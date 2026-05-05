@@ -9,16 +9,22 @@ export_bundle(
   grade,
   output_dir = ".",
   bundle_name = "pmatools_results",
-  include = c("data", "script", "results", "forest", "funnel", "grade_table",
-    "grade_appendix"),
+  include = c("data", "script", "results", "forest", "forest_rob", "funnel",
+    "grade_table"),
   per = 1000,
   prediction = FALSE,
   convert_smd_to_or = FALSE,
   baseline_risk = NULL,
   threshold_label = NULL,
+  chinn_invert = FALSE,
+  other_text = NULL,
+  other_downgrade = 0L,
   data = NULL,
   grade_args = NULL,
-  ma_args = NULL
+  ma_args = NULL,
+  forest_display = NULL,
+  rob = NULL,
+  forest_display_rob = NULL
 )
 }
 \arguments{
@@ -54,6 +60,20 @@ specifications with \code{value}/\code{origin}/\code{col} slots, used to render
 \code{analysis.R} faithfully. See SPEC.md.}
 
 \item{ma_args}{Optional named list of \code{run_ma()} argument specifications.}
+
+\item{forest_display}{Optional named list of arguments forwarded to
+\code{\link{plot_forest}} when rendering the bundled forest plot.
+Recognised names: \code{title}, \code{label_e}, \code{label_c}, \code{xlim},
+\code{favors_left}, \code{favors_right}, \code{show_n}, \code{show_events},
+\code{addrow_above}, \code{addrow_below}.}
+
+\item{rob}{Optional character vector of per-study Risk-of-Bias labels
+(length \code{length(meta_obj$studlab)} or \code{meta_obj$k}). Required
+when \code{"forest_rob"} is in \code{include} to render the stratified forest plot.}
+
+\item{forest_display_rob}{Optional named list of \code{plot_forest} arguments
+for the RoB-stratified forest plot bundled when \code{"forest_rob"} is in
+\code{include}. Same recognized names as \code{forest_display}.}
 }
 \value{
 Character. Absolute path to the created ZIP file.

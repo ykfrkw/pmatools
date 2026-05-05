@@ -12,6 +12,13 @@ plot_forest(
   xlim = NULL,
   prediction = TRUE,
   auto_layout = TRUE,
+  mid_lines = NULL,
+  show_n = FALSE,
+  show_events = FALSE,
+  favors_left = NULL,
+  favors_right = NULL,
+  addrow_above = 0,
+  addrow_below = 1,
   ...
 )
 }
@@ -31,6 +38,23 @@ plot_forest(
 \item{prediction}{Show 95 percent prediction interval (default TRUE if available).}
 
 \item{auto_layout}{Apply automatic margin/x-axis/cex tweaks (default TRUE).}
+
+\item{mid_lines}{Optional numeric scalar on the TE scale (log scale for
+ratio sm). When non-NULL, vertical dashed lines are drawn at
+\code{-mid_lines} and \code{+mid_lines} (or at \code{exp(-mid)} and
+\code{exp(mid)} on a log-scale axis) to indicate the threshold for
+clinical importance.}
+
+\item{show_n}{Logical; if TRUE, add per-arm sample size columns
+(\code{n.e}, \code{n.c}) to the left of the forest.}
+
+\item{show_events}{Logical; if TRUE and binary outcome, add per-arm
+event count columns (\code{event.e}, \code{event.c}).}
+
+\item{favors_left, favors_right}{Optional character labels positioned on
+the left and right of the x-axis (e.g., "Favors Control" / "Favors
+Treatment"). Passed to \code{meta::forest()} as \code{label.left} /
+\code{label.right}.}
 
 \item{...}{Additional arguments passed to \code{\link[meta]{forest}}.}
 }
