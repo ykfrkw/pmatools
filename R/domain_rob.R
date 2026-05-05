@@ -99,12 +99,32 @@ assess_rob <- function(rob, meta_obj,
   n_high   <- sum(high_idx)
   n_total  <- length(rob_vec)
 
-  # IV weight share carried by high-RoB studies (random-effects weights when
-  # available, common-effect weights otherwise).
-  w_vec <- if (!is.null(meta_obj$w.random)) meta_obj$w.random else meta_obj$w.common
-  w_total <- if (!is.null(w_vec)) sum(w_vec, na.rm = TRUE) else 0
-  w_high_pct <- if (!is.null(w_vec) && length(w_vec) == n_total && w_total > 0) {
-    100 * sum(w_vec[high_idx], na.rm = TRUE) / w_total
+  # IV weight share carried by high-RoB studies. Prefer meta's pre-computed
+  # weights (random > common > legacy fixed). Fall back to 1/seTE^2 (the basic
+  # inverse-variance weights), which {meta} always exposes via `seTE`. This
+  # keeps the weight % visible even when a slot is missing or zero-filled.
+  pick_weights <- function(meta_obj, n) {
+    for (slot in c("w.random", "w.common", "w.fixed")) {
+      v <- meta_obj[[slot]]
+      if (!is.null(v) && length(v) == n) {
+        ok <- is.finite(v) & v > 0
+        if (any(ok) && sum(v[ok]) > 0) return(v)
+      }
+    }
+    se <- meta_obj$seTE
+    if (!is.null(se) && length(se) == n) {
+      v  <- 1 / se^2
+      if (any(is.finite(v) & v > 0)) return(v)
+    }
+    NULL
+  }
+  w_vec <- pick_weights(meta_obj, n_total)
+  w_high_pct <- if (!is.null(w_vec)) {
+    ok <- is.finite(w_vec)
+    w_total <- sum(w_vec[ok], na.rm = TRUE)
+    if (w_total > 0) {
+      100 * sum(w_vec[high_idx & ok], na.rm = TRUE) / w_total
+    } else NA_real_
   } else NA_real_
 
   count_pct <- 100 * (n_high / max(1L, n_total))
