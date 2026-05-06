@@ -111,6 +111,10 @@
 #' @param pubias_unpublished \code{"yes"} / \code{"no"}: Is there documentation of
 #'   unpublished studies (eg, in trial registry or FDA)? Only used when k < 10.
 #'   If \code{NULL} (default), assumed \code{"no"} with a warning.
+#' @param pubias_registry_complete \code{"yes"} / \code{"no"}: Top-level structural
+#'   rule-out for fields where pre-registration is universal and all registered
+#'   trials can be accounted for. \code{"yes"} short-circuits the publication
+#'   bias domain to "no" regardless of Egger's test or k. Default \code{NULL}.
 #'
 #' @return An S3 object of class \code{pmatools} containing:
 #'   \describe{
@@ -158,7 +162,8 @@ grade_meta <- function(meta_obj,
                        baseline_risk                    = NULL,
                        pubias_small_industry            = NULL,
                        pubias_funnel_asymmetry          = NULL,
-                       pubias_unpublished               = NULL) {
+                       pubias_unpublished               = NULL,
+                       pubias_registry_complete         = NULL) {
 
   # --- input check ---
   if (!inherits(meta_obj, "meta")) {
@@ -180,7 +185,8 @@ grade_meta <- function(meta_obj,
   d_rob   <- assess_rob(rob, meta_obj,
                         rob_dominant_threshold  = rob_dominant_threshold,
                         rob_inflation_threshold = rob_inflation_threshold,
-                        small_values            = small_values)
+                        small_values            = small_values,
+                        mid_internal            = mid_internal)
 
   d_indir <- assess_indirectness(indirectness, meta_obj)
 
@@ -210,9 +216,10 @@ grade_meta <- function(meta_obj,
 
   d_pubias <- assess_pubias(
     meta_obj,
-    pubias_small_industry   = pubias_small_industry,
-    pubias_funnel_asymmetry = pubias_funnel_asymmetry,
-    pubias_unpublished      = pubias_unpublished
+    pubias_small_industry    = pubias_small_industry,
+    pubias_funnel_asymmetry  = pubias_funnel_asymmetry,
+    pubias_unpublished       = pubias_unpublished,
+    pubias_registry_complete = pubias_registry_complete
   )
 
   domains <- dplyr::bind_rows(d_rob, d_indir, d_incon, d_impre, d_pubias)

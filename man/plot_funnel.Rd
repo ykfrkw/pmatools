@@ -13,7 +13,9 @@ plot_funnel(
 )
 }
 \arguments{
-\item{meta_obj}{A \code{meta} object.}
+\item{meta_obj}{A \code{meta} object, or a \code{pmatools} object returned by
+\code{\link{grade_meta}} (the embedded \code{meta} object is extracted
+automatically).}
 
 \item{contour}{Numeric vector of (1 - alpha) significance levels for
 contour boundaries. Default \code{c(0.9, 0.95, 0.99)} produces 4 zones:

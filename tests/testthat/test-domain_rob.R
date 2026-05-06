@@ -2,12 +2,15 @@ library(testthat)
 
 skip_if_not_installed("meta")
 
-# Mock dominated meta object (cf. test-grade_meta.R)
-# `seTE.random` is set so the new (v0.3.2+) CI-overlap and significance-change
-# branches can be exercised. Tighten/loosen it across tests to control overlap.
+# Mock dominated meta object: 1 large high-RoB study + 2 small low-RoB studies.
+# TE values supplied here are on the analysis scale (log scale for RR/OR).
+# `te_all` is the random-effects pooled estimate; `te_low_only` is set as the
+# study-level TE for the two low-RoB studies, which becomes TE_low (the IV-
+# weighted mean of low-RoB studies) by construction.
 make_mock_dominated <- function(te_all, te_low_only,
                                 seTE.random = 0.10,
-                                seTE        = c(0.10, 0.45, 0.45)) {
+                                seTE        = c(0.10, 0.45, 0.45),
+                                sm          = "RR") {
   m <- list(
     k            = 3L,
     w.random     = c(80, 10, 10),
@@ -17,7 +20,7 @@ make_mock_dominated <- function(te_all, te_low_only,
     seTE.random  = seTE.random,
     lower.random = te_all - 0.4,
     upper.random = te_all + 0.4,
-    sm           = "RR",
+    sm           = sm,
     I2           = 0.10,
     tau2         = 0.01,
     pval.Q       = 0.30,
@@ -32,52 +35,122 @@ make_mock_dominated <- function(te_all, te_low_only,
   m
 }
 
-test_that("inflation threshold 0.10 blocks rate-down for small inflation", {
-  # Modest inflation: te_all=1.05, te_low=1.00 -> ratio = 5%
-  m <- make_mock_dominated(te_all = 1.05, te_low_only = 1.00)
+# --- Rule 1: same trivial zone -----------------------------------------------
+test_that("Rule 1: TE_all and TE_low both in trivial zone -> no", {
+  # log(1.20) ~ 0.182; both 0.05 and 0.05 fall inside +/-0.182.
+  m <- make_mock_dominated(te_all = 0.05, te_low_only = 0.05)
   g <- grade_meta(m, rob = c("serious", "no", "no"),
                   small_values = "undesirable",
+                  mid = 1.20, mid_scale = "ratio",
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   expect_equal(rob_row$judgment, "no")
-  # CIs nearly identical at this scale -> overlap path or "below threshold"
-  expect_true(grepl("overlap|below threshold", rob_row$notes))
+  expect_match(rob_row$notes, "Rule 1")
 })
 
-test_that("large inflation rates down to some_concerns (v0.3+; sign-flip required for serious)", {
-  # Large inflation: te_all=1.4, te_low=0.3 -> ratio = 367%, signs both positive (no flip)
-  # Tight CIs to keep overlap < 0.8.
-  m <- make_mock_dominated(te_all = 1.4, te_low_only = 0.3,
-                           seTE.random = 0.05, seTE = c(0.05, 0.20, 0.20))
+# --- Rule 2: same non-trivial zone, inflation within threshold ---------------
+test_that("Rule 2: same non-trivial zone, inflation <= 10% -> no", {
+  # Both te_all=0.50 and te_low=0.48 are above +log(1.20)=0.182 (zone 'above').
+  # inflation = (0.50 - 0.48) / 0.48 = 4.2% < 10%.
+  m <- make_mock_dominated(te_all = 0.50, te_low_only = 0.48)
   g <- grade_meta(m, rob = c("serious", "no", "no"),
                   small_values = "undesirable",
+                  mid = 1.20, mid_scale = "ratio",
+                  rob_inflation_threshold = 0.10)
+  rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
+  expect_equal(rob_row$judgment, "no")
+  expect_match(rob_row$notes, "Rule 2")
+})
+
+test_that("Rule 2: same non-trivial zone, deflating direction -> no", {
+  # te_all=0.40 < te_low=0.60: high-RoB pulls *toward* null; not bias-favouring.
+  # Both still in 'above' zone (above +0.182). -> Rule 2.
+  m <- make_mock_dominated(te_all = 0.40, te_low_only = 0.60)
+  g <- grade_meta(m, rob = c("serious", "no", "no"),
+                  small_values = "undesirable",
+                  mid = 1.20, mid_scale = "ratio",
+                  rob_inflation_threshold = 0.10)
+  rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
+  expect_equal(rob_row$judgment, "no")
+  expect_match(rob_row$notes, "Rule 2")
+})
+
+# --- Rule 3: same non-trivial zone, bias-favouring inflation > threshold -----
+test_that("Rule 3: same non-trivial zone, inflation > 10% -> some_concerns", {
+  # Both te_all=0.60 and te_low=0.40 in 'above' zone; inflation = 50% > 10%.
+  m <- make_mock_dominated(te_all = 0.60, te_low_only = 0.40)
+  g <- grade_meta(m, rob = c("serious", "no", "no"),
+                  small_values = "undesirable",
+                  mid = 1.20, mid_scale = "ratio",
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   expect_equal(rob_row$judgment, "some_concerns")
+  expect_match(rob_row$notes, "Rule 3")
 })
 
-test_that("sign flip from removing high-RoB rates down to serious", {
-  # te_all positive, te_low negative -> sign flip -> "serious"
+# --- Rule 4: zone changes without sign flip ----------------------------------
+test_that("Rule 4: 'above' -> 'trivial' zone change -> some_concerns", {
+  # te_all=0.50 (above), te_low=0.10 (trivial). Zones differ; no sign flip.
+  m <- make_mock_dominated(te_all = 0.50, te_low_only = 0.10)
+  g <- grade_meta(m, rob = c("serious", "no", "no"),
+                  small_values = "undesirable",
+                  mid = 1.20, mid_scale = "ratio",
+                  rob_inflation_threshold = 0.10)
+  rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
+  expect_equal(rob_row$judgment, "some_concerns")
+  expect_match(rob_row$notes, "Rule 4")
+})
+
+test_that("Rule 4: 'trivial' -> 'above' zone change -> some_concerns", {
+  # high-RoB pulls into trivial: te_all=0.10 (trivial), te_low=0.50 (above).
+  m <- make_mock_dominated(te_all = 0.10, te_low_only = 0.50)
+  g <- grade_meta(m, rob = c("serious", "no", "no"),
+                  small_values = "undesirable",
+                  mid = 1.20, mid_scale = "ratio",
+                  rob_inflation_threshold = 0.10)
+  rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
+  expect_equal(rob_row$judgment, "some_concerns")
+  expect_match(rob_row$notes, "Rule 4")
+})
+
+# --- Rule 5: zone change with sign flip --------------------------------------
+test_that("Rule 5: 'above' <-> 'below' sign flip -> serious", {
+  m <- make_mock_dominated(te_all = 0.50, te_low_only = -0.50)
+  g <- grade_meta(m, rob = c("serious", "no", "no"),
+                  small_values = "undesirable",
+                  mid = 1.20, mid_scale = "ratio",
+                  rob_inflation_threshold = 0.10)
+  rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
+  expect_equal(rob_row$judgment, "serious")
+  expect_match(rob_row$notes, "Rule 5")
+})
+
+# --- Fallback: MID not supplied ---------------------------------------------
+test_that("Fallback: MID not supplied + sign flip -> serious (rule 5)", {
   m <- make_mock_dominated(te_all = 1.0, te_low_only = -0.5)
   g <- grade_meta(m, rob = c("serious", "no", "no"),
                   small_values = NULL,
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   expect_equal(rob_row$judgment, "serious")
+  expect_match(rob_row$notes, "MID not supplied")
 })
 
-test_that("inflation threshold 0 (v0.1.0 compat) rates down for any inflation", {
-  m <- make_mock_dominated(te_all = 1.05, te_low_only = 1.00,
-                           seTE.random = 0.05, seTE = c(0.05, 0.20, 0.20))
+test_that("Fallback: MID not supplied + same-sign small inflation -> no (rule 2)", {
+  # Without MID, trivial zone collapses to {0}; both 0.05 and 0.04 are 'above'.
+  # te_all < te_low under small_values='undesirable' -> direction_ok FALSE -> rule 2.
+  m <- make_mock_dominated(te_all = 0.04, te_low_only = 0.05)
   g <- grade_meta(m, rob = c("serious", "no", "no"),
                   small_values = "undesirable",
-                  rob_inflation_threshold = 0)
+                  rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "some_concerns")
+  expect_equal(rob_row$judgment, "no")
+  expect_match(rob_row$notes, "Rule 2")
 })
 
+# --- small_values direction handling ----------------------------------------
 test_that("small_values = NULL: high-RoB toward null does NOT rate down", {
-  # |te_all|=0.2 < |te_low|=1.1 -> direction_ok FALSE -> no
+  # |te_all|=0.2 < |te_low|=1.1 -> direction_ok FALSE; both 'above' (no MID).
   m <- make_mock_dominated(te_all = 0.2, te_low_only = 1.1)
   g <- grade_meta(m, rob = c("serious", "no", "no"),
                   small_values = NULL,
@@ -86,53 +159,39 @@ test_that("small_values = NULL: high-RoB toward null does NOT rate down", {
   expect_equal(rob_row$judgment, "no")
 })
 
-# v0.3.2+ — nmatools-derived branches ----------------------------------------
-
-test_that("CI-overlap >= 0.8 forces 'no' even with inflation > threshold", {
-  # 40% inflation in point estimates, similar wide CIs -> overlap_ratio ~0.83.
-  m <- make_mock_dominated(te_all = 1.4, te_low_only = 1.0,
-                           seTE.random = 1.0, seTE = c(1.0, 1.0, 1.0))
+# --- Threshold = 0 backward compatibility -----------------------------------
+test_that("Threshold = 0 inside same non-trivial zone rates down for any inflation", {
+  # te_all=0.20 (above), te_low=0.19 (above); 5% inflation; threshold 0 -> rule 3.
+  m <- make_mock_dominated(te_all = 0.20, te_low_only = 0.19)
   g <- grade_meta(m, rob = c("serious", "no", "no"),
                   small_values = "undesirable",
-                  rob_inflation_threshold = 0.10)
-  rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "no")
-  expect_true(grepl("overlap", rob_row$notes))
-})
-
-test_that("Significance change rates down to some_concerns even when inflation < threshold", {
-  # Modest inflation (8%, < 10%), but excluding high-RoB shifts the CI to no
-  # longer cross null. te_all=0.27, se=0.20 -> CI [-0.12, 0.66] (crosses null);
-  # te_low=0.25 with very tight se=0.05 -> CI [0.15, 0.35] (does not cross null).
-  m <- make_mock_dominated(te_all = 0.27, te_low_only = 0.25,
-                           seTE.random = 0.20,
-                           seTE = c(0.20, 0.05, 0.05))
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
-                  small_values = "undesirable",
-                  rob_inflation_threshold = 0.10)
+                  mid = 1.20, mid_scale = "ratio",
+                  rob_inflation_threshold = 0)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   expect_equal(rob_row$judgment, "some_concerns")
-  expect_true(grepl("significance changes", rob_row$notes))
+  expect_match(rob_row$notes, "Rule 3")
 })
 
+# --- Reporting ---------------------------------------------------------------
 test_that("weight_note reports both count % and weight %", {
-  m <- make_mock_dominated(te_all = 1.05, te_low_only = 1.00)
+  m <- make_mock_dominated(te_all = 0.05, te_low_only = 0.05)
   g <- grade_meta(m, rob = c("serious", "no", "no"),
                   small_values = "undesirable",
-                  rob_inflation_threshold = 0.10)
+                  mid = 1.20, mid_scale = "ratio")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   expect_match(rob_row$notes, "by count")
   expect_match(rob_row$notes, "by weight")
 })
 
-test_that("diff_note no longer prints |TE_all| / |TE_low|", {
-  m <- make_mock_dominated(te_all = 1.4, te_low_only = 0.3,
-                           seTE.random = 0.05, seTE = c(0.05, 0.20, 0.20))
+test_that("diff_note reports zone labels and relative inflation", {
+  m <- make_mock_dominated(te_all = 0.60, te_low_only = 0.40)
   g <- grade_meta(m, rob = c("serious", "no", "no"),
                   small_values = "undesirable",
+                  mid = 1.20, mid_scale = "ratio",
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_false(grepl("\\|TE_all\\|", rob_row$notes))
-  expect_false(grepl("\\|TE_low\\|", rob_row$notes))
+  expect_match(rob_row$notes, "\\[zone = above\\]")
   expect_match(rob_row$notes, "relative inflation")
+  expect_false(grepl("\\|TE_all\\|", rob_row$notes))
+  expect_false(grepl("CI overlap", rob_row$notes))
 })

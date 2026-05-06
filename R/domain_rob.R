@@ -1,13 +1,24 @@
 # domain_rob.R - Risk of Bias domain assessment
 #
-# v0.3.1+: dominance-threshold gate removed. Direction-and-magnitude check
-# is always run regardless of how much weight high-RoB studies carry.
+# v0.4+: MECE 5-rule zone-based decision. TE_all and TE_low are each
+# classified into one of three zones defined by +/-MID:
+#   above   : TE > +MID
+#   trivial : -MID <= TE <= +MID
+#   below   : TE < -MID
 #
-#   sign(TE_all) != sign(TE_low) (sign flips when high-RoB removed)
-#                                          -> "serious"      (-2)
-#   else, |TE_all| / |TE_low| inflated > rob_inflation_threshold (default 0.10)
-#                                          -> "some_concerns" (-1)
-#   else                                   -> "no"
+# Decision (zone(TE_all) = za, zone(TE_low) = zl):
+#   Rule 1: za == zl == "trivial"                    -> "no"
+#   Rule 2: za == zl, non-trivial, inflation <= 10%  -> "no"
+#   Rule 3: za == zl, non-trivial, inflation > 10%   -> "some_concerns"  (-1)
+#   Rule 4: za != zl, no sign flip across null       -> "some_concerns"  (-1)
+#   Rule 5: za != zl, sign flip (above <-> below)    -> "serious"        (-2)
+#
+# inflation_ratio = (|TE_all| - |TE_low|) / |TE_low|, evaluated only when the
+# bias direction is bias-favouring (per `small_values`); a deflation in the
+# bias-favouring direction never triggers a downgrade.
+#
+# Fallback: when `mid_internal` is NULL/NA/<=0 the trivial zone collapses to
+# {0}, so only sign-flip (rule 5) can trigger a zone change.
 #
 # `rob_dominant_threshold` is accepted but ignored for backward compatibility.
 #
@@ -26,7 +37,8 @@
 assess_rob <- function(rob, meta_obj,
                        rob_dominant_threshold  = NULL,   # accepted but ignored (deprecated)
                        rob_inflation_threshold = 0.10,
-                       small_values            = NULL) {
+                       small_values            = NULL,
+                       mid_internal            = NULL) {
   k <- meta_obj$k
 
   # NULL -> default "no"
@@ -84,14 +96,16 @@ assess_rob <- function(rob, meta_obj,
   validate_grade_level(rob, "rob")
   .flowchart_rob(rob, meta_obj,
                  inflation_threshold = rob_inflation_threshold,
-                 small_values        = small_values)
+                 small_values        = small_values,
+                 mid_internal        = mid_internal)
 }
 
 # --------------------------------------------------------------------------
 # Flowchart (v0.3.1+: dominance gate removed; always run direction check)
 # --------------------------------------------------------------------------
 .flowchart_rob <- function(rob_vec, meta_obj,
-                           inflation_threshold = 0.10, small_values = NULL) {
+                           inflation_threshold = 0.10, small_values = NULL,
+                           mid_internal = NULL) {
 
   # high-RoB = "serious" (legacy "very_serious" still recognized after
   # .normalize_rob_levels)
@@ -186,7 +200,8 @@ assess_rob <- function(rob, meta_obj,
     low_idx             = !high_idx,
     small_values        = small_values,
     inflation_threshold = inflation_threshold,
-    sm                  = meta_obj$sm
+    sm                  = meta_obj$sm,
+    mid_internal        = mid_internal
   )
 
   judgment <- dir$judgment
@@ -204,21 +219,25 @@ assess_rob <- function(rob, meta_obj,
 }
 
 # --------------------------------------------------------------------------
-# Direction-and-magnitude check (v0.3.2+)
+# MECE 5-rule zone-and-magnitude check (v0.4+)
 #
-# Decision tree:
-#   sign(TE_all) != sign(TE_low)      -> "serious"        (-2)
-#   else CI overlap ratio >= 0.8      -> "no"             (absorbed by uncertainty)
-#   else sig(TE_all) != sig(TE_low)   -> "some_concerns"  (-1)
-#   else inflation > threshold        -> "some_concerns"  (-1)
-#   else                              -> "no"
+# Zones (defined by +/-MID on the analysis scale):
+#   above   : TE > +MID
+#   trivial : -MID <= TE <= +MID
+#   below   : TE < -MID
+# Fallback when MID is NULL/NA/<=0: trivial zone collapses to {0}, so above
+# means TE > 0 and below means TE < 0; only sign flips can trigger zone change.
 #
-# Overlap-aware and significance-change branches adapted from nmatools'
-# CINeMA within-study bias logic (judge_rob_direct_sens_v).
+# Decision tree (za = zone(TE_all), zl = zone(TE_low)):
+#   za == zl == "trivial"                                     -> "no"            (rule 1)
+#   za == zl, non-trivial, no bias-favouring inflation > 10%  -> "no"            (rule 2)
+#   za == zl, non-trivial, bias-favouring inflation > 10%     -> "some_concerns" (rule 3)
+#   za != zl, no sign flip across null                        -> "some_concerns" (rule 4)
+#   za != zl, sign flip (above <-> below)                     -> "serious"       (rule 5)
 # --------------------------------------------------------------------------
 .assess_bias_direction <- function(te_all, se_all, te_vec, se_vec, low_idx,
                                    small_values, inflation_threshold = 0.10,
-                                   sm = NULL) {
+                                   sm = NULL, mid_internal = NULL) {
 
   n_low <- sum(low_idx)
 
@@ -226,10 +245,30 @@ assess_rob <- function(rob, meta_obj,
     rlang::abort("small_values must be 'desirable' or 'undesirable'.")
   }
 
-  # Determine display label and back-transform for ratio measures
+  # Display label and back-transform for ratio measures
   log_scale <- !is.null(sm) && sm %in% c("OR", "RR", "HR", "RoM")
   sm_label  <- if (!is.null(sm) && nzchar(sm)) sm else "TE"
   .disp <- function(x) if (log_scale) round(exp(x), 3) else round(x, 3)
+
+  # MID handling
+  M <- if (!is.null(mid_internal) && is.finite(mid_internal) && mid_internal > 0) {
+    mid_internal
+  } else {
+    0
+  }
+  mid_supplied <- M > 0
+  zone_of <- function(te) {
+    if (!is.finite(te)) return(NA_character_)
+    if (te >  +M) "above"
+    else if (te < -M) "below"
+    else "trivial"
+  }
+  mid_disp <- if (mid_supplied) sprintf("+/-%s", format(.disp(M), nsmall = 0)) else "+/-0"
+  mid_note <- if (mid_supplied) {
+    sprintf("MID threshold = %s (%s)", mid_disp, if (log_scale) paste0("log ", sm_label, " scale") else sm_label)
+  } else {
+    "MID not supplied; trivial zone collapsed to {0} (sign-flip rule only)"
+  }
 
   # No low/some-RoB studies -> conservative rate-down
   if (n_low == 0 || is.null(te_vec) || is.null(se_vec)) {
@@ -237,7 +276,7 @@ assess_rob <- function(rob, meta_obj,
       judgment = "some_concerns",
       note     = paste0(
         "No low/some-RoB studies to compare with; conservative rate-down applied. ",
-        sm_label, "(all) = ", .disp(te_all), "."
+        sm_label, "(all) = ", .disp(te_all), ". ", mid_note, "."
       )
     ))
   }
@@ -245,23 +284,11 @@ assess_rob <- function(rob, meta_obj,
   # TE_low: inverse-variance weighted mean of low-RoB studies
   w_low  <- 1 / se_vec[low_idx]^2
   te_low <- sum(w_low * te_vec[low_idx]) / sum(w_low)
-  se_low <- sqrt(1 / sum(w_low))
 
-  # |TE_low| approx 0 -> ratio undefined -> conservative rate-down
-  if (abs(te_low) < 1e-9) {
-    return(list(
-      judgment = "some_concerns",
-      note     = paste0(
-        sm_label, "(excl. high-RoB) approx 0; relative inflation undefined; ",
-        "conservative rate-down applied. ",
-        sprintf("%s(all) = %.3f, %s(excl. high-RoB) = %.3f.",
-                sm_label, .disp(te_all), sm_label, .disp(te_low))
-      )
-    ))
-  }
+  za <- zone_of(te_all)
+  zl <- zone_of(te_low)
 
-  inflation_ratio <- (abs(te_all) - abs(te_low)) / abs(te_low)
-
+  # Direction of the bias contribution (only relevant for rule 3)
   direction_ok <- if (is.null(small_values)) {
     abs(te_all) > abs(te_low)
   } else if (small_values == "undesirable") {
@@ -270,89 +297,72 @@ assess_rob <- function(rob, meta_obj,
     te_all < te_low
   }
 
-  inflates <- isTRUE(direction_ok) && (inflation_ratio > inflation_threshold)
-
-  # -2 trigger: removing high-RoB studies flips the sign of the pooled TE.
-  # (Treat |TE_all| / |TE_low| close to 0 as a non-flip to avoid spurious
-  # serious downgrade from negligible effects on either side.)
-  sign_flips <- (sign(te_all) != sign(te_low)) &&
-                (abs(te_all) > 1e-6) &&
-                (abs(te_low) > 1e-6)
-
-  # 95% CIs on the analysis scale (log scale for ratio measures, raw for MD/SMD).
-  # null = 0 on this scale for all common GRADE outcomes, so significance is
-  # "CI does not contain 0".
-  has_ci <- !is.null(se_all) && is.finite(se_all) && se_all > 0 && is.finite(se_low) && se_low > 0
-  if (has_ci) {
-    ci_all_lo <- te_all - 1.96 * se_all
-    ci_all_hi <- te_all + 1.96 * se_all
-    ci_low_lo <- te_low - 1.96 * se_low
-    ci_low_hi <- te_low + 1.96 * se_low
-    overlap_len <- max(0, min(ci_all_hi, ci_low_hi) - max(ci_all_lo, ci_low_lo))
-    mean_width  <- ((ci_all_hi - ci_all_lo) + (ci_low_hi - ci_low_lo)) / 2
-    overlap_ratio <- if (mean_width > 0) overlap_len / mean_width else 0
-    sig_all <- (ci_all_lo > 0) || (ci_all_hi < 0)
-    sig_low <- (ci_low_lo > 0) || (ci_low_hi < 0)
-    sig_changed <- (sig_all != sig_low)
+  # Relative inflation (defined only when |TE_low| > 0; rule 3 requires it).
+  if (abs(te_low) > 1e-9) {
+    inflation_ratio <- (abs(te_all) - abs(te_low)) / abs(te_low)
   } else {
-    overlap_ratio <- NA_real_
-    sig_changed   <- FALSE
+    inflation_ratio <- NA_real_
   }
+  inflates <- isTRUE(direction_ok) &&
+              is.finite(inflation_ratio) &&
+              (inflation_ratio > inflation_threshold)
 
-  # Combined decision tree
-  judgment <- if (sign_flips) {
-    "serious"
-  } else if (isTRUE(overlap_ratio >= 0.8)) {
-    "no"
-  } else if (isTRUE(sig_changed)) {
-    "some_concerns"
-  } else if (inflates) {
-    "some_concerns"
+  # Sign flip across the null (rule 5 vs rule 4 disambiguation).
+  sign_flips <- identical(za, "above") && identical(zl, "below") ||
+                identical(za, "below") && identical(zl, "above")
+
+  # 5-rule decision
+  if (identical(za, zl)) {
+    if (identical(za, "trivial")) {
+      judgment <- "no"; rule <- 1L
+      rule_desc <- "Rule 1: TE_all and TE_low both in trivial zone -> do not rate down"
+    } else if (inflates) {
+      judgment <- "some_concerns"; rule <- 3L
+      rule_desc <- "Rule 3: same non-trivial zone but bias-favouring inflation > threshold -> rate down 1"
+    } else {
+      judgment <- "no"; rule <- 2L
+      rule_desc <- "Rule 2: same non-trivial zone, inflation within threshold (or not bias-favouring) -> do not rate down"
+    }
   } else {
-    "no"
+    if (sign_flips) {
+      judgment <- "serious"; rule <- 5L
+      rule_desc <- "Rule 5: zone changes across null (benefit <-> harm) -> rate down 2 (serious)"
+    } else {
+      judgment <- "some_concerns"; rule <- 4L
+      rule_desc <- "Rule 4: zone changes without sign flip -> rate down 1 (some_concerns)"
+    }
   }
 
   sv_desc <- if (is.null(small_values)) {
-    "small_values = NULL (using |TE| comparison)"
+    "small_values = NULL (using |TE| comparison for inflation direction)"
   } else {
     sprintf("small_values = '%s'", small_values)
   }
 
-  overlap_desc <- if (is.finite(overlap_ratio)) {
-    sprintf("CI overlap = %.0f%%; CI-significance change = %s",
-            100 * overlap_ratio, if (sig_changed) "yes" else "no")
+  inflation_str <- if (is.finite(inflation_ratio)) {
+    sprintf("relative inflation = %.1f%% (threshold %.0f%%)",
+            100 * inflation_ratio, 100 * inflation_threshold)
   } else {
-    "CI overlap = unavailable"
+    sprintf("relative inflation = undefined (|TE_low| ~ 0; threshold %.0f%%)",
+            100 * inflation_threshold)
   }
 
-  scale_note <- if (log_scale) paste0("log ", sm_label, " scale") else sm_label
   diff_note <- sprintf(
-    "%s(all) = %.3f; %s(excl. high-RoB) = %.3f; relative inflation = %.1f%% (%s; threshold %.0f%%); %s; %s",
-    sm_label, .disp(te_all), sm_label, .disp(te_low),
-    100 * inflation_ratio, scale_note, 100 * inflation_threshold, sv_desc, overlap_desc
+    "%s(all) = %.3f [zone = %s]; %s(excl. high-RoB) = %.3f [zone = %s]; %s; %s; %s",
+    sm_label, .disp(te_all), za,
+    sm_label, .disp(te_low), zl,
+    inflation_str, mid_note, sv_desc
   )
 
-  dir_desc <- if (sign_flips) {
-    "DIRECTION FLIPS when high-RoB studies are removed -> rate down 2 (serious)"
-  } else if (isTRUE(overlap_ratio >= 0.8)) {
-    "CIs substantially overlap (>=80%); difference absorbed by uncertainty -> do not rate down"
-  } else if (isTRUE(sig_changed)) {
-    "CI-significance changes when high-RoB studies are removed -> rate down 1 (some_concerns)"
-  } else if (inflates) {
-    "high-RoB inflates effect beyond threshold -> rate down 1 (some_concerns)"
-  } else if (!isTRUE(direction_ok)) {
-    "high-RoB does NOT inflate (direction check failed) -> do not rate down"
-  } else {
-    "inflation below threshold; treated as random variation -> do not rate down"
-  }
-
   list(
-    judgment      = judgment,
-    sign_flips    = sign_flips,
-    inflates      = inflates,
-    overlap_ratio = overlap_ratio,
-    sig_changed   = sig_changed,
-    note          = paste0(diff_note, ". ", dir_desc)
+    judgment        = judgment,
+    rule            = rule,
+    zone_all        = za,
+    zone_low        = zl,
+    sign_flips      = sign_flips,
+    inflates        = inflates,
+    inflation_ratio = inflation_ratio,
+    note            = paste0(diff_note, ". ", rule_desc)
   )
 }
 

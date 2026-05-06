@@ -70,10 +70,12 @@ test_that("ingest_data rejects empty input", {
 })
 
 test_that("ingest_data validates studlab pair count", {
+  # Study A has only one arm (after Cochrane 6.5.2.10 auto-combining of duplicate
+  # arms, this still cannot become a valid 2-row pair).
   df <- data.frame(
-    studlab = c("A", "A", "A", "B", "B"),
-    treat   = c("e", "c", "c", "e", "c"),
-    n       = c(10, 10, 10, 20, 20),
+    studlab = c("A", "B", "B"),
+    treat   = c("e", "e", "c"),
+    n       = c(10, 20, 20),
     stringsAsFactors = FALSE
   )
   expect_error(ingest_data(df, format = "long"), regexp = "exactly 2 rows")

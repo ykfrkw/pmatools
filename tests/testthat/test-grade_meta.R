@@ -142,9 +142,11 @@ test_that("inconsistency flowchart: majority_one_side → do not rate down", {
 
 test_that("inconsistency scalar overrides flowchart", {
   m <- make_metabin()
+  # Legacy "very_serious" is normalized to canonical "serious" (-2) under the
+  # v0.3+ 3-level system.
   g <- grade_meta(m, inconsistency = "very_serious")
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  expect_equal(incon_row$judgment, "very_serious")
+  expect_equal(incon_row$judgment, "serious")
   expect_false(incon_row$auto)
 })
 
@@ -188,14 +190,17 @@ test_that("pubias_small_industry = 'yes' rates down", {
   m <- make_metabin()
   g <- suppressWarnings(grade_meta(m, pubias_small_industry = "yes"))
   pb_row <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
-  expect_equal(pb_row$judgment, "serious")
+  # Step 1 of BMJ Core GRADE 4 Fig 5: small + industry-sponsored -> rate down 1.
+  expect_equal(pb_row$judgment, "some_concerns")
 })
 
 test_that("pubias_unpublished = 'yes' rates down when k < 10", {
   m <- make_metabin()  # k = 3
   g <- grade_meta(m, pubias_unpublished = "yes")
   pb_row <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
-  expect_equal(pb_row$judgment, "serious")
+  # Step 2 (k < 10) of BMJ Core GRADE 4 Fig 5: documented unpublished studies
+  # -> rate down 1.
+  expect_equal(pb_row$judgment, "some_concerns")
   expect_false(pb_row$auto)
 })
 

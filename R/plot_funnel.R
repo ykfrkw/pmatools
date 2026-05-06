@@ -6,7 +6,9 @@
 
 #' Contour-enhanced funnel plot with annotated legend
 #'
-#' @param meta_obj A `meta` object.
+#' @param meta_obj A `meta` object, or a `pmatools` object returned by
+#'   \code{\link{grade_meta}} (the embedded `meta` object is extracted
+#'   automatically).
 #' @param contour Numeric vector of (1 - alpha) significance levels for
 #'   contour boundaries. Default \code{c(0.9, 0.95, 0.99)} produces 4 zones:
 #'   p > 0.10, 0.05-0.10, 0.01-0.05, < 0.01.
@@ -23,6 +25,9 @@ plot_funnel <- function(meta_obj,
                         show_egger  = TRUE,
                         auto_layout = TRUE,
                         ...) {
+  if (inherits(meta_obj, "pmatools")) {
+    meta_obj <- meta_obj$meta
+  }
   if (!inherits(meta_obj, "meta")) {
     rlang::abort("plot_funnel: meta_obj must be a meta-analysis object.")
   }

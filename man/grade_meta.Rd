@@ -31,7 +31,8 @@ grade_meta(
   baseline_risk = NULL,
   pubias_small_industry = NULL,
   pubias_funnel_asymmetry = NULL,
-  pubias_unpublished = NULL
+  pubias_unpublished = NULL,
+  pubias_registry_complete = NULL
 )
 }
 \arguments{
@@ -163,6 +164,11 @@ run automatically.}
 \item{pubias_unpublished}{\code{"yes"} / \code{"no"}: Is there documentation of
 unpublished studies (eg, in trial registry or FDA)? Only used when k < 10.
 If \code{NULL} (default), assumed \code{"no"} with a warning.}
+
+\item{pubias_registry_complete}{\code{"yes"} / \code{"no"}: Top-level structural
+rule-out for fields where pre-registration is universal and all registered
+trials can be accounted for. \code{"yes"} short-circuits the publication
+bias domain to "no" regardless of Egger's test or k. Default \code{NULL}.}
 }
 \value{
 An S3 object of class \code{pmatools} containing:

@@ -136,44 +136,51 @@ GRADE certainty starts at **High** for RCTs (or **Low** for observational studie
 
 ## Domain-by-domain logic
 
-### 1. Risk of Bias (BMJ Core GRADE 4, Fig 2 flowchart)
+### 1. Risk of Bias (5-rule MECE zone-based decision; aligned with BMJ Core GRADE 4)
 
 **Scalar input — flowchart bypassed:**
 
 ```r
-grade_meta(m, rob = "serious")   # used as-is; no domination check
+grade_meta(m, rob = "serious")   # used as-is
 ```
 
-**Per-study vector — BMJ Fig 2 flowchart applied:**
+**Per-study vector — 5-rule zone decision applied:**
+
+`pmatools` classifies the pooled effect from all studies (`TE_all`) and the
+IV-weighted pooled effect of low / some-RoB studies (`TE_low`) into one of three
+zones defined by the minimally important difference (MID) on the analysis scale:
+
+- `above`   : TE > +MID
+- `trivial` : −MID ≤ TE ≤ +MID
+- `below`   : TE < −MID
+
+Then a single MECE 3×3 table determines the downgrade:
+
+| zone(TE_all) → / zone(TE_low) ↓ | **above** | **trivial** | **below** |
+|---|---|---|---|
+| **above**    | rule 2 / 3 | rule 4    | **rule 5** |
+| **trivial**  | rule 4    | rule 1    | rule 4    |
+| **below**    | **rule 5** | rule 4    | rule 2 / 3 |
 
 ```
-Is evidence DOMINATED by high-RoB studies?
-(= high/very-high-RoB weight ≥ rob_dominant_threshold of total random-effects weight)
-
-  NO  → judgment = "no" (do not rate down)
-
-  YES → Does including high-RoB studies inflate the apparent effect?
-          Automatically checked by comparing:
-            TE_all  (pooled estimate including all studies)
-            TE_low  (IV-weighted mean of low/some-RoB studies only)
-
-          small_values = "undesirable": inflates = (TE_all > TE_low)
-          small_values = "desirable":  inflates = (TE_all < TE_low)
-          small_values = NULL:         always rate down (conservative) + warning
-
-          Inflates     → judgment = "serious"  (rate down)
-          Conservative → judgment = "no"       (do not rate down)
+Rule 1: same trivial zone                                         → no
+Rule 2: same non-trivial zone, inflation ≤ 10%                    → no
+Rule 3: same non-trivial zone, bias-favouring inflation > 10%     → some_concerns (−1)
+Rule 4: zone differs without sign flip                            → some_concerns (−1)
+Rule 5: zone differs with sign flip (above ↔ below)               → serious       (−2)
 ```
+
+`inflation_ratio = (|TE_all| − |TE_low|) / |TE_low|` is evaluated only when the
+sign of the inflation matches the bias-favouring direction (per `small_values`);
+deflation in the bias-favouring direction never triggers a downgrade.
 
 ```r
 grade_meta(m,
-  rob                    = rob_vec,         # character vector, length k
-  rob_dominant_threshold = 0.60,            # default: >60% weight = dominated
-  small_values           = "undesirable")   # large OR = desirable (response)
-
-grade_meta(m,
-  rob          = rob_vec,
-  small_values = "desirable")    # small values good (eg, mortality rate)
+  rob                     = rob_vec,        # character vector, length k
+  mid                     = 1.20,           # MID on natural scale
+  mid_scale               = "ratio",        # OR/RR/HR/RoM: ratio; MD/SMD: te_scale
+  small_values            = "undesirable",  # large OR = good (eg, response)
+  rob_inflation_threshold = 0.10)           # rule 3 trigger; default 10%
 ```
 
 **`small_values` parameter** (consistent with `netmetaviz`):
@@ -182,11 +189,16 @@ grade_meta(m,
 |-------|---------|---------|
 | `"undesirable"` | Small values are bad; large = good | Response rate, remission |
 | `"desirable"` | Small values are good | Mortality, symptom severity |
-| `NULL` | Unknown direction | Conservative rate-down + warning |
+| `NULL` | Unknown direction | Bias direction inferred from |TE| comparison |
 
-**Threshold guidance** (BMJ 2025 Core GRADE 4 Fig 2 footnote):
-- `rob_dominant_threshold = 0.60` (default): >60% weight = dominated
-- `rob_dominant_threshold = 0.55`: more conservative
+**Fallback when MID is not supplied** (`mid = NULL`): the trivial zone collapses
+to `{0}`, so only sign flips can change zones. The algorithm reduces to a
+sign-flip check (rule 5 vs rule 2/3); rule 1 and rule 4 cannot fire.
+
+**Backward-compatibility note.** `rob_dominant_threshold` is still accepted but
+ignored: the 5-rule decision is run whenever at least one high-RoB study is
+present. The previous CI-overlap and CI-significance branches were removed
+because they are subsumed by the zone-and-magnitude comparison.
 
 **Cochrane RoB 2.0 labels accepted directly** — no pre-mapping needed:
 
@@ -311,34 +323,49 @@ grade_meta(m, ois_delta = 3, ois_sd = 7)
 ### 5. Publication Bias (BMJ Core GRADE 4, Fig 5 flowchart)
 
 ```
-Step 1: Are most or all studies small AND industry-sponsored?
-  pubias_small_industry = "yes"        → judgment = "serious" (stop)
+Top-level structural rule-out:
+  pubias_registry_complete = "yes"
+    → judgment = "no" (stop; pre-registration coverage rules out pub bias)
+
+Q1: Are most or all studies small AND industry-sponsored?
+  pubias_small_industry = "yes"        → judgment = "some_concerns" (-1; stop)
   pubias_small_industry = "no" / NULL  → continue
 
-Step 2 (k ≥ 10):
-  pubias_funnel_asymmetry = NULL  → run Egger's test automatically
-    Egger p < 0.10  → judgment = "serious"
-    Egger p ≥ 0.10  → judgment = "no"
-  pubias_funnel_asymmetry = "yes" / "no"  → use as-is (override Egger)
+Q2: Is statistical analysis feasible (k ≥ 10)?
+  YES → Q3
+  NO  → Q4
 
-Step 2 (k < 10):
-  Egger's test underpowered — not run automatically.
-  pubias_unpublished = "yes"        → judgment = "serious"
-  pubias_unpublished = "no" / NULL  → judgment = "no" (note: k < 10)
+Q3 (k ≥ 10): Visual asymmetry / Egger's test (2-tier)
+  pubias_funnel_asymmetry = NULL  → run Egger's test automatically
+    Egger p < 0.01           → judgment = "serious"        (-2)
+    0.01 ≤ Egger p < 0.05    → judgment = "some_concerns"  (-1)
+    Egger p ≥ 0.05           → judgment = "no"
+  pubias_funnel_asymmetry = "yes"  → judgment = "some_concerns" (-1; visual override)
+  pubias_funnel_asymmetry = "no"   → judgment = "no"             (visual override)
+
+Q4 (k < 10): Documentation of unpublished studies
+  pubias_unpublished = "yes"        → judgment = "some_concerns" (-1)
+  pubias_unpublished = "no" / NULL  → judgment = "no" (NULL: assumed "no" with warning)
 ```
 
 ```r
 grade_meta(m,
-  pubias_small_industry   = "no",   # explicitly specify
-  pubias_funnel_asymmetry = NULL,   # auto Egger (if k ≥ 10)
-  pubias_unpublished      = NULL)   # assumed "no" (if k < 10)
+  pubias_registry_complete = "no",   # default; "yes" if all trials pre-registered
+  pubias_small_industry    = "no",
+  pubias_funnel_asymmetry  = NULL,   # auto 2-tier Egger (if k ≥ 10)
+  pubias_unpublished       = NULL)   # assumed "no" (if k < 10)
 ```
 
-**Manual override:**
-```r
-grade_meta(m, pubias_funnel_asymmetry = "yes")   # force rate-down (k ≥ 10)
-grade_meta(m, pubias_unpublished      = "yes")   # force rate-down (k < 10)
-```
+**Visual inspection.** A contour-enhanced funnel plot is available as
+`plot_funnel(g)` (or `plot_funnel(meta_obj)`). Reviewers who want to override
+the auto Egger judgment from visual inspection can pass
+`pubias_funnel_asymmetry = "yes"` or `"no"`.
+
+**Trim-and-fill diagnostics.** Trim-and-fill no longer drives the GRADE
+judgment (the 2-tier Egger rule supersedes the previous sign-flip escalation),
+but the imputed studies and adjusted random-effects summary are still
+informative. They are available through `plot_trimfill_forest(g)` for display
+in the Reporting bias tab of the companion Shiny app.
 
 ---
 
