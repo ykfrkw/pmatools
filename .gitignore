@@ -32,3 +32,6 @@ data/*.rda
 # Manuscript (local only — not for public repo)
 manuscript/
 pmatools_campbell_draft.docx
+
+# Drafts (specs not ready for the public repo)
+gitignore/
