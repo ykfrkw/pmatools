@@ -16,16 +16,16 @@
 #   No concern (-0)    : CI が null を跨がない かつ OIS を満たす（または未指定）
 #   Some concerns (-1) : CI が null を跨ぐ、または OIS を満たさない（30% 超）
 #   Serious (-2)       :
-#     (a) MID 提示時: 95% CI が ±MID の両方を超えて広がる（clinically
+#     (a) Threshold 提示時: 95% CI が ±Threshold の両方を含む（clinically
 #         important benefit と harm の両方が確からしい）, または
 #     (b) 総 N（連続）／総イベント数（バイナリ）が OIS の 30% 以下
 #
 # Null の定義:
 #   {meta} の lower.random / upper.random は RR/OR/HR で log スケール、
 #   MD/SMD で原スケール。いずれも null_val = 0 として crosses-null を判定できる。
-# MID:
-#   mid_internal は TE スケール（ratio は log、絶対値は原）の正値。閾値は
-#   ±mid_internal。MID 未提示時は (a) は適用せず crosses_null のみで判断。
+# Threshold:
+#   threshold_internal は TE スケール（ratio は log、絶対値は原）の正値。閾値は
+#   ±threshold_internal。Threshold 未提示時は (a) は適用せず crosses_null のみで判断。
 #
 # OIS (Optimal Information Size) の計算方法:
 #
@@ -43,17 +43,17 @@
 #     既定: ois_alpha = 0.05 (両側), ois_beta = 0.20 (検出力 80%)
 
 assess_imprecision <- function(meta_obj,
-                               outcome_type = "relative",
-                               ois_events   = NULL,
-                               ois_n        = NULL,
-                               ois_alpha    = 0.05,
-                               ois_beta     = 0.20,
-                               ois_p0       = NULL,
-                               ois_p1       = NULL,
-                               ois_delta    = NULL,
-                               ois_sd       = NULL,
-                               mid_internal = NULL,
-                               mid_kind     = NULL) {
+                               outcome_type       = "relative",
+                               ois_events         = NULL,
+                               ois_n              = NULL,
+                               ois_alpha          = 0.05,
+                               ois_beta           = 0.20,
+                               ois_p0             = NULL,
+                               ois_p1             = NULL,
+                               ois_delta          = NULL,
+                               ois_sd             = NULL,
+                               threshold_internal = NULL,
+                               threshold_kind     = NULL) {
   lower <- meta_obj$lower.random
   upper <- meta_obj$upper.random
 
@@ -70,26 +70,35 @@ assess_imprecision <- function(meta_obj,
   null_val    <- 0.0
   crosses_null <- (lower < null_val) && (upper > null_val)
 
-  # MID-based threshold check (Zeng et al. BMJ 2025). Three states relative
-  # to the [-MID, +MID] trivial zone:
-  #   crosses_both_thresholds = lower < -MID AND upper > +MID  (serious -2)
-  #   crosses_one_threshold   = exactly one of (lower < -MID, upper > +MID)
-  #                             (some_concerns -1)
-  #   within_thresholds       = -MID <= lower AND upper <= +MID
-  #                             (no concern even if CI crosses null)
-  has_mid <- !is.null(mid_internal) &&
-             length(mid_internal) > 0 &&
-             !is.na(mid_internal) &&
-             is.finite(mid_internal) &&
-             mid_internal > 0
-  if (has_mid) {
-    below_thresh <- lower < -mid_internal
-    above_thresh <- upper >  mid_internal
-    crosses_both_thresholds <- below_thresh && above_thresh
-    crosses_one_threshold   <- xor(below_thresh, above_thresh)
+  # Threshold-based check (Zeng et al. BMJ 2025, GRADE Guidance 34).
+  # A CI "crosses" a threshold T iff T lies inside the CI: lower < T AND upper > T.
+  # Four states relative to the [-Threshold, +Threshold] trivial zone:
+  #   crosses_both_thresholds : CI contains both -T and +T (lower < -T AND upper > +T)
+  #                             -> serious (-2)
+  #   crosses_one_threshold   : CI contains exactly one of {-T, +T}
+  #                             -> some_concerns (-1)
+  #   within_thresholds       : CI lies entirely in trivial zone
+  #                             (-T <= lower AND upper <= +T) -> no concern
+  #   beyond_thresholds       : CI lies entirely outside trivial zone on one side
+  #                             (upper <= -T OR lower >= +T) -> no concern
+  #                             (definitively important effect)
+  has_threshold <- !is.null(threshold_internal) &&
+                   length(threshold_internal) > 0 &&
+                   !is.na(threshold_internal) &&
+                   is.finite(threshold_internal) &&
+                   threshold_internal > 0
+  if (has_threshold) {
+    crosses_lower_threshold <- (lower < -threshold_internal) && (upper > -threshold_internal)
+    crosses_upper_threshold <- (lower <  threshold_internal) && (upper >  threshold_internal)
+    crosses_both_thresholds <- crosses_lower_threshold && crosses_upper_threshold
+    crosses_one_threshold   <- xor(crosses_lower_threshold, crosses_upper_threshold)
+    within_thresholds       <- (lower >= -threshold_internal) && (upper <= threshold_internal)
+    beyond_thresholds       <- (upper <= -threshold_internal) || (lower >= threshold_internal)
   } else {
     crosses_both_thresholds <- NA
     crosses_one_threshold   <- NA
+    within_thresholds       <- NA
+    beyond_thresholds       <- NA
   }
 
   # Defensive: treat NA as NULL
@@ -100,10 +109,11 @@ assess_imprecision <- function(meta_obj,
   if (!is.null(ois_delta)  && (length(ois_delta)  == 0 || is.na(ois_delta)))  ois_delta  <- NULL
   if (!is.null(ois_sd)     && (length(ois_sd)     == 0 || is.na(ois_sd)))     ois_sd     <- NULL
 
-  # v0.2: derive ois_p1/ois_delta from mid_internal when not explicitly provided
-  mid_used_note <- ""
+  # v0.2: derive ois_p1/ois_delta from threshold_internal when not explicitly provided
+  threshold_used_note <- ""
   if (is.null(ois_events) && is.null(ois_n) &&
-      !is.null(mid_internal) && !is.na(mid_internal) && mid_internal != 0) {
+      !is.null(threshold_internal) && !is.na(threshold_internal) &&
+      threshold_internal != 0) {
     if (outcome_type == "relative") {
       # Auto-fall back ois_p0 to control-arm pooled proportion if missing
       if (is.null(ois_p0)) {
@@ -111,35 +121,35 @@ assess_imprecision <- function(meta_obj,
                         error = function(e) NULL)
         if (!is.null(cer) && is.finite(cer) && cer > 0 && cer < 1) {
           ois_p0 <- cer
-          mid_used_note <- sprintf(
+          threshold_used_note <- sprintf(
             " (ois_p0 auto from data = %.4f)", ois_p0
           )
         }
       }
       if (is.null(ois_p1) && !is.null(ois_p0)) {
         sm_local <- meta_obj$sm %||% ""
-        if (identical(mid_kind, "ard")) {
-          ois_p1 <- ois_p0 + mid_internal
+        if (identical(threshold_kind, "ard")) {
+          ois_p1 <- ois_p0 + threshold_internal
         } else if (identical(sm_local, "OR")) {
-          # OR scale: invert odds, not risk. RR-style p1 = p0 * exp(MID)
+          # OR scale: invert odds, not risk. RR-style p1 = p0 * exp(Threshold)
           # is only accurate when p0 is small; for p0 ~ 0.5 it can be
           # ~10% off and biases the OIS estimate.
-          or_val <- exp(mid_internal)
+          or_val <- exp(threshold_internal)
           ois_p1 <- (ois_p0 * or_val) / (1 - ois_p0 + ois_p0 * or_val)
         } else {
-          # RR / HR / RoM: log scale, ois_p1 = p0 * exp(MID).
-          ois_p1 <- ois_p0 * exp(mid_internal)
+          # RR / HR / RoM: log scale, ois_p1 = p0 * exp(Threshold).
+          ois_p1 <- ois_p0 * exp(threshold_internal)
         }
         ois_p1 <- max(min(ois_p1, 1 - 1e-6), 1e-6)
-        mid_used_note <- paste0(mid_used_note, sprintf(
+        threshold_used_note <- paste0(threshold_used_note, sprintf(
           " (ois_p1 derived from Threshold: ois_p1 = %.4f)", ois_p1
         ))
       }
     } else {
       # Continuous outcomes
       if (is.null(ois_delta)) {
-        ois_delta <- mid_internal
-        mid_used_note <- sprintf(
+        ois_delta <- threshold_internal
+        threshold_used_note <- sprintf(
           " (ois_delta = Threshold = %.4f)", ois_delta
         )
       }
@@ -152,7 +162,7 @@ assess_imprecision <- function(meta_obj,
     auto_ois <- .calc_ois(outcome_type, ois_alpha, ois_beta,
                           ois_p0, ois_p1, ois_delta, ois_sd)
     if (!is.null(auto_ois)) {
-      ois_calc_note <- paste0(auto_ois$formula, mid_used_note)
+      ois_calc_note <- paste0(auto_ois$formula, threshold_used_note)
       if (auto_ois$type == "events") ois_events <- auto_ois$value
       if (auto_ois$type == "n")      ois_n      <- auto_ois$value
     }
@@ -162,7 +172,7 @@ assess_imprecision <- function(meta_obj,
   ois_met <- if (is.na(ois_pct)) NA else (ois_pct >= 1.0)
   judgment <- .classify_imprecision(
     crosses_null, crosses_both_thresholds, crosses_one_threshold,
-    ois_met, ois_pct, has_mid
+    ois_met, ois_pct, has_threshold
   )
 
   # Display CI on natural scale (exp for ratio sm; raw for MD/SMD)
@@ -188,14 +198,16 @@ assess_imprecision <- function(meta_obj,
     sprintf("OIS not met (%.0f%%)", 100 * ois_pct)
   }
 
-  thresh_str <- if (!has_mid) {
+  thresh_str <- if (!has_threshold) {
     ""
   } else if (isTRUE(crosses_both_thresholds)) {
-    "; crosses BOTH MID thresholds"
+    "; crosses BOTH Thresholds"
   } else if (isTRUE(crosses_one_threshold)) {
-    "; crosses one MID threshold"
+    "; crosses one Threshold"
+  } else if (isTRUE(within_thresholds)) {
+    "; within Threshold (trivial effect)"
   } else {
-    "; within both MID thresholds"
+    "; beyond Threshold (definitively important effect)"
   }
 
   notes <- sprintf(
@@ -290,20 +302,20 @@ assess_imprecision <- function(meta_obj,
                                   crosses_one_threshold,
                                   ois_met,
                                   ois_pct,
-                                  has_mid) {
+                                  has_threshold) {
   # -2 (serious):
-  #   (a) CI crosses BOTH ±MID thresholds (when MID is provided), OR
+  #   (a) CI contains both ±Thresholds (when Threshold is provided), OR
   #   (b) total events / total N <= 30% of OIS.
   # -1 (some_concerns):
-  #   When MID provided  : CI crosses one threshold only.
-  #   When MID not given : CI crosses null.
-  #   Always             : OIS not met (and > 30%).
-  # -0 (no): CI within thresholds (or, no MID, doesn't cross null) AND OIS met.
+  #   When Threshold provided : CI crosses exactly one Threshold.
+  #   When Threshold absent   : CI crosses null.
+  #   Always                  : OIS not met (and > 30%).
+  # -0 (no): CI within or beyond Threshold (or, no Threshold, doesn't cross null) AND OIS met.
   serious_ois <- !is.na(ois_pct) && is.finite(ois_pct) && ois_pct <= 0.30
   if (isTRUE(crosses_both_thresholds) || serious_ois) return("serious")
 
-  ci_some <- if (has_mid) isTRUE(crosses_one_threshold)
-             else         isTRUE(crosses_null)
+  ci_some <- if (has_threshold) isTRUE(crosses_one_threshold)
+             else               isTRUE(crosses_null)
   if (ci_some || isFALSE(ois_met)) return("some_concerns")
   "no"
 }

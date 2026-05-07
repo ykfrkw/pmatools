@@ -1,10 +1,10 @@
 # domain_rob.R - Risk of Bias domain assessment
 #
 # v0.4+: MECE 5-rule zone-based decision. TE_all and TE_low are each
-# classified into one of three zones defined by +/-MID:
-#   above   : TE > +MID
-#   trivial : -MID <= TE <= +MID
-#   below   : TE < -MID
+# classified into one of three zones defined by +/-Threshold:
+#   above   : TE > +Threshold
+#   trivial : -Threshold <= TE <= +Threshold
+#   below   : TE < -Threshold
 #
 # Decision (zone(TE_all) = za, zone(TE_low) = zl):
 #   Rule 1: za == zl == "trivial"                    -> "no"
@@ -17,8 +17,8 @@
 # bias direction is bias-favouring (per `small_values`); a deflation in the
 # bias-favouring direction never triggers a downgrade.
 #
-# Fallback: when `mid_internal` is NULL/NA/<=0 the trivial zone collapses to
-# {0}, so only sign-flip (rule 5) can trigger a zone change.
+# Fallback: when `threshold_internal` is NULL/NA/<=0 the trivial zone collapses
+# to {0}, so only sign-flip (rule 5) can trigger a zone change.
 #
 # `rob_dominant_threshold` is accepted but ignored for backward compatibility.
 #
@@ -42,7 +42,7 @@ assess_rob <- function(rob, meta_obj,
                        rob_dominant_threshold  = NULL,   # accepted but ignored (deprecated)
                        rob_inflation_threshold = 0.10,
                        small_values            = NULL,
-                       mid_internal            = NULL) {
+                       threshold_internal      = NULL) {
   k <- meta_obj$k
 
   # NULL -> default "no"
@@ -101,7 +101,7 @@ assess_rob <- function(rob, meta_obj,
   .flowchart_rob(rob, meta_obj,
                  inflation_threshold = rob_inflation_threshold,
                  small_values        = small_values,
-                 mid_internal        = mid_internal)
+                 threshold_internal  = threshold_internal)
 }
 
 # --------------------------------------------------------------------------
@@ -109,7 +109,7 @@ assess_rob <- function(rob, meta_obj,
 # --------------------------------------------------------------------------
 .flowchart_rob <- function(rob_vec, meta_obj,
                            inflation_threshold = 0.10, small_values = NULL,
-                           mid_internal = NULL) {
+                           threshold_internal = NULL) {
 
   # high-RoB = "serious" (legacy "very_serious" still recognized after
   # .normalize_rob_levels)
@@ -205,7 +205,7 @@ assess_rob <- function(rob, meta_obj,
     small_values        = small_values,
     inflation_threshold = inflation_threshold,
     sm                  = meta_obj$sm,
-    mid_internal        = mid_internal
+    threshold_internal  = threshold_internal
   )
 
   judgment <- dir$judgment
@@ -225,12 +225,13 @@ assess_rob <- function(rob, meta_obj,
 # --------------------------------------------------------------------------
 # MECE 5-rule zone-and-magnitude check (v0.4+)
 #
-# Zones (defined by +/-MID on the analysis scale):
-#   above   : TE > +MID
-#   trivial : -MID <= TE <= +MID
-#   below   : TE < -MID
-# Fallback when MID is NULL/NA/<=0: trivial zone collapses to {0}, so above
-# means TE > 0 and below means TE < 0; only sign flips can trigger zone change.
+# Zones (defined by +/-Threshold on the analysis scale):
+#   above   : TE > +Threshold
+#   trivial : -Threshold <= TE <= +Threshold
+#   below   : TE < -Threshold
+# Fallback when Threshold is NULL/NA/<=0: trivial zone collapses to {0}, so
+# above means TE > 0 and below means TE < 0; only sign flips can trigger zone
+# change.
 #
 # Decision tree (za = zone(TE_all), zl = zone(TE_low)):
 #   za == zl == "trivial"                                     -> "no"            (rule 1)
@@ -241,7 +242,7 @@ assess_rob <- function(rob, meta_obj,
 # --------------------------------------------------------------------------
 .assess_bias_direction <- function(te_all, se_all, te_vec, se_vec, low_idx,
                                    small_values, inflation_threshold = 0.10,
-                                   sm = NULL, mid_internal = NULL) {
+                                   sm = NULL, threshold_internal = NULL) {
 
   n_low <- sum(low_idx)
 
@@ -254,24 +255,24 @@ assess_rob <- function(rob, meta_obj,
   sm_label  <- if (!is.null(sm) && nzchar(sm)) sm else "TE"
   .disp <- function(x) if (log_scale) round(exp(x), 3) else round(x, 3)
 
-  # MID handling
-  M <- if (!is.null(mid_internal) && is.finite(mid_internal) && mid_internal > 0) {
-    mid_internal
+  # Threshold handling
+  M <- if (!is.null(threshold_internal) && is.finite(threshold_internal) && threshold_internal > 0) {
+    threshold_internal
   } else {
     0
   }
-  mid_supplied <- M > 0
+  threshold_supplied <- M > 0
   zone_of <- function(te) {
     if (!is.finite(te)) return(NA_character_)
     if (te >  +M) "above"
     else if (te < -M) "below"
     else "trivial"
   }
-  mid_disp <- if (mid_supplied) sprintf("+/-%s", format(.disp(M), nsmall = 0)) else "+/-0"
-  mid_note <- if (mid_supplied) {
-    sprintf("MID threshold = %s (%s)", mid_disp, if (log_scale) paste0("log ", sm_label, " scale") else sm_label)
+  threshold_disp <- if (threshold_supplied) sprintf("+/-%s", format(.disp(M), nsmall = 0)) else "+/-0"
+  threshold_note <- if (threshold_supplied) {
+    sprintf("Threshold = %s (%s)", threshold_disp, if (log_scale) paste0("log ", sm_label, " scale") else sm_label)
   } else {
-    "MID not supplied; trivial zone collapsed to {0} (sign-flip rule only)"
+    "Threshold not supplied; trivial zone collapsed to {0} (sign-flip rule only)"
   }
 
   # All studies are high-RoB (no comparator pool exists) -> rate down 2 levels.
@@ -283,7 +284,7 @@ assess_rob <- function(rob, meta_obj,
       note     = paste0(
         "All studies high-RoB; no low/some-RoB comparator pool. ",
         "Rate down 2 levels (serious). ",
-        sm_label, "(all) = ", .disp(te_all), ". ", mid_note, "."
+        sm_label, "(all) = ", .disp(te_all), ". ", threshold_note, "."
       )
     ))
   }
@@ -358,7 +359,7 @@ assess_rob <- function(rob, meta_obj,
     "%s(all) = %.3f [zone = %s]; %s(excl. high-RoB) = %.3f [zone = %s]; %s; %s; %s",
     sm_label, .disp(te_all), za,
     sm_label, .disp(te_low), zl,
-    inflation_str, mid_note, sv_desc
+    inflation_str, threshold_note, sv_desc
   )
 
   list(

@@ -71,42 +71,69 @@ test_that("Rule (b) for continuous: N <= 30% of OIS triggers serious", {
 })
 
 # --------------------------------------------------------------------------
-# Rule (a): CI crosses both ±MID thresholds -> serious
+# Rule (a): CI contains both ±Thresholds -> serious
 # --------------------------------------------------------------------------
-test_that("Rule (a): CI crossing both MID thresholds triggers serious", {
+test_that("Rule (a): CI containing both Thresholds triggers serious", {
   m <- wide_ci_meta()
-  # On RR scale this CI typically spans [<<1, >>1]. With a tight MID,
-  # log(RR) CI extends beyond -log(1.05) on one side and +log(1.05) on the
-  # other -> crosses both thresholds.
-  g <- suppressWarnings(grade_meta(m, mid = 1.05, mid_scale = "ratio",
+  # On RR scale this CI typically spans [<<1, >>1]. With a tight Threshold,
+  # log(RR) CI extends below -log(1.05) and above +log(1.05) -> contains both
+  # thresholds.
+  g <- suppressWarnings(grade_meta(m, threshold = 1.05, threshold_scale = "ratio",
                                     ois_events = 10))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_equal(row$judgment, "serious")
-  expect_match(row$notes, "BOTH MID thresholds", fixed = TRUE)
+  expect_match(row$notes, "BOTH Thresholds", fixed = TRUE)
 })
 
-test_that("Rule (a): CI within MID thresholds, OIS met -> no concern", {
+test_that("Rule (a): CI within Thresholds, OIS met -> no concern", {
   # Construct a precise meta where both upper and lower are well within
-  # ±MID.
+  # ±Threshold.
   m <- metacont(
     n.e = rep(2000, 4), mean.e = rep(10, 4), sd.e = rep(1, 4),
     n.c = rep(2000, 4), mean.c = rep(10, 4), sd.c = rep(1, 4),
     studlab = paste0("S", 1:4), sm = "MD", random = TRUE, common = FALSE
   )
-  # Tight CI around 0; MID = 0.5 on TE scale; OIS_n = 100 (already met).
+  # Tight CI around 0; Threshold = 0.5 on TE scale; OIS_n = 100 (already met).
   g <- suppressWarnings(grade_meta(m,
-    outcome_type = "absolute", mid = 0.5, mid_scale = "te_scale", ois_n = 100))
+    outcome_type = "absolute", threshold = 0.5, threshold_scale = "te_scale",
+    ois_n = 100))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_equal(row$judgment, "no")
   expect_equal(row$downgrade, 0L)
+  expect_match(row$notes, "within Threshold", fixed = TRUE)
+})
+
+# --------------------------------------------------------------------------
+# Regression test: CI entirely beyond Threshold (definitive effect)
+# was incorrectly flagged as "crosses one threshold" -> some_concerns.
+# Correct GRADE Guidance 34 behavior: no rate down (definitive important effect).
+# --------------------------------------------------------------------------
+test_that("CI entirely beyond +Threshold -> no rate down (regression)", {
+  # Construct a CI like [OR 1.62, 3.34] vs Threshold OR 1.25.
+  # log(1.62) = 0.482, log(3.34) = 1.206, log(1.25) = 0.223 -> entirely above +T.
+  m <- metabin(
+    event.e = c(40, 50, 55), n.e = c(100, 100, 100),
+    event.c = c(15, 18, 22), n.c = c(100, 100, 100),
+    studlab = c("A", "B", "C"), sm = "OR",
+    method = "Inverse", random = TRUE, common = FALSE
+  )
+  g <- suppressWarnings(grade_meta(
+    m, threshold = 1.25, threshold_scale = "ratio",
+    ois_p0 = 0.2, ois_p1 = 0.4
+  ))
+  row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
+  expect_equal(row$judgment, "no")
+  expect_equal(row$downgrade, 0L)
+  expect_match(row$notes, "beyond Threshold", fixed = TRUE)
+  expect_false(grepl("crosses one Threshold", row$notes, fixed = TRUE))
 })
 
 # --------------------------------------------------------------------------
 # Combined behaviour
 # --------------------------------------------------------------------------
-test_that("OR-scale MID derives ois_p1 via odds (not RR approximation)", {
-  # When sm = "OR" and the user supplies a ratio-scale MID, the OIS
-  # auto-calc must convert MID -> p1 via the odds formula
+test_that("OR-scale Threshold derives ois_p1 via odds (not RR approximation)", {
+  # When sm = "OR" and the user supplies a ratio-scale Threshold, the OIS
+  # auto-calc must convert Threshold -> p1 via the odds formula
   #   p1 = (p0 * OR) / (1 - p0 + p0 * OR)
   # rather than the RR-style p1 = p0 * exp(log OR), which diverges from
   # the truth as p0 moves away from 0.
@@ -119,10 +146,10 @@ test_that("OR-scale MID derives ois_p1 via odds (not RR approximation)", {
     sm = "OR", method = "Inverse", random = TRUE, common = FALSE
   )
   # Control event rate ~ 0.55 - high enough that OR != RR materially.
-  # With MID = 0.75 (OR scale), odds-formula ois_p1 ~= 0.478;
+  # With Threshold = 0.75 (OR scale), odds-formula ois_p1 ~= 0.478;
   # RR approximation would give p0*0.75 ~= 0.413. Notes should reflect
   # the odds-formula value.
-  g <- suppressWarnings(grade_meta(m, mid = 0.75, mid_scale = "ratio"))
+  g <- suppressWarnings(grade_meta(m, threshold = 0.75, threshold_scale = "ratio"))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   m_ois_p1 <- regmatches(row$notes,
                           regexpr("ois_p1 = [0-9.]+", row$notes))
@@ -139,8 +166,8 @@ test_that("OR-scale MID derives ois_p1 via odds (not RR approximation)", {
   expect_gt(abs(ois_p1_val - rr_approx), 0.02)
 })
 
-test_that("Crosses null but not both MIDs, OIS met (>=100%) -> some_concerns", {
-  # Small effect, narrow-ish CI that crosses null but stays inside ±MID.
+test_that("Crosses null but not both Thresholds, OIS met (>=100%) -> some_concerns", {
+  # Small effect, narrow-ish CI that crosses null but stays inside ±Threshold.
   m <- metabin(
     event.e = c(50, 60, 70),
     n.e     = c(500, 500, 500),
@@ -149,7 +176,7 @@ test_that("Crosses null but not both MIDs, OIS met (>=100%) -> some_concerns", {
     studlab = c("A", "B", "C"),
     sm = "RR", method = "MH", random = TRUE, common = FALSE
   )
-  g <- suppressWarnings(grade_meta(m, mid = 1.5, mid_scale = "ratio",
+  g <- suppressWarnings(grade_meta(m, threshold = 1.5, threshold_scale = "ratio",
                                     ois_events = 100))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_true(row$judgment %in% c("no", "some_concerns"))

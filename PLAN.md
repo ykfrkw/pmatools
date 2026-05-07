@@ -39,13 +39,13 @@
 - [x] plot_forest.R（auto_layout, log/linear 自動）
 - [x] plot_funnel.R（contour + Egger 注釈）
 - [x] export_bundle.R + inst/templates/analysis_script.R.tpl（ZIP 一括出力）
-- [x] utils.R 拡張（chinn_smd_to_or, suggest_mid, compute_pooled_sd, mid_to_te_scale）
-- [x] grade_meta() に rob_inflation_threshold, mid, mid_scale 引数
+- [x] utils.R 拡張（chinn_smd_to_or, suggest_threshold, compute_pooled_sd, threshold_to_te_scale）
+- [x] grade_meta() に rob_inflation_threshold, threshold, threshold_scale 引数
 - [x] sof_table() に convert_smd_to_or, baseline_risk, threshold_label
 - [x] domain_rob.R: inflation 閾値（既定 10%）+ small_values=NULL の |TE| ロジック
-- [x] domain_inconsistency.R: Step 2 で MID-3-zone（auto）、Q-test 駆動撤去
-- [x] domain_imprecision.R: MID から ois_p1/ois_delta 自動派生
-- [x] tests: test-data_ingest, test-run_ma, test-domain_rob, test-inconsistency_mid, test-chinn, test-export_bundle
+- [x] domain_inconsistency.R: Step 2 で Threshold-3-zone（auto）、Q-test 駆動撤去
+- [x] domain_imprecision.R: Threshold から ois_p1/ois_delta 自動派生
+- [x] tests: test-data_ingest, test-run_ma, test-domain_rob, test-inconsistency_threshold, test-chinn, test-export_bundle
 
 ---
 

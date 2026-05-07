@@ -12,7 +12,7 @@ plot_forest(
   xlim = NULL,
   prediction = TRUE,
   auto_layout = TRUE,
-  mid_lines = NULL,
+  threshold_lines = NULL,
   show_n = FALSE,
   show_events = FALSE,
   favors_left = NULL,
@@ -39,11 +39,11 @@ plot_forest(
 
 \item{auto_layout}{Apply automatic margin/x-axis/cex tweaks (default TRUE).}
 
-\item{mid_lines}{Optional numeric scalar on the TE scale (log scale for
-ratio sm). When non-NULL, vertical dashed lines are drawn at
-\code{-mid_lines} and \code{+mid_lines} (or at \code{exp(-mid)} and
-\code{exp(mid)} on a log-scale axis) to indicate the threshold for
-clinical importance.}
+\item{threshold_lines}{Optional numeric scalar on the TE scale (log scale
+for ratio sm). When non-NULL, vertical dashed lines are drawn at
+\code{-threshold_lines} and \code{+threshold_lines} (or at
+\code{exp(-threshold)} and \code{exp(threshold)} on a log-scale axis) to
+indicate the clinical decision Threshold.}
 
 \item{show_n}{Logical; if TRUE, add per-arm sample size columns
 (\code{n.e}, \code{n.c}) to the left of the forest.}

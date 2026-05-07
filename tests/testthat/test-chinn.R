@@ -24,16 +24,16 @@ test_that("chinn_smd_to_or handles NULL CI inputs", {
   expect_true(is.na(r$or_upper))
 })
 
-test_that("suggest_mid returns expected defaults", {
+test_that("suggest_threshold returns expected defaults", {
   skip_if_not_installed("meta")
   m <- suppressWarnings(meta::metabin(
     event.e = c(10, 15), n.e = c(50, 50),
     event.c = c(15, 20), n.c = c(50, 50),
     studlab = c("A", "B"), sm = "OR"
   ))
-  s <- suggest_mid(m)
-  expect_equal(s$mid_user, 1.25)
-  expect_equal(s$mid_scale, "ratio")
+  s <- suggest_threshold(m)
+  expect_equal(s$threshold_user, 1.25)
+  expect_equal(s$threshold_scale, "ratio")
 })
 
 test_that("compute_pooled_sd returns numeric for metacont", {
@@ -48,24 +48,24 @@ test_that("compute_pooled_sd returns numeric for metacont", {
   expect_gt(sd_pooled, 0)
 })
 
-test_that("mid_to_te_scale handles ratio scale", {
-  out <- mid_to_te_scale(1.25, "ratio", "OR")
-  expect_equal(out$mid_internal, log(1.25))
-  expect_equal(out$mid_kind, "ratio")
+test_that("threshold_to_te_scale handles ratio scale", {
+  out <- threshold_to_te_scale(1.25, "ratio", "OR")
+  expect_equal(out$threshold_internal, log(1.25))
+  expect_equal(out$threshold_kind, "ratio")
 })
 
-test_that("mid_to_te_scale auto for OR -> ratio", {
-  out <- mid_to_te_scale(1.25, "auto", "OR")
-  expect_equal(out$mid_internal, log(1.25))
+test_that("threshold_to_te_scale auto for OR -> ratio", {
+  out <- threshold_to_te_scale(1.25, "auto", "OR")
+  expect_equal(out$threshold_internal, log(1.25))
 })
 
-test_that("mid_to_te_scale auto for SMD -> te_scale", {
-  out <- mid_to_te_scale(0.20, "auto", "SMD")
-  expect_equal(out$mid_internal, 0.20)
-  expect_equal(out$mid_kind, "te_scale")
+test_that("threshold_to_te_scale auto for SMD -> te_scale", {
+  out <- threshold_to_te_scale(0.20, "auto", "SMD")
+  expect_equal(out$threshold_internal, 0.20)
+  expect_equal(out$threshold_kind, "te_scale")
 })
 
-test_that("mid_to_te_scale returns NULL for NULL mid", {
-  out <- mid_to_te_scale(NULL, "auto", "OR")
-  expect_null(out$mid_internal)
+test_that("threshold_to_te_scale returns NULL for NULL threshold", {
+  out <- threshold_to_te_scale(NULL, "auto", "OR")
+  expect_null(out$threshold_internal)
 })

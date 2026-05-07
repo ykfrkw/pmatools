@@ -20,11 +20,11 @@
 #'   \code{auto_layout = TRUE}, computed from the data.
 #' @param prediction Show 95 percent prediction interval (default TRUE if available).
 #' @param auto_layout Apply automatic margin/x-axis/cex tweaks (default TRUE).
-#' @param mid_lines Optional numeric scalar on the TE scale (log scale for
-#'   ratio sm). When non-NULL, vertical dashed lines are drawn at
-#'   \code{-mid_lines} and \code{+mid_lines} (or at \code{exp(-mid)} and
-#'   \code{exp(mid)} on a log-scale axis) to indicate the threshold for
-#'   clinical importance.
+#' @param threshold_lines Optional numeric scalar on the TE scale (log scale
+#'   for ratio sm). When non-NULL, vertical dashed lines are drawn at
+#'   \code{-threshold_lines} and \code{+threshold_lines} (or at
+#'   \code{exp(-threshold)} and \code{exp(threshold)} on a log-scale axis) to
+#'   indicate the clinical decision Threshold.
 #' @param show_n Logical; if TRUE, add per-arm sample size columns
 #'   (\code{n.e}, \code{n.c}) to the left of the forest.
 #' @param show_events Logical; if TRUE and binary outcome, add per-arm
@@ -44,9 +44,9 @@ plot_forest <- function(meta_obj,
                         label_c      = NULL,
                         xlim         = NULL,
                         prediction   = TRUE,
-                        auto_layout  = TRUE,
-                        mid_lines    = NULL,
-                        show_n       = FALSE,
+                        auto_layout     = TRUE,
+                        threshold_lines = NULL,
+                        show_n          = FALSE,
                         show_events  = FALSE,
                         favors_left  = NULL,
                         favors_right = NULL,
@@ -144,13 +144,14 @@ plot_forest <- function(meta_obj,
     args$fs.study <- 9 * fs_lab
   }
 
-  # Try meta-native xline first if mid_lines provided
-  if (!is.null(mid_lines) && is.numeric(mid_lines) &&
-      length(mid_lines) == 1 && is.finite(mid_lines) && mid_lines > 0) {
+  # Try meta-native xline first if threshold_lines provided
+  if (!is.null(threshold_lines) && is.numeric(threshold_lines) &&
+      length(threshold_lines) == 1 && is.finite(threshold_lines) &&
+      threshold_lines > 0) {
     if (is_ratio) {
-      args$xline <- c(exp(-mid_lines), exp(mid_lines))
+      args$xline <- c(exp(-threshold_lines), exp(threshold_lines))
     } else {
-      args$xline <- c(-mid_lines, mid_lines)
+      args$xline <- c(-threshold_lines, threshold_lines)
     }
   }
 
@@ -171,11 +172,12 @@ plot_forest <- function(meta_obj,
     }
   )
 
-  # Fallback: draw MID lines via abline if xline was not honored
-  if (!is.null(mid_lines) && is.numeric(mid_lines) &&
-      length(mid_lines) == 1 && is.finite(mid_lines) && mid_lines > 0) {
-    v <- if (is_ratio) c(exp(-mid_lines), exp(mid_lines))
-         else          c(-mid_lines, mid_lines)
+  # Fallback: draw Threshold lines via abline if xline was not honored
+  if (!is.null(threshold_lines) && is.numeric(threshold_lines) &&
+      length(threshold_lines) == 1 && is.finite(threshold_lines) &&
+      threshold_lines > 0) {
+    v <- if (is_ratio) c(exp(-threshold_lines), exp(threshold_lines))
+         else          c(-threshold_lines, threshold_lines)
     tryCatch(graphics::abline(v = v, lty = 2, col = "#888888"),
              error = function(e) NULL)
   }

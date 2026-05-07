@@ -288,32 +288,32 @@ grade_meta(
   meta_obj,
   ...,                                  # all v0.1.0 params unchanged
   rob_inflation_threshold = 0.10,       # NEW: minimum relative inflation to rate down
-  mid                     = NULL,       # NEW: minimally important difference (numeric)
-  mid_scale               = "auto"      # NEW: how to interpret `mid`
+  threshold               = NULL,       # NEW: clinical decision Threshold (numeric)
+  threshold_scale         = "auto"      # NEW: how to interpret `threshold`
                                          #   "auto"        → infer from meta_obj$sm (recommended)
                                          #   "te_scale"    → already on meta_obj$TE scale
                                          #                   (log for OR/RR/HR/RoM, raw for MD/SMD)
                                          #   "ratio"       → user gave OR/RR ratio (e.g., 1.25);
-                                         #                   internally → log(mid)
+                                         #                   internally → log(threshold)
                                          #   "ard"         → absolute risk difference (binary only);
                                          #                   internally treated specially
 ) -> S3 "pmatools" object
 ```
 
-**`mid` and `mid_scale` interaction (auto-detection table):**
+**`threshold` and `threshold_scale` interaction (auto-detection table):**
 
-When `mid_scale = "auto"`:
+When `threshold_scale = "auto"`:
 
 | `meta_obj$sm` | User input convention | Internal storage |
 |---|---|---|
-| `"OR"`, `"RR"`, `"HR"`, `"RoM"` | ratio scale (e.g., 1.25, 1.10) | `log(mid)` (matches `meta_obj$TE`) |
-| `"MD"` | raw outcome units (e.g., 3 PHQ-9 points) | `mid` as-is |
-| `"SMD"` | standardized units (e.g., 0.20) | `mid` as-is |
-| `"ARD"` | proportion (e.g., 0.05 = 5%) | `mid` as-is |
+| `"OR"`, `"RR"`, `"HR"`, `"RoM"` | ratio scale (e.g., 1.25, 1.10) | `log(threshold)` (matches `meta_obj$TE`) |
+| `"MD"` | raw outcome units (e.g., 3 PHQ-9 points) | `threshold` as-is |
+| `"SMD"` | standardized units (e.g., 0.20) | `threshold` as-is |
+| `"ARD"` | proportion (e.g., 0.05 = 5%) | `threshold` as-is |
 
-`mid_scale = "te_scale"` is the escape hatch for power users who want to specify directly on the log scale.
+`threshold_scale = "te_scale"` is the escape hatch for power users who want to specify directly on the log scale.
 
-When `mid` is supplied but auto-detection fails (unrecognized `sm`), the function aborts with a clear error.
+When `threshold` is supplied but auto-detection fails (unrecognized `sm`), the function aborts with a clear error.
 
 **`rob_inflation_threshold` semantics:**
 
@@ -334,9 +334,9 @@ notes <- sprintf("Dominated by high-RoB studies (%.1f%% weight); |TE_all|=%.3f, 
 
 When `small_values` is `NULL` (unknown direction), the conservative rate-down is **only** applied when the threshold is exceeded. This is a behavioral refinement; v0.1.0 always rated down conservatively. Test coverage MUST verify the previous "always rate down when small_values = NULL" tests now pass with `rob_inflation_threshold = 0` (which forces the old behavior).
 
-**`mid` semantics — Inconsistency (BMJ Core GRADE 3 flowchart):**
+**`threshold` semantics — Inconsistency (BMJ Core GRADE 3 flowchart):**
 
-> v0.2 keeps the existing BMJ-faithful flowchart from v0.1.0. The only change is that **Step 2's clinical threshold uses MID** when it is supplied (instead of always using null = 0). Point estimates are classified into zones around ±MID; "majority on one side of the clinical threshold" is interpreted accordingly. I², τ², and Q-test statistics remain supplementary context — they do not drive the judgment. PI is **not** used in the decision logic.
+> v0.2 keeps the existing BMJ-faithful flowchart from v0.1.0. The only change is that **Step 2's clinical decision boundary uses Threshold** when it is supplied (instead of always using null = 0). Point estimates are classified into zones around ±Threshold; "majority on one side of the clinical Threshold" is interpreted accordingly. I², τ², and Q-test statistics remain supplementary context — they do not drive the judgment. PI is **not** used in the decision logic.
 
 **The flowchart (BMJ Core GRADE 3, Fig 2):**
 
@@ -345,8 +345,8 @@ Step 1: Are there important differences in point estimates AND limited CI overla
   NO  → judgment = "no"  (do not rate down)
   YES → continue to Step 2
 
-Step 2: Where do the point estimates fall relative to the clinical decision threshold?
-  Majority on one side of threshold → judgment = "no"  (do not rate down)
+Step 2: Where do the point estimates fall relative to the clinical decision Threshold?
+  Majority on one side of Threshold → judgment = "no"  (do not rate down)
   Substantial proportion on opposite sides → continue to Step 3
 
 Step 3: Is the opposite-sided inconsistency explained by a credible subgroup analysis?
@@ -354,7 +354,7 @@ Step 3: Is the opposite-sided inconsistency explained by a credible subgroup ana
   NO  → judgment = "serious"
 ```
 
-The "clinical decision threshold" in Step 2 is **null = 0 by default**, but **±MID** when `mid` is supplied. This is the v0.2 enhancement.
+The "clinical decision Threshold" in Step 2 is **null = 0 by default**, but **±Threshold** when `threshold` is supplied. This is the v0.2 enhancement.
 
 **Three input paths (preserved from v0.1.0):**
 
@@ -401,23 +401,23 @@ Step 1 proxy:
   Notes: I² is a statistical proxy for "important differences AND limited CI overlap";
          clinical visual judgment may differ.
 
-Step 2 proxy (depends on whether mid is provided):
+Step 2 proxy (depends on whether threshold is provided):
 
-  When mid_internal is NULL (v0.1.0 behavior, fall-back):
-    threshold = 0 (null)
+  When threshold_internal is NULL (v0.1.0 behavior, fall-back):
+    boundary = 0 (null)
     pct_positive <- mean(meta_obj$TE > 0)
     if (pct_positive >= 0.75 OR pct_positive <= 0.25) → "majority_one_side"
     else → "opposite_sides"
 
-  When mid_internal is provided (v0.2 enhancement):
-    Classify each study's TE into 3 zones around ±MID:
-      above_mid: TE > +mid_internal
-      trivial:   -mid_internal ≤ TE ≤ +mid_internal
-      below_mid: TE < -mid_internal
+  When threshold_internal is provided (v0.2 enhancement):
+    Classify each study's TE into 3 zones around ±Threshold:
+      above_threshold: TE > +threshold_internal
+      trivial:         -threshold_internal ≤ TE ≤ +threshold_internal
+      below_threshold: TE < -threshold_internal
     Compute:
       pct_one_side <- max(
-        (n_above_mid + n_trivial) / k,
-        (n_below_mid + n_trivial) / k
+        (n_above_threshold + n_trivial) / k,
+        (n_below_threshold + n_trivial) / k
       )
     if (pct_one_side >= 0.75) → "majority_one_side"
     else → "opposite_sides"
@@ -444,8 +444,8 @@ Method: {{"scalar (path A)" | "manual flowchart (path B)" | "auto (path C)"}}
 {{#if path_C}}
 AUTO Step 1: I² = {{i2_pct}}% → {{"important differences detected (I² > 25%)" | "no important heterogeneity (I² ≤ 25%)"}}
 AUTO Step 2 ({{threshold_label}}):
-  {{#if mid}}
-    Zone counts: above_mid = {{n_above}}, trivial = {{n_trivial}}, below_mid = {{n_below}} (k = {{k}})
+  {{#if threshold}}
+    Zone counts: above_threshold = {{n_above}}, trivial = {{n_trivial}}, below_threshold = {{n_below}} (k = {{k}})
     Largest one-side proportion = {{pct_one_side}}% → {{"majority_one_side" | "opposite_sides"}}
   {{else}}
     {{pct_positive}}% of TE > 0 → {{"majority_one_side" | "opposite_sides"}}
@@ -456,20 +456,20 @@ Supportive context: I² = {{i2_pct}}%, τ² = {{tau2}}, Q p = {{q_p}} (supplemen
 Resulting judgment: {{judgment}}
 ```
 
-`{{threshold_label}}` is `"vs ±MID = ±{{mid_internal}}"` when MID is supplied, otherwise `"vs null = 0"`.
+`{{threshold_label}}` is `"vs ±Threshold = ±{{threshold_internal}}"` when Threshold is supplied, otherwise `"vs null = 0"`.
 
-**`mid` semantics — Imprecision:**
+**`threshold` semantics — Imprecision:**
 
-In `assess_imprecision()`, when `mid` is supplied AND no explicit `ois_*` is provided:
+In `assess_imprecision()`, when `threshold` is supplied AND no explicit `ois_*` is provided:
 
-- Binary, sm = OR/RR: `ois_p1 = ois_p0 * exp(mid_internal)` (mid_internal is on log scale via `mid_scale = "auto"`).
-- Binary, ARD scale: `ois_p1 = ois_p0 + mid_internal` (mid_internal is the absolute risk difference).
-- Continuous (MD): `ois_delta = mid_internal` (raw outcome units).
-- Continuous (SMD): `ois_delta = mid_internal × pooled_SD` *(see §5.4 for pooled_SD computation)*.
+- Binary, sm = OR/RR: `ois_p1 = ois_p0 * exp(threshold_internal)` (threshold_internal is on log scale via `threshold_scale = "auto"`).
+- Binary, ARD scale: `ois_p1 = ois_p0 + threshold_internal` (threshold_internal is the absolute risk difference).
+- Continuous (MD): `ois_delta = threshold_internal` (raw outcome units).
+- Continuous (SMD): `ois_delta = threshold_internal × pooled_SD` *(see §5.4 for pooled_SD computation)*.
 
-If both `mid` and `ois_*` supplied, `ois_*` wins. Notes string indicates source.
+If both `threshold` and `ois_*` supplied, `ois_*` wins. Notes string indicates source.
 
-`mid` and `mid_scale` are the **single source of truth** — Inconsistency and Imprecision use the same `mid_internal` derived from them, never two different MIDs.
+`threshold` and `threshold_scale` are the **single source of truth** — RoB, Inconsistency, and Imprecision use the same `threshold_internal` derived from them, never two different Thresholds.
 
 ### 4.6 `sof_table()` [modified — backward compatible]
 
@@ -517,13 +517,13 @@ chinn_smd_to_or(
 
 `factor = pi / sqrt(3)`. NA propagation: any NA input yields NA output for that position.
 
-### 4.7a `suggest_mid()` [new helper, exported]
+### 4.7a `suggest_threshold()` [new helper, exported]
 
 ```r
-suggest_mid(meta_obj) -> list(mid_user, mid_scale) | NULL
+suggest_threshold(meta_obj) -> list(threshold_user, threshold_scale) | NULL
 ```
 
-Returns a conventional default MID for the given `{meta}` object based on `meta_obj$sm`. See §5.4 for the table. Returns `NULL` when `sm` is unrecognized.
+Returns a conventional default Threshold for the given `{meta}` object based on `meta_obj$sm`. See §5.4 for the table. Returns `NULL` when `sm` is unrecognized.
 
 For `sm = "MD"`, calls `compute_pooled_sd()` internally and returns `0.20 * sd_pooled`.
 
@@ -603,7 +603,7 @@ g <- grade_meta(
   small_values            = {{small_values_expr}},
   indirectness            = "{{indirectness}}",
   outcome_type            = "{{ois_outcome_type}}",
-  mid                     = {{mid_expr}},
+  threshold               = {{threshold_expr}},
   ois_p0                  = {{ois_p0_expr}},
   ois_p1                  = {{ois_p1_expr}},
   ois_delta               = {{ois_delta_expr}},
@@ -648,8 +648,8 @@ The Shiny app stores each argument in its `state` as a list with origin metadata
 state$grade_args <- list(
   rob          = list(value = rob_vec,  origin = "column", col = "rob"),
   indirectness = list(value = "no",      origin = "scalar"),
-  mid          = list(value = 0.20,      origin = "scalar"),
-  mid_scale    = list(value = "auto",    origin = "scalar"),
+  threshold       = list(value = 0.20,      origin = "scalar"),
+  threshold_scale = list(value = "auto",    origin = "scalar"),
   ois_p0       = list(value = 0.25,      origin = "scalar"),
   ois_events   = list(value = NULL,      origin = "null"),
   small_values = list(value = NULL,      origin = "null"),
@@ -724,14 +724,14 @@ This means `small_values = NULL` is no longer "always rate down conservatively w
 
 ### 5.2 Inconsistency — BMJ Core GRADE 3 flowchart (v0.2)
 
-> **Design rationale.** v0.2 preserves the BMJ Core GRADE 3 flowchart implemented in v0.1.0. The only enhancement is that **Step 2's clinical decision threshold uses ±MID** when supplied (instead of always using null = 0). I², τ², and Q-test are supplementary context only — they never drive the judgment in the manual flowchart path. PI is **not** used in the decision logic. Per-study CIs are also not used (CI overlap is judged clinically by the user in manual mode, or proxied by I² in auto mode).
+> **Design rationale.** v0.2 preserves the BMJ Core GRADE 3 flowchart implemented in v0.1.0. The only enhancement is that **Step 2's clinical decision boundary uses ±Threshold** when supplied (instead of always using null = 0). I², τ², and Q-test are supplementary context only — they never drive the judgment in the manual flowchart path. PI is **not** used in the decision logic. Per-study CIs are also not used (CI overlap is judged clinically by the user in manual mode, or proxied by I² in auto mode).
 
 **Algorithm:**
 
 ```
 INPUT:
   meta_obj                          # {meta} object
-  mid_internal                      # MID on TE scale, or NULL
+  threshold_internal                # Threshold on TE scale, or NULL
   inconsistency                     # scalar override, or NULL
   inconsistency_ci_diff             # "yes"/"no"/NULL  (Step 1 manual)
   inconsistency_threshold_side      # "majority_one_side"/"opposite_sides"/NULL (Step 2 manual)
@@ -758,7 +758,7 @@ if (!is.null(inconsistency_ci_diff)) {
 
   if (inconsistency_threshold_side == "majority_one_side") {
     return judgment = "no", auto = FALSE,
-           notes = "Step 2: important differences exist, but majority on one side of clinical threshold → do not rate down (per BMJ Core GRADE 3 flowchart)."
+           notes = "Step 2: important differences exist, but majority on one side of clinical Threshold → do not rate down (per BMJ Core GRADE 3 flowchart)."
   }
 
   # opposite_sides → Step 3
@@ -785,12 +785,12 @@ if (!ci_diff_yes) {
          notes = "AUTO Step 1: no important heterogeneity (I² ≤ 25%)."
 }
 
-# Step 2 proxy: depends on whether mid is provided
-if (!is.null(mid_internal)) {
-  # MID-based 3-zone classification of point estimates
+# Step 2 proxy: depends on whether threshold is provided
+if (!is.null(threshold_internal)) {
+  # Threshold-based 3-zone classification of point estimates
   te_studies <- meta_obj$TE
   k <- length(te_studies)
-  M <- mid_internal
+  M <- threshold_internal
 
   n_above   <- sum(te_studies > +M)
   n_below   <- sum(te_studies < -M)
@@ -802,9 +802,9 @@ if (!is.null(mid_internal)) {
   )
 
   threshold_side <- if (pct_one_side >= 0.75) "majority_one_side" else "opposite_sides"
-  threshold_label <- sprintf("vs ±MID = ±%g", M)
+  threshold_label <- sprintf("vs ±Threshold = ±%g", M)
 } else {
-  # Fall-back: null=0 threshold (v0.1.0 behavior)
+  # Fall-back: null=0 boundary (v0.1.0 behavior)
   pct_positive <- mean(meta_obj$TE > 0, na.rm = TRUE)
   threshold_side <- if (pct_positive >= 0.75 OR pct_positive <= 0.25) "majority_one_side" else "opposite_sides"
   threshold_label <- "vs null = 0"
@@ -831,11 +831,11 @@ In the BMJ manual flowchart, "majority_one_side" → judgment = `"no"` because t
 - `k < 2`: cannot assess inconsistency. Return judgment = `"no"` with note "k < 2; inconsistency not assessable."
 - I² is NA (e.g., k = 1): Step 1 proxy returns FALSE → judgment = `"no"` with note "I² unavailable; cannot detect heterogeneity."
 - All TE values equal (τ² = 0): I² will be 0 → Step 1 proxy returns FALSE → judgment = `"no"`.
-- MID supplied but `mid_internal` cannot be derived (unknown sm): function aborts before reaching this domain.
+- Threshold supplied but `threshold_internal` cannot be derived (unknown sm): function aborts before reaching this domain.
 
 **Judgment interpretation table:**
 
-| Path | Step 1 / I² | Step 2 / threshold check | Step 3 / subgroup | Judgment |
+| Path | Step 1 / I² | Step 2 / Threshold check | Step 3 / subgroup | Judgment |
 |---|---|---|---|---|
 | Manual | ci_diff = "no" | — | — | **No** |
 | Manual | ci_diff = "yes" | majority_one_side | — | **No** |
@@ -857,23 +857,23 @@ SMD = log(OR) / factor
 
 CI bounds use the same multiplication. Document in `?chinn_smd_to_or` that the conversion assumes the latent-variable/logistic distribution (Cox 1970, Hasselblad & Hedges 1995, Chinn 2000).
 
-### 5.4 MID auto-default per `sm` (suggested defaults)
+### 5.4 Threshold auto-default per `sm` (suggested defaults)
 
-When the Shiny app pre-fills the MID input, use these **conventional defaults** based on `meta_obj$sm`. The user can always override.
+When the Shiny app pre-fills the Threshold input, use these **conventional defaults** based on `meta_obj$sm`. The user can always override.
 
 ```r
-suggest_mid <- function(meta_obj) {
+suggest_threshold <- function(meta_obj) {
   sm <- meta_obj$sm
   switch(sm,
-    "OR"  = list(mid_user = 1.25,  mid_scale = "ratio"),     # log(1.25) ≈ 0.223
-    "RR"  = list(mid_user = 1.20,  mid_scale = "ratio"),     # log(1.20) ≈ 0.182
-    "HR"  = list(mid_user = 1.20,  mid_scale = "ratio"),
-    "RoM" = list(mid_user = 1.10,  mid_scale = "ratio"),     # 10% ratio of means
-    "ARD" = list(mid_user = 0.05,  mid_scale = "ard"),        # 5% absolute risk diff
-    "SMD" = list(mid_user = 0.20,  mid_scale = "te_scale"),   # Cohen's small
+    "OR"  = list(threshold_user = 1.25,  threshold_scale = "ratio"),     # log(1.25) ≈ 0.223
+    "RR"  = list(threshold_user = 1.20,  threshold_scale = "ratio"),     # log(1.20) ≈ 0.182
+    "HR"  = list(threshold_user = 1.20,  threshold_scale = "ratio"),
+    "RoM" = list(threshold_user = 1.10,  threshold_scale = "ratio"),     # 10% ratio of means
+    "ARD" = list(threshold_user = 0.05,  threshold_scale = "ard"),        # 5% absolute risk diff
+    "SMD" = list(threshold_user = 0.20,  threshold_scale = "te_scale"),   # Cohen's small
     "MD"  = {
       sd_pooled <- compute_pooled_sd(meta_obj)
-      list(mid_user = 0.20 * sd_pooled, mid_scale = "te_scale")  # 0.2 * pooled SD
+      list(threshold_user = 0.20 * sd_pooled, threshold_scale = "te_scale")  # 0.2 * pooled SD
     },
     NULL  # unknown sm → no default
   )
@@ -906,32 +906,32 @@ If `meta_obj$sd.e/sd.c` is unavailable (some metacont calls), fall back to `weig
 
 **API surface:**
 
-`suggest_mid()` and `compute_pooled_sd()` are **exported** (so Shiny can pre-fill the input). The user may also call them directly from R.
+`suggest_threshold()` and `compute_pooled_sd()` are **exported** (so Shiny can pre-fill the input). The user may also call them directly from R.
 
 **Behavior in `grade_meta()`:**
 
-`grade_meta()` itself does **not** auto-fill `mid` — passing `mid = NULL` triggers the I²-fallback path explicitly. The Shiny app calls `suggest_mid()` to pre-fill the input field, but the *value* the user sees is what gets passed (override-able). This keeps `grade_meta()`'s behavior deterministic and reproducible: no hidden defaults at the R API level.
+`grade_meta()` itself does **not** auto-fill `threshold` — passing `threshold = NULL` triggers the I²-fallback path explicitly. The Shiny app calls `suggest_threshold()` to pre-fill the input field, but the *value* the user sees is what gets passed (override-able). This keeps `grade_meta()`'s behavior deterministic and reproducible: no hidden defaults at the R API level.
 
-**MID conversion to TE scale** (used internally by `assess_inconsistency()` and `assess_imprecision()`):
+**Threshold conversion to TE scale** (used internally by `assess_rob()`, `assess_inconsistency()` and `assess_imprecision()`):
 
 ```r
-mid_to_te_scale <- function(mid, mid_scale, sm) {
-  if (is.null(mid)) return(NULL)
+threshold_to_te_scale <- function(threshold, threshold_scale, sm) {
+  if (is.null(threshold)) return(NULL)
 
-  scale <- if (mid_scale == "auto") {
+  scale <- if (threshold_scale == "auto") {
     switch(sm,
       "OR" = "ratio", "RR" = "ratio", "HR" = "ratio", "RoM" = "ratio",
       "ARD" = "ard",
       "SMD" = "te_scale", "MD" = "te_scale",
-      rlang::abort(sprintf("Cannot auto-detect mid_scale for sm = %s", sm))
+      rlang::abort(sprintf("Cannot auto-detect threshold_scale for sm = %s", sm))
     )
-  } else mid_scale
+  } else threshold_scale
 
   switch(scale,
-    "te_scale" = mid,                # already on TE scale
-    "ratio"    = log(mid),            # convert ratio → log
-    "ard"      = mid                  # ARD: keep as-is, but special handling in OIS
-                                       # (ois uses p1 = p0 + ARD)
+    "te_scale" = threshold,                # already on TE scale
+    "ratio"    = log(threshold),            # convert ratio → log
+    "ard"      = threshold                  # ARD: keep as-is, but special handling in OIS
+                                            # (ois uses p1 = p0 + ARD)
   )
 }
 ```
@@ -949,9 +949,9 @@ mid_to_te_scale <- function(mid, mid_scale, sm) {
 | test-run_ma.R *(new)* | binary OR/RR with method × method.tau matrix, continuous SMD/MD/RoM, hakn/prediction auto k>=3, subgroup, error on invalid sm |
 | test-export_bundle.R *(new)* | ZIP generated; all 9 files present; `analysis.R` is syntactically valid R (`parse()` succeeds); `analysis.R` reproduces same `meta::TE.random` when run via `Rscript` |
 | test-domain_rob.R *(new)* | inflation threshold 0/0.05/0.10/0.20 boundary, dominated + below-threshold = "no", dominated + above-threshold = "serious", `small_values = NULL` paths |
-| test-inconsistency_mid.R *(new)* | manual flowchart (3 paths: ci_diff=no / majority_one_side / opposite_sides×subgroup); auto Step 1 = I² > 25% only (Q-test no longer used); auto Step 2 with MID (3-zone classification, ≥75% threshold); auto Step 2 without MID (null=0 fallback, v0.1.0 behavior preserved); auto vs manual asymmetry on majority_one_side |
-| test-mid_scale.R *(new)* | `mid_scale = "auto"` correctly maps OR/RR/HR/RoM → log, MD/SMD → te_scale, ARD → ard; abort on unknown sm |
-| test-suggest_mid.R *(new)* | defaults match table for OR/RR/SMD/MD/ARD/RoM; MD default = 0.2 × pooled SD; unknown sm returns NULL |
+| test-inconsistency_threshold.R *(new)* | manual flowchart (3 paths: ci_diff=no / majority_one_side / opposite_sides×subgroup); auto Step 1 = I² > 25% only (Q-test no longer used); auto Step 2 with Threshold (3-zone classification, ≥75% one-side share); auto Step 2 without Threshold (null=0 fallback, v0.1.0 behavior preserved); auto vs manual asymmetry on majority_one_side |
+| test-threshold_scale.R *(new)* | `threshold_scale = "auto"` correctly maps OR/RR/HR/RoM → log, MD/SMD → te_scale, ARD → ard; abort on unknown sm |
+| test-suggest_threshold.R *(new)* | defaults match table for OR/RR/SMD/MD/ARD/RoM; MD default = 0.2 × pooled SD; unknown sm returns NULL |
 | test-chinn.R *(new)* | numerical accuracy of factor π/√3, NA propagation, sof_table integration with convert_smd_to_or = TRUE |
 
 ---
@@ -965,8 +965,8 @@ mid_to_te_scale <- function(mid, mid_scale, sm) {
 | `run_ma` with k = 1 | return meta object; `hakn`/`prediction` set FALSE; warn "single study; CI may be unreliable" |
 | `run_ma` with k = 2 | hakn FALSE, prediction FALSE; otherwise normal |
 | `plot_funnel` with k < 10 | render plot; annotate "Egger's test not run (k < 10)" |
-| `grade_meta` with `mid = -3` (negative) | abort with "mid must be positive (it is treated as a half-width around null)" |
-| `grade_meta` with `mid` AND `ois_p0/p1` both supplied | use `ois_p0/p1`; note "MID provided but explicit ois_p0/p1 takes precedence" in domain notes |
+| `grade_meta` with `threshold = -3` (negative) | abort with "threshold must be positive (it is treated as a half-width around null)" |
+| `grade_meta` with `threshold` AND `ois_p0/p1` both supplied | use `ois_p0/p1`; note "Threshold provided but explicit ois_p0/p1 takes precedence" in domain notes |
 | `sof_table(convert_smd_to_or = TRUE, baseline_risk = NULL)` | abort with informative message |
 | `export_bundle` to non-writable directory | abort with file-system error |
 | `export_bundle` with `include = c("data")` only | ZIP contains only `data_long.csv`; no analysis.R |
@@ -987,7 +987,7 @@ mid_to_te_scale <- function(mid, mid_scale, sm) {
 | File | Audience | Content |
 |---|---|---|
 | `README.md` (updated) | First-time users | install_github, 30-line quick start (CLI + Shiny URL), feature highlights |
-| `vignettes/pmatools_cli.Rmd` (new) | R users | End-to-end CLI workflow on bundled `cbti_depression.csv`; explain MID, inflation threshold, Chinn |
+| `vignettes/pmatools_cli.Rmd` (new) | R users | End-to-end CLI workflow on bundled `cbti_depression.csv`; explain Threshold, inflation threshold, Chinn |
 | `PLAN.md` (updated) | Maintainer | v0.2 scope, what's done / not done, v0.3 roadmap |
 | `SPEC.md` (this file) | Maintainer + AI implementers | Authoritative spec |
 | roxygen man pages | Function-level reference | `?grade_meta`, `?sof_table`, etc., kept in sync with SPEC |

@@ -9,9 +9,9 @@ Description: End-to-end pairwise meta-analysis pipeline with GRADE certainty
     common-effect pooling, contour-enhanced funnel plots with Egger's test,
     and auto-laid-out forest plots. GRADE follows the BMJ 2025 Core GRADE
     series (Guyatt et al.): Risk of Bias (BMJ Fig 2 weight-based dominance
-    plus inflation threshold), Inconsistency (BMJ Fig 2 flowchart with MID
-    threshold for clinical decision), Indirectness (manual), Imprecision
-    (CI vs null + Optimal Information Size from MID), and Publication Bias
+    plus inflation threshold), Inconsistency (BMJ Fig 2 flowchart with a
+    clinical decision Threshold), Indirectness (manual), Imprecision
+    (CI vs Threshold + Optimal Information Size from Threshold), and Publication Bias
     (Egger / unpublished-studies flowchart). Outputs SoF flextable, multi-
     outcome GRADE table, and Appendix report (docx/html/pdf/md), and
     bundles everything plus a reproducible analysis.R into a ZIP archive.

@@ -16,8 +16,8 @@ grade_meta(
   inconsistency_ci_diff = NULL,
   inconsistency_threshold_side = NULL,
   inconsistency_subgroup_explained = NULL,
-  mid = NULL,
-  mid_scale = "auto",
+  threshold = NULL,
+  threshold_scale = "auto",
   outcome_name = NULL,
   outcome_type = c("relative", "absolute"),
   ois_events = NULL,
@@ -92,23 +92,24 @@ side of the clinical threshold, or spread across both sides?}
 \code{inconsistency_threshold_side = "opposite_sides"}.
 \code{"yes"} / \code{"no"}: is the inconsistency explained by a credible subgroup?}
 
-\item{mid}{(v0.2) Numeric minimally important difference. Used as the
-clinical decision threshold in Inconsistency Step 2 (3-zone
-classification of point estimates around \eqn{\pm}MID), and also
-feeds the OIS calculation in Imprecision when explicit OIS values
-are not supplied. The same MID is used for both domains.}
+\item{threshold}{(v0.2) Numeric clinical decision Threshold (a minimally
+important effect on the analysis scale). Used in Inconsistency Step 2
+(3-zone classification of point estimates around \eqn{\pm}Threshold),
+in Imprecision (CI-vs-Threshold check, Zeng et al. BMJ 2025), and feeds
+the OIS calculation in Imprecision when explicit OIS values are not
+supplied. The same Threshold is used across all three domains.}
 
-\item{mid_scale}{(v0.2) How to interpret \code{mid}. One of:
+\item{threshold_scale}{(v0.2) How to interpret \code{threshold}. One of:
 \itemize{
 \item \code{"auto"} (default): infer from \code{meta_obj$sm}
 (OR/RR/HR/RoM \eqn{\to} ratio scale; SMD/MD \eqn{\to} TE scale;
 ARD \eqn{\to} ARD scale).
-\item \code{"te_scale"}: \code{mid} is already on the same scale as
-\code{meta_obj$TE} (log scale for ratios, raw for MD/SMD).
-\item \code{"ratio"}: \code{mid} is supplied as a ratio (e.g.,
+\item \code{"te_scale"}: \code{threshold} is already on the same
+scale as \code{meta_obj$TE} (log scale for ratios, raw for MD/SMD).
+\item \code{"ratio"}: \code{threshold} is supplied as a ratio (e.g.,
 \code{1.25} for a 25 percent relative effect); internally
-converted to \code{log(mid)}.
-\item \code{"ard"}: \code{mid} is an absolute risk difference
+converted to \code{log(threshold)}.
+\item \code{"ard"}: \code{threshold} is an absolute risk difference
 (binary outcomes only).
 }}
 

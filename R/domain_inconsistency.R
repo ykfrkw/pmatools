@@ -1,15 +1,15 @@
 # domain_inconsistency.R - Inconsistency domain assessment
 #
 # BMJ 2025 Core GRADE 3, Fig 2 flowchart (preserved from v0.1.0).
-# v0.2 enhancement: when `mid_internal` is supplied, Step 2 uses +/-MID as the
-# clinical decision threshold (3-zone classification) instead of null = 0.
+# v0.2 enhancement: when `threshold_internal` is supplied, Step 2 uses +/-Threshold
+# as the clinical decision boundary (3-zone classification) instead of null = 0.
 #
 # Steps:
 #   Step 1. Are there important differences in point estimates AND limited CI overlap?
 #     NO  -> judgment = "no" (do not rate down)
 #     YES -> Step 2
 #
-#   Step 2. Where do point estimates fall vs the clinical decision threshold?
+#   Step 2. Where do point estimates fall vs the clinical decision Threshold?
 #     majority_one_side -> judgment = "no" (manual) or "some" (auto, conservative)
 #     opposite_sides    -> Step 3
 #
@@ -19,11 +19,11 @@
 #
 # Auto Step 1 proxy: I^2 > 25%  (Q-test no longer used; v0.1.0 used "I^2 > 25% OR Q p < 0.10")
 # Auto Step 2 proxy:
-#   With mid_internal:
-#     classify TE per study into 3 zones around +/-MID;
+#   With threshold_internal:
+#     classify TE per study into 3 zones around +/-Threshold;
 #     pct_one_side = max((above+trivial)/k, (below+trivial)/k);
 #     >=0.75 -> majority_one_side
-#   Without mid_internal:
+#   Without threshold_internal:
 #     fall back to v0.1.0 null=0 behavior (pct_positive >= 0.75 or <= 0.25)
 # Auto Step 3: cannot be auto-detected -> opposite_sides leads to "serious"
 #
@@ -34,7 +34,7 @@ assess_inconsistency <- function(meta_obj,
                                  inconsistency_ci_diff            = NULL,
                                  inconsistency_threshold_side     = NULL,
                                  inconsistency_subgroup_explained = NULL,
-                                 mid_internal                     = NULL) {
+                                 threshold_internal               = NULL) {
 
   # ----- Statistics (always computed for notes) -----
   i2_pct <- if (!is.null(meta_obj$I2) && !is.na(meta_obj$I2)) {
@@ -106,7 +106,7 @@ assess_inconsistency <- function(meta_obj,
         auto     = FALSE,
         notes    = paste0(
           "FLOWCHART Step 2: Important CI differences exist, but majority of point ",
-          "estimates are on one side of clinical threshold -> do not rate down ",
+          "estimates are on one side of clinical Threshold -> do not rate down ",
           "(per BMJ Core GRADE 3 flowchart). | ",
           stat_note
         )
@@ -150,13 +150,13 @@ assess_inconsistency <- function(meta_obj,
   }
 
   # ----- Path C: auto-detect -----
-  .auto_inconsistency(meta_obj, i2_pct, stat_note, mid_internal)
+  .auto_inconsistency(meta_obj, i2_pct, stat_note, threshold_internal)
 }
 
 # --------------------------------------------------------------------------
 # Auto-detect path
 # --------------------------------------------------------------------------
-.auto_inconsistency <- function(meta_obj, i2_pct, stat_note, mid_internal = NULL) {
+.auto_inconsistency <- function(meta_obj, i2_pct, stat_note, threshold_internal = NULL) {
 
   # Step 1 proxy: I^2 > 25%
   has_i2 <- !is.na(i2_pct)
@@ -204,13 +204,13 @@ assess_inconsistency <- function(meta_obj,
   ZONE_MAJORITY    <- 0.80
   OPPOSITE_EACH    <- 0.20
 
-  if (!is.null(mid_internal) && !is.na(mid_internal) && mid_internal > 0) {
-    M <- mid_internal
+  if (!is.null(threshold_internal) && !is.na(threshold_internal) && threshold_internal > 0) {
+    M <- threshold_internal
     n_above   <- sum(te_vec > +M)
     n_below   <- sum(te_vec < -M)
     n_trivial <- length(te_vec) - n_above - n_below
   } else {
-    # Fallback: null = 0 (no MID supplied). "trivial" zone collapses to 0.
+    # Fallback: null = 0 (no Threshold supplied). "trivial" zone collapses to 0.
     M <- 0
     n_above   <- sum(te_vec > 0)
     n_below   <- sum(te_vec < 0)

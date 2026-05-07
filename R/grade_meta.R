@@ -53,22 +53,23 @@
 #' @param inconsistency_subgroup_explained Required when
 #'   \code{inconsistency_threshold_side = "opposite_sides"}.
 #'   \code{"yes"} / \code{"no"}: is the inconsistency explained by a credible subgroup?
-#' @param mid (v0.2) Numeric minimally important difference. Used as the
-#'   clinical decision threshold in Inconsistency Step 2 (3-zone
-#'   classification of point estimates around \eqn{\pm}MID), and also
-#'   feeds the OIS calculation in Imprecision when explicit OIS values
-#'   are not supplied. The same MID is used for both domains.
-#' @param mid_scale (v0.2) How to interpret \code{mid}. One of:
+#' @param threshold (v0.2) Numeric clinical decision Threshold (a minimally
+#'   important effect on the analysis scale). Used in Inconsistency Step 2
+#'   (3-zone classification of point estimates around \eqn{\pm}Threshold),
+#'   in Imprecision (CI-vs-Threshold check, Zeng et al. BMJ 2025), and feeds
+#'   the OIS calculation in Imprecision when explicit OIS values are not
+#'   supplied. The same Threshold is used across all three domains.
+#' @param threshold_scale (v0.2) How to interpret \code{threshold}. One of:
 #'   \itemize{
 #'     \item \code{"auto"} (default): infer from \code{meta_obj$sm}
 #'       (OR/RR/HR/RoM \eqn{\to} ratio scale; SMD/MD \eqn{\to} TE scale;
 #'       ARD \eqn{\to} ARD scale).
-#'     \item \code{"te_scale"}: \code{mid} is already on the same scale as
-#'       \code{meta_obj$TE} (log scale for ratios, raw for MD/SMD).
-#'     \item \code{"ratio"}: \code{mid} is supplied as a ratio (e.g.,
+#'     \item \code{"te_scale"}: \code{threshold} is already on the same
+#'       scale as \code{meta_obj$TE} (log scale for ratios, raw for MD/SMD).
+#'     \item \code{"ratio"}: \code{threshold} is supplied as a ratio (e.g.,
 #'       \code{1.25} for a 25 percent relative effect); internally
-#'       converted to \code{log(mid)}.
-#'     \item \code{"ard"}: \code{mid} is an absolute risk difference
+#'       converted to \code{log(threshold)}.
+#'     \item \code{"ard"}: \code{threshold} is an absolute risk difference
 #'       (binary outcomes only).
 #'   }
 #' @param outcome_name Optional label for the outcome (used in SoF table).
@@ -147,8 +148,8 @@ grade_meta <- function(meta_obj,
                        inconsistency_ci_diff            = NULL,
                        inconsistency_threshold_side     = NULL,
                        inconsistency_subgroup_explained = NULL,
-                       mid                              = NULL,
-                       mid_scale                        = "auto",
+                       threshold                        = NULL,
+                       threshold_scale                  = "auto",
                        outcome_name                     = NULL,
                        outcome_type                     = c("relative", "absolute"),
                        ois_events                       = NULL,
@@ -176,17 +177,17 @@ grade_meta <- function(meta_obj,
   start_score     <- if (study_design == "RCT") 4L else 2L
   starting_quality <- score_to_certainty(start_score)
 
-  # --- resolve MID to TE scale (used by Inconsistency and Imprecision) ---
-  mid_resolved <- mid_to_te_scale(mid, mid_scale, meta_obj$sm)
-  mid_internal <- mid_resolved$mid_internal
-  mid_kind     <- mid_resolved$mid_kind
+  # --- resolve Threshold to TE scale (used by RoB, Inconsistency, Imprecision) ---
+  threshold_resolved <- threshold_to_te_scale(threshold, threshold_scale, meta_obj$sm)
+  threshold_internal <- threshold_resolved$threshold_internal
+  threshold_kind     <- threshold_resolved$threshold_kind
 
   # --- domain assessments ---
   d_rob   <- assess_rob(rob, meta_obj,
                         rob_dominant_threshold  = rob_dominant_threshold,
                         rob_inflation_threshold = rob_inflation_threshold,
                         small_values            = small_values,
-                        mid_internal            = mid_internal)
+                        threshold_internal      = threshold_internal)
 
   d_indir <- assess_indirectness(indirectness, meta_obj)
 
@@ -196,22 +197,22 @@ grade_meta <- function(meta_obj,
     inconsistency_ci_diff            = inconsistency_ci_diff,
     inconsistency_threshold_side     = inconsistency_threshold_side,
     inconsistency_subgroup_explained = inconsistency_subgroup_explained,
-    mid_internal                     = mid_internal
+    threshold_internal               = threshold_internal
   )
 
   d_impre <- assess_imprecision(
     meta_obj,
-    outcome_type = outcome_type,
-    ois_events   = ois_events,
-    ois_n        = ois_n,
-    ois_alpha    = ois_alpha,
-    ois_beta     = ois_beta,
-    ois_p0       = ois_p0,
-    ois_p1       = ois_p1,
-    ois_delta    = ois_delta,
-    ois_sd       = ois_sd,
-    mid_internal = mid_internal,
-    mid_kind     = mid_kind
+    outcome_type       = outcome_type,
+    ois_events         = ois_events,
+    ois_n              = ois_n,
+    ois_alpha          = ois_alpha,
+    ois_beta           = ois_beta,
+    ois_p0             = ois_p0,
+    ois_p1             = ois_p1,
+    ois_delta          = ois_delta,
+    ois_sd             = ois_sd,
+    threshold_internal = threshold_internal,
+    threshold_kind     = threshold_kind
   )
 
   d_pubias <- assess_pubias(
@@ -240,9 +241,9 @@ grade_meta <- function(meta_obj,
       outcome_name       = if (is.null(outcome_name)) "Outcome" else outcome_name,
       outcome_type       = outcome_type,
       baseline_risk      = .resolve_baseline_risk(baseline_risk, meta_obj, ois_p0),
-      mid                = mid,
-      mid_scale          = mid_scale,
-      mid_internal       = mid_internal,
+      threshold          = threshold,
+      threshold_scale    = threshold_scale,
+      threshold_internal = threshold_internal,
       meta               = meta_obj
     ),
     class = "pmatools"

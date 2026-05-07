@@ -42,12 +42,12 @@ ma <- run_ma(data,
 plot_forest(ma, title = "CBT-I for depression")
 plot_funnel(ma)
 
-# 4. GRADE certainty (per-study RoB; MID drives both Inconsistency Step 2 and OIS)
+# 4. GRADE certainty (per-study RoB; Threshold drives RoB / Inconsistency / Imprecision)
 g <- grade_meta(ma,
                 study_design = "RCT",
                 rob          = data$rob[data$treat == "CBT-I"],
                 small_values = "undesirable",
-                mid          = 1.25,    # OR-scale MID (auto-detected)
+                threshold    = 1.25,    # OR-scale Threshold (auto-detected)
                 ois_p0       = 0.25,
                 outcome_name = "Depression response")
 
@@ -148,11 +148,11 @@ grade_meta(m, rob = "serious")   # used as-is
 
 `pmatools` classifies the pooled effect from all studies (`TE_all`) and the
 IV-weighted pooled effect of low / some-RoB studies (`TE_low`) into one of three
-zones defined by the minimally important difference (MID) on the analysis scale:
+zones defined by the clinical decision Threshold on the analysis scale:
 
-- `above`   : TE > +MID
-- `trivial` : −MID ≤ TE ≤ +MID
-- `below`   : TE < −MID
+- `above`   : TE > +Threshold
+- `trivial` : −Threshold ≤ TE ≤ +Threshold
+- `below`   : TE < −Threshold
 
 Then a single MECE 3×3 table determines the downgrade:
 
@@ -177,8 +177,8 @@ deflation in the bias-favouring direction never triggers a downgrade.
 ```r
 grade_meta(m,
   rob                     = rob_vec,        # character vector, length k
-  mid                     = 1.20,           # MID on natural scale
-  mid_scale               = "ratio",        # OR/RR/HR/RoM: ratio; MD/SMD: te_scale
+  threshold               = 1.20,           # Threshold on natural scale
+  threshold_scale         = "ratio",        # OR/RR/HR/RoM: ratio; MD/SMD: te_scale
   small_values            = "undesirable",  # large OR = good (eg, response)
   rob_inflation_threshold = 0.10)           # rule 3 trigger; default 10%
 ```
@@ -191,9 +191,10 @@ grade_meta(m,
 | `"desirable"` | Small values are good | Mortality, symptom severity |
 | `NULL` | Unknown direction | Bias direction inferred from |TE| comparison |
 
-**Fallback when MID is not supplied** (`mid = NULL`): the trivial zone collapses
-to `{0}`, so only sign flips can change zones. The algorithm reduces to a
-sign-flip check (rule 5 vs rule 2/3); rule 1 and rule 4 cannot fire.
+**Fallback when Threshold is not supplied** (`threshold = NULL`): the trivial
+zone collapses to `{0}`, so only sign flips can change zones. The algorithm
+reduces to a sign-flip check (rule 5 vs rule 2/3); rule 1 and rule 4 cannot
+fire.
 
 **Backward-compatibility note.** `rob_dominant_threshold` is still accepted but
 ignored: the 5-rule decision is run whenever at least one high-RoB study is
@@ -313,7 +314,7 @@ grade_meta(m, ois_n = 300)
 # Formula: n_arm = (z_α/2 + z_β)² × [p0(1−p0) + p1(1−p1)] / (p0−p1)²
 grade_meta(m, ois_p0 = 0.25, ois_p1 = 0.40, ois_alpha = 0.05, ois_beta = 0.20)
 
-# Option 4: auto-calculate from MID/SD (continuous)
+# Option 4: auto-calculate from Threshold/SD (continuous)
 # Formula: n_arm = 2 × (z_α/2 + z_β)² × σ² / δ²
 grade_meta(m, ois_delta = 3, ois_sd = 7)
 ```
@@ -647,7 +648,7 @@ grade_meta(
   ois_beta      = 0.20,            # type II error (1 − power)
   ois_p0        = NULL,            # control event rate (binary)
   ois_p1        = NULL,            # experimental event rate (binary)
-  ois_delta     = NULL,            # MID (continuous)
+  ois_delta     = NULL,            # Threshold (continuous)
   ois_sd        = NULL,            # pooled SD (continuous)
 
   ## Event rate columns

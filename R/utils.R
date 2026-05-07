@@ -184,21 +184,22 @@ chinn_smd_to_or <- function(smd, ci_lower = NULL, ci_upper = NULL) {
 }
 
 # --------------------------------------------------------------------------
-# MID auto-default per effect measure
+# Threshold auto-default per effect measure
 # --------------------------------------------------------------------------
 
-#' Suggest a conventional default MID based on the effect measure
+#' Suggest a conventional default Threshold based on the effect measure
 #'
-#' Returns a conventional minimally important difference (MID) suitable for
-#' pre-filling the input field in interactive UIs. Users should override with
-#' a published or expert-derived MID whenever available.
+#' Returns a conventional clinical decision Threshold (a minimally important
+#' effect on the analysis scale) suitable for pre-filling the input field in
+#' interactive UIs. Users should override with a published or expert-derived
+#' Threshold whenever available.
 #'
 #' @param meta_obj A meta object (from \code{\link[meta]{metabin}} or
 #'   \code{\link[meta]{metacont}}).
 #'
-#' @return A list with \code{mid_user} (user-facing value) and \code{mid_scale}
-#'   (one of \code{"ratio"}, \code{"te_scale"}, \code{"ard"}). Returns
-#'   \code{NULL} if the effect measure is unrecognized.
+#' @return A list with \code{threshold_user} (user-facing value) and
+#'   \code{threshold_scale} (one of \code{"ratio"}, \code{"te_scale"},
+#'   \code{"ard"}). Returns \code{NULL} if the effect measure is unrecognized.
 #'
 #' @details
 #' Defaults:
@@ -211,23 +212,23 @@ chinn_smd_to_or <- function(smd, ci_lower = NULL, ci_upper = NULL) {
 #' }
 #'
 #' @export
-suggest_mid <- function(meta_obj) {
+suggest_threshold <- function(meta_obj) {
   sm <- meta_obj$sm
   if (is.null(sm)) return(NULL)
 
   switch(sm,
-    "OR"  = list(mid_user = 1.25,  mid_scale = "ratio"),
-    "RR"  = list(mid_user = 1.20,  mid_scale = "ratio"),
-    "HR"  = list(mid_user = 1.20,  mid_scale = "ratio"),
-    "RoM" = list(mid_user = 1.10,  mid_scale = "ratio"),
-    "ARD" = list(mid_user = 0.05,  mid_scale = "ard"),
-    "SMD" = list(mid_user = 0.20,  mid_scale = "te_scale"),
+    "OR"  = list(threshold_user = 1.25,  threshold_scale = "ratio"),
+    "RR"  = list(threshold_user = 1.20,  threshold_scale = "ratio"),
+    "HR"  = list(threshold_user = 1.20,  threshold_scale = "ratio"),
+    "RoM" = list(threshold_user = 1.10,  threshold_scale = "ratio"),
+    "ARD" = list(threshold_user = 0.05,  threshold_scale = "ard"),
+    "SMD" = list(threshold_user = 0.20,  threshold_scale = "te_scale"),
     "MD"  = {
       sd_pooled <- compute_pooled_sd(meta_obj)
       if (is.null(sd_pooled) || is.na(sd_pooled) || sd_pooled <= 0) {
         return(NULL)
       }
-      list(mid_user = 0.20 * sd_pooled, mid_scale = "te_scale")
+      list(threshold_user = 0.20 * sd_pooled, threshold_scale = "te_scale")
     },
     NULL
   )
@@ -288,36 +289,36 @@ compute_pooled_sd <- function(meta_obj) {
   NULL
 }
 
-#' Convert a user-supplied MID to the meta TE scale
+#' Convert a user-supplied Threshold to the meta TE scale
 #'
-#' Internal helper. Translates the user's MID input (with its declared scale)
-#' into a value on the same scale as \code{meta_obj$TE}. Used by the
+#' Internal helper. Translates the user's Threshold input (with its declared
+#' scale) into a value on the same scale as \code{meta_obj$TE}. Used by the
 #' Inconsistency and Imprecision domains to anchor judgments to a clinical
-#' threshold.
+#' decision Threshold.
 #'
-#' @param mid Numeric MID value.
-#' @param mid_scale One of \code{"auto"}, \code{"te_scale"}, \code{"ratio"},
-#'   or \code{"ard"}.
+#' @param threshold Numeric Threshold value.
+#' @param threshold_scale One of \code{"auto"}, \code{"te_scale"},
+#'   \code{"ratio"}, or \code{"ard"}.
 #' @param sm The effect measure from \code{meta_obj$sm}, used when
-#'   \code{mid_scale = "auto"}.
+#'   \code{threshold_scale = "auto"}.
 #'
-#' @return A list with \code{mid_internal} (numeric on TE scale) and
-#'   \code{mid_kind} (the resolved scale, useful for downstream branching like
-#'   ARD-vs-ratio in OIS).
+#' @return A list with \code{threshold_internal} (numeric on TE scale) and
+#'   \code{threshold_kind} (the resolved scale, useful for downstream
+#'   branching like ARD-vs-ratio in OIS).
 #'
 #' @keywords internal
-mid_to_te_scale <- function(mid, mid_scale = "auto", sm = NULL) {
-  if (is.null(mid) || is.na(mid)) {
-    return(list(mid_internal = NULL, mid_kind = NULL))
+threshold_to_te_scale <- function(threshold, threshold_scale = "auto", sm = NULL) {
+  if (is.null(threshold) || is.na(threshold)) {
+    return(list(threshold_internal = NULL, threshold_kind = NULL))
   }
 
-  if (!is.numeric(mid) || length(mid) != 1) {
-    rlang::abort("mid must be a single numeric value or NULL.")
+  if (!is.numeric(threshold) || length(threshold) != 1) {
+    rlang::abort("threshold must be a single numeric value or NULL.")
   }
 
-  scale <- if (identical(mid_scale, "auto")) {
+  scale <- if (identical(threshold_scale, "auto")) {
     if (is.null(sm)) {
-      rlang::abort("mid_scale = 'auto' requires meta_obj$sm to be set.")
+      rlang::abort("threshold_scale = 'auto' requires meta_obj$sm to be set.")
     }
     switch(sm,
       "OR"  = "ratio",
@@ -328,21 +329,21 @@ mid_to_te_scale <- function(mid, mid_scale = "auto", sm = NULL) {
       "SMD" = "te_scale",
       "MD"  = "te_scale",
       rlang::abort(sprintf(
-        "Cannot auto-detect mid_scale for sm = '%s'. Specify mid_scale explicitly.", sm))
+        "Cannot auto-detect threshold_scale for sm = '%s'. Specify threshold_scale explicitly.", sm))
     )
   } else {
-    mid_scale
+    threshold_scale
   }
 
   if (!scale %in% c("te_scale", "ratio", "ard")) {
-    rlang::abort("mid_scale must be one of 'auto', 'te_scale', 'ratio', 'ard'.")
+    rlang::abort("threshold_scale must be one of 'auto', 'te_scale', 'ratio', 'ard'.")
   }
 
-  mid_internal <- switch(scale,
-    "te_scale" = mid,
-    "ratio"    = log(mid),
-    "ard"      = mid
+  threshold_internal <- switch(scale,
+    "te_scale" = threshold,
+    "ratio"    = log(threshold),
+    "ard"      = threshold
   )
 
-  list(mid_internal = mid_internal, mid_kind = scale)
+  list(threshold_internal = threshold_internal, threshold_kind = scale)
 }
