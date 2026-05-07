@@ -27,6 +27,10 @@
 #   (b) length-k vector: apply flowchart
 #   (c) column name in meta_obj$data: expand to vector and apply flowchart
 #
+# Edge case: when every study is high-RoB (n_low == 0), no low/some-RoB
+# comparator pool exists, so the zone-based check cannot run. We rate down
+# 2 levels (serious) — the entire body of evidence rests on high-RoB studies.
+#
 # small_values:
 #   "undesirable": small values are bad (e.g., response rate, OR for benefit)
 #                  TE_all > TE_low indicates inflation toward favorable
@@ -270,12 +274,15 @@ assess_rob <- function(rob, meta_obj,
     "MID not supplied; trivial zone collapsed to {0} (sign-flip rule only)"
   }
 
-  # No low/some-RoB studies -> conservative rate-down
+  # All studies are high-RoB (no comparator pool exists) -> rate down 2 levels.
+  # Without any low/some-RoB evidence the entire body of evidence rests on
+  # high-RoB studies, which warrants the maximum RoB downgrade.
   if (n_low == 0 || is.null(te_vec) || is.null(se_vec)) {
     return(list(
-      judgment = "some_concerns",
+      judgment = "serious",
       note     = paste0(
-        "No low/some-RoB studies to compare with; conservative rate-down applied. ",
+        "All studies high-RoB; no low/some-RoB comparator pool. ",
+        "Rate down 2 levels (serious). ",
         sm_label, "(all) = ", .disp(te_all), ". ", mid_note, "."
       )
     ))
