@@ -49,6 +49,8 @@ export_bundle <- function(ma,
                           bundle_name  = "pmatools_results",
                           include      = c("data", "script", "results",
                                            "forest", "forest_rob", "funnel",
+                                           "funnel_trimfill",
+                                           "pubias_missing_forest",
                                            "grade_table"),
                           per          = 1000,
                           prediction   = FALSE,
@@ -63,7 +65,8 @@ export_bundle <- function(ma,
                           ma_args            = NULL,
                           forest_display     = NULL,
                           rob                = NULL,
-                          forest_display_rob = NULL) {
+                          forest_display_rob = NULL,
+                          pubias_missing_df  = NULL) {
   if (!inherits(ma, "meta")) {
     rlang::abort("export_bundle: 'ma' must be a meta object.")
   }
@@ -151,6 +154,72 @@ export_bundle <- function(ma,
       function() plot_funnel(ma),
       pdf_path, png_path,
       width = 7, height = 6
+    )
+    files_in_zip <- c(files_in_zip, pdf_path, png_path)
+  }
+
+  # 5b. trim-and-fill funnel (k >= 10)
+  if ("funnel_trimfill" %in% include && (ma$k %||% 0L) >= 10) {
+    pdf_path <- file.path(work_dir, "funnel_trimfill.pdf")
+    png_path <- file.path(work_dir, "funnel_trimfill.png")
+    tf <- tryCatch(suppressWarnings(meta::trimfill(ma)),
+                   error = function(e) NULL)
+    .save_plot_pdf_png(
+      function() {
+        if (is.null(tf)) {
+          graphics::plot.new()
+          graphics::title(main = "Trim-and-fill could not be computed")
+          return(invisible(NULL))
+        }
+        n_total <- length(tf$TE)
+        is_imp  <- if (!is.null(tf$trimfill)) {
+          as.logical(tf$trimfill)
+        } else {
+          k0 <- if (!is.null(tf$k0)) as.integer(tf$k0) else
+                (n_total - (ma$k %||% 0L))
+          c(rep(FALSE, n_total - k0), rep(TRUE, k0))
+        }
+        meta::funnel(tf,
+                     contour = c(0.9, 0.95, 0.99),
+                     pch = rep(21L, n_total),
+                     col = ifelse(is_imp, "red", "black"),
+                     bg  = ifelse(is_imp, "red", "darkgray"),
+                     cex = ifelse(is_imp, 1.6, 1.0))
+        graphics::legend(
+          "topright",
+          legend = c("Observed studies", "Imputed (filled) studies"),
+          pch    = c(21, 21),
+          col    = c("black", "red"),
+          pt.bg  = c("darkgray", "red"),
+          pt.cex = c(1.0, 1.4),
+          bty    = "o", bg = "#ffffff", cex = 0.8
+        )
+      },
+      pdf_path, png_path, width = 7, height = 6
+    )
+    files_in_zip <- c(files_in_zip, pdf_path, png_path)
+  }
+
+  # 5c. publication bias missing-results forest (k >= 10)
+  if ("pubias_missing_forest" %in% include && (ma$k %||% 0L) >= 10) {
+    pdf_path <- file.path(work_dir, "pubias_missing_forest.pdf")
+    png_path <- file.path(work_dir, "pubias_missing_forest.png")
+    m_df <- if (is.data.frame(pubias_missing_df) &&
+                all(c("studlab", "n", "results_known") %in% names(pubias_missing_df))) {
+      pubias_missing_df
+    } else {
+      data.frame(studlab = character(0), n = integer(0),
+                 results_known = character(0), stringsAsFactors = FALSE)
+    }
+    k_avail <- length(ma$TE)
+    k_miss  <- nrow(m_df)
+    .save_plot_pdf_png(
+      function() plot_forest_pubias_subgroup(meta_obj    = ma,
+                                             missing_df  = m_df,
+                                             auto_detect = FALSE),
+      pdf_path, png_path,
+      width  = max(8, 3 + 0.3 * (k_avail + k_miss)),
+      height = max(7, 3 + 0.4 * (k_avail + k_miss + 4))
     )
     files_in_zip <- c(files_in_zip, pdf_path, png_path)
   }
