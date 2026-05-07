@@ -91,3 +91,35 @@ test_that("plot_forest_pubias_subgroup rejects non-meta objects", {
     "must be a meta-analysis object"
   )
 })
+
+test_that("plot_forest_pubias_subgroup auto-detects NA-TE rows as Missing", {
+  # A study with all-zero events in both arms produces a non-finite TE in
+  # metabin. It should be auto-classified into the Missing subgroup.
+  m <- meta::metabin(
+    event.e = c(10, 0,  20),
+    n.e     = c(50, 50, 70),
+    event.c = c(15, 0,  25),
+    n.c     = c(50, 50, 70),
+    studlab = c("S1", "Lopez2019", "S3"),
+    sm      = "OR",
+    method  = "Inverse",
+    random  = TRUE,
+    common  = FALSE,
+    incr    = 0  # disable continuity correction so the all-zero row stays NA
+  )
+  pdf(NULL); on.exit(dev.off(), add = TRUE)
+  expect_silent(plot_forest_pubias_subgroup(m))
+  # A user-supplied missing row should be combined with the auto-detected one.
+  miss_df <- data.frame(studlab = "Extra", n = 100L,
+                         results_known = "Not measured",
+                         stringsAsFactors = FALSE)
+  expect_silent(plot_forest_pubias_subgroup(m, missing_df = miss_df))
+})
+
+test_that("plot_forest_pubias_subgroup with no missing_df arg works", {
+  # missing_df is now optional; passing nothing should fall back to a
+  # standard one-panel forest with N column shown.
+  m <- mk_simple_meta(5)
+  pdf(NULL); on.exit(dev.off(), add = TRUE)
+  expect_silent(plot_forest_pubias_subgroup(m))
+})
