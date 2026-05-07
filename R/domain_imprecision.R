@@ -11,14 +11,21 @@
 #     Size). J Clin Epidemiol. 2011;64(12):1283-1293.
 #     doi:10.1016/j.jclinepi.2011.01.012 (PMID 21839614)
 #
-# 判定基準:
-#   No concern    : 95% CI が null を跨がない かつ OIS を満たす（または未指定）
-#   Serious       : CI が null を跨ぐ、または OIS を満たさない
-#   Very serious  : CI が null を跨ぎ かつ OIS も満たさない
+# 判定基準 (BMJ 2025 Core GRADE 4 / Zeng GRADE Guidance 34, 3-level):
+#
+#   No concern (-0)    : CI が null を跨がない かつ OIS を満たす（または未指定）
+#   Some concerns (-1) : CI が null を跨ぐ、または OIS を満たさない（30% 超）
+#   Serious (-2)       :
+#     (a) MID 提示時: 95% CI が ±MID の両方を超えて広がる（clinically
+#         important benefit と harm の両方が確からしい）, または
+#     (b) 総 N（連続）／総イベント数（バイナリ）が OIS の 30% 以下
 #
 # Null の定義:
 #   {meta} の lower.random / upper.random は RR/OR/HR で log スケール、
 #   MD/SMD で原スケール。いずれも null_val = 0 として crosses-null を判定できる。
+# MID:
+#   mid_internal は TE スケール（ratio は log、絶対値は原）の正値。閾値は
+#   ±mid_internal。MID 未提示時は (a) は適用せず crosses_null のみで判断。
 #
 # OIS (Optimal Information Size) の計算方法:
 #
@@ -62,6 +69,28 @@ assess_imprecision <- function(meta_obj,
   # null = 0 (log scale for RR/OR/HR; original scale for MD/SMD)
   null_val    <- 0.0
   crosses_null <- (lower < null_val) && (upper > null_val)
+
+  # MID-based threshold check (Zeng et al. BMJ 2025). Three states relative
+  # to the [-MID, +MID] trivial zone:
+  #   crosses_both_thresholds = lower < -MID AND upper > +MID  (serious -2)
+  #   crosses_one_threshold   = exactly one of (lower < -MID, upper > +MID)
+  #                             (some_concerns -1)
+  #   within_thresholds       = -MID <= lower AND upper <= +MID
+  #                             (no concern even if CI crosses null)
+  has_mid <- !is.null(mid_internal) &&
+             length(mid_internal) > 0 &&
+             !is.na(mid_internal) &&
+             is.finite(mid_internal) &&
+             mid_internal > 0
+  if (has_mid) {
+    below_thresh <- lower < -mid_internal
+    above_thresh <- upper >  mid_internal
+    crosses_both_thresholds <- below_thresh && above_thresh
+    crosses_one_threshold   <- xor(below_thresh, above_thresh)
+  } else {
+    crosses_both_thresholds <- NA
+    crosses_one_threshold   <- NA
+  }
 
   # Defensive: treat NA as NULL
   if (!is.null(ois_events) && (length(ois_events) == 0 || is.na(ois_events))) ois_events <- NULL
@@ -121,8 +150,12 @@ assess_imprecision <- function(meta_obj,
     }
   }
 
-  ois_met <- .check_ois(meta_obj, ois_events, ois_n)
-  judgment <- .classify_imprecision(crosses_null, ois_met)
+  ois_pct <- .compute_ois_pct(meta_obj, ois_events, ois_n)
+  ois_met <- if (is.na(ois_pct)) NA else (ois_pct >= 1.0)
+  judgment <- .classify_imprecision(
+    crosses_null, crosses_both_thresholds, crosses_one_threshold,
+    ois_met, ois_pct, has_mid
+  )
 
   # Display CI on natural scale (exp for ratio sm; raw for MD/SMD)
   sm <- meta_obj$sm
@@ -140,15 +173,28 @@ assess_imprecision <- function(meta_obj,
   ois_str <- if (is.na(ois_met)) {
     "OIS not specified"
   } else if (ois_met) {
-    "OIS met"
+    sprintf("OIS met (%.0f%%)", 100 * ois_pct)
+  } else if (!is.na(ois_pct) && ois_pct <= 0.30) {
+    sprintf("OIS not met; total = %.0f%% of OIS (<= 30%%)", 100 * ois_pct)
   } else {
-    "OIS not met"
+    sprintf("OIS not met (%.0f%%)", 100 * ois_pct)
+  }
+
+  thresh_str <- if (!has_mid) {
+    ""
+  } else if (isTRUE(crosses_both_thresholds)) {
+    "; crosses BOTH MID thresholds"
+  } else if (isTRUE(crosses_one_threshold)) {
+    "; crosses one MID threshold"
+  } else {
+    "; within both MID thresholds"
   }
 
   notes <- sprintf(
-    "95%% CI %s; null = %g; crosses null = %s; %s%s",
+    "95%% CI %s; null = %g; crosses null = %s%s; %s%s",
     ci_str, null_disp,
     if (crosses_null) "YES" else "no",
+    thresh_str,
     ois_str,
     if (nchar(ois_calc_note) > 0) paste0(" (", ois_calc_note, ")") else ""
   )
@@ -208,34 +254,48 @@ assess_imprecision <- function(meta_obj,
 }
 
 # --------------------------------------------------------------------------
-# OIS 達成チェック
+# OIS 達成率（達成判定 / serious 判定の双方に使用）
 # --------------------------------------------------------------------------
-.check_ois <- function(meta_obj, ois_events, ois_n) {
-  if (!is.null(ois_events)) {
+.compute_ois_pct <- function(meta_obj, ois_events, ois_n) {
+  if (!is.null(ois_events) && is.finite(ois_events) && ois_events > 0) {
     events_e <- if (!is.null(meta_obj$event.e)) sum(meta_obj$event.e, na.rm = TRUE) else NA
     events_c <- if (!is.null(meta_obj$event.c)) sum(meta_obj$event.c, na.rm = TRUE) else NA
-    total_events <- if (!is.na(events_e) && !is.na(events_c)) events_e + events_c else NA
-    if (!is.na(total_events)) return(total_events >= ois_events)
+    if (!is.na(events_e) && !is.na(events_c)) {
+      return((events_e + events_c) / ois_events)
+    }
   }
-  if (!is.null(ois_n)) {
+  if (!is.null(ois_n) && is.finite(ois_n) && ois_n > 0) {
     n_e <- if (!is.null(meta_obj$n.e)) sum(meta_obj$n.e, na.rm = TRUE) else NA
     n_c <- if (!is.null(meta_obj$n.c)) sum(meta_obj$n.c, na.rm = TRUE) else NA
-    total_n <- if (!is.na(n_e) && !is.na(n_c)) n_e + n_c else NA
-    if (!is.na(total_n)) return(total_n >= ois_n)
+    if (!is.na(n_e) && !is.na(n_c)) {
+      return((n_e + n_c) / ois_n)
+    }
   }
-  NA
+  NA_real_
 }
 
 # --------------------------------------------------------------------------
-# 判定分類
+# 判定分類 (Zeng et al. BMJ 2025, GRADE Guidance 34)
 # --------------------------------------------------------------------------
-.classify_imprecision <- function(crosses_null, ois_met) {
-  # 3-level mapping (v0.3+):
-  #   both fail (CI crosses null AND OIS not met) -> serious        (-2)
-  #   one fails                                    -> some_concerns (-1)
-  #   neither fails                                -> no
-  if (isTRUE(crosses_null) && isFALSE(ois_met)) return("serious")
-  if (isTRUE(crosses_null))  return("some_concerns")
-  if (isFALSE(ois_met))      return("some_concerns")
+.classify_imprecision <- function(crosses_null,
+                                  crosses_both_thresholds,
+                                  crosses_one_threshold,
+                                  ois_met,
+                                  ois_pct,
+                                  has_mid) {
+  # -2 (serious):
+  #   (a) CI crosses BOTH ±MID thresholds (when MID is provided), OR
+  #   (b) total events / total N <= 30% of OIS.
+  # -1 (some_concerns):
+  #   When MID provided  : CI crosses one threshold only.
+  #   When MID not given : CI crosses null.
+  #   Always             : OIS not met (and > 30%).
+  # -0 (no): CI within thresholds (or, no MID, doesn't cross null) AND OIS met.
+  serious_ois <- !is.na(ois_pct) && is.finite(ois_pct) && ois_pct <= 0.30
+  if (isTRUE(crosses_both_thresholds) || serious_ois) return("serious")
+
+  ci_some <- if (has_mid) isTRUE(crosses_one_threshold)
+             else         isTRUE(crosses_null)
+  if (ci_some || isFALSE(ois_met)) return("some_concerns")
   "no"
 }
