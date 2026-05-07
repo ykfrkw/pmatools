@@ -123,3 +123,31 @@ test_that("plot_forest_pubias_subgroup with no missing_df arg works", {
   pdf(NULL); on.exit(dev.off(), add = TRUE)
   expect_silent(plot_forest_pubias_subgroup(m))
 })
+
+test_that("plot_forest_pubias_subgroup respects auto_detect = FALSE", {
+  # When the caller drives the missing list (e.g. a Shiny editor),
+  # auto_detect = FALSE skips internal NA-TE detection: NA-TE rows are
+  # excluded from Available but NOT auto-added to Missing.
+  m <- meta::metabin(
+    event.e = c(10, 0,  20),
+    n.e     = c(50, 50, 70),
+    event.c = c(15, 0,  25),
+    n.c     = c(50, 50, 70),
+    studlab = c("S1", "Lopez2019", "S3"),
+    sm = "OR", method = "Inverse",
+    random = TRUE, common = FALSE, incr = 0
+  )
+  pdf(NULL); on.exit(dev.off(), add = TRUE)
+  empty_df <- data.frame(studlab = character(0), n = integer(0),
+                          results_known = character(0),
+                          stringsAsFactors = FALSE)
+  # Empty + auto_detect = FALSE -> no Missing rows at all -> standard forest.
+  expect_silent(plot_forest_pubias_subgroup(m, missing_df = empty_df,
+                                             auto_detect = FALSE))
+  # Caller-supplied row + auto_detect = FALSE -> only the supplied row in Missing.
+  miss_df <- data.frame(studlab = "Lopez2019", n = 100L,
+                         results_known = "Custom label",
+                         stringsAsFactors = FALSE)
+  expect_silent(plot_forest_pubias_subgroup(m, missing_df = miss_df,
+                                             auto_detect = FALSE))
+})

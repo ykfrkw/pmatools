@@ -29,8 +29,7 @@
 #'
 #' @param meta_obj A `meta` object (from \code{\link{run_ma}} or
 #'   \code{\link[meta]{metabin}}/\code{\link[meta]{metacont}}).
-#' @param missing_df Optional \code{data.frame} of *additional* missing trials
-#'   (i.e. trials not present in \code{meta_obj} at all). Columns:
+#' @param missing_df Optional \code{data.frame} of missing trials. Columns:
 #'   \itemize{
 #'     \item \code{studlab} (chr)
 #'     \item \code{n} (int) total sample size or NA
@@ -39,13 +38,23 @@
 #'       "Measured but not reported (suspect P > 0.05 / P < 0.05 / opposite
 #'       direction)".
 #'   }
-#'   May be \code{NULL} or have 0 rows.
+#'   May be \code{NULL} or have 0 rows. With \code{auto_detect = TRUE}
+#'   (default), entries are merged with any auto-detected NA-TE rows. With
+#'   \code{auto_detect = FALSE}, the caller is responsible for supplying the
+#'   complete set (typical when an interactive editor manages the list).
+#' @param auto_detect Logical (default \code{TRUE}). If \code{TRUE}, studies
+#'   in \code{meta_obj} with NA TE/seTE are automatically classified into
+#'   the Missing-results subgroup and labelled
+#'   \code{"Reported but data not extractable"}. If \code{FALSE}, the
+#'   function uses \code{missing_df} verbatim and excludes NA-TE rows from
+#'   \emph{both} subgroups.
 #' @param ... Additional arguments forwarded to \code{\link[meta]{forest.meta}}.
 #'
 #' @return Invisibly NULL. Side effect: draws on the active graphics device.
 #'
 #' @export
-plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL, ...) {
+plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
+                                        auto_detect = TRUE, ...) {
   if (!inherits(meta_obj, "meta")) {
     rlang::abort("plot_forest_pubias_subgroup: meta_obj must be a meta-analysis object.")
   }
@@ -103,8 +112,10 @@ plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL, ...) {
   avail_idx     <- which(te_finite)
   auto_miss_idx <- which(!te_finite)
 
-  # Auto-detected missing rows from meta_obj (NA TE).
-  auto_miss_df <- if (length(auto_miss_idx) > 0L) {
+  # Auto-detected missing rows from meta_obj (NA TE). Skipped when the
+  # caller manages the missing list themselves (e.g. an interactive
+  # editor that has already imported the auto rows into missing_df).
+  auto_miss_df <- if (isTRUE(auto_detect) && length(auto_miss_idx) > 0L) {
     data.frame(
       studlab = studlab_obj[auto_miss_idx],
       n = suppressWarnings(as.integer(n_obj[auto_miss_idx])),
