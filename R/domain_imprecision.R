@@ -117,9 +117,17 @@ assess_imprecision <- function(meta_obj,
         }
       }
       if (is.null(ois_p1) && !is.null(ois_p0)) {
+        sm_local <- meta_obj$sm %||% ""
         if (identical(mid_kind, "ard")) {
           ois_p1 <- ois_p0 + mid_internal
+        } else if (identical(sm_local, "OR")) {
+          # OR scale: invert odds, not risk. RR-style p1 = p0 * exp(MID)
+          # is only accurate when p0 is small; for p0 ~ 0.5 it can be
+          # ~10% off and biases the OIS estimate.
+          or_val <- exp(mid_internal)
+          ois_p1 <- (ois_p0 * or_val) / (1 - ois_p0 + ois_p0 * or_val)
         } else {
+          # RR / HR / RoM: log scale, ois_p1 = p0 * exp(MID).
           ois_p1 <- ois_p0 * exp(mid_internal)
         }
         ois_p1 <- max(min(ois_p1, 1 - 1e-6), 1e-6)

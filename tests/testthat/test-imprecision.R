@@ -104,6 +104,41 @@ test_that("Rule (a): CI within MID thresholds, OIS met -> no concern", {
 # --------------------------------------------------------------------------
 # Combined behaviour
 # --------------------------------------------------------------------------
+test_that("OR-scale MID derives ois_p1 via odds (not RR approximation)", {
+  # When sm = "OR" and the user supplies a ratio-scale MID, the OIS
+  # auto-calc must convert MID -> p1 via the odds formula
+  #   p1 = (p0 * OR) / (1 - p0 + p0 * OR)
+  # rather than the RR-style p1 = p0 * exp(log OR), which diverges from
+  # the truth as p0 moves away from 0.
+  m <- metabin(
+    event.e = c(40, 45, 50),
+    n.e     = c(100, 100, 100),
+    event.c = c(50, 55, 60),
+    n.c     = c(100, 100, 100),
+    studlab = c("A", "B", "C"),
+    sm = "OR", method = "Inverse", random = TRUE, common = FALSE
+  )
+  # Control event rate ~ 0.55 - high enough that OR != RR materially.
+  # With MID = 0.75 (OR scale), odds-formula ois_p1 ~= 0.478;
+  # RR approximation would give p0*0.75 ~= 0.413. Notes should reflect
+  # the odds-formula value.
+  g <- suppressWarnings(grade_meta(m, mid = 0.75, mid_scale = "ratio"))
+  row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
+  m_ois_p1 <- regmatches(row$notes,
+                          regexpr("ois_p1 = [0-9.]+", row$notes))
+  expect_match(m_ois_p1, "^ois_p1 = ")
+  ois_p1_val <- as.numeric(sub("ois_p1 = ", "", m_ois_p1))
+  # Compute expected from the OR formula directly using whatever p0 the
+  # function picked from the data (control-arm pooled rate).
+  cer <- (50 + 55 + 60) / (3 * 100)
+  or_val <- 0.75
+  expected <- (cer * or_val) / (1 - cer + cer * or_val)
+  expect_equal(ois_p1_val, round(expected, 4), tolerance = 5e-4)
+  # Sanity: OR-derived ois_p1 must differ from naive RR approximation.
+  rr_approx <- cer * or_val
+  expect_gt(abs(ois_p1_val - rr_approx), 0.02)
+})
+
 test_that("Crosses null but not both MIDs, OIS met (>=100%) -> some_concerns", {
   # Small effect, narrow-ish CI that crosses null but stays inside ±MID.
   m <- metabin(
