@@ -48,13 +48,38 @@
 #'   \code{"Reported but data not extractable"}. If \code{FALSE}, the
 #'   function uses \code{missing_df} verbatim and excludes NA-TE rows from
 #'   \emph{both} subgroups.
+#' @param title Optional plot title (passed as \code{smlab}).
+#' @param label_e,label_c Optional arm labels forwarded to
+#'   \code{\link[meta]{forest.meta}}.
+#' @param xlim Optional length-2 numeric vector for the x-axis range. For ratio
+#'   summary measures (OR/RR/HR/RoM/IRR), the range is snapped outward to
+#'   standard log ticks.
+#' @param favors_left,favors_right Optional labels positioned on the left and
+#'   right of the x-axis (\code{label.left} / \code{label.right}).
+#' @param show_n Logical. Only honoured when \code{meta_obj} has no missing
+#'   rows (so this function falls back to a standard one-panel forest); the
+#'   subgroup view always shows a single combined "No" column.
+#' @param show_events Logical, fallback-only (see \code{show_n}).
+#' @param addrow_above,addrow_below Number of blank rows above/below the
+#'   overall pooled effect line.
 #' @param ... Additional arguments forwarded to \code{\link[meta]{forest.meta}}.
 #'
 #' @return Invisibly NULL. Side effect: draws on the active graphics device.
 #'
 #' @export
 plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
-                                        auto_detect = TRUE, ...) {
+                                        auto_detect  = TRUE,
+                                        title        = NULL,
+                                        label_e      = NULL,
+                                        label_c      = NULL,
+                                        xlim         = NULL,
+                                        favors_left  = NULL,
+                                        favors_right = NULL,
+                                        show_n       = TRUE,
+                                        show_events  = FALSE,
+                                        addrow_above = 0,
+                                        addrow_below = 1,
+                                        ...) {
   if (!inherits(meta_obj, "meta")) {
     rlang::abort("plot_forest_pubias_subgroup: meta_obj must be a meta-analysis object.")
   }
@@ -137,10 +162,22 @@ plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
   full_missing_df <- rbind(auto_miss_df, user_miss_df)
 
   # If there are no missing trials at all and TE is fully populated, fall
-  # back to the standard one-panel forest with sample-size column shown by
-  # default (N = n.e + n.c per study).
+  # back to the standard one-panel forest. Display options are passed
+  # through so the user's choices in the calling app still apply.
   if (nrow(full_missing_df) == 0L) {
-    plot_forest(meta_obj, auto_layout = TRUE, show_n = TRUE, ...)
+    plot_forest(meta_obj,
+                auto_layout  = TRUE,
+                title        = title,
+                label_e      = label_e,
+                label_c      = label_c,
+                xlim         = xlim,
+                favors_left  = favors_left,
+                favors_right = favors_right,
+                show_n       = isTRUE(show_n),
+                show_events  = isTRUE(show_events),
+                addrow_above = addrow_above,
+                addrow_below = addrow_below,
+                ...)
     return(invisible(NULL))
   }
 
@@ -207,6 +244,7 @@ plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
 
   args <- list(
     x         = m_combined,
+    smlab     = if (is.null(title)) "" else title,
     leftcols  = c("studlab", "No"),
     leftlabs  = c("Study",   "No"),
     rightcols = "effect_status",
@@ -215,8 +253,24 @@ plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
     random    = TRUE,
     print.subgroup.labels = TRUE,
     test.subgroup = FALSE,
-    spacing   = 0.9
+    spacing   = 0.9,
+    addrow.overall        = addrow_above > 0,
+    addrows.below.overall = addrow_below
   )
+  if (!is.null(label_e)      && nzchar(label_e))      args$label.e     <- label_e
+  if (!is.null(label_c)      && nzchar(label_c))      args$label.c     <- label_c
+  if (!is.null(favors_left)  && nzchar(favors_left))  args$label.left  <- favors_left
+  if (!is.null(favors_right) && nzchar(favors_right)) args$label.right <- favors_right
+  if (!is.null(xlim) && length(xlim) == 2L && all(is.finite(xlim)) && xlim[1] < xlim[2]) {
+    if (is_ratio) {
+      snapped <- .snap_log_xlim(xlim)
+      args$xlim <- snapped
+      args$at   <- .nice_log_ticks(snapped)
+    } else {
+      args$xlim <- xlim
+      args$at   <- .nice_lin_ticks(xlim)
+    }
+  }
   extra <- list(...)
   args[names(extra)] <- extra
 

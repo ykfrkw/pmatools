@@ -124,6 +124,36 @@ test_that("plot_forest_pubias_subgroup with no missing_df arg works", {
   expect_silent(plot_forest_pubias_subgroup(m))
 })
 
+test_that("plot_forest_pubias_subgroup accepts display options", {
+  m <- mk_simple_meta(6)
+  miss_df <- data.frame(
+    studlab = "Stefanelli 2013", n = 40L,
+    results_known = "Measured but not reported (suspect P > 0.05)",
+    stringsAsFactors = FALSE
+  )
+  pdf(NULL); on.exit(dev.off(), add = TRUE)
+  expect_silent(plot_forest_pubias_subgroup(
+    m, missing_df = miss_df,
+    title        = "Test title",
+    label_e      = "CBT-I",
+    label_c      = "Control",
+    favors_left  = "Favors Control",
+    favors_right = "Favors CBT-I",
+    xlim         = c(0.1, 10),
+    addrow_above = 1,
+    addrow_below = 1
+  ))
+  # No-missing fallback also accepts display options.
+  expect_silent(plot_forest_pubias_subgroup(
+    m,
+    title        = "Fallback title",
+    favors_left  = "L", favors_right = "R",
+    xlim         = c(0.2, 5),
+    show_n       = FALSE,
+    addrow_above = 1, addrow_below = 1
+  ))
+})
+
 test_that("plot_forest_pubias_subgroup respects auto_detect = FALSE", {
   # When the caller drives the missing list (e.g. a Shiny editor),
   # auto_detect = FALSE skips internal NA-TE detection: NA-TE rows are
