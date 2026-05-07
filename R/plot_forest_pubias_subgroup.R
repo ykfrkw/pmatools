@@ -1,6 +1,6 @@
 # plot_forest_pubias_subgroup.R - Available vs Missing results forest plot
 #
-# Reference-only diagnostic for the Reporting Bias domain (ROB-ME, Page et al.,
+# Reference-only diagnostic for the Reporting Bias domain (RoB-ME, Page et al.,
 # BMJ 2023, doi:10.1136/bmj-2023-076754). Mirrors the BMJ figure where two
 # subgroups ("Available results" / "Missing results") are stacked on a single
 # forest plot. Missing rows display a "Results known" status string in the
