@@ -168,8 +168,9 @@ assess_imprecision <- function(meta_obj,
     }
   }
 
-  ois_pct <- .compute_ois_pct(meta_obj, ois_events, ois_n)
-  ois_met <- if (is.na(ois_pct)) NA else (ois_pct >= 1.0)
+  ois_info <- .compute_ois_pct(meta_obj, ois_events, ois_n)
+  ois_pct  <- ois_info$pct
+  ois_met  <- if (is.na(ois_pct)) NA else (ois_pct >= 1.0)
   judgment <- .classify_imprecision(
     crosses_null, crosses_both_thresholds, crosses_one_threshold,
     ois_met, ois_pct, has_threshold
@@ -191,11 +192,14 @@ assess_imprecision <- function(meta_obj,
   ois_str <- if (is.na(ois_met)) {
     "OIS not specified"
   } else if (ois_met) {
-    sprintf("OIS met (%.0f%%)", 100 * ois_pct)
+    sprintf("OIS met (%.0f%%; observed %d / target %d %s)",
+            100 * ois_pct, ois_info$observed, ois_info$target, ois_info$unit)
   } else if (!is.na(ois_pct) && ois_pct <= 0.30) {
-    sprintf("OIS not met; total = %.0f%% of OIS (<= 30%%)", 100 * ois_pct)
+    sprintf("OIS not met; observed %d / target %d %s = %.0f%% (<= 30%%)",
+            ois_info$observed, ois_info$target, ois_info$unit, 100 * ois_pct)
   } else {
-    sprintf("OIS not met (%.0f%%)", 100 * ois_pct)
+    sprintf("OIS not met (observed %d / target %d %s = %.0f%%)",
+            ois_info$observed, ois_info$target, ois_info$unit, 100 * ois_pct)
   }
 
   thresh_str <- if (!has_threshold) {
@@ -275,23 +279,37 @@ assess_imprecision <- function(meta_obj,
 
 # --------------------------------------------------------------------------
 # OIS 達成率（達成判定 / serious 判定の双方に使用）
+#
+# Returns list(pct, observed, target, unit). `unit` is "events" (binary) or
+# "N" (continuous). When neither is computable, all four fields are NA.
 # --------------------------------------------------------------------------
 .compute_ois_pct <- function(meta_obj, ois_events, ois_n) {
+  na_out <- list(pct = NA_real_, observed = NA_integer_,
+                 target = NA_integer_, unit = NA_character_)
+
   if (!is.null(ois_events) && is.finite(ois_events) && ois_events > 0) {
     events_e <- if (!is.null(meta_obj$event.e)) sum(meta_obj$event.e, na.rm = TRUE) else NA
     events_c <- if (!is.null(meta_obj$event.c)) sum(meta_obj$event.c, na.rm = TRUE) else NA
     if (!is.na(events_e) && !is.na(events_c)) {
-      return((events_e + events_c) / ois_events)
+      observed <- as.integer(events_e + events_c)
+      return(list(pct      = observed / ois_events,
+                  observed = observed,
+                  target   = as.integer(ois_events),
+                  unit     = "events"))
     }
   }
   if (!is.null(ois_n) && is.finite(ois_n) && ois_n > 0) {
     n_e <- if (!is.null(meta_obj$n.e)) sum(meta_obj$n.e, na.rm = TRUE) else NA
     n_c <- if (!is.null(meta_obj$n.c)) sum(meta_obj$n.c, na.rm = TRUE) else NA
     if (!is.na(n_e) && !is.na(n_c)) {
-      return((n_e + n_c) / ois_n)
+      observed <- as.integer(n_e + n_c)
+      return(list(pct      = observed / ois_n,
+                  observed = observed,
+                  target   = as.integer(ois_n),
+                  unit     = "N"))
     }
   }
-  NA_real_
+  na_out
 }
 
 # --------------------------------------------------------------------------

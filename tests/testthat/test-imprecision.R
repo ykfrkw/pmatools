@@ -55,6 +55,9 @@ test_that("Rule (b): events between 30% and 100% of OIS gives some_concerns", {
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_equal(row$judgment, "some_concerns")
   expect_equal(row$downgrade, -1L)
+  # Notes should display observed / target counts alongside the percentage
+  # so users can verify the OIS check at a glance.
+  expect_match(row$notes, "observed 105 / target 200 events", fixed = TRUE)
 })
 
 test_that("Rule (b) for continuous: N <= 30% of OIS triggers serious", {
