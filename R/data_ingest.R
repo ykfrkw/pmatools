@@ -4,7 +4,8 @@
 # text. Normalises to canonical long format (one row per study x arm).
 #
 # Canonical long columns:
-#   studlab, treat, n, [event], [mean], [sd], [rob], [indirectness], [subgroup]
+#   studlab, treat, n, [event], [mean], [sd], [outcome], [rob],
+#   [indirectness], [subgroup]
 
 #' Ingest study-level data into canonical long format
 #'
@@ -19,7 +20,8 @@
 #'   identify experimental and control arms in long format. If NULL, inferred
 #'   from data.
 #'
-#' @return A tibble in canonical long format (one row per study x arm).
+#' @return A tibble in canonical long format (one row per study x arm, or one
+#'   row per study x outcome x arm when an `outcome` column is present).
 #'
 #' @export
 ingest_data <- function(data,
@@ -52,13 +54,18 @@ ingest_data <- function(data,
     long_df <- .normalise_long(df, experimental_label, control_label)
   }
 
-  # 5. Combine duplicate (studlab, treat) rows (Cochrane Handbook 6.5.2.10)
+  # 5. Combine duplicate study-unit arm rows (Cochrane Handbook 6.5.2.10)
   n_before <- nrow(long_df)
   long_df  <- .combine_arms(long_df)
   if (nrow(long_df) < n_before) {
+    unit_label <- if ("outcome" %in% names(long_df)) {
+      "(studlab, outcome, treat)"
+    } else {
+      "(studlab, treat)"
+    }
     message(sprintf(
-      "Combined %d duplicate (studlab, treat) rows using Cochrane Handbook 6.5.2.10.",
-      n_before - nrow(long_df)
+      "Combined %d duplicate %s rows using Cochrane Handbook 6.5.2.10.",
+      n_before - nrow(long_df), unit_label
     ))
   }
 
@@ -307,12 +314,21 @@ ingest_data <- function(data,
     }
   }
 
-  # Each studlab must appear exactly twice (one row per arm)
-  counts <- table(df$studlab)
+  # Each study unit must appear exactly twice (one row per arm). If an
+  # outcome column exists, each study-outcome pair is treated separately.
+  unit_cols <- c("studlab", if ("outcome" %in% names(df)) "outcome")
+  unit_key  <- do.call(paste, c(df[unit_cols], sep = "::"))
+  counts <- table(unit_key)
   bad    <- names(counts)[counts != 2]
   if (length(bad) > 0) {
+    label <- if ("outcome" %in% names(df)) {
+      "Each study-outcome pair"
+    } else {
+      "Each study"
+    }
     rlang::abort(sprintf(
-      "Each study must have exactly 2 rows (one per arm). Offending: %s (counts: %s)",
+      "%s must have exactly 2 rows (one per arm). Offending: %s (counts: %s)",
+      label,
       paste(bad, collapse = ", "),
       paste(counts[bad], collapse = ", ")
     ))

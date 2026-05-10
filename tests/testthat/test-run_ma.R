@@ -54,3 +54,12 @@ test_that("run_ma rejects invalid sm", {
   expect_error(run_ma(data, outcome_type = "binary", sm = "SMD"),
                regexp = "not valid")
 })
+
+test_that("run_ma rejects unfiltered multi-outcome data", {
+  data <- rbind(
+    transform(make_long_continuous(), outcome = "ISI"),
+    transform(make_long_continuous(), outcome = "TST")
+  )
+  expect_error(run_ma(data, outcome_type = "continuous"),
+               regexp = "multiple outcomes")
+})

@@ -28,7 +28,8 @@ identify experimental and control arms in long format. If NULL, inferred
 from data.}
 }
 \value{
-A tibble in canonical long format (one row per study x arm).
+A tibble in canonical long format (one row per study x arm, or one
+row per study x outcome x arm when an \code{outcome} column is present).
 }
 \description{
 Ingest study-level data into canonical long format

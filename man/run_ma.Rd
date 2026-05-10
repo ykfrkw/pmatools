@@ -23,7 +23,8 @@ run_ma(
 \arguments{
 \item{data}{Canonical long-format data, typically from
 \code{\link{ingest_data}}: one row per study x arm with columns
-\code{studlab}, \code{treat}, \code{n}, plus \code{event} (binary) or \code{mean}/\code{sd} (continuous).}
+\code{studlab}, \code{treat}, \code{n}, plus \code{event} (binary) or \code{mean}/\code{sd} (continuous).
+If an \code{outcome} column is present, data must contain exactly one outcome.}
 
 \item{outcome_type}{One of \code{"binary"} or \code{"continuous"}.}
 

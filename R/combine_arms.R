@@ -1,4 +1,4 @@
-# combine_arms.R - Combine multiple rows with same (studlab, treat)
+# combine_arms.R - Combine multiple rows with same study unit + treat
 #
 # Cochrane Handbook 6.5.2.10: when several arms in a single study should be
 # treated as a single group (e.g. multiple dose groups merged), pool them
@@ -8,7 +8,8 @@
 # Continuous: weighted mean and pooled SD via iterative pairing.
 
 .combine_arms <- function(df) {
-  combo_key <- paste(df$studlab, df$treat, sep = "::")
+  key_cols <- c("studlab", if ("outcome" %in% names(df)) "outcome", "treat")
+  combo_key <- do.call(paste, c(df[key_cols], sep = "::"))
   if (!any(duplicated(combo_key))) return(df)
 
   out_rows <- list()

@@ -42,6 +42,45 @@ test_that("ingest_data converts wide -> long", {
   expect_equal(sum(out$treat == "control"), 3)
 })
 
+test_that("ingest_data keeps study-outcome rows separate", {
+  df <- data.frame(
+    studlab = rep(c("A", "B"), each = 2),
+    outcome = rep(c("ISI", "TST"), times = 2),
+    n_e     = c(13, 13, 28, 28),
+    mean_e  = c(6.31, 428.61, 13.00, 390.05),
+    sd_e    = c(3.38, 44.06, 5.70, 66.71),
+    n_c     = c(13, 13, 27, 27),
+    mean_c  = c(12.92, 352.82, 12.80, 395.05),
+    sd_c    = c(6.07, 200.12, 4.30, 84.27),
+    stringsAsFactors = FALSE
+  )
+  out <- ingest_data(df, format = "wide")
+  isi <- out[out$studlab == "A" & out$outcome == "ISI" &
+               out$treat == "experimental", ]
+
+  expect_equal(nrow(out), 8)
+  expect_equal(isi$n, 13)
+  expect_equal(isi$mean, 6.31)
+  expect_equal(isi$sd, 3.38)
+})
+
+test_that("ingest_data combines duplicate arms within the same study-outcome only", {
+  df <- data.frame(
+    studlab = rep("A", 4),
+    outcome = rep("ISI", 4),
+    treat   = c("experimental", "experimental", "control", "control"),
+    n       = c(10, 20, 15, 15),
+    mean    = c(1, 2, 3, 5),
+    sd      = c(1, 1, 2, 2),
+    stringsAsFactors = FALSE
+  )
+  out <- suppressMessages(ingest_data(df, format = "long"))
+
+  expect_equal(nrow(out), 2)
+  expect_equal(out$n[out$treat == "experimental"], 30)
+  expect_equal(out$outcome, c("ISI", "ISI"))
+})
+
 test_that("ingest_data auto-detects wide vs long", {
   wide <- make_wide_binary()
   long <- make_long_binary()

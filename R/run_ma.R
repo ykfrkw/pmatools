@@ -8,6 +8,7 @@
 #' @param data Canonical long-format data, typically from
 #'   \code{\link{ingest_data}}: one row per study x arm with columns
 #'   `studlab`, `treat`, `n`, plus `event` (binary) or `mean`/`sd` (continuous).
+#'   If an `outcome` column is present, data must contain exactly one outcome.
 #' @param outcome_type One of `"binary"` or `"continuous"`.
 #' @param sm Effect measure. Binary: `"OR"` or `"RR"`. Continuous: `"SMD"`,
 #'   `"MD"`, or `"RoM"`. Defaults: `"OR"` for binary, `"SMD"` for continuous.
@@ -45,6 +46,20 @@ run_ma <- function(data,
                    control_label      = NULL) {
   outcome_type <- match.arg(outcome_type)
   method.tau   <- match.arg(method.tau)
+
+  if ("outcome" %in% names(data)) {
+    outcomes <- unique(as.character(data$outcome))
+    outcomes <- outcomes[!is.na(outcomes) & nzchar(outcomes)]
+    if (length(outcomes) > 1) {
+      rlang::abort(sprintf(
+        paste0(
+          "run_ma() received multiple outcomes (%s). ",
+          "Filter data to one outcome before calling run_ma()."
+        ),
+        paste(outcomes, collapse = ", ")
+      ))
+    }
+  }
 
   if (is.null(sm)) {
     sm <- if (outcome_type == "binary") "OR" else "SMD"
