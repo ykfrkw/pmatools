@@ -104,6 +104,21 @@ test_that("ingest_data applies column-name mapping", {
   expect_true("event" %in% names(out))
 })
 
+test_that("ingest_data recognises common study and arm aliases", {
+  df <- data.frame(
+    id    = rep(c("A", "B", "C"), each = 2),
+    t     = rep(c("experimental", "control"), 3),
+    n     = c(50, 50, 60, 60, 70, 70),
+    event = c(10, 15, 15, 20, 20, 25),
+    stringsAsFactors = FALSE
+  )
+  out <- ingest_data(df, format = "long")
+
+  expect_equal(nrow(out), 6)
+  expect_equal(unique(out$studlab), c("A", "B", "C"))
+  expect_equal(sort(unique(out$treat)), c("control", "experimental"))
+})
+
 test_that("ingest_data rejects empty input", {
   expect_error(ingest_data(data.frame()), regexp = "no rows")
 })

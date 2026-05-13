@@ -248,8 +248,9 @@ ingest_data <- function(data,
 
   # Auto-rename common aliases to canonical names
   aliases <- list(
-    studlab = c("study", "trial", "study_id", "trial_id"),
-    treat   = c("treatment", "arm"),
+    studlab = c("study", "id", "study_name", "study_id",
+                "trial", "trial_id"),
+    treat   = c("treatment", "arm", "t", "intervention", "group", "condition"),
     n       = c("n_randomized", "n_total", "sample_size", "N"),
     event   = c("events", "d_r", "responders", "n_events"),
     mean    = c("means"),
@@ -269,7 +270,11 @@ ingest_data <- function(data,
 
   if (!"studlab" %in% names(df) || !"treat" %in% names(df)) {
     rlang::abort(
-      "Long format requires 'studlab' and 'treat' columns (or aliases 'study'/'arm'/'treatment')."
+      paste0(
+        "Long format requires 'studlab' and 'treat' columns ",
+        "(or aliases such as 'study'/'study_id'/'id' and ",
+        "'arm'/'treatment'/'t')."
+      )
     )
   }
 
