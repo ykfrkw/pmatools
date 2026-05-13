@@ -39,6 +39,11 @@
 #' @param forest_display_rob Optional named list of `plot_forest` arguments
 #'   for the RoB-stratified forest plot bundled when `"forest_rob"` is in
 #'   `include`. Same recognized names as `forest_display`.
+#' @param rare Optional \code{pma_rare_meta} object from
+#'   \code{\link{run_rare_ma}}. When supplied, rare-event diagnostics,
+#'   the method table, and the method-comparison forest plot are bundled.
+#' @param rare_forest_display Optional named list of display arguments for
+#'   \code{\link{plot_rare_sensitivity_forest}}.
 #'
 #' @return Character. Absolute path to the created ZIP file.
 #'
@@ -66,6 +71,8 @@ export_bundle <- function(ma,
                           forest_display     = NULL,
                           rob                = NULL,
                           forest_display_rob = NULL,
+                          rare               = NULL,
+                          rare_forest_display = NULL,
                           pubias_missing_df  = NULL) {
   if (!inherits(ma, "meta")) {
     rlang::abort("export_bundle: 'ma' must be a meta object.")
@@ -101,7 +108,8 @@ export_bundle <- function(ma,
     .render_analysis_script(ma, grade, ma_args, grade_args,
                             per, prediction,
                             convert_smd_to_or, baseline_risk, threshold_label,
-                            script_path)
+                            script_path,
+                            rare = rare)
     files_in_zip <- c(files_in_zip, script_path)
   }
 
@@ -142,6 +150,35 @@ export_bundle <- function(ma,
       pdf_path, png_path,
       width  = max(8, 3 + 0.3 * k_extra),
       height = max(7, 3 + 0.4 * (k_extra + 4))
+    )
+    files_in_zip <- c(files_in_zip, pdf_path, png_path)
+  }
+
+  # 4c. rare-events sensitivity outputs
+  if (!is.null(rare) && inherits(rare, "pma_rare_meta")) {
+    diag_path <- file.path(work_dir, "rare_event_diagnostics.csv")
+    method_path <- file.path(work_dir, "rare_event_method_table.csv")
+    utils::write.csv(.rare_diagnostics_table(rare$diagnostics),
+                     diag_path, row.names = FALSE)
+    utils::write.csv(as.data.frame(rare$method_table),
+                     method_path, row.names = FALSE)
+    files_in_zip <- c(files_in_zip, diag_path, method_path)
+
+    pdf_path <- file.path(work_dir, "rare_event_method_forest.pdf")
+    png_path <- file.path(work_dir, "rare_event_method_forest.png")
+    rfd <- if (is.list(rare_forest_display)) rare_forest_display else list()
+    rfd <- rfd[intersect(names(rfd), c("title", "xlim",
+                                      "favors_left", "favors_right"))]
+    if (is.null(rfd$title) || !nzchar(rfd$title %||% "")) {
+      rfd$title <- "Rare-event method sensitivity"
+    }
+    n_methods <- nrow(as.data.frame(rare$method_table))
+    .save_plot_pdf_png(
+      function() do.call(plot_rare_sensitivity_forest,
+                         c(list(x = rare), rfd)),
+      pdf_path, png_path,
+      width = max(8, 4 + 0.4 * n_methods),
+      height = max(5, 2.5 + 0.45 * n_methods)
     )
     files_in_zip <- c(files_in_zip, pdf_path, png_path)
   }
@@ -319,6 +356,29 @@ export_bundle <- function(ma,
   NULL
 }
 
+.rare_diagnostics_table <- function(x) {
+  if (is.null(x)) {
+    return(data.frame(metric = character(), value = character(),
+                      stringsAsFactors = FALSE))
+  }
+  keep <- names(x)[vapply(x, function(z) {
+    is.atomic(z) && length(z) == 1L
+  }, logical(1))]
+  data.frame(
+    metric = keep,
+    value = vapply(x[keep], function(z) {
+      if (is.logical(z)) {
+        if (isTRUE(z)) "TRUE" else "FALSE"
+      } else if (is.numeric(z)) {
+        format(z, scientific = FALSE, trim = TRUE)
+      } else {
+        as.character(z)
+      }
+    }, character(1)),
+    stringsAsFactors = FALSE
+  )
+}
+
 # --------------------------------------------------------------------------
 # Plot saving (PDF + PNG)
 # --------------------------------------------------------------------------
@@ -397,7 +457,8 @@ export_bundle <- function(ma,
                                     ma_args, grade_args,
                                     per, prediction,
                                     convert_smd_to_or, baseline_risk, threshold_label,
-                                    out_path) {
+                                    out_path,
+                                    rare = NULL) {
 
   tpl_path <- system.file("templates", "analysis_script.R.tpl",
                           package = "pmatools")
@@ -452,7 +513,8 @@ export_bundle <- function(ma,
     outcome_name     = grade$outcome_name,
     per              = per,
     sof_prediction   = if (isTRUE(prediction)) "TRUE" else "FALSE",
-    convert_args     = .convert_args_str(convert_smd_to_or, baseline_risk, threshold_label)
+    convert_args     = .convert_args_str(convert_smd_to_or, baseline_risk, threshold_label),
+    rare_block       = .rare_script_block(rare)
   )
 
   rendered <- glue::glue_data(values, tpl, .open = "{{", .close = "}}",
@@ -464,6 +526,36 @@ export_bundle <- function(ma,
 
   writeLines(rendered, out_path)
   invisible(out_path)
+}
+
+.rare_script_block <- function(rare) {
+  if (is.null(rare) || !inherits(rare, "pma_rare_meta")) return("")
+  effect_scale <- rare$effect_scale %||% "OR"
+  primary_method <- rare$primary_method %||% "BB_CR"
+  paste0(
+    "\n# ----- 4b. Rare-events sensitivity analyses -----\n",
+    "rare <- run_rare_ma(\n",
+    "  data,\n",
+    "  effect_scale = ", shQuote(effect_scale), ",\n",
+    "  primary_method = ", shQuote(primary_method), "\n",
+    ")\n",
+    "rare_diag <- rare$diagnostics\n",
+    "rare_diag <- data.frame(\n",
+    "  metric = names(rare_diag),\n",
+    "  value = vapply(rare_diag, function(x) {\n",
+    "    if (is.atomic(x) && length(x) == 1L) as.character(x) else paste(x, collapse = '; ')\n",
+    "  }, character(1)),\n",
+    "  stringsAsFactors = FALSE\n",
+    ")\n",
+    "write.csv(rare_diag, \"rare_event_diagnostics.csv\", row.names = FALSE)\n",
+    "write.csv(as.data.frame(rare$method_table), \"rare_event_method_table.csv\", row.names = FALSE)\n",
+    "grDevices::pdf(\"rare_event_method_forest.pdf\", width = 8, height = 5)\n",
+    "plot_rare_sensitivity_forest(rare)\n",
+    "grDevices::dev.off()\n",
+    "grDevices::png(\"rare_event_method_forest.png\", width = 800, height = 500, res = 100)\n",
+    "plot_rare_sensitivity_forest(rare)\n",
+    "grDevices::dev.off()\n"
+  )
 }
 
 # Convert a {value, origin, col} spec (or plain value) to an R literal string

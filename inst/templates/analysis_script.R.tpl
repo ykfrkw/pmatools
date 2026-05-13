@@ -54,6 +54,7 @@ summary(g)
 # ----- 4. Plots -----
 plot_forest(ma, title = "{{outcome_name}}")
 plot_funnel(ma)
+{{rare_block}}
 
 # ----- 5. SoF table -----
 sof <- sof_table(g, per = {{per}}, prediction = {{sof_prediction}}{{convert_args}})
