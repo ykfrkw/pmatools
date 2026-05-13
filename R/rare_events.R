@@ -33,6 +33,20 @@ rare_event_diagnostics <- function(x,
 #' @param method.tau Between-study variance estimator for methods that use it.
 #' @param experimental_label,control_label Optional arm labels.
 #'
+#' @details
+#' The default primary method on the OR scale is \code{BB_CR} (beta-binomial
+#' with correlated responses via the \pkg{mmeta} Sarmanov model), with
+#' \code{MH_no_cc} as the automatic fallback when \pkg{mmeta} is missing or
+#' the model fails to converge. This default is an implementation choice,
+#' not an absolute endorsement: neither Efthimiou (2018, Evid Based Ment
+#' Health) nor Tsujimoto (2024, Res Synth Methods) singles out the
+#' beta-binomial as the recommended primary. Both papers treat MH without
+#' continuity correction, GLMM, and beta-binomial as defensible options to
+#' compare in a sensitivity analysis; the present function surfaces all of
+#' them in \code{method_table} so the analyst can prespecify a different
+#' primary via \code{primary_method = "MH_no_cc"} (or any other id) if the
+#' protocol calls for it.
+#'
 #' @return An object of class \code{pma_rare_meta}.
 #' @export
 run_rare_ma <- function(data,
@@ -355,9 +369,10 @@ plot_rare_sensitivity_forest <- function(x,
          method = "MH", sm = "OR", incr = 0, method.incr = "only0",
          MH.exact = TRUE, allstudies = TRUE, common = TRUE, random = FALSE,
          zero = "No continuity correction"),
-    list(id = "GLMM", label = "GLMM (one-stage logistic random effects)",
+    list(id = "GLMM", label = "GLMM (conditional hypergeometric-normal, exact)",
          method = "GLMM", sm = "OR", package = "metafor",
-         model.glmm = "UM.FS", common = FALSE, random = TRUE, method.tau = "ML",
+         extra_packages = "BiasedUrn",
+         model.glmm = "CM.EL", common = FALSE, random = TRUE, method.tau = "ML",
          zero = "No continuity correction"),
     list(id = "Peto", label = "Peto, common effect",
          method = "Peto", sm = "OR", common = TRUE, random = FALSE,
@@ -370,10 +385,11 @@ plot_rare_sensitivity_forest <- function(x,
          method = "Inverse", sm = "OR", incr = 0.5, method.incr = "only0",
          allstudies = TRUE, common = FALSE, random = TRUE, method.tau = "DL",
          zero = "Fixed 0.5 continuity correction"),
-    list(id = "MH_CC", label = "Mantel-Haenszel, fixed 0.5 correction",
+    list(id = "MH_CC",
+         label = "Mantel-Haenszel, fixed 0.5 correction (not recommended)",
          method = "MH", sm = "OR", incr = 0.5, method.incr = "only0",
          allstudies = TRUE, common = TRUE, random = FALSE,
-         zero = "Fixed 0.5 continuity correction")
+         zero = "Fixed 0.5 continuity correction (not recommended)")
   )
 }
 
@@ -382,6 +398,16 @@ plot_rare_sensitivity_forest <- function(x,
       !requireNamespace(spec$package, quietly = TRUE)) {
     return(list(spec = spec, meta = NULL,
                 error = sprintf("Package '%s' is not installed.", spec$package)))
+  }
+  if (!is.null(spec$extra_packages)) {
+    missing_pkg <- spec$extra_packages[!vapply(spec$extra_packages,
+      function(p) requireNamespace(p, quietly = TRUE), logical(1))]
+    if (length(missing_pkg) > 0L) {
+      return(list(spec = spec, meta = NULL,
+                  error = sprintf(
+                    "Package '%s' (required for %s) is not installed.",
+                    missing_pkg[[1]], spec$id)))
+    }
   }
 
   if (identical(spec$engine, "mmeta")) {

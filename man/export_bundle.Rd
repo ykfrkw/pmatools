@@ -10,7 +10,7 @@ export_bundle(
   output_dir = ".",
   bundle_name = "pmatools_results",
   include = c("data", "script", "results", "forest", "forest_rob", "funnel",
-    "grade_table"),
+    "funnel_trimfill", "pubias_missing_forest", "grade_table"),
   per = 1000,
   prediction = FALSE,
   convert_smd_to_or = FALSE,
@@ -24,7 +24,10 @@ export_bundle(
   ma_args = NULL,
   forest_display = NULL,
   rob = NULL,
-  forest_display_rob = NULL
+  forest_display_rob = NULL,
+  rare = NULL,
+  rare_forest_display = NULL,
+  pubias_missing_df = NULL
 )
 }
 \arguments{
@@ -74,6 +77,13 @@ when \code{"forest_rob"} is in \code{include} to render the stratified forest pl
 \item{forest_display_rob}{Optional named list of \code{plot_forest} arguments
 for the RoB-stratified forest plot bundled when \code{"forest_rob"} is in
 \code{include}. Same recognized names as \code{forest_display}.}
+
+\item{rare}{Optional \code{pma_rare_meta} object from
+\code{\link{run_rare_ma}}. When supplied, rare-event diagnostics,
+the method table, and the method-comparison forest plot are bundled.}
+
+\item{rare_forest_display}{Optional named list of display arguments for
+\code{\link{plot_rare_sensitivity_forest}}.}
 }
 \value{
 Character. Absolute path to the created ZIP file.
