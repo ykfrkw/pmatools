@@ -1023,6 +1023,7 @@ threshold_to_te_scale <- function(threshold, threshold_scale, sm) {
 ## 12. References
 
 - Guyatt G, et al. *Core GRADE 1: Overview*. BMJ 2025. PMID: 40262844.
+- Guyatt G, et al. *Core GRADE 2: Choosing the target of certainty rating and assessing imprecision*. BMJ 2025;389:e081904. doi:10.1136/bmj-2024-081904.
 - Guyatt G, et al. *Core GRADE 3: Inconsistency*. BMJ 2025. PMID: 40328467.
 - Guyatt G, et al. *Core GRADE 4: Risk of bias, publication bias*. BMJ 2025. PMID: 40360206.
 - Guyatt G, et al. *Core GRADE 5: Indirectness*. BMJ 2025. PMID: 40393729.

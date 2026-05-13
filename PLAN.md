@@ -13,6 +13,7 @@
 ## 参照文献
 
 - Core GRADE 1 (BMJ 2025): Overview - PMID 40262844
+- Core GRADE 2 (BMJ 2025): Imprecision - doi:10.1136/bmj-2024-081904
 - Core GRADE 3 (BMJ 2025): Inconsistency - PMID 40328467
 - Core GRADE 4 (BMJ 2025): Risk of Bias, Publication Bias - PMID 40360206
 - Core GRADE 5 (BMJ 2025): Indirectness - PMID 40393729

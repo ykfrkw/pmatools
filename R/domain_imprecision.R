@@ -1,17 +1,22 @@
 # domain_imprecision.R — 不精確性ドメイン自動評価
 #
-# BMJ 2025 Core GRADE 4: Imprecision
+# BMJ 2025 Core GRADE 2: Imprecision
 #
 # References:
+#   Guyatt G, Brignardello-Petersen R, Hultcrantz M, et al.
+#     Core GRADE 2: choosing the target of certainty rating and assessing
+#     imprecision. BMJ. 2025;389:e081904.
+#     doi:10.1136/bmj-2024-081904
 #   Zeng L, Brignardello-Petersen R, Hultcrantz M, et al.
 #     GRADE Guidance 34: update on rating imprecision using a minimally
-#     contextualised approach. BMJ. 2025;389:e083087. (PMID 40360206)
+#     contextualised approach. BMJ. 2025;389:e083087. (companion methodology
+#     paper)
 #   Guyatt GH, Oxman AD, Kunz R, et al. GRADE guidelines 6.
 #     Rating the quality of evidence — imprecision (Optimal Information
 #     Size). J Clin Epidemiol. 2011;64(12):1283-1293.
 #     doi:10.1016/j.jclinepi.2011.01.012 (PMID 21839614)
 #
-# 判定基準 (BMJ 2025 Core GRADE 4 / Zeng GRADE Guidance 34, 3-level):
+# 判定基準 (BMJ 2025 Core GRADE 2 / Zeng GRADE Guidance 34, 3-level):
 #
 #   No concern (-0)    : CI が null を跨がない かつ OIS を満たす（または未指定）
 #   Some concerns (-1) : CI が null を跨ぐ、または OIS を満たさない（30% 超）

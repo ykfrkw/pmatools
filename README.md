@@ -287,7 +287,7 @@ grade_meta(m, indirectness = indirectness_vec)       # per-study vector
 
 ---
 
-### 4. Imprecision (auto — BMJ Core GRADE 4)
+### 4. Imprecision (auto — BMJ Core GRADE 2)
 
 **Algorithm:**
 
