@@ -36,7 +36,7 @@ assess_pubias <- function(meta_obj,
                           pubias_funnel_asymmetry  = NULL,
                           pubias_unpublished       = NULL,
                           pubias_registry_complete = NULL) {
-  k <- meta_obj$k
+  k <- .pubias_effective_k(meta_obj)
   if (is.null(k) || is.na(k)) k <- 0L
 
   # --- Top-level: complete pre-registration coverage rules out pub bias -----
@@ -94,6 +94,15 @@ assess_pubias <- function(meta_obj,
       q1_note            = q1_note
     ))
   }
+}
+
+.pubias_effective_k <- function(meta_obj) {
+  te <- meta_obj$TE
+  se <- meta_obj$seTE
+  if (!is.null(te) && !is.null(se) && length(te) == length(se) && length(te) > 0L) {
+    return(sum(is.finite(te) & is.finite(se) & se > 0))
+  }
+  meta_obj$k %||% 0L
 }
 
 # --------------------------------------------------------------------------

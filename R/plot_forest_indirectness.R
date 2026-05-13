@@ -39,9 +39,10 @@ plot_forest_indirectness <- function(meta_obj, indirectness, ...) {
   indir_factor <- factor(indir_norm,
                          levels = c("low", "some", "high", "unknown"))
 
+  update_obj <- .subgroup_update_object(meta_obj)
   m_sg <- tryCatch(
     suppressWarnings(stats::update(
-      meta_obj,
+      update_obj,
       subgroup      = indir_factor,
       subgroup.name = "Indirectness"
     )),
@@ -53,6 +54,7 @@ plot_forest_indirectness <- function(meta_obj, indirectness, ...) {
     return(invisible(NULL))
   }
 
+  m_sg <- .restore_rare_overall(m_sg, meta_obj)
   plot_forest(m_sg, auto_layout = TRUE, ...)
   invisible(NULL)
 }
@@ -64,9 +66,9 @@ plot_forest_indirectness <- function(meta_obj, indirectness, ...) {
   out <- ifelse(
     is.na(v) | v == "" | v %in% c("na", "*", "?"),
     "unknown",
-    ifelse(v %in% c("l", "low"), "low",
-      ifelse(v %in% c("s", "some", "moderate", "m", "unclear"), "some",
-        ifelse(v %in% c("h", "high"), "high", "unknown")
+    ifelse(v %in% c("l", "low", "no"), "low",
+      ifelse(v %in% c("s", "some", "some_concerns", "moderate", "m", "unclear"), "some",
+        ifelse(v %in% c("h", "high", "serious", "very_serious"), "high", "unknown")
       )
     )
   )

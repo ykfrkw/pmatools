@@ -54,8 +54,24 @@ assess_imprecision <- function(meta_obj,
                                ois_sd             = NULL,
                                threshold_internal = NULL,
                                threshold_kind     = NULL) {
-  lower <- meta_obj$lower.random
-  upper <- meta_obj$upper.random
+  if (isTRUE(meta_obj$random)) {
+    lower <- meta_obj$lower.random
+    upper <- meta_obj$upper.random
+  } else {
+    lower <- meta_obj$lower.common
+    upper <- meta_obj$upper.common
+  }
+  if (is.null(lower) || is.null(upper) ||
+      length(lower) == 0L || length(upper) == 0L ||
+      !is.finite(lower) || !is.finite(upper)) {
+    if (isTRUE(meta_obj$random)) {
+      lower <- meta_obj$lower.common
+      upper <- meta_obj$upper.common
+    } else {
+      lower <- meta_obj$lower.random
+      upper <- meta_obj$upper.random
+    }
+  }
 
   if (is.null(lower) || is.null(upper) || is.na(lower) || is.na(upper)) {
     return(make_domain_row(

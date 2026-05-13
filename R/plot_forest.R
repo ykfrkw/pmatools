@@ -199,7 +199,8 @@ plot_forest <- function(meta_obj,
 
   if (!is.null(sm) && sm %in% c("OR", "RR", "HR", "RoM", "IRR")) {
     lo_e <- exp(lo); hi_e <- exp(hi)
-    finite_vals <- c(lo_e[is.finite(lo_e)], hi_e[is.finite(hi_e)])
+    finite_vals <- c(lo_e[is.finite(lo_e) & lo_e > 0],
+                     hi_e[is.finite(hi_e) & hi_e > 0])
     if (length(finite_vals) == 0) return(NULL)
     qrange <- stats::quantile(finite_vals, c(0.05, 0.95), na.rm = TRUE)
     out <- c(qrange[1], qrange[2])
@@ -220,6 +221,8 @@ plot_forest <- function(meta_obj,
            0.1, 0.2, 0.5, 1, 2, 5,
            10, 20, 50, 100, 200, 500, 1000)
   lo <- xlim[1]; hi <- xlim[2]
+  if (!is.finite(lo) || lo <= 0) lo <- min(std)
+  if (!is.finite(hi) || hi <= lo) hi <- max(lo * 10, 1)
   xmin <- max(std[std <= lo], na.rm = TRUE)
   xmax <- min(std[std >= hi], na.rm = TRUE)
   if (!is.finite(xmin)) xmin <- min(std)

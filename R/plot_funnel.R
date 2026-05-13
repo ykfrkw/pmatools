@@ -37,8 +37,17 @@ plot_funnel <- function(meta_obj,
     on.exit(graphics::par(par_old), add = TRUE)
   }
 
+  meta_plot <- .finite_funnel_meta(meta_obj)
+  if (is.null(meta_plot) || (meta_plot$k %||% 0L) < 2L) {
+    .draw_funnel_unavailable(
+      "Funnel plot not available",
+      "Fewer than 2 finite study-level effect estimates."
+    )
+    return(invisible(NULL))
+  }
+
   args <- list(
-    x       = meta_obj,
+    x       = meta_plot,
     contour = contour,
     ...
   )
@@ -47,6 +56,13 @@ plot_funnel <- function(meta_obj,
     do.call(meta::funnel, args),
     error = function(e) NULL
   )
+  if (is.null(res)) {
+    .draw_funnel_unavailable(
+      "Funnel plot not available",
+      "meta::funnel() could not draw this analysis."
+    )
+    return(invisible(NULL))
+  }
 
   # Annotation swatch palette. Innermost (p > 0.10) is white. The remaining
   # non-white zones go innermost -> outermost as DARK -> LIGHT, mirroring the
@@ -84,7 +100,7 @@ plot_funnel <- function(meta_obj,
   zone_fills   <- c(zone_fills,   NA)
   zone_borders <- c(zone_borders, NA)
 
-  egger_label <- if (isTRUE(show_egger)) .egger_label(meta_obj) else NULL
+  egger_label <- if (isTRUE(show_egger)) .egger_label(meta_plot) else NULL
   if (!is.null(egger_label)) {
     zone_labels  <- c(zone_labels,  egger_label)
     zone_fills   <- c(zone_fills,   NA)
@@ -110,6 +126,37 @@ plot_funnel <- function(meta_obj,
     inset    = 0.02
   )
 
+  invisible(NULL)
+}
+
+.finite_funnel_meta <- function(meta_obj) {
+  te <- meta_obj$TE
+  se <- meta_obj$seTE
+  if (is.null(te) || is.null(se) || length(te) != length(se)) return(NULL)
+  keep <- is.finite(te) & is.finite(se) & se > 0
+  if (sum(keep) == length(te)) {
+    meta_obj$k <- sum(keep)
+    return(meta_obj)
+  }
+  if (sum(keep) < 2L) return(NULL)
+
+  out <- meta_obj
+  n <- length(keep)
+  for (nm in names(out)) {
+    v <- out[[nm]]
+    if (is.atomic(v) && length(v) == n) {
+      out[[nm]] <- v[keep]
+    }
+  }
+  out$k <- sum(keep)
+  out$k.TE <- sum(keep)
+  out$k.all <- sum(keep)
+  out
+}
+
+.draw_funnel_unavailable <- function(main, sub = NULL) {
+  graphics::plot.new()
+  graphics::title(main = main, sub = sub)
   invisible(NULL)
 }
 

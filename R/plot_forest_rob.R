@@ -37,9 +37,10 @@ plot_forest_rob <- function(meta_obj, rob, ...) {
   rob_factor <- factor(rob_norm,
                        levels = c("low", "some", "high", "unknown"))
 
+  update_obj <- .subgroup_update_object(meta_obj)
   m_sg <- tryCatch(
     suppressWarnings(stats::update(
-      meta_obj,
+      update_obj,
       subgroup      = rob_factor,
       subgroup.name = "Risk of bias"
     )),
@@ -51,6 +52,7 @@ plot_forest_rob <- function(meta_obj, rob, ...) {
     return(invisible(NULL))
   }
 
+  m_sg <- .restore_rare_overall(m_sg, meta_obj)
   plot_forest(m_sg, auto_layout = TRUE, ...)
   invisible(NULL)
 }
@@ -61,11 +63,37 @@ plot_forest_rob <- function(meta_obj, rob, ...) {
   out <- ifelse(
     is.na(x) | x == "" | x %in% c("na", "*", "?"),
     "unknown",
-    ifelse(x %in% c("l", "low"), "low",
-      ifelse(x %in% c("s", "some", "moderate", "m", "unclear"), "some",
-        ifelse(x %in% c("h", "high"), "high", "unknown")
+    ifelse(x %in% c("l", "low", "no"), "low",
+      ifelse(x %in% c("s", "some", "some_concerns", "moderate", "m", "unclear"), "some",
+        ifelse(x %in% c("h", "high", "serious", "very_serious"), "high", "unknown")
       )
     )
   )
   out
+}
+
+.subgroup_update_object <- function(meta_obj) {
+  obj <- meta_obj
+  if (identical(attr(obj, "pma_rare_engine"), "mmeta") &&
+      !is.null(obj$method) &&
+      !(obj$method %in% c("Inverse", "MH", "Peto", "GLMM", "LRP", "SSW"))) {
+    obj$method <- "MH"
+  }
+  obj
+}
+
+.restore_rare_overall <- function(m_sg, meta_obj) {
+  if (!identical(attr(meta_obj, "pma_rare_engine"), "mmeta")) return(m_sg)
+  for (nm in c("TE.common", "seTE.common", "lower.common", "upper.common",
+               "statistic.common", "pval.common", "text.common",
+               "common", "random", "overall")) {
+    if (!is.null(meta_obj[[nm]])) m_sg[[nm]] <- meta_obj[[nm]]
+  }
+  m_sg$k <- length(m_sg$studlab)
+  m_sg$k.TE <- length(m_sg$studlab)
+  m_sg$k.all <- length(m_sg$studlab)
+  attr(m_sg, "pma_rare_engine") <- attr(meta_obj, "pma_rare_engine")
+  attr(m_sg, "pma_rare_method") <- attr(meta_obj, "pma_rare_method")
+  attr(m_sg, "pma_rare_model") <- attr(meta_obj, "pma_rare_model")
+  m_sg
 }

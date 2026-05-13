@@ -187,18 +187,43 @@ assess_rob <- function(rob, meta_obj,
   te_vec  <- meta_obj$TE
   se_vec  <- meta_obj$seTE
   if (!is.null(te_vec) && length(te_vec) != n_total) {
-    keep <- is.finite(te_vec)
+    keep <- !is.na(te_vec)
     if (sum(keep) == n_total) {
       te_vec <- te_vec[keep]
       if (!is.null(se_vec) && length(se_vec) == length(meta_obj$TE)) {
         se_vec <- se_vec[keep]
       }
+    } else {
+      keep <- is.finite(te_vec)
+      if (sum(keep) == n_total) {
+        te_vec <- te_vec[keep]
+        if (!is.null(se_vec) && length(se_vec) == length(meta_obj$TE)) {
+          se_vec <- se_vec[keep]
+        }
+      }
+    }
+  }
+
+  if (isTRUE(meta_obj$random)) {
+    te_all <- meta_obj$TE.random
+    se_all <- meta_obj$seTE.random
+  } else {
+    te_all <- meta_obj$TE.common
+    se_all <- meta_obj$seTE.common
+  }
+  if (is.null(te_all) || length(te_all) == 0L || !is.finite(te_all)) {
+    if (isTRUE(meta_obj$random)) {
+      te_all <- meta_obj$TE.common
+      se_all <- meta_obj$seTE.common
+    } else {
+      te_all <- meta_obj$TE.random
+      se_all <- meta_obj$seTE.random
     }
   }
 
   dir <- .assess_bias_direction(
-    te_all              = meta_obj$TE.random,
-    se_all              = meta_obj$seTE.random,
+    te_all              = te_all,
+    se_all              = se_all,
     te_vec              = te_vec,
     se_vec              = se_vec,
     low_idx             = !high_idx,
@@ -289,9 +314,46 @@ assess_rob <- function(rob, meta_obj,
     ))
   }
 
-  # TE_low: inverse-variance weighted mean of low-RoB studies
-  w_low  <- 1 / se_vec[low_idx]^2
-  te_low <- sum(w_low * te_vec[low_idx]) / sum(w_low)
+  usable <- is.finite(te_vec) & is.finite(se_vec) & se_vec > 0
+  if (length(usable) != length(low_idx) || !any(usable)) {
+    return(list(
+      judgment = "some_concerns",
+      note     = paste0(
+        "Risk-of-bias direction check not assessable because study-level ",
+        "effects are sparse or non-finite. Rate down 1 level ",
+        "(some concerns). ", sm_label, "(all) = ", .disp(te_all), ". ",
+        threshold_note, "."
+      )
+    ))
+  }
+
+  low_usable <- low_idx & usable
+  if (!any(low_usable)) {
+    return(list(
+      judgment = "some_concerns",
+      note     = paste0(
+        "Risk-of-bias direction check not assessable because no finite ",
+        "low/some-RoB comparator studies remain after sparse-data filtering. ",
+        "Rate down 1 level (some concerns). ", sm_label, "(all) = ",
+        .disp(te_all), ". ", threshold_note, "."
+      )
+    ))
+  }
+
+  # TE_low: inverse-variance weighted mean of finite low/some-RoB studies.
+  w_low  <- 1 / se_vec[low_usable]^2
+  te_low <- sum(w_low * te_vec[low_usable]) / sum(w_low)
+  if (!is.finite(te_low)) {
+    return(list(
+      judgment = "some_concerns",
+      note     = paste0(
+        "Risk-of-bias direction check not assessable because the finite ",
+        "low/some-RoB comparator estimate could not be computed. Rate down ",
+        "1 level (some concerns). ", sm_label, "(all) = ", .disp(te_all),
+        ". ", threshold_note, "."
+      )
+    ))
+  }
 
   za <- zone_of(te_all)
   zl <- zone_of(te_low)
