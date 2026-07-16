@@ -38,8 +38,10 @@ step1_ui <- function() {
       ),
       shiny::conditionalPanel(
         "input.input_method == 'file'",
-        shiny::fileInput("data_file", "Choose a .csv, .tsv, or .xlsx",
-                         accept = c(".csv", ".tsv", ".xlsx"))
+        shiny::fileInput("data_file", "Choose a .csv, .tsv, or .xlsx (max 10 MB)",
+                         accept = c(".csv", ".tsv", ".xlsx")),
+        htmltools::p(class = "pma-card-subtitle",
+                     "Files larger than 10 MB are rejected by the server.")
       ),
       shiny::conditionalPanel(
         "input.input_method == 'paste'",
@@ -147,7 +149,30 @@ step1_server <- function(input, output, session, state) {
     }
   }, ignoreInit = TRUE)
 
-  # Load raw data based on input_method
+  # Run a read expression, converting parse failures into the same
+  # list(error = ...) shape that ingested() already surfaces to the user,
+  # instead of letting a raw R error crash the reactive chain.
+  .read_or_error <- function(what, expr) {
+    tryCatch(
+      expr,
+      error = function(e) {
+        list(error = paste0(
+          "Could not read the ", what, ": ", conditionMessage(e), ". ",
+          "Check that the input is plain tabular data with a single header ",
+          "row (long format: one row per study x arm)."
+        ))
+      }
+    )
+  }
+
+  # Count occurrences of a single character in a string (0 when absent).
+  .count_char <- function(x, ch) {
+    m <- gregexpr(ch, x, fixed = TRUE)[[1]]
+    if (m[1] == -1L) 0L else length(m)
+  }
+
+  # Load raw data based on input_method. Returns a data.frame, NULL (no
+  # source selected yet), or list(error = <message>) on a read failure.
   raw <- shiny::reactive({
     method <- input$input_method
     if (is.null(method) || !length(method) || !nzchar(method)) return(NULL)
@@ -164,24 +189,48 @@ step1_server <- function(input, output, session, state) {
         path <- system.file("extdata", file, package = "pmatools")
         if (!nzchar(path)) return(NULL)
       }
-      utils::read.csv(path, stringsAsFactors = FALSE)
+      .read_or_error("bundled sample dataset",
+                     utils::read.csv(path, stringsAsFactors = FALSE))
     } else if (method == "file") {
       f <- input$data_file
       if (is.null(f)) return(NULL)
       ext <- tolower(tools::file_ext(f$name))
-      if (ext == "csv") utils::read.csv(f$datapath, stringsAsFactors = FALSE)
-      else if (ext == "tsv") utils::read.delim(f$datapath, stringsAsFactors = FALSE)
-      else if (ext %in% c("xlsx", "xls")) {
-        if (requireNamespace("readxl", quietly = TRUE))
-          as.data.frame(readxl::read_excel(f$datapath), stringsAsFactors = FALSE)
-        else NULL
-      } else NULL
+      if (ext == "csv") {
+        .read_or_error(".csv file",
+                       utils::read.csv(f$datapath, stringsAsFactors = FALSE))
+      } else if (ext == "tsv") {
+        .read_or_error(".tsv file",
+                       utils::read.delim(f$datapath, stringsAsFactors = FALSE))
+      } else if (ext %in% c("xlsx", "xls")) {
+        if (!requireNamespace("readxl", quietly = TRUE)) {
+          return(list(error = paste0(
+            "The readxl package is required to read .xlsx files, but it is ",
+            "not installed on this server. Please save the sheet as .csv ",
+            "and upload that instead."
+          )))
+        }
+        .read_or_error(".xlsx file",
+                       as.data.frame(readxl::read_excel(f$datapath),
+                                     stringsAsFactors = FALSE))
+      } else {
+        list(error = paste0(
+          "Unsupported file extension '.", ext,
+          "'. Please upload a .csv, .tsv, or .xlsx file."
+        ))
+      }
     } else if (method == "paste") {
       txt <- input$data_paste
       if (is.null(txt) || !nzchar(trimws(txt))) return(NULL)
-      sep <- if (grepl("\t", strsplit(txt, "\n", fixed = TRUE)[[1]][1])) "\t" else ","
-      utils::read.table(text = txt, sep = sep, header = TRUE,
-                        stringsAsFactors = FALSE, na.strings = c("", "NA", "."))
+      # Sniff the delimiter over the WHOLE pasted block (the first line
+      # alone is fragile, e.g. a stray comma in the header of otherwise
+      # tab-separated data). Tabs win ties because Excel pastes tabs.
+      n_tab   <- .count_char(txt, "\t")
+      n_comma <- .count_char(txt, ",")
+      sep <- if (n_tab >= n_comma && n_tab > 0L) "\t" else ","
+      .read_or_error("pasted text",
+                     utils::read.table(text = txt, sep = sep, header = TRUE,
+                                       stringsAsFactors = FALSE,
+                                       na.strings = c("", "NA", ".")))
     } else NULL
   })
 
@@ -192,6 +241,10 @@ step1_server <- function(input, output, session, state) {
     state$data_edits <- NULL
     if (is.null(df)) {
       return(list(error = "No data source selected, or the selected source is empty."))
+    }
+    # Read-stage failure from raw(): forward the friendly error as is.
+    if (!is.data.frame(df) && is.list(df) && !is.null(df$error)) {
+      return(df)
     }
     tryCatch(
       withCallingHandlers(

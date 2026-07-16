@@ -13,6 +13,10 @@ library(htmltools)
 library(DT)
 library(flextable)
 
+# Cap uploads at 10 MB (shinyapps.io free tier is memory-constrained; a
+# study-level long-format table should never come close to this).
+options(shiny.maxRequestSize = 10 * 1024^2)
+
 # Source vendored pmatools (~17 files); order doesn't matter because each
 # file defines functions only.
 for (f in list.files("R/_pmatools", pattern = "\\.R$", full.names = TRUE)) {
@@ -115,7 +119,7 @@ server <- function(input, output, session) {
   output$step_body <- shiny::renderUI({
     switch(state$step,
       `1` = step1_ui(),
-      `2` = step2_ui(),
+      `2` = step2_ui(state),
       `3` = step3_ui(),
       `4` = step4_ui(),
       step1_ui()
