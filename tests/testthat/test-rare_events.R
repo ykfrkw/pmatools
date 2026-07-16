@@ -62,5 +62,5 @@ test_that("rare MA returns method table and sensitivity forest renders", {
   expect_true(grep("Fixed|Treatment-arm", rare$method_table$zero_cell_handling)[1] >
                 grep("Peto", rare$method_table$method_id))
 
-  expect_silent(plot_rare_sensitivity_forest(rare))
+  with_null_device(expect_silent(plot_rare_sensitivity_forest(rare)))
 })

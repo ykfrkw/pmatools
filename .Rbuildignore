@@ -1,2 +1,12 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^SPEC\.md$
+^PLAN\.md$
+^sample\.R$
+^manuscript$
+^data-raw$
+^gitignore$
+^outputs$
+\.DS_Store$
+^~\$
+Rplots\.pdf$

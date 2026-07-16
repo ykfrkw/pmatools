@@ -21,6 +21,12 @@ pmatools.Rproj
 .RData
 .Ruserdata
 
+# Default graphics device output leaked by tests / interactive plotting
+Rplots.pdf
+
+# MS Word lock files
+~$*
+
 # Generated output (reproduced by sample.R)
 outputs/
 
