@@ -1,0 +1,28 @@
+Type: Project
+Package: pairwise.meta.analysis.app
+Title: pmatools wizard (Shiny app for pairwise MA + GRADE)
+Version: 2.1.0
+Authors@R: person("Yuki", "Furukawa", email = "furukawa.y.psy@gmail.com",
+                  role = c("aut", "cre"))
+Description: 4-step wizard around the pmatools sources (vendored under
+    R/_pmatools/ rather than installed from a package, to bypass the
+    shinyapps.io build server's stale GITHUB_PAT). Deployed on
+    shinyapps.io.
+License: CC BY 4.0
+Imports:
+    shiny,
+    bslib,
+    htmltools,
+    DT,
+    flextable,
+    meta,
+    brglm2,
+    metafor,
+    mmeta,
+    tibble,
+    dplyr,
+    rlang,
+    glue,
+    zip,
+    officer,
+    magick

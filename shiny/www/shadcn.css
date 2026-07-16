@@ -1,0 +1,416 @@
+/* shadcn-style design tokens for pairwise_meta_analysis (bslib + custom CSS) */
+
+:root {
+  --background:               0 0% 100%;
+  --foreground:               222 47% 11%;
+  --card:                     0 0% 100%;
+  --card-foreground:          222 47% 11%;
+  --primary:                  222 47% 11%;
+  --primary-foreground:       210 40% 98%;
+  --secondary:                210 40% 96%;
+  --secondary-foreground:     222 47% 11%;
+  --muted:                    210 40% 96%;
+  --muted-foreground:         215 16% 47%;
+  --accent:                   210 40% 96%;
+  --accent-foreground:        222 47% 11%;
+  --destructive:              0 84% 60%;
+  --destructive-foreground:   210 40% 98%;
+  --border:                   214 32% 91%;
+  --input:                    214 32% 91%;
+  --ring:                     222 47% 11%;
+  --radius:                   0.5rem;
+
+  /* GRADE certainty palette (CINeMA pastel; matches pmatools SoF) */
+  --grade-high-bg:      #d7e8d3;  --grade-high-fg:      #238b21;
+  --grade-moderate-bg:  #cccce9;  --grade-moderate-fg:  #01008b;
+  --grade-low-bg:       #f8edd7;  --grade-low-fg:       #daa521;
+  --grade-vlow-bg:      #e8d0d0;  --grade-vlow-fg:      #8b0000;
+
+  --rob-low-bg:    var(--grade-high-bg);    --rob-low-fg:    var(--grade-high-fg);
+  --rob-some-bg:   var(--grade-low-bg);     --rob-some-fg:   var(--grade-low-fg);
+  --rob-high-bg:   var(--grade-vlow-bg);    --rob-high-fg:   var(--grade-vlow-fg);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: var(--font-sans);
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.container-fluid { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+
+h1, h2, h3, h4, h5 { color: hsl(var(--foreground)); }
+h2 { font-size: 1.5rem; margin-bottom: 0.75rem; }
+h3 { font-size: 1.25rem; }
+h5 { font-size: 0.95rem; margin-top: 0.75rem; margin-bottom: 0.4rem; }
+
+/* Card */
+.pma-card {
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+.pma-card-header   { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
+.pma-card-subtitle { font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.75rem; }
+
+#rare-events-detected-card {
+  background: #fff8e6;
+  border-color: #efd99c;
+  box-shadow: inset 4px 0 0 #d99a21;
+}
+#rare-events-detected-card .pma-card-header {
+  color: #111827;
+}
+#rare-events-detected-card .selectize-control,
+#rare-events-detected-card .selectize-input {
+  width: 100%;
+}
+#rare-events-detected-card .rare-primary-method,
+#rare-events-detected-card .rare-primary-method .form-group,
+#rare-events-detected-card .rare-primary-method select {
+  width: 100%;
+}
+#rare-events-detected-card .rare-primary-method select {
+  min-width: min(22rem, 100%);
+  max-width: 100%;
+  white-space: nowrap;
+}
+#rare-events-detected-card .selectize-input > .item {
+  display: block;
+  max-width: calc(100% - 1.4rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Step header */
+.pma-step-header { margin-bottom: 1.25rem; }
+.pma-why { font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-top: 0.5rem; }
+
+/* Badge */
+.pma-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.pma-badge.grade-high     { background: var(--grade-high-bg);     color: var(--grade-high-fg); }
+.pma-badge.grade-moderate { background: var(--grade-moderate-bg); color: var(--grade-moderate-fg); }
+.pma-badge.grade-low      { background: var(--grade-low-bg);      color: var(--grade-low-fg); }
+.pma-badge.grade-vlow     { background: var(--grade-vlow-bg);     color: var(--grade-vlow-fg); }
+
+/* Stepper */
+.pma-stepper { display: flex; gap: 0.4rem; margin-bottom: 1.5rem; align-items: center;
+               font-size: 0.85rem; flex-wrap: wrap; }
+.pma-step    { display: inline-flex; align-items: center; gap: 0.4rem;
+               color: hsl(var(--muted-foreground));
+               padding: 0.25rem 0.5rem; border-radius: var(--radius);
+               transition: background 0.15s ease; }
+.pma-step:hover { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
+.pma-step.current { color: hsl(var(--foreground)); font-weight: 600;
+                    background: hsl(var(--muted)); }
+.pma-step.done    { color: var(--grade-high-fg); }
+.pma-step .num    { width: 1.4rem; height: 1.4rem; border-radius: 9999px;
+                     display: inline-flex; align-items: center; justify-content: center;
+                     background: hsl(var(--muted)); font-weight: 600; }
+.pma-step.current .num { background: hsl(var(--primary));
+                          color: hsl(var(--primary-foreground)); }
+.pma-step.done    .num { background: var(--grade-high-bg);
+                          color: var(--grade-high-fg); }
+.pma-step .sep    { color: hsl(var(--muted-foreground)); margin: 0 0.15rem;
+                    align-self: center; }
+/* Action-link styling: kill default underline, keep colours from .pma-step */
+.pma-stepper a.action-button { color: inherit; }
+.pma-stepper a.action-button:hover { text-decoration: none; }
+
+/* Banner */
+.pma-banner {
+  background: var(--grade-low-bg);
+  border-left: 4px solid var(--grade-low-fg);
+  color: var(--grade-low-fg);
+  padding: 0.7rem 1rem;
+  border-radius: var(--radius);
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+/* How-this-is-judged block */
+.pma-how p { margin: 0.25rem 0 0.75rem 0; line-height: 1.5; font-size: 0.9rem; }
+
+/* Inline help icon */
+.pma-help { color: hsl(var(--muted-foreground)); cursor: help; margin-left: 0.25rem; font-size: 0.8rem; }
+.pma-help:hover { color: hsl(var(--foreground)); }
+
+/* Buttons (work alongside bslib bs5 .btn) */
+.btn-primary {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.btn-primary:hover, .btn-primary:focus {
+  background: hsl(var(--primary)) !important;
+  filter: brightness(1.1);
+  color: hsl(var(--primary-foreground)) !important;
+}
+.btn-secondary {
+  background: hsl(var(--secondary));
+  border-color: hsl(var(--border));
+  color: hsl(var(--secondary-foreground));
+}
+
+/* Verbatim text styling */
+pre, code {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  background: hsl(var(--muted));
+  border-radius: 4px;
+  padding: 0.5rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Details/summary */
+details {
+  margin-top: 0.75rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  background: hsl(var(--muted));
+}
+details summary {
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: hsl(var(--foreground));
+  padding: 0.2rem 0;
+}
+details > div { padding-top: 0.75rem; }
+
+/* DT table tweaks */
+table.dataTable th { background: hsl(var(--muted)); }
+
+/* Phase 6: Sticky Final certainty + summary bar + accordion */
+.pma-sticky-cert {
+  position: sticky;
+  top: 0.5rem;
+  z-index: 100;
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  padding: 0.6rem 0.85rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+.pma-sticky-cert .pma-cert-label {
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pma-summary-bar {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  padding: 0.55rem 0.85rem;
+  background: hsl(var(--muted));
+  border-radius: var(--radius);
+  margin-bottom: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88rem;
+}
+.pma-stat { white-space: nowrap; }
+.pma-stat strong { color: hsl(var(--primary)); font-weight: 600; }
+
+.pma-accordion-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.pma-accordion-title > .pma-domain-name {
+  font-weight: 500;
+  flex: 0 0 auto;
+}
+.pma-badge.pma-chip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  padding: 0.05rem 0.4rem;
+}
+
+/* Phase 7: Forest plot trimmed image and copy-button overlay */
+.pma-forest-image,
+.shiny-image-output {
+  display: block;
+}
+.pma-forest-image img,
+.shiny-image-output img {
+  max-width: 900px;
+  width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.pma-results-wrap {
+  position: relative;
+}
+.pma-results-wrap .pma-copy-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 10;
+}
+.pma-results-wrap pre {
+  padding-top: 2.5rem;
+}
+
+/* Per-study edit accordion (RoB / Indirectness in Step 3) -------------- */
+.pma-edit-details {
+  margin: 1rem 0;
+  border: 1px dashed hsl(var(--border));
+  border-radius: var(--radius);
+  background: hsl(var(--muted) / 0.4);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.pma-edit-details[open] {
+  background: hsl(var(--background));
+  border-style: solid;
+  border-color: hsl(var(--primary) / 0.4);
+}
+.pma-edit-summary {
+  cursor: pointer;
+  padding: 0.6rem 0.9rem;
+  list-style: none;
+  user-select: none;
+  font-size: 0.92rem;
+  color: hsl(var(--foreground));
+  display: flex;
+  align-items: center;
+}
+.pma-edit-summary::-webkit-details-marker { display: none; }
+.pma-edit-summary::before {
+  content: "\25B6";
+  font-size: 0.7rem;
+  margin-right: 0.45rem;
+  color: hsl(var(--muted-foreground));
+  transition: transform 0.15s ease;
+}
+.pma-edit-details[open] > .pma-edit-summary::before {
+  transform: rotate(90deg);
+}
+.pma-edit-summary:hover {
+  color: hsl(var(--primary));
+}
+.pma-edit-hint {
+  color: hsl(var(--muted-foreground));
+  font-weight: 400;
+  font-size: 0.85rem;
+  margin-left: 0.4rem;
+}
+.pma-edit-body {
+  padding: 0.5rem 0.9rem 0.9rem 0.9rem;
+  border-top: 1px solid hsl(var(--border));
+}
+
+/* ---------------------------------------------------------------------------
+   Form-control labels: keep input labels and option labels aligned cleanly
+   so wrapped text uses a hanging indent (does not flow under the radio /
+   checkbox circle) and short widget labels do not break unnecessarily.
+   --------------------------------------------------------------------------- */
+
+/* Top-level widget label (above the input) */
+.shiny-input-container > label,
+.form-group > label {
+  display: block;
+  white-space: normal;
+  line-height: 1.35;
+  margin-bottom: 0.25rem;
+}
+
+/* Option label (radio, checkbox group): radio circle + text laid out as a
+   flex row so wrapped lines indent past the circle instead of flowing
+   underneath it. */
+.shiny-options-group .radio,
+.shiny-options-group .checkbox {
+  display: block;
+  margin: 0.15rem 0;
+}
+.shiny-options-group .radio > label,
+.shiny-options-group .checkbox > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  line-height: 1.4;
+  margin: 0;
+  padding: 0;
+  font-weight: 400;
+}
+.shiny-options-group .radio > label > input,
+.shiny-options-group .checkbox > label > input {
+  margin-top: 0.25rem;
+  flex: 0 0 auto;
+}
+.shiny-options-group .radio > label > span,
+.shiny-options-group .checkbox > label > span {
+  flex: 1 1 auto;
+}
+
+/* Compact toggle switch for binary workflow settings. */
+.pma-switch-row .checkbox > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 1.6rem;
+}
+.pma-switch-row .checkbox > label > input[type="checkbox"] {
+  appearance: none;
+  width: 2.5rem;
+  height: 1.35rem;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted));
+  position: relative;
+  margin: 0;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.pma-switch-row .checkbox > label > input[type="checkbox"]::before {
+  content: "";
+  position: absolute;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 9999px;
+  left: 0.12rem;
+  top: 0.11rem;
+  background: white;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
+  transition: transform 0.15s ease;
+}
+.pma-switch-row .checkbox > label > input[type="checkbox"]:checked {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+}
+.pma-switch-row .checkbox > label > input[type="checkbox"]:checked::before {
+  transform: translateX(1.1rem);
+}
+
+/* details > summary: keep the title on one line where possible */
+details > summary {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
