@@ -24,9 +24,13 @@
 #'   `TRUE` if k >= 3, else `FALSE`.
 #' @param incr Continuity correction for zero events (binary). Default 0.5.
 #' @param subgroup Optional column name in `data` for subgroup analysis.
-#' @param experimental_label,control_label Values of `treat` identifying arms.
-#'   If NULL, the function looks for `"experimental"`/`"control"` first;
-#'   otherwise picks two distinct values from `treat`.
+#' @param experimental_label,control_label Values of `treat` identifying the
+#'   intervention (experimental) and comparator (control) arms. Supplied values
+#'   must exist in `data$treat` and be distinct. If NULL, the function looks
+#'   for `"experimental"`/`"control"` first; with exactly two other treat
+#'   values it falls back to alphabetical assignment (first = control,
+#'   second = experimental) and emits a warning, because the effect direction
+#'   depends on this choice.
 #'
 #' @return An object of class `meta` (from the \{meta\} package).
 #'
@@ -154,6 +158,32 @@ run_ma <- function(data,
 
   treats <- unique(data$treat)
 
+  # Validate user-supplied arm labels (exist in data, distinct)
+  for (lbl in list(list(experimental_label, "experimental_label"),
+                   list(control_label,      "control_label"))) {
+    if (!is.null(lbl[[1]]) && !lbl[[1]] %in% treats) {
+      rlang::abort(sprintf(
+        "%s = '%s' not found in treat values: %s.",
+        lbl[[2]], lbl[[1]], paste(treats, collapse = ", ")
+      ))
+    }
+  }
+  if (!is.null(experimental_label) && !is.null(control_label) &&
+      identical(experimental_label, control_label)) {
+    rlang::abort(
+      "experimental_label and control_label must be distinct treat values."
+    )
+  }
+
+  # If only one label is supplied and there are exactly 2 groups, infer the other
+  if (xor(is.null(experimental_label), is.null(control_label)) &&
+      length(treats) == 2) {
+    supplied <- experimental_label %||% control_label
+    other    <- setdiff(treats, supplied)
+    if (is.null(experimental_label)) experimental_label <- other
+    if (is.null(control_label))      control_label      <- other
+  }
+
   if (is.null(experimental_label) || is.null(control_label)) {
     if (all(c("experimental", "control") %in% treats)) {
       experimental_label <- "experimental"
@@ -163,6 +193,16 @@ run_ma <- function(data,
       sorted <- sort(treats)
       control_label      <- sorted[1]
       experimental_label <- sorted[2]
+      rlang::warn(sprintf(
+        paste0(
+          "Treat labels do not include 'experimental'/'control'; arms were ",
+          "assigned alphabetically: control = '%s', experimental = '%s'. ",
+          "The pooled effect direction depends on this assignment. ",
+          "If it is wrong, set experimental_label/control_label in run_ma() ",
+          "(or ingest_data())."
+        ),
+        control_label, experimental_label
+      ))
     } else {
       rlang::abort(paste0(
         "Cannot infer experimental vs control arms from treat values: ",

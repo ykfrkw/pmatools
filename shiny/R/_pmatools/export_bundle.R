@@ -21,6 +21,16 @@
 #'   when \code{convert_smd_to_or = TRUE}.
 #' @param threshold_label Optional free-text label describing the
 #'   dichotomisation threshold.
+#' @param chinn_invert Logical (default \code{FALSE}). Passed to
+#'   \code{\link{sof_table}}: flips the SMD sign before applying Chinn's
+#'   formula so that a negative-is-better SMD yields OR > 1 in the
+#'   dichotomised rate columns. Only relevant when
+#'   \code{convert_smd_to_or = TRUE}.
+#' @param other_text Optional free-text "Other considerations" note passed to
+#'   \code{\link{evidence_profile}} for the bundled `grade_table.docx`.
+#' @param other_downgrade Integer \code{0}/\code{-1}/\code{-2} (default
+#'   \code{0L}). Extra downgrade applied on top of the automatic domain
+#'   calculations; passed to \code{\link{evidence_profile}}.
 #' @param data Optional canonical long-format tibble from
 #'   \code{\link{ingest_data}}; if provided, written to `data_long.csv`. If
 #'   NULL, the function attempts to reconstruct from `ma$data`.
@@ -44,6 +54,10 @@
 #'   the method table, and the method-comparison forest plot are bundled.
 #' @param rare_forest_display Optional named list of display arguments for
 #'   \code{\link{plot_rare_sensitivity_forest}}.
+#' @param pubias_missing_df Optional data.frame of studies with unavailable
+#'   results, with columns `studlab`, `n`, and `results_known`; forwarded to
+#'   \code{\link{plot_forest_pubias_subgroup}} when
+#'   `"pubias_missing_forest"` is in `include` (rendered only when k >= 10).
 #'
 #' @return Character. Absolute path to the created ZIP file.
 #'
@@ -493,6 +507,8 @@ export_bundle <- function(ma,
     hakn             = if (isTRUE(ma$hakn))       "TRUE" else "FALSE",
     prediction       = if (isTRUE(ma$prediction)) "TRUE" else "FALSE",
     incr             = ma$incr %||% 0.5,
+    arm_labels_arg   = .arm_labels_arg(ma_args$experimental_label,
+                                       ma_args$control_label),
     subgroup_arg     = .subgroup_arg(ma_args$subgroup),
     study_design     = grade$study_design,
     rob_arg          = .arg_lit(grade_args$rob,                    fallback = "NULL"),
@@ -501,16 +517,36 @@ export_bundle <- function(ma,
     small_values_arg = .arg_lit(grade_args$small_values,           fallback = "NULL"),
     indirectness_arg = .arg_lit(grade_args$indirectness,           fallback = shQuote("no")),
     inconsistency_arg= .arg_lit(grade_args$inconsistency,          fallback = "NULL"),
+    inconsistency_ci_diff_arg =
+      .arg_lit(grade_args$inconsistency_ci_diff,            fallback = "NULL"),
+    inconsistency_side_arg =
+      .arg_lit(grade_args$inconsistency_threshold_side,     fallback = "NULL"),
+    inconsistency_subgroup_arg =
+      .arg_lit(grade_args$inconsistency_subgroup_explained, fallback = "NULL"),
     threshold_arg    = .arg_lit(grade_args$threshold,              fallback = if (!is.null(grade$threshold)) format(grade$threshold) else "NULL"),
     threshold_scale  = grade_args$threshold_scale$value             %||% (grade$threshold_scale %||% "auto"),
     ois_outcome_type = grade$outcome_type,
+    ois_events_arg   = .arg_lit(grade_args$ois_events,             fallback = "NULL"),
+    ois_n_arg        = .arg_lit(grade_args$ois_n,                  fallback = "NULL"),
+    ois_alpha_arg    = .arg_lit(grade_args$ois_alpha,              fallback = "0.05"),
+    ois_beta_arg     = .arg_lit(grade_args$ois_beta,               fallback = "0.2"),
     ois_p0_arg       = .arg_lit(grade_args$ois_p0,                 fallback = "NULL"),
     ois_p1_arg       = .arg_lit(grade_args$ois_p1,                 fallback = "NULL"),
     ois_delta_arg    = .arg_lit(grade_args$ois_delta,              fallback = "NULL"),
     ois_sd_arg       = .arg_lit(grade_args$ois_sd,                 fallback = "NULL"),
+    baseline_risk_arg = .arg_lit(
+      grade_args$baseline_risk,
+      fallback = if (!is.null(grade$baseline_risk) &&
+                     is.numeric(grade$baseline_risk)) {
+        deparse(grade$baseline_risk)
+      } else {
+        "NULL"
+      }
+    ),
     pubias_small_industry_arg = .arg_lit(grade_args$pubias_small_industry,   fallback = "NULL"),
     pubias_funnel_arg         = .arg_lit(grade_args$pubias_funnel_asymmetry, fallback = "NULL"),
     pubias_unpub_arg          = .arg_lit(grade_args$pubias_unpublished,      fallback = "NULL"),
+    pubias_registry_arg       = .arg_lit(grade_args$pubias_registry_complete, fallback = "NULL"),
     outcome_name     = grade$outcome_name,
     per              = per,
     sof_prediction   = if (isTRUE(prediction)) "TRUE" else "FALSE",
@@ -582,6 +618,29 @@ export_bundle <- function(ma,
   if (is.character(spec) && length(spec) == 1) return(shQuote(spec))
   if (is.numeric(spec)   && length(spec) == 1) return(format(spec))
   fallback
+}
+
+# Render optional run_ma() arm-label arguments (Item: alphabetical-fallback
+# override). Accepts {value, ...} specs or plain strings; returns "" when
+# neither label was supplied so the template line stays unchanged.
+.arm_labels_arg <- function(exp_spec, ctl_spec) {
+  get_val <- function(spec) {
+    v <- if (is.list(spec)) spec$value else spec
+    if (is.null(v) || !is.character(v) || length(v) != 1 || !nzchar(v)) {
+      return(NULL)
+    }
+    v
+  }
+  e <- get_val(exp_spec)
+  c_ <- get_val(ctl_spec)
+  out <- ""
+  if (!is.null(e)) {
+    out <- paste0(out, ",\n  experimental_label = ", shQuote(e))
+  }
+  if (!is.null(c_)) {
+    out <- paste0(out, ",\n  control_label      = ", shQuote(c_))
+  }
+  out
 }
 
 .subgroup_arg <- function(spec) {

@@ -24,6 +24,10 @@
 #' @param threshold_label (v0.2) Optional free-text label for the
 #'   dichotomisation threshold (e.g., \code{">=50 percent reduction in PHQ-9"}).
 #'   Shown in the table footer when \code{convert_smd_to_or = TRUE}.
+#' @param chinn_invert Logical (default \code{FALSE}). Flips the SMD sign
+#'   before applying Chinn's formula so that a negative-is-better SMD (e.g.,
+#'   symptom severity reduction) yields OR > 1 in the dichotomised rate
+#'   columns. Only relevant when \code{convert_smd_to_or = TRUE}.
 #' @param ... Additional arguments (currently unused).
 #'
 #' @return A \code{flextable} object suitable for printing, Word export, etc.
@@ -155,6 +159,15 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   )
   ft <- flextable::add_footer_lines(ft, values = base_note)
 
+  # Publication bias not formally assessed -> prominent qualitative-judgment
+  # footnote (see domain_pubias.R)
+  pubias_qual_note <- .pubias_qualitative_note(x)
+  if (!is.null(pubias_qual_note)) {
+    ft <- flextable::add_footer_lines(
+      ft, values = paste0("Publication bias: ", pubias_qual_note)
+    )
+  }
+
   # Chinn-specific footnote with explicit '*' link and citations
   if (chinn_active) {
     invert_str <- if (isTRUE(chinn_invert)) {
@@ -198,11 +211,39 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   NA_integer_
 }
 
+# Pooled estimate with model fallback (mirrors domain_imprecision.R /
+# domain_rob.R): prefer the random-effects pool when random = TRUE, otherwise
+# the common-effect pool; fall back to the other model when the preferred
+# one is unavailable (e.g. run_ma(random = FALSE, common = TRUE)).
+.pooled_estimate <- function(meta_obj) {
+  pick <- function(model) {
+    if (model == "random") {
+      list(est   = meta_obj$TE.random,
+           lower = meta_obj$lower.random,
+           upper = meta_obj$upper.random)
+    } else {
+      list(est   = meta_obj$TE.common,
+           lower = meta_obj$lower.common,
+           upper = meta_obj$upper.common)
+    }
+  }
+  ok <- function(x) {
+    !is.null(x$est) && length(x$est) == 1L && is.finite(x$est)
+  }
+  primary <- if (isTRUE(meta_obj$random)) "random" else "common"
+  out <- pick(primary)
+  if (!ok(out)) {
+    out <- pick(if (primary == "random") "common" else "random")
+  }
+  out
+}
+
 .format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
   sm  <- meta_obj$sm
-  est <- meta_obj$TE.random
-  lo  <- meta_obj$lower.random
-  hi  <- meta_obj$upper.random
+  pooled <- .pooled_estimate(meta_obj)
+  est <- pooled$est
+  lo  <- pooled$lower
+  hi  <- pooled$upper
 
   if (is.null(est) || is.na(est)) return("NR")
 
@@ -244,9 +285,12 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   sm <- meta_obj$sm
   if (is.null(sm) || !sm %in% c("RR", "OR", "HR", "IRR")) return("-")
 
-  p1_est <- .p1(baseline_risk, meta_obj$TE.random,    sm)
-  p1_lo  <- .p1(baseline_risk, meta_obj$lower.random, sm)
-  p1_hi  <- .p1(baseline_risk, meta_obj$upper.random, sm)
+  pooled <- .pooled_estimate(meta_obj)
+  if (is.null(pooled$est) || is.na(pooled$est)) return("-")
+
+  p1_est <- .p1(baseline_risk, pooled$est,   sm)
+  p1_lo  <- .p1(baseline_risk, pooled$lower, sm)
+  p1_hi  <- .p1(baseline_risk, pooled$upper, sm)
 
   if (is.null(p1_est)) return("-")
 
@@ -262,9 +306,10 @@ sof_table <- function(x, palette = c("pastel", "classic"),
 # negative-is-better SMD (e.g., depression severity reduction) yields OR > 1.
 .format_ier_chinn <- function(meta_obj, baseline_risk, per = 1000, invert = FALSE) {
   if (is.null(baseline_risk)) return("-")
-  est <- meta_obj$TE.random
-  lo  <- meta_obj$lower.random
-  hi  <- meta_obj$upper.random
+  pooled <- .pooled_estimate(meta_obj)
+  est <- pooled$est
+  lo  <- pooled$lower
+  hi  <- pooled$upper
   if (is.null(est) || is.na(est)) return("-")
 
   if (isTRUE(invert)) {

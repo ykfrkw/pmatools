@@ -16,3 +16,6 @@ Core GRADE papers/
 *.key
 credentials*
 secrets*
+
+# Claude Code session artifacts
+.claude/
