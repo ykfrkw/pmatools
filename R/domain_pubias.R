@@ -19,7 +19,9 @@
 #         auto Egger p < 0.01                    -> "serious"        (-2)
 #         auto 0.01 <= Egger p < 0.05            -> "some_concerns"  (-1)
 #         auto Egger p >= 0.05                   -> "no"
-#         Egger fails to run                     -> "no" (with note)
+#         Egger fails to run                     -> "no" + prominent
+#           "QUALITATIVE ASSESSMENT REQUIRED" note (propagated to SoF /
+#           Evidence Profile / grade_table / grade_report footnotes)
 #
 #   Q4 (k < 10):
 #         pubias_unpublished == "yes" -> "some_concerns" (-1)
@@ -30,6 +32,41 @@
 # rule subsumes the previous sign-flip escalation). The {meta} trim-and-fill
 # computation remains available via plot_trimfill_forest() for the Reporting
 # bias tab in the companion Shiny app.
+
+# Marker prepended to the publication-bias note whenever no statistical test
+# and no manual input decided the judgment, so downstream outputs (SoF table,
+# Evidence Profile, grade_table, grade_report) can surface it prominently.
+.PUBIAS_QUALITATIVE_MARKER <- "QUALITATIVE ASSESSMENT REQUIRED"
+
+# Guidance text shared by the two not-formally-assessed branches.
+.pubias_qualitative_guidance <- function() {
+  paste0(
+    "Judgment defaults to 'no' (no downgrade) pending a qualitative ",
+    "assessment: inspect the contour-enhanced funnel plot for asymmetry, ",
+    "review the comprehensiveness of the search, and check trial-registry ",
+    "completeness for unpublished studies. Record the conclusion via ",
+    "pubias_funnel_asymmetry / pubias_unpublished ",
+    "(or pubias_registry_complete = 'yes')."
+  )
+}
+
+# Return the publication-bias note from a pmatools object (or a
+# domain_assessments tibble) when the domain could not be formally assessed
+# and requires a qualitative judgment; NULL otherwise.
+.pubias_qualitative_note <- function(x) {
+  d <- if (inherits(x, "pmatools")) x$domain_assessments else x
+  if (!is.data.frame(d) || !all(c("domain", "notes") %in% names(d))) {
+    return(NULL)
+  }
+  r <- d[d$domain == "Publication bias", , drop = FALSE]
+  if (nrow(r) == 0) return(NULL)
+  note <- r$notes[1]
+  if (is.na(note) ||
+      !grepl(.PUBIAS_QUALITATIVE_MARKER, note, fixed = TRUE)) {
+    return(NULL)
+  }
+  note
+}
 
 assess_pubias <- function(meta_obj,
                           pubias_small_industry    = NULL,
@@ -152,9 +189,30 @@ assess_pubias <- function(meta_obj,
   }
 
   if (is.na(pval)) {
-    egger_note <- sprintf("Egger's test could not be computed (k = %d).", k)
-    judgment   <- "no"
-    asym_desc  <- "Egger's test failed to run; defaulted to 'no' (no evidence of asymmetry available)."
+    qual_note <- paste0(
+      .PUBIAS_QUALITATIVE_MARKER, ": Egger's test could not be computed ",
+      sprintf("(k = %d)", k),
+      ", so publication bias was NOT formally assessed. ",
+      .pubias_qualitative_guidance()
+    )
+    rlang::warn(paste0(
+      "Publication bias could not be formally assessed: Egger's test failed ",
+      "to run (k = ", k, "). A qualitative assessment is required ",
+      "(funnel plot asymmetry, search comprehensiveness, registry ",
+      "completeness). Assuming 'no' (no downgrade); specify ",
+      "pubias_funnel_asymmetry = 'yes'/'no' to record your judgment."
+    ))
+    return(make_domain_row(
+      domain   = "Publication bias",
+      judgment = "no",
+      auto     = TRUE,
+      notes    = paste0(
+        qual_note, " ",
+        q1_note,
+        sprintf("Q2: Statistical analysis feasible (k = %d >= 10) but ", k),
+        "Egger's test failed to run. [auto (Egger's test, 2-tier)]"
+      )
+    ))
   } else if (pval < 0.01) {
     egger_note <- sprintf("Egger's test: p = %.4f.", pval)
     judgment   <- "serious"
@@ -196,7 +254,13 @@ assess_pubias <- function(meta_obj,
       "Assuming 'no' (no documented unpublished studies)."
     ))
     unpublished <- "no"
-    src_note    <- " [assumed 'no'; specify pubias_unpublished to override]"
+    src_note    <- paste0(
+      " ", .PUBIAS_QUALITATIVE_MARKER,
+      ": no statistical test possible (k < 10) and no manual input given, ",
+      "so publication bias was NOT formally assessed. ",
+      .pubias_qualitative_guidance(),
+      " [assumed 'no'; specify pubias_unpublished to override]"
+    )
     auto_flag   <- TRUE
   } else {
     if (!pubias_unpublished %in% c("yes", "no")) {

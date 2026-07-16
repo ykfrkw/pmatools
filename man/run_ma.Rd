@@ -50,9 +50,13 @@ common-effects (default \code{FALSE}) pooling.}
 
 \item{subgroup}{Optional column name in \code{data} for subgroup analysis.}
 
-\item{experimental_label, control_label}{Values of \code{treat} identifying arms.
-If NULL, the function looks for \code{"experimental"}/\code{"control"} first;
-otherwise picks two distinct values from \code{treat}.}
+\item{experimental_label, control_label}{Values of \code{treat} identifying the
+intervention (experimental) and comparator (control) arms. Supplied values
+must exist in \code{data$treat} and be distinct. If NULL, the function looks
+for \code{"experimental"}/\code{"control"} first; with exactly two other treat
+values it falls back to alphabetical assignment (first = control,
+second = experimental) and emits a warning, because the effect direction
+depends on this choice.}
 }
 \value{
 An object of class \code{meta} (from the \{meta\} package).

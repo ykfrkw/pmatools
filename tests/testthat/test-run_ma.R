@@ -55,6 +55,89 @@ test_that("run_ma rejects invalid sm", {
                regexp = "not valid")
 })
 
+make_long_binary_custom <- function() {
+  # Non-standard treat labels; alphabetical order: cbt < placebo
+  data.frame(
+    studlab = rep(c("A", "B", "C"), each = 2),
+    treat   = rep(c("cbt", "placebo"), 3),
+    n       = c(50, 50, 60, 60, 70, 70),
+    event   = c(10, 15, 15, 20, 20, 25),
+    stringsAsFactors = FALSE
+  )
+}
+
+test_that("alphabetical arm fallback emits a warning stating the assignment", {
+  data <- make_long_binary_custom()
+  expect_warning(
+    run_ma(data, outcome_type = "binary", sm = "OR"),
+    regexp = "assigned alphabetically.*control = 'cbt'.*experimental = 'placebo'"
+  )
+})
+
+test_that("no fallback warning when arm labels are supplied", {
+  data <- make_long_binary_custom()
+  expect_no_warning(
+    run_ma(data, outcome_type = "binary", sm = "OR",
+           experimental_label = "cbt", control_label = "placebo")
+  )
+})
+
+test_that("effect direction respects explicit arm labels", {
+  data <- make_long_binary_custom()
+  ma_fallback <- suppressWarnings(
+    run_ma(data, outcome_type = "binary", sm = "OR")
+  )  # control = 'cbt', experimental = 'placebo'
+  ma_explicit <- run_ma(data, outcome_type = "binary", sm = "OR",
+                        experimental_label = "cbt",
+                        control_label      = "placebo")
+
+  # Swapping arms flips the log OR sign
+  expect_equal(ma_explicit$TE.random, -ma_fallback$TE.random,
+               tolerance = 1e-10)
+  # cbt has fewer events -> OR(cbt vs placebo) < 1
+  expect_lt(ma_explicit$TE.random, 0)
+})
+
+test_that("run_ma validates supplied arm labels", {
+  data <- make_long_binary_custom()
+  expect_error(
+    run_ma(data, outcome_type = "binary", sm = "OR",
+           experimental_label = "drug", control_label = "placebo"),
+    regexp = "not found in treat values"
+  )
+  expect_error(
+    run_ma(data, outcome_type = "binary", sm = "OR",
+           experimental_label = "cbt", control_label = "cbt"),
+    regexp = "must be distinct"
+  )
+})
+
+test_that("run_ma infers the other arm when only one label is supplied", {
+  data <- make_long_binary_custom()
+  ma <- run_ma(data, outcome_type = "binary", sm = "OR",
+               experimental_label = "cbt")
+  ma_full <- run_ma(data, outcome_type = "binary", sm = "OR",
+                    experimental_label = "cbt", control_label = "placebo")
+  expect_equal(ma$TE.random, ma_full$TE.random)
+})
+
+test_that("ingest_data validates experimental/control labels", {
+  data <- make_long_binary_custom()
+  expect_error(
+    ingest_data(data, format = "long",
+                experimental_label = "drug", control_label = "placebo"),
+    regexp = "not found in treat values"
+  )
+  expect_error(
+    ingest_data(data, format = "long",
+                experimental_label = "cbt", control_label = "cbt"),
+    regexp = "must be distinct"
+  )
+  ok <- ingest_data(data, format = "long",
+                    experimental_label = "cbt", control_label = "placebo")
+  expect_setequal(unique(ok$treat), c("experimental", "control"))
+})
+
 test_that("run_ma rejects unfiltered multi-outcome data", {
   data <- rbind(
     transform(make_long_continuous(), outcome = "ISI"),

@@ -92,10 +92,18 @@ evidence_profile <- function(grade,
                      add_fn(impr$judgment, .first_sentence(impr$notes)))
 
   other_parts <- character(0)
+  pubias_qual_note <- .pubias_qualitative_note(grade)
   if (pubi$judgment != "no") {
     other_parts <- c(other_parts,
                      paste0("publication bias suspected",
                             add_fn(pubi$judgment, .first_sentence(pubi$notes))))
+  } else if (!is.null(pubias_qual_note)) {
+    # Not formally assessed -> make the limitation visible with a footnote
+    # prompting a qualitative judgment (see domain_pubias.R)
+    fn[[length(fn) + 1L]] <- pubias_qual_note
+    other_parts <- c(other_parts,
+                     paste0("publication bias not formally assessed",
+                            " [", length(fn), "]"))
   }
   has_user_other <- !is.null(other_text) && nzchar(trimws(other_text %||% ""))
   user_dg <- as.integer(other_downgrade %||% 0L)

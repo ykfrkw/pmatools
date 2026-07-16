@@ -54,6 +54,19 @@ when \code{convert_smd_to_or = TRUE}.}
 \item{threshold_label}{Optional free-text label describing the
 dichotomisation threshold.}
 
+\item{chinn_invert}{Logical (default \code{FALSE}). Passed to
+\code{\link{sof_table}}: flips the SMD sign before applying Chinn's
+formula so that a negative-is-better SMD yields OR > 1 in the
+dichotomised rate columns. Only relevant when
+\code{convert_smd_to_or = TRUE}.}
+
+\item{other_text}{Optional free-text "Other considerations" note passed to
+\code{\link{evidence_profile}} for the bundled \code{grade_table.docx}.}
+
+\item{other_downgrade}{Integer \code{0}/\code{-1}/\code{-2} (default
+\code{0L}). Extra downgrade applied on top of the automatic domain
+calculations; passed to \code{\link{evidence_profile}}.}
+
 \item{data}{Optional canonical long-format tibble from
 \code{\link{ingest_data}}; if provided, written to \code{data_long.csv}. If
 NULL, the function attempts to reconstruct from \code{ma$data}.}
@@ -84,6 +97,11 @@ the method table, and the method-comparison forest plot are bundled.}
 
 \item{rare_forest_display}{Optional named list of display arguments for
 \code{\link{plot_rare_sensitivity_forest}}.}
+
+\item{pubias_missing_df}{Optional data.frame of studies with unavailable
+results, with columns \code{studlab}, \code{n}, and \code{results_known}; forwarded to
+\code{\link{plot_forest_pubias_subgroup}} when
+\code{"pubias_missing_forest"} is in \code{include} (rendered only when k >= 10).}
 }
 \value{
 Character. Absolute path to the created ZIP file.
