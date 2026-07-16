@@ -26,9 +26,9 @@ step4_ui <- function() {
                      "funnel","funnel_trimfill","pubias_missing_forest",
                      "grade_table")),
       shiny::uiOutput("rare_export_note"),
-      shiny::downloadButton("download_zip", "Download ZIP",
-                            class = "btn btn-primary",
-                            style = "width: 100%; margin-top: 0.5rem;")
+      # The Download button is rendered server-side so it only appears once
+      # Steps 2-3 have produced results (see output$download_zip_ui).
+      shiny::uiOutput("download_zip_ui")
     ),
 
     pma_card(
@@ -116,6 +116,34 @@ step4_server <- function(input, output, session, state) {
     out
   }
 
+  # Gate the Download button on Steps 2-3 being complete. Without this,
+  # pressing the always-active button before running the analysis produced
+  # a confusing ERROR.zip. The downloadHandler keeps its own guards as a
+  # second line of defense (e.g. state cleared between render and click).
+  output$download_zip_ui <- shiny::renderUI({
+    if (is.null(state$ma) || is.null(state$grade)) {
+      missing <- c(
+        if (is.null(state$ma)) "Step 2 (run the meta-analysis)",
+        if (is.null(state$grade)) "Step 3 (open the GRADE assessment)"
+      )
+      return(htmltools::div(
+        class = "pma-card-subtitle",
+        style = paste(
+          "border: 1px dashed hsl(var(--border));",
+          "border-radius: 6px;",
+          "padding: 0.75rem;",
+          "margin-top: 0.5rem;",
+          "text-align: center;"
+        ),
+        paste0("Download unavailable - complete ",
+               paste(missing, collapse = " and "), " first.")
+      ))
+    }
+    shiny::downloadButton("download_zip", "Download ZIP",
+                          class = "btn btn-primary",
+                          style = "width: 100%; margin-top: 0.5rem;")
+  })
+
   output$download_zip <- shiny::downloadHandler(
     filename = function() {
       paste0(input$bundle_name %||% "pmatools_results", ".zip")
@@ -136,10 +164,16 @@ step4_server <- function(input, output, session, state) {
         return()
       }
 
-      tryCatch({
-        tmp_dir <- tempfile()
-        dir.create(tmp_dir)
+      # Create the staging dir at function scope and register cleanup
+      # immediately, so it is removed on success AND on error (item 11).
+      tmp_dir <- tempfile("pmatools_export_")
+      on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
+      dir.create(tmp_dir)
 
+      shiny::withProgress(
+        message = "Building export bundle", value = 0,
+      tryCatch({
+        shiny::incProgress(0.05, detail = "Collecting settings...")
         include <- input$include %||% c("data","script","results",
                                         "forest","forest_rob","funnel",
                                         "funnel_trimfill",
@@ -148,6 +182,13 @@ step4_server <- function(input, output, session, state) {
 
         rob_vec <- .export_covariate(state$ma, "rob", default = "*")
 
+        # export_bundle() renders every plot, writes the tables and docx
+        # report, and zips them in one vendored call, so the bulk of the
+        # work sits inside this single step.
+        shiny::incProgress(
+          0.10,
+          detail = "Rendering plots, tables, and report (this may take a while)..."
+        )
         out <- export_bundle(
           ma           = state$ma,
           grade        = state$grade,
@@ -170,7 +211,9 @@ step4_server <- function(input, output, session, state) {
           rare_forest_display = state$display$forest_step2,
           pubias_missing_df  = state$pubias_missing
         )
+        shiny::incProgress(0.75, detail = "Packaging ZIP...")
         file.copy(out, file)
+        shiny::incProgress(0.10, detail = "Done.")
       },
       error = function(e) {
         msg <- conditionMessage(e)
@@ -182,7 +225,9 @@ step4_server <- function(input, output, session, state) {
         # Write a *valid* ZIP that contains an ERROR.txt explaining what
         # went wrong, so the browser doesn't hand the user a malformed
         # 58-byte download that "Unable to expand".
-        err_dir <- tempfile()
+        err_dir <- tempfile("pmatools_export_error_")
+        # Cleanup on handler exit; zip::zipr below reads err_txt first.
+        on.exit(unlink(err_dir, recursive = TRUE), add = TRUE)
         dir.create(err_dir)
         err_txt <- file.path(err_dir, "ERROR.txt")
         writeLines(c(
@@ -197,6 +242,7 @@ step4_server <- function(input, output, session, state) {
         # zip::zipr writes a real ZIP archive
         zip::zipr(zipfile = file, files = err_txt)
       })
+      )
     },
     contentType = "application/zip"
   )

@@ -1,7 +1,19 @@
 # step2_ma.R - Step 2: Meta-analysis configuration + plots
 
-step2_ui <- function() {
+step2_ui <- function(state = NULL) {
   s <- EDU_COPY$steps$step2
+
+  # Rare-event datasets trigger an expensive multi-method suite (run_rare_ma)
+  # on every rerun, so the auto-rerun toggle defaults to OFF for them (the
+  # one-time updateCheckboxInput in step2_server handles the live transition;
+  # this default keeps the choice sticky when the step body is re-rendered).
+  # isolate(): this UI is built inside app.R's step_body renderUI, which must
+  # not take a reactive dependency on the diagnostics.
+  auto_rerun_default <- TRUE
+  if (!is.null(state)) {
+    diag <- shiny::isolate(state$rare_diagnostics)
+    if (!is.null(diag) && isTRUE(diag$rare_flow)) auto_rerun_default <- FALSE
+  }
 
   htmltools::tagList(
     pma_step_header(s$title, s$what, s$why),
@@ -90,7 +102,7 @@ step2_ui <- function() {
           htmltools::hr(),
           shiny::checkboxInput("auto_rerun",
             "Auto-rerun on change (500ms debounce)",
-            value = TRUE),
+            value = auto_rerun_default),
           shiny::actionButton("run_ma", "Run analysis",
             class = "btn btn-primary", style = "width: 100%;")
         )
@@ -426,7 +438,11 @@ step2_server <- function(input, output, session, state) {
 
   ma <- shiny::reactive({
     args <- ma_inputs()
-    auto <- isTRUE(input$auto_rerun)
+    # isolate(): the one-time "auto-rerun OFF" default applied when rare
+    # events are detected (observer below) must not itself re-trigger this
+    # heavy reactive. Toggling the checkbox therefore no longer forces an
+    # immediate rerun; the next input change (or Run analysis click) does.
+    auto <- isTRUE(shiny::isolate(input$auto_rerun))
     clicked <- (input$run_ma %||% 0L) > 0L
     # When auto-rerun is off, require an explicit Run analysis click
     if (!auto && !clicked) return(NULL)
@@ -574,31 +590,34 @@ step2_server <- function(input, output, session, state) {
     )
     run_args <- run_args[!vapply(run_args, is.null, logical(1))]
 
-    tryCatch({
-      out <- do.call(run_ma, run_args)
-      attr(out, "pmatools_input_data") <- d
-      attr(out, "pmatools_run_args") <- run_args
-      out
-    },
-      error = function(e) {
-        msg <- conditionMessage(e)
-        hint <- if (grepl("does not have exactly one experimental", msg, fixed = TRUE)) {
-          paste0(
-            " Same (studlab, treat) rows are auto-combined per Cochrane ",
-            "Handbook 6.5.2.10. If a study still has more than one ",
-            "experimental or control arm, pick a single arm per study in the ",
-            "intervention/control selectors above, or remove the extra rows."
+    shiny::withProgress(
+      message = "Running meta-analysis...", value = 0.4,
+      tryCatch({
+        out <- do.call(run_ma, run_args)
+        attr(out, "pmatools_input_data") <- d
+        attr(out, "pmatools_run_args") <- run_args
+        out
+      },
+        error = function(e) {
+          msg <- conditionMessage(e)
+          hint <- if (grepl("does not have exactly one experimental", msg, fixed = TRUE)) {
+            paste0(
+              " Same (studlab, treat) rows are auto-combined per Cochrane ",
+              "Handbook 6.5.2.10. If a study still has more than one ",
+              "experimental or control arm, pick a single arm per study in the ",
+              "intervention/control selectors above, or remove the extra rows."
+            )
+          } else {
+            ""
+          }
+          shiny::showNotification(
+            paste0("Meta-analysis stopped: ", msg, hint),
+            type = "warning",
+            duration = 10
           )
-        } else {
-          ""
+          NULL
         }
-        shiny::showNotification(
-          paste0("Meta-analysis stopped: ", msg, hint),
-          type = "warning",
-          duration = 10
-        )
-        NULL
-      }
+      )
     )
   })
 
@@ -690,24 +709,29 @@ step2_server <- function(input, output, session, state) {
       state$rare_diagnostics <- diag
       if (!is.null(diag) && isTRUE(diag$rare_flow)) {
         primary_method <- input$rare_primary_method %||% "BB_CR"
-        rare <- tryCatch(
-          run_rare_ma(
-            d,
-            effect_scale = "OR",
-            primary_method = primary_method,
-            random = isTRUE(run_args$random),
-            common = isTRUE(run_args$common),
-            method.tau = run_args$method.tau %||% "REML",
-            experimental_label = run_args$experimental_label,
-            control_label = run_args$control_label
-          ),
-          error = function(e) {
-            shiny::showNotification(
-              paste("Rare-event analysis failed:", conditionMessage(e)),
-              type = "warning"
-            )
-            NULL
-          }
+        rare <- shiny::withProgress(
+          message = "Running rare-events method suite...",
+          detail = "Comparing sparse-data methods; this can take a while.",
+          value = 0.4,
+          tryCatch(
+            run_rare_ma(
+              d,
+              effect_scale = "OR",
+              primary_method = primary_method,
+              random = isTRUE(run_args$random),
+              common = isTRUE(run_args$common),
+              method.tau = run_args$method.tau %||% "REML",
+              experimental_label = run_args$experimental_label,
+              control_label = run_args$control_label
+            ),
+            error = function(e) {
+              shiny::showNotification(
+                paste("Rare-event analysis failed:", conditionMessage(e)),
+                type = "warning"
+              )
+              NULL
+            }
+          )
         )
         if (!is.null(rare) && inherits(rare$primary, "meta")) {
           state$rare <- rare
@@ -753,24 +777,29 @@ step2_server <- function(input, output, session, state) {
     d <- attr(obj, "pmatools_input_data")
     if (is.null(run_args) || is.null(d) ||
         !identical(run_args$outcome_type, "binary")) return()
-    rare <- tryCatch(
-      run_rare_ma(
-        d,
-        effect_scale = "OR",
-        primary_method = method_id,
-        random = isTRUE(run_args$random),
-        common = isTRUE(run_args$common),
-        method.tau = run_args$method.tau %||% "REML",
-        experimental_label = run_args$experimental_label,
-        control_label = run_args$control_label
-      ),
-      error = function(e) {
-        shiny::showNotification(
-          paste("Rare-event recompute failed:", conditionMessage(e)),
-          type = "warning"
-        )
-        NULL
-      }
+    rare <- shiny::withProgress(
+      message = "Recomputing rare-events method suite...",
+      detail = "Applying the new primary method.",
+      value = 0.4,
+      tryCatch(
+        run_rare_ma(
+          d,
+          effect_scale = "OR",
+          primary_method = method_id,
+          random = isTRUE(run_args$random),
+          common = isTRUE(run_args$common),
+          method.tau = run_args$method.tau %||% "REML",
+          experimental_label = run_args$experimental_label,
+          control_label = run_args$control_label
+        ),
+        error = function(e) {
+          shiny::showNotification(
+            paste("Rare-event recompute failed:", conditionMessage(e)),
+            type = "warning"
+          )
+          NULL
+        }
+      )
     )
     if (!is.null(rare) && inherits(rare$primary, "meta")) {
       state$rare <- rare
@@ -780,6 +809,40 @@ step2_server <- function(input, output, session, state) {
       }
     }
   }, ignoreInit = TRUE)
+
+  # Rare events detected: default the auto-rerun toggle OFF, once per
+  # detection episode. The multi-method rare-event suite is expensive, so
+  # silently re-running it on every input change is a poor default on the
+  # shared shinyapps.io tier; the user can re-enable the checkbox at any
+  # time. Loop safety follows the same conventions as the observers above:
+  # this observer only writes the checkbox input (never state$ma /
+  # state$rare / state$rare_diagnostics), the ma() reactive reads
+  # input$auto_rerun through isolate() so the update cannot re-trigger the
+  # heavy chain, and the local reactiveVal is read/written under isolate()
+  # so the observer depends only on state$rare_diagnostics.
+  auto_rerun_rare_defaulted <- shiny::reactiveVal(FALSE)
+  shiny::observe({
+    diag <- state$rare_diagnostics
+    if (is.null(diag) || !isTRUE(diag$rare_flow)) {
+      # Non-rare (or cleared) diagnostics: re-arm for the next rare dataset.
+      shiny::isolate(auto_rerun_rare_defaulted(FALSE))
+      return()
+    }
+    if (isTRUE(shiny::isolate(auto_rerun_rare_defaulted()))) return()
+    shiny::isolate(auto_rerun_rare_defaulted(TRUE))
+    if (isTRUE(shiny::isolate(input$auto_rerun))) {
+      shiny::updateCheckboxInput(session, "auto_rerun", value = FALSE)
+      shiny::showNotification(
+        paste0(
+          "Rare events detected: 'Auto-rerun on change' has been switched ",
+          "off because the rare-event method suite is computationally ",
+          "expensive. Click 'Run analysis' after changing settings, or ",
+          "re-enable auto-rerun if you prefer."
+        ),
+        type = "message", duration = 10
+      )
+    }
+  })
 
   .pct <- function(x, digits = 2) {
     if (is.null(x) || length(x) == 0 || !is.finite(x)) return("NA")
