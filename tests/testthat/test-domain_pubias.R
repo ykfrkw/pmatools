@@ -123,6 +123,44 @@ test_that("Q4: k < 10, pubias_unpublished = 'no' -> no", {
   expect_equal(pb$judgment, "no")
 })
 
+# --- Not formally assessed -> qualitative-assessment note -------------------
+test_that("Egger not computable (k >= 10) -> 'no' with prominent qualitative note", {
+  # A plain list makes meta::metabias() error out inside tryCatch,
+  # exercising the Egger-failure branch directly.
+  row <- NULL
+  expect_warning(
+    row <- .pubias_statistical(meta_obj = list(), k = 12,
+                               pubias_funnel_asymmetry = NULL,
+                               q1_note = "Q1: test. "),
+    regexp = "qualitative assessment is required"
+  )
+  expect_equal(row$judgment, "no")
+  expect_equal(row$downgrade, 0)
+  expect_match(row$notes, "QUALITATIVE ASSESSMENT REQUIRED")
+  expect_match(row$notes, "funnel plot")
+  expect_match(row$notes, "registry")
+})
+
+test_that("k < 10 with no manual input -> note flags qualitative assessment", {
+  m <- make_small_meta()
+  g <- NULL
+  expect_warning(g <- grade_meta(m), regexp = "pubias_unpublished")
+  pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
+  expect_equal(pb$judgment, "no")
+  expect_match(pb$notes, "QUALITATIVE ASSESSMENT REQUIRED")
+  expect_false(is.null(.pubias_qualitative_note(g)))
+})
+
+test_that("manual pubias input suppresses the qualitative marker", {
+  m <- make_small_meta()
+  g <- grade_meta(m, pubias_unpublished = "no")
+  expect_null(.pubias_qualitative_note(g))
+
+  m10 <- make_symmetric()
+  g10 <- grade_meta(m10)  # Egger runs fine
+  expect_null(.pubias_qualitative_note(g10))
+})
+
 # --- meta object passthrough + plot helpers ---------------------------------
 test_that("grade_meta() exposes the meta object via $meta and plot helpers accept pmatools", {
   m <- make_symmetric()

@@ -22,7 +22,7 @@ ma <- run_ma(
   common       = {{common}},
   hakn         = {{hakn}},
   prediction   = {{prediction}},
-  incr         = {{incr}}{{subgroup_arg}}
+  incr         = {{incr}}{{arm_labels_arg}}{{subgroup_arg}}
 )
 
 # ----- 3. GRADE certainty assessment -----
@@ -35,16 +35,25 @@ g <- grade_meta(
   small_values            = {{small_values_arg}},
   indirectness            = {{indirectness_arg}},
   inconsistency           = {{inconsistency_arg}},
+  inconsistency_ci_diff            = {{inconsistency_ci_diff_arg}},
+  inconsistency_threshold_side     = {{inconsistency_side_arg}},
+  inconsistency_subgroup_explained = {{inconsistency_subgroup_arg}},
   threshold               = {{threshold_arg}},
   threshold_scale         = "{{threshold_scale}}",
   outcome_type            = "{{ois_outcome_type}}",
+  ois_events              = {{ois_events_arg}},
+  ois_n                   = {{ois_n_arg}},
+  ois_alpha               = {{ois_alpha_arg}},
+  ois_beta                = {{ois_beta_arg}},
   ois_p0                  = {{ois_p0_arg}},
   ois_p1                  = {{ois_p1_arg}},
   ois_delta               = {{ois_delta_arg}},
   ois_sd                  = {{ois_sd_arg}},
+  baseline_risk           = {{baseline_risk_arg}},
   pubias_small_industry   = {{pubias_small_industry_arg}},
   pubias_funnel_asymmetry = {{pubias_funnel_arg}},
   pubias_unpublished      = {{pubias_unpub_arg}},
+  pubias_registry_complete = {{pubias_registry_arg}},
   outcome_name            = "{{outcome_name}}"
 )
 

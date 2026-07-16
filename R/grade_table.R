@@ -163,6 +163,18 @@ grade_table <- function(outcomes,
     if (show_domains) " Domain columns: RoB=Risk of bias; Ind=Indirectness; Inc=Inconsistency; Imp=Imprecision; PB=Publication bias." else ""
   )
   ft <- flextable::add_footer_lines(ft, values = footnote)
+
+  # Publication bias not formally assessed -> per-outcome qualitative-judgment
+  # footnote (see domain_pubias.R)
+  for (nm in nms) {
+    pubias_qual_note <- .pubias_qualitative_note(outcomes[[nm]])
+    if (!is.null(pubias_qual_note)) {
+      ft <- flextable::add_footer_lines(
+        ft, values = paste0("[", nm, "] Publication bias: ", pubias_qual_note)
+      )
+    }
+  }
+
   ft <- flextable::fontsize(ft, size = 8, part = "footer")
   ft <- flextable::color(ft, color = "#555555", part = "footer")
 

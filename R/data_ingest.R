@@ -280,6 +280,20 @@ ingest_data <- function(data,
 
   # Tag experimental vs control if requested
   if (!is.null(experimental_label) && !is.null(control_label)) {
+    if (identical(experimental_label, control_label)) {
+      rlang::abort(
+        "experimental_label and control_label must be distinct treat values."
+      )
+    }
+    missing_lbl <- setdiff(c(experimental_label, control_label),
+                           unique(df$treat))
+    if (length(missing_lbl) > 0) {
+      rlang::abort(sprintf(
+        "Label(s) not found in treat values: %s. Available: %s.",
+        paste(missing_lbl, collapse = ", "),
+        paste(unique(df$treat), collapse = ", ")
+      ))
+    }
     df$treat <- ifelse(df$treat == experimental_label, "experimental",
                        ifelse(df$treat == control_label, "control", df$treat))
   }

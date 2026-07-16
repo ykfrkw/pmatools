@@ -46,6 +46,11 @@ pmatools object.}
 dichotomisation threshold (e.g., \code{">=50 percent reduction in PHQ-9"}).
 Shown in the table footer when \code{convert_smd_to_or = TRUE}.}
 
+\item{chinn_invert}{Logical (default \code{FALSE}). Flips the SMD sign
+before applying Chinn's formula so that a negative-is-better SMD (e.g.,
+symptom severity reduction) yields OR > 1 in the dichotomised rate
+columns. Only relevant when \code{convert_smd_to_or = TRUE}.}
+
 \item{...}{Additional arguments (currently unused).}
 }
 \value{
