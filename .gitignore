@@ -41,3 +41,6 @@ pmatools_campbell_draft.docx
 
 # Drafts (specs not ready for the public repo)
 gitignore/
+
+# Claude Code session artifacts
+.claude/
