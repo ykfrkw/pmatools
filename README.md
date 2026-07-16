@@ -72,7 +72,7 @@ m <- meta::metabin(event.e = c(10,15,20), n.e = c(50,60,70),
                    studlab = c("A","B","C"), sm = "OR",
                    prediction = TRUE)
 
-g <- grade_meta(m, study_design = "RCT", rob = "some",
+g <- grade_meta(m, study_design = "RCT", rob = "some_concerns",
                 small_values = "undesirable", indirectness = "no",
                 outcome_name = "My Outcome")
 print(g)
@@ -114,9 +114,10 @@ GRADE certainty starts at **High** for RCTs (or **Low** for observational studie
 | Judgment | Downgrade |
 |----------|-----------|
 | `"no"` | 0 |
-| `"some"` | −1 |
-| `"serious"` | −1 |
-| `"very_serious"` | −2 |
+| `"some_concerns"` | −1 |
+| `"serious"` | −2 |
+
+Legacy labels are still accepted and normalized: `"some"` → `"some_concerns"` (−1), `"very_serious"` → `"serious"` (−2).
 
 ### Starting and final certainty
 
@@ -183,6 +184,18 @@ grade_meta(m,
   rob_inflation_threshold = 0.10)           # rule 3 trigger; default 10%
 ```
 
+**Threshold default: `suggest_threshold()`.** Returns a conventional clinical
+decision Threshold for the effect measure — OR 1.25, RR/HR 1.20, RoM 1.10,
+SMD 0.20, MD 0.20 × pooled SD, ARD 0.05 — as
+`list(threshold_user, threshold_scale)`, suitable for pre-filling an input
+field. Override with a published or expert-derived Threshold whenever available.
+
+```r
+suggest_threshold(ma)
+#> $threshold_user  1.25
+#> $threshold_scale "ratio"
+```
+
 **`small_values` parameter** (consistent with `netmetaviz`):
 
 | Value | Meaning | Example |
@@ -206,9 +219,9 @@ because they are subsumed by the zone-and-magnitude comparison.
 | Cochrane RoB 2.0 | Internal GRADE level |
 |------------------|---------------------|
 | `"No concerns"` | `"no"` |
-| `"Some concerns"` | `"some"` |
+| `"Some concerns"` | `"some_concerns"` |
 | `"Serious concerns"` | `"serious"` |
-| `"Critical concerns"` | `"very_serious"` |
+| `"Critical concerns"` | `"serious"` |
 
 Plain-English aliases (`"low"`, `"moderate"`, `"high"`) are also accepted.
 
@@ -223,6 +236,17 @@ grade_meta(m, rob = rob_vec, ...)   # works directly
 ```r
 grade_meta(m, rob = "no")        # bypass flowchart entirely
 grade_meta(m, rob = "serious")   # force rate-down regardless of weights
+```
+
+**Visual companion: `plot_forest_rob()`.** Re-runs the meta-analysis with a
+Risk-of-Bias subgroup (low / some / high / unknown) and draws a forest plot
+with per-stratum pooled estimates next to the overall diamond — useful to see
+whether high-RoB studies inflate the apparent effect. Accepts the same label
+aliases as `grade_meta()` (`"L"/"S"/"H"`, `"Some concerns"`, ...); `NA` is
+kept as its own "unknown" stratum.
+
+```r
+plot_forest_rob(ma, rob = rob_vec)   # rob_vec: character, length k
 ```
 
 ---
@@ -240,7 +264,7 @@ AUTO Step 1: Is there important heterogeneity?
   YES → AUTO Step 2: Are most point estimates on one side of null?
           meta$TE is on null = 0 scale for all measures
           (log OR/RR/HR for relative; raw MD/SMD for absolute)
-          ≥ 75% on same side → "majority_one_side" → judgment = "some"
+          ≥ 75% on same side → "majority_one_side" → judgment = "some_concerns"
           < 75% on same side → "opposite_sides"    → judgment = "serious"
           (subgroup explanation cannot be checked automatically)
 ```
@@ -265,7 +289,7 @@ I², tau², Q p-value.
 
 **Scalar override:**
 ```r
-grade_meta(m, inconsistency = "very_serious")   # overrides flowchart entirely
+grade_meta(m, inconsistency = "serious")   # overrides flowchart entirely (−2)
 ```
 
 ---
@@ -292,13 +316,20 @@ grade_meta(m, indirectness = indirectness_vec)       # per-study vector
 **Algorithm:**
 
 ```
-Does the 95% CI cross the null?
-  null = 0 on log scale for OR/RR/HR; = 0 for MD/SMD
+"serious" (−2):
+  CI contains both ±Thresholds (clinically important benefit AND harm
+  both plausible; only when a Threshold is supplied), OR
+  total events (binary) / total N (continuous) ≤ 30% of OIS
 
-  NO + OIS met (or not specified)  → judgment = "no"
-  NO + OIS NOT met                 → judgment = "serious"
-  YES + OIS met (or not specified) → judgment = "serious"
-  YES + OIS NOT met                → judgment = "very_serious"
+"some_concerns" (−1):
+  Threshold supplied : CI crosses exactly one Threshold
+  Threshold absent   : CI crosses the null (0 on log scale for OR/RR/HR;
+                       0 for MD/SMD)
+  Either way         : OIS not met (but > 30%)
+
+"no" (0):
+  CI within or beyond Threshold (or, without Threshold, does not cross
+  the null) AND OIS met (or not specified)
 ```
 
 **OIS specification options:**
@@ -368,6 +399,23 @@ but the imputed studies and adjusted random-effects summary are still
 informative. They are available through `plot_trimfill_forest(g)` for display
 in the Reporting bias tab of the companion Shiny app.
 
+**Available vs missing results: `plot_forest_pubias_subgroup()`.** Draws the
+RoB-ME-style two-subgroup forest (Page et al., BMJ 2023): "Available results"
+with the usual estimates and pooled diamond, stacked over "Missing results" —
+registry/protocol entries supplied via `missing_df` (columns `studlab`, `n`,
+`results_known`) plus auto-detected studies whose effect estimate is `NA`
+(e.g. all-zero events). Missing rows show a status string in place of an
+estimate and contribute nothing to pooling. Reference-only diagnostic — it
+does not drive the GRADE judgment.
+
+```r
+miss <- data.frame(
+  studlab       = "Trial X",
+  n             = 40L,
+  results_known = "Measured but not reported (suspect P > 0.05)")
+plot_forest_pubias_subgroup(ma, missing_df = miss)
+```
+
 ---
 
 ## Overriding automatic judgments
@@ -388,7 +436,7 @@ print(g)   # inspect domain_assessments
 # Step 2: override specific domains
 g_override <- grade_meta(m,
   study_design  = "RCT",
-  rob           = "some",           # override: single overall judgment
+  rob           = "some_concerns",  # override: single overall judgment
   inconsistency = "serious",        # override: clinical judgment → serious
   indirectness  = "no",
   outcome_name  = "Depression response (manual override)")
@@ -413,7 +461,7 @@ g$domain_assessments
 #   domain           judgment  auto  downgrade notes
 #   Risk of bias     no        FALSE         0 "Not dominated: 38% weight..."
 #   Indirectness     no        FALSE         0 NA
-#   Inconsistency    some      TRUE         -1 "AUTO Step 1: I²=36% > 25%..."
+#   Inconsistency    some_concerns TRUE     -1 "AUTO Step 1: I²=36% > 25%..."
 #   Imprecision      no        TRUE          0 "CI does not cross null; OIS = 311..."
 #   Publication bias no        TRUE          0 "Egger p = 0.93"
 ```
@@ -474,7 +522,7 @@ g_response <- grade_meta(
 |--------|----------|-----------|--------|
 | **Risk of Bias** | no | High-RoB weight ≈ 38% < 60% → NOT dominated | auto flowchart |
 | **Indirectness** | no | Directly applicable PICO | manual |
-| **Inconsistency** | some | I² ≈ 36% > 25%; majority on same side (OR > 1) | auto |
+| **Inconsistency** | some_concerns | I² ≈ 36% > 25%; majority on same side (OR > 1) | auto |
 | **Imprecision** | no | CI [1.64, 3.23] does not cross null; OIS met | auto |
 | **Publication Bias** | no | Egger p ≈ 0.93; k = 17 ≥ 10 | auto |
 
@@ -536,6 +584,21 @@ grade_report(
 )
 ```
 
+### `evidence_profile()` — single-outcome GRADE Evidence Profile
+
+Canonical GRADE / BMJ Evidence Profile layout for one outcome:
+**Outcome | No of studies (N) | Design | Risk of bias | Inconsistency |
+Indirectness | Imprecision | Other considerations | Certainty**, with numbered
+footnotes for every rated-down domain.
+
+```r
+evidence_profile(g)
+evidence_profile(g, palette = "classic",
+                 other_text = "Strong plausible confounding",
+                 other_downgrade = -1L)   # extra downgrade on top of domains
+flextable::save_as_docx(evidence_profile(g), path = "evidence_profile.docx")
+```
+
 ---
 
 ## Event rate columns (Control rate / Experimental rate)
@@ -592,6 +655,35 @@ Output format in Effect column:
 OR 2.30 (1.64; 3.23)
 PI (0.71; 7.43)
 ```
+
+---
+
+## Rare-event meta-analysis
+
+For binary outcomes with very low event rates, inverse-variance pooling with
+continuity corrections is biased. `rare_event_diagnostics()` flags when the
+rare-event flow should apply; `run_rare_ma()` fits a suite of rare-event
+methods (per Efthimiou 2018, Evid Based Ment Health; Tsujimoto 2024, Res
+Synth Methods) and reports them side by side for sensitivity analysis.
+
+```r
+d    <- ingest_data("events_long.csv", format = "long")
+diag <- rare_event_diagnostics(d)    # $rare_flow, event rates, zero-cell counts
+
+rare <- run_rare_ma(d, effect_scale = "OR")
+rare$primary                         # primary result as a regular meta object
+rare$method_table                    # all methods: estimate, CI, zero-cell handling
+plot_rare_sensitivity_forest(rare)   # method-comparison forest
+
+g <- grade_meta(rare$primary, ...)                 # GRADE proceeds as usual
+export_bundle(rare$primary, g, rare = rare, ...)   # adds rare-event diagnostics to ZIP
+```
+
+The default primary on the OR scale is `BB_CR` (beta-binomial with correlated
+responses, via {mmeta}), falling back to `MH_no_cc` (Mantel-Haenszel without
+continuity correction) when {mmeta} is unavailable or fails to converge.
+Prespecify a different primary with `primary_method = "MH_no_cc"` (or any
+other method id in `method_table`).
 
 ---
 
