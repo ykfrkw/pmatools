@@ -7,7 +7,11 @@ Authors@R: person("Yuki", "Furukawa", email = "furukawa.y.psy@gmail.com",
 Description: 4-step wizard around the pmatools sources (vendored under
     R/_pmatools/ rather than installed from a package, to bypass the
     shinyapps.io build server's stale GITHUB_PAT). Deployed on
-    shinyapps.io.
+    shinyapps.io. WARNING - the rare-event backends metafor, mmeta and
+    BiasedUrn are referenced only as name strings in
+    R/_pmatools/rare_events.R, so rsconnect's code scan cannot detect
+    them; this Imports field is the ONLY thing that installs them on
+    the server. Never remove them (see deploy.R and update_vendor.R).
 License: CC BY 4.0
 Imports:
     shiny,
@@ -19,10 +23,13 @@ Imports:
     brglm2,
     metafor,
     mmeta,
+    BiasedUrn,
     tibble,
     dplyr,
     rlang,
     glue,
     zip,
     officer,
-    magick
+    magick,
+    shinycssloaders,
+    readxl

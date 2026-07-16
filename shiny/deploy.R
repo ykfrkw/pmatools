@@ -1,7 +1,24 @@
 # deploy.R - Push the Shiny app to shinyapps.io
 #
+# =============================================================================
+# !! DEPENDENCY LIFELINE - READ BEFORE TOUCHING DESCRIPTION !!
+#
+# The rare-event backends `metafor`, `mmeta`, and `BiasedUrn` are referenced
+# ONLY as name strings in R/_pmatools/rare_events.R (e.g. package = "metafor",
+# extra_packages = "BiasedUrn", engine = "mmeta"), so rsconnect's static code
+# scan CANNOT detect them. The app DESCRIPTION's Imports field is the ONLY
+# mechanism that gets them installed on the shinyapps.io server. They MUST
+# stay listed in the app DESCRIPTION Imports, even if grep for `pkg::` finds
+# nothing. Removing them deploys fine but breaks the rare-event method suite
+# at runtime. Run `Rscript update_vendor.R --check-only` to audit.
+# =============================================================================
+#
 # Usage (from the pairwise_meta_analysis directory):
 #   Rscript deploy.R
+#
+# Bundle exclusions live in the permanent, committed .rscignore at the repo
+# root (one glob pattern per line; rsconnect reads it at deploy time). Edit
+# that file -- this script no longer generates or deletes it.
 #
 # Architecture: pmatools sources are vendored under R/_pmatools/ and inst
 #   files under _pmatools_inst/. The app does not depend on the pmatools
@@ -23,23 +40,16 @@ APP_NAME <- "pairwise_meta_analysis"
 ACCOUNT  <- "yuki-furukawa"
 APP_DIR  <- normalizePath(".")
 
-cat("=== Step 1/3: prepare clean bundle (.rscignore) ===\n")
+cat("=== Step 1/3: verify clean-bundle config (.rscignore) ===\n")
 rsignore_path <- file.path(APP_DIR, ".rscignore")
-writeLines(c(
-  "app_*.R",        # historical backups (if any return)
-  "prompt.Rmd",
-  "SPEC.md",        # design doc - not needed at runtime
-  "Core GRADE papers", # 4 MB of reference PDFs
-  ".Rproj.user",
-  ".DS_Store",
-  "*.Rproj",
-  "rsconnect",      # local deployment metadata
-  ".deploy_excluded",
-  "deploy.R",
-  "update_vendor.R",
-  "*.tar.gz"
-), rsignore_path)
-cat("   Wrote .rscignore (", length(readLines(rsignore_path)), " patterns)\n", sep = "")
+if (!file.exists(rsignore_path)) {
+  stop(".rscignore is missing from ", APP_DIR, ". It is a permanent, ",
+       "committed file that keeps SPEC.md, reference PDFs, and local ",
+       "metadata out of the deploy bundle. Restore it with ",
+       "`git checkout -- .rscignore` before deploying.")
+}
+cat("   Found .rscignore (", length(readLines(rsignore_path)),
+    " patterns)\n", sep = "")
 
 # Files with non-UTF-8 (Latin-1) byte sequences in the filename break
 # rsconnect's path scanner. Stash them out of the way during deploy.
@@ -75,11 +85,7 @@ result <- tryCatch({
   FALSE
 })
 
-cat("\n=== Step 3/3: cleanup ===\n")
-if (file.exists(rsignore_path)) {
-  unlink(rsignore_path)
-  cat("   Removed .rscignore\n")
-}
+cat("\n=== Step 3/3: report ===\n")
 
 if (isTRUE(result)) {
   cat("\nSUCCESS. App live at https://", ACCOUNT, ".shinyapps.io/", APP_NAME, "/\n",
