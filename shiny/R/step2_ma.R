@@ -1049,7 +1049,7 @@ step2_server <- function(input, output, session, state) {
     footer <- c(
       "",
       "--- Software versions ---",
-      sprintf("pmatools : %s", safe_ver("pmatools", "0.3.3 (vendored)")),
+      sprintf("pmatools : %s", safe_ver("pmatools", "0.3.4 (vendored)")),
       sprintf("meta     : %s", safe_ver("meta")),
       sprintf("R        : %s", paste(R.version$major, R.version$minor, sep = "."))
     )

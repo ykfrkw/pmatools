@@ -457,7 +457,7 @@ export_bundle <- function(ma,
   writeLines("================================================================", con)
   writeLines("[ Software versions ]", con)
   writeLines("================================================================", con)
-  writeLines(sprintf("pmatools : %s", .safe_ver("pmatools", "0.3.3 (vendored)")), con)
+  writeLines(sprintf("pmatools : %s", .safe_ver("pmatools", "0.3.4 (vendored)")), con)
   writeLines(sprintf("meta     : %s", .safe_ver("meta")), con)
   writeLines(sprintf("R        : %s", paste(R.version$major, R.version$minor, sep = ".")), con)
 
@@ -494,7 +494,7 @@ export_bundle <- function(ma,
     timestamp        = format(Sys.time()),
     pmatools_version = tryCatch(
       as.character(utils::packageVersion("pmatools")),
-      error = function(e) "0.3.3 (vendored)"
+      error = function(e) "0.3.4 (vendored)"
     ),
     outcome_type     = outcome_type_ma,
     sm               = sm,
