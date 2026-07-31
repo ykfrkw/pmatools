@@ -9,10 +9,14 @@
 #'
 #' @param meta_obj A `meta` object (from \code{\link{run_ma}} or
 #'   \code{\link[meta]{metabin}}/\code{\link[meta]{metacont}}).
-#' @param rob A character vector of length \code{meta_obj$k}, with values in
-#'   \code{c("L","S","H","low","some","high")} (case-insensitive) or other
-#'   recognizable aliases. NA values are tolerated (kept as their own group
-#'   labeled \code{"unknown"}).
+#' @param rob A character vector of length \code{meta_obj$k}. Accepts the same
+#'   labels as \code{\link{grade_meta}} (case-insensitive): \code{"L"/"S"/"H"},
+#'   \code{"low"/"some"/"high"}, the internal levels
+#'   \code{"no"/"some_concerns"/"serious"}, and the Cochrane RoB2 wording
+#'   \code{"No concerns"}, \code{"Some concerns"}, \code{"Serious concerns"},
+#'   \code{"Critical concerns"}. \code{NA}, \code{""} and \code{"?"} are
+#'   tolerated (kept as their own group labeled \code{"unknown"}); any other
+#'   unrecognized label is bucketed into \code{"unknown"} with a warning.
 #'
 #' @return Invisibly NULL. Side effect: draws on the active graphics device.
 #'
@@ -57,19 +61,12 @@ plot_forest_rob <- function(meta_obj, rob, ...) {
   invisible(NULL)
 }
 
-# Normalise per-study RoB labels (case-insensitive single-letter or word forms).
+# Normalise per-study RoB labels to plot strata. Delegates to the shared
+# grade_meta() vocabulary (.normalize_rob_level) so both entry points accept
+# the same labels; NA / "" / "?" stay "unknown", anything else unrecognised
+# warns before being bucketed there.
 .normalise_rob <- function(rob) {
-  x <- tolower(trimws(as.character(rob)))
-  out <- ifelse(
-    is.na(x) | x == "" | x %in% c("na", "*", "?"),
-    "unknown",
-    ifelse(x %in% c("l", "low", "no"), "low",
-      ifelse(x %in% c("s", "some", "some_concerns", "moderate", "m", "unclear"), "some",
-        ifelse(x %in% c("h", "high", "serious", "very_serious"), "high", "unknown")
-      )
-    )
-  )
-  out
+  .rob_plot_strata(rob, arg = "plot_forest_rob: rob")
 }
 
 .subgroup_update_object <- function(meta_obj) {
