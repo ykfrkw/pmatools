@@ -457,6 +457,7 @@ assess_rob <- function(rob, meta_obj,
     # Plain / alternate capitalisation
     "low"          = "no",            "Low"          = "no",
     "moderate"     = "some_concerns", "Moderate"     = "some_concerns",
+    "unclear"      = "some_concerns", "Unclear"      = "some_concerns",  # RoB1 wording
     "high"         = "serious",       "High"         = "serious",
     "very high"    = "serious",       "Very high"    = "serious",
     # Internal (pass-through + legacy)
@@ -466,7 +467,47 @@ assess_rob <- function(rob, meta_obj,
     "serious"       = "serious",
     "very_serious"  = "serious"           # legacy alias
   )
-  if (x %in% names(aliases)) aliases[[x]] else x
+  if (is.na(x)) return(NA_character_)
+  if (x %in% names(aliases)) return(unname(aliases[[x]]))
+  # Case-insensitive fallback ("SOME CONCERNS", "some concerns", ...)
+  i <- match(tolower(trimws(x)), tolower(names(aliases)))
+  if (!is.na(i)) return(unname(aliases[[i]]))
+  x
+}
+
+# --------------------------------------------------------------------------
+# Forest-plot strata ("low" / "some" / "high" / "unknown")
+#
+# Shares the alias vocabulary of .normalize_rob_level() so that grade_meta()
+# and the stratified forest plots accept exactly the same labels — including
+# the Cochrane RoB2 wording documented in README ("Some concerns", ...).
+# Unlike .normalize_rob_levels(), unrecognised labels warn instead of
+# aborting: a plot should still be drawn, but never silently.
+# --------------------------------------------------------------------------
+.rob_plot_strata <- function(x, arg = "rob") {
+  v <- trimws(as.character(x))
+  blank <- is.na(v) | !nzchar(v) | tolower(v) %in% c("na", "?", "unknown")
+
+  out <- rep("unknown", length(v))
+  if (!any(!blank)) return(out)
+
+  lvl <- vapply(v[!blank], .normalize_rob_level, character(1), USE.NAMES = FALSE)
+  strata <- unname(c(no = "low", some_concerns = "some", serious = "high")[lvl])
+
+  bad <- is.na(strata)
+  if (any(bad)) {
+    rlang::warn(paste0(
+      arg, ": unrecognized label(s) -> \"unknown\" stratum: ",
+      paste(unique(v[!blank][bad]), collapse = ", "),
+      ". Accepted values: 'no'/'low'/'L', 'some_concerns'/'some'/'S', ",
+      "'serious'/'high'/'H', or Cochrane RoB2 labels ('No concerns', ",
+      "'Some concerns', 'Serious concerns', 'Critical concerns')."
+    ))
+    strata[bad] <- "unknown"
+  }
+
+  out[!blank] <- strata
+  out
 }
 
 .normalize_rob_levels <- function(rob_vec) {
