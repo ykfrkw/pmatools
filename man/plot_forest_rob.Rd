@@ -10,10 +10,14 @@ plot_forest_rob(meta_obj, rob, ...)
 \item{meta_obj}{A \code{meta} object (from \code{\link{run_ma}} or
 \code{\link[meta]{metabin}}/\code{\link[meta]{metacont}}).}
 
-\item{rob}{A character vector of length \code{meta_obj$k}, with values in
-\code{c("L","S","H","low","some","high")} (case-insensitive) or other
-recognizable aliases. NA values are tolerated (kept as their own group
-labeled \code{"unknown"}).}
+\item{rob}{A character vector of length \code{meta_obj$k}. Accepts the same
+labels as \code{\link{grade_meta}} (case-insensitive): \code{"L"/"S"/"H"},
+\code{"low"/"some"/"high"}, the internal levels
+\code{"no"/"some_concerns"/"serious"}, and the Cochrane RoB2 wording
+\code{"No concerns"}, \code{"Some concerns"}, \code{"Serious concerns"},
+\code{"Critical concerns"}. \code{NA}, \code{""} and \code{"?"} are
+tolerated (kept as their own group labeled \code{"unknown"}); any other
+unrecognized label is bucketed into \code{"unknown"} with a warning.}
 }
 \value{
 Invisibly NULL. Side effect: draws on the active graphics device.

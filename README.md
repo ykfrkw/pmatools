@@ -242,8 +242,12 @@ grade_meta(m, rob = "serious")   # force rate-down regardless of weights
 Risk-of-Bias subgroup (low / some / high / unknown) and draws a forest plot
 with per-stratum pooled estimates next to the overall diamond — useful to see
 whether high-RoB studies inflate the apparent effect. Accepts the same label
-aliases as `grade_meta()` (`"L"/"S"/"H"`, `"Some concerns"`, ...); `NA` is
-kept as its own "unknown" stratum.
+aliases as `grade_meta()` (`"L"/"S"/"H"`, `"Some concerns"`, ..., matched
+case-insensitively); `NA` / `""` / `"?"` are kept as their own "unknown"
+stratum, and any other unrecognized label is bucketed into "unknown" **with a
+warning** (so a mistyped vocabulary can no longer collapse every trial into a
+single meaningless stratum). `plot_forest_indirectness()` uses the same
+vocabulary.
 
 ```r
 plot_forest_rob(ma, rob = rob_vec)   # rob_vec: character, length k

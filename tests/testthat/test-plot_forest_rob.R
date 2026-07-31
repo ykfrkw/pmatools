@@ -41,6 +41,64 @@ test_that("plot_forest_rob draws a placeholder on length mismatch", {
   })
 })
 
+test_that(".normalise_rob accepts the Cochrane RoB2 labels documented in README", {
+  expect_equal(
+    pmatools:::.normalise_rob(c("No concerns", "Some concerns",
+                                "Serious concerns", "Critical concerns")),
+    c("low", "some", "high", "high")
+  )
+  # Same vocabulary as grade_meta(): single letters, plain words, internal
+  # levels, legacy aliases and free capitalisation all land in a stratum.
+  expect_equal(
+    pmatools:::.normalise_rob(c("L", "S", "H", "low", "some", "high",
+                                "no", "some_concerns", "serious",
+                                "moderate", "unclear", "very_serious",
+                                "SOME CONCERNS", " Low ")),
+    c("low", "some", "high", "low", "some", "high",
+      "low", "some", "high",
+      "some", "some", "high",
+      "some", "low")
+  )
+  # Missing markers stay "unknown"
+  expect_equal(
+    pmatools:::.normalise_rob(c(NA, "", "?", "na")),
+    rep("unknown", 4)
+  )
+})
+
+test_that("Cochrane labels stratify the forest plot instead of collapsing to unknown", {
+  m   <- make_metabin_pfr()
+  rob <- c("No concerns", "No concerns", "Some concerns",
+           "Some concerns", "Serious concerns", "Critical concerns")
+
+  with_null_device(expect_silent(plot_forest_rob(m, rob = rob)))
+
+  # The subgroup actually reaching meta::update() must have >1 non-empty level
+  strata <- pmatools:::.normalise_rob(rob)
+  expect_setequal(unique(strata), c("low", "some", "high"))
+  expect_false(any(strata == "unknown"))
+})
+
+test_that("plot_forest_rob warns on unrecognized labels rather than silently bucketing", {
+  m   <- make_metabin_pfr()
+  rob <- c("L", "L", "S", "S", "H", "totally bogus")
+  with_null_device(
+    expect_warning(plot_forest_rob(m, rob = rob), regexp = "unrecognized label")
+  )
+  expect_warning(
+    expect_equal(pmatools:::.normalise_rob(c("L", "bogus")), c("low", "unknown")),
+    regexp = "unrecognized label"
+  )
+})
+
+test_that("plot_forest_indirectness shares the RoB label vocabulary", {
+  expect_equal(
+    pmatools:::.normalise_indirectness(c("No concerns", "Some concerns",
+                                         "Serious concerns", NA)),
+    c("low", "some", "high", "unknown")
+  )
+})
+
 test_that("plot_forest_rob rejects non-meta objects", {
   expect_error(plot_forest_rob(list(), rob = "L"),
                regexp = "must be a meta-analysis object")
