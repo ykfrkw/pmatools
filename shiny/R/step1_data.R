@@ -88,16 +88,20 @@ step1_server <- function(input, output, session, state) {
 
   loaded_signature <- shiny::reactiveVal(NULL)
 
+  # Map an uploaded RoB / Indirectness column to the Step 3 editor vocabulary
+  # ("low" / "some" / "high"; NA = not set). Delegates to the vendored
+  # .rob_plot_strata() so the editor, grade_meta() and the stratified forest
+  # plots all accept the same labels -- including the Cochrane RoB2 wording
+  # ("No concerns", "Some concerns", "Serious concerns", "Critical concerns").
   .study_level_for_editor <- function(x) {
-    v <- tolower(trimws(as.character(x)))
-    out <- ifelse(
-      is.na(v) | !nzchar(v), NA_character_,
-      ifelse(v %in% c("l", "low", "no"), "low",
-        ifelse(v %in% c("s", "some", "some_concerns", "moderate", "m", "unclear"), "some",
-          ifelse(v %in% c("h", "high", "serious", "very_serious"), "high", v)
-        )
-      )
-    )
+    v <- trimws(as.character(x))
+    out <- rep(NA_character_, length(v))
+    known <- !is.na(v) & nzchar(v)
+    if (any(known)) {
+      lvl <- .rob_plot_strata(v[known], arg = "Uploaded RoB/Indirectness column")
+      lvl[lvl == "unknown"] <- NA_character_   # unrecognized -> leave unset
+      out[known] <- lvl
+    }
     out
   }
 

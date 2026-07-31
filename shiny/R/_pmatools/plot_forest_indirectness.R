@@ -9,10 +9,14 @@
 #'
 #' @param meta_obj A `meta` object (from \code{\link{run_ma}} or
 #'   \code{\link[meta]{metabin}}/\code{\link[meta]{metacont}}).
-#' @param indirectness A character vector of length \code{meta_obj$k}, with
-#'   values in \code{c("L","S","H","low","some","high")} (case-insensitive) or
-#'   other recognizable aliases. NA values are tolerated (kept as their own
-#'   group labeled \code{"unknown"}).
+#' @param indirectness A character vector of length \code{meta_obj$k}. Accepts
+#'   the same labels as \code{\link{plot_forest_rob}} (case-insensitive):
+#'   \code{"L"/"S"/"H"}, \code{"low"/"some"/"high"}, the internal levels
+#'   \code{"no"/"some_concerns"/"serious"}, and the Cochrane wording
+#'   \code{"No concerns"}, \code{"Some concerns"}, \code{"Serious concerns"},
+#'   \code{"Critical concerns"}. \code{NA}, \code{""} and \code{"?"} are
+#'   tolerated (kept as their own group labeled \code{"unknown"}); any other
+#'   unrecognized label is bucketed into \code{"unknown"} with a warning.
 #' @param ... Additional arguments forwarded to \code{\link{plot_forest}}.
 #'
 #' @return Invisibly NULL. Side effect: draws on the active graphics device.
@@ -59,18 +63,8 @@ plot_forest_indirectness <- function(meta_obj, indirectness, ...) {
   invisible(NULL)
 }
 
-# Normalise per-study Indirectness labels (case-insensitive single-letter or
-# word forms). Same vocabulary as RoB.
+# Normalise per-study Indirectness labels to plot strata. Same vocabulary as
+# RoB (see .rob_plot_strata in domain_rob.R).
 .normalise_indirectness <- function(x) {
-  v <- tolower(trimws(as.character(x)))
-  out <- ifelse(
-    is.na(v) | v == "" | v %in% c("na", "*", "?"),
-    "unknown",
-    ifelse(v %in% c("l", "low", "no"), "low",
-      ifelse(v %in% c("s", "some", "some_concerns", "moderate", "m", "unclear"), "some",
-        ifelse(v %in% c("h", "high", "serious", "very_serious"), "high", "unknown")
-      )
-    )
-  )
-  out
+  .rob_plot_strata(x, arg = "plot_forest_indirectness: indirectness")
 }
