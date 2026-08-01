@@ -48,7 +48,7 @@ step4_ui <- function() {
         htmltools::tags$li(paste0(
           "Balduzzi S, Ruecker G, Schwarzer G. ",
           "How to perform a meta-analysis with R: a practical tutorial. ",
-          "J Stat Softw. 2019;91(1):1-37.")),
+          "Evid Based Ment Health. 2019;22(4):153-160.")),
         htmltools::tags$li(
           htmltools::tags$a(href = "https://doi.org/10.1136/bmj-2024-081903",
                             target = "_blank",
