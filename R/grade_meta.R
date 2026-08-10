@@ -26,12 +26,23 @@
 #'   The Risk-of-Bias flowchart no longer uses a weight-share dominance gate;
 #'   the direction-and-magnitude check is now run whenever at least one
 #'   high-RoB study is present.
-#' @param rob_inflation_threshold (v0.2) Minimum *relative* inflation
-#'   \eqn{(|TE_{all}| - |TE_{low}|) / |TE_{low}|} required to rate down for
-#'   risk of bias when the evidence is dominated. Default \code{0.10}
-#'   (10 percent). Set to \code{0} to restore v0.1.0 behavior (any direction-
-#'   consistent change rates down). Only used when \code{rob} is a vector
-#'   or column name.
+#' @param rob_inflation_threshold (v0.2) Threshold for the relative change of
+#'   the pooled estimate when high-RoB studies are excluded, computed on the
+#'   absolute analysis scale: \eqn{(|TE_{all}| - |TE_{low}|) / |TE_{low}|},
+#'   where \eqn{TE_{low}} is the inverse-variance weighted mean of the
+#'   low/some-concerns RoB studies. Default \code{0.10} (10 percent).
+#'   A downgrade under this criterion requires BOTH (a) the relative change to
+#'   be *strictly* greater than the threshold (\code{>}; a change exactly at
+#'   the threshold does not rate down) AND (b) the shift to be in the
+#'   bias-favouring direction per \code{small_values}: only shifts that would
+#'   make the apparent effect look more favourable (over-estimation) count.
+#'   Shifts toward a smaller or less favourable effect never rate down under
+#'   this criterion, even when their magnitude exceeds the threshold; in that
+#'   case the domain note states explicitly why no downgrade was applied.
+#'   When every study is high-RoB, no low/some-RoB comparator pool exists and
+#'   the domain is rated \code{"serious"} (rate down 2 levels) unconditionally.
+#'   Set to \code{0} to restore v0.1.0 behavior (any bias-favouring change
+#'   rates down). Only used when \code{rob} is a vector or column name.
 #' @param small_values Are small outcome values desirable?
 #'   \code{"desirable"} if small values are good (eg, mortality, symptom severity) or
 #'   \code{"undesirable"} if small values are bad (eg, response rate, remission OR > 1).

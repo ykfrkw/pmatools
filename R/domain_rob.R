@@ -38,6 +38,38 @@
 #                  TE_all < TE_low indicates inflation toward favorable
 #   NULL         : direction unknown; use |TE_all| > |TE_low| (further from null)
 
+#' Assess the Risk of Bias GRADE domain (internal)
+#'
+#' Applies the MECE 5-rule zone-based flowchart documented at the top of this
+#' file whenever `rob` is a per-study vector (or column name); scalar GRADE
+#' levels bypass the flowchart.
+#'
+#' @param rob Scalar GRADE level, per-study vector, or column name in
+#'   `meta_obj$data`.
+#' @param meta_obj A `meta::metagen`-like object.
+#' @param rob_dominant_threshold Deprecated (v0.3.1+; accepted but ignored).
+#' @param rob_inflation_threshold Threshold for the relative change of the
+#'   pooled estimate when high-RoB studies are excluded, computed on the
+#'   absolute analysis scale:
+#'   \eqn{(|TE_{all}| - |TE_{low}|) / |TE_{low}|}, where \eqn{TE_{low}} is the
+#'   inverse-variance weighted mean of the low/some-concerns RoB studies.
+#'   Default `0.10`. A downgrade under rule 3 requires BOTH (a) the relative
+#'   change to be strictly greater than this threshold (`>`, so a change
+#'   exactly at the threshold does not rate down) AND (b) the shift to be in
+#'   the bias-favouring direction per `small_values`: only shifts that would
+#'   make the apparent effect look more favourable (over-estimation) count.
+#'   Shifts toward a smaller or less favourable effect never trigger a
+#'   downgrade under this criterion, even when their magnitude exceeds the
+#'   threshold; when that happens the domain note states it explicitly.
+#'   When every study is high-RoB, no low/some-RoB comparator pool exists,
+#'   the check cannot run, and the domain is rated `"serious"` (rate down 2
+#'   levels) unconditionally.
+#' @param small_values `"desirable"`, `"undesirable"`, or `NULL`. Defines the
+#'   bias-favouring direction; when `NULL`, `|TE_all| > |TE_low|` is used and
+#'   a warning is emitted if that assumption drives a downgrade.
+#' @param threshold_internal Clinical decision threshold on the analysis
+#'   scale (defines the trivial zone).
+#' @noRd
 assess_rob <- function(rob, meta_obj,
                        rob_dominant_threshold  = NULL,   # accepted but ignored (deprecated)
                        rob_inflation_threshold = 0.10,
@@ -382,6 +414,7 @@ assess_rob <- function(rob, meta_obj,
                 identical(za, "below") && identical(zl, "above")
 
   # 5-rule decision
+  gate_note <- NULL
   if (identical(za, zl)) {
     if (identical(za, "trivial")) {
       judgment <- "no"; rule <- 1L
@@ -389,9 +422,46 @@ assess_rob <- function(rob, meta_obj,
     } else if (inflates) {
       judgment <- "some_concerns"; rule <- 3L
       rule_desc <- "Rule 3: same non-trivial zone but bias-favouring inflation > threshold -> rate down 1"
+      if (is.null(small_values)) {
+        rlang::warn(paste0(
+          "assess_rob(): small_values was not supplied, so the bias-direction ",
+          "gate assumed that a larger absolute pooled effect ",
+          "(|TE_all| > |TE_low|) indicates bias-favouring inflation. This ",
+          "assumption determined the risk-of-bias downgrade (rule 3). Supply ",
+          "small_values = 'desirable' or 'undesirable' to make the direction ",
+          "of bias explicit."
+        ))
+      }
     } else {
       judgment <- "no"; rule <- 2L
       rule_desc <- "Rule 2: same non-trivial zone, inflation within threshold (or not bias-favouring) -> do not rate down"
+      # Transparency: the magnitude of the shift exceeds the threshold, but the
+      # direction gate blocked the downgrade. Say so explicitly so readers do
+      # not conclude the threshold was ignored.
+      if (!isTRUE(direction_ok) && is.finite(inflation_ratio) &&
+          abs(inflation_ratio) > inflation_threshold) {
+        shift_expl <- if (is.null(small_values)) {
+          paste0("the pooled estimate moves closer to the null when high-RoB ",
+                 "studies are included, so bias would not inflate the ",
+                 "apparent effect (small_values not supplied; |TE| ",
+                 "comparison used)")
+        } else if (identical(small_values, "undesirable")) {
+          paste0("the shift is toward smaller values, the unfavourable ",
+                 "direction given small_values = 'undesirable', so bias ",
+                 "would not inflate the apparent benefit")
+        } else {
+          paste0("the shift is toward larger values, the unfavourable ",
+                 "direction given small_values = 'desirable', so bias ",
+                 "would not inflate the apparent benefit")
+        }
+        gate_note <- sprintf(
+          paste0("Pooled estimate shifts by %.0f%% in absolute magnitude ",
+                 "when restricted to low/some-concerns RoB studies, ",
+                 "exceeding the %.0f%% threshold, but %s; per Core GRADE ",
+                 "guidance, no downgrade for this criterion."),
+          100 * abs(inflation_ratio), 100 * inflation_threshold, shift_expl
+        )
+      }
     }
   } else {
     if (sign_flips) {
@@ -417,11 +487,14 @@ assess_rob <- function(rob, meta_obj,
             100 * inflation_threshold)
   }
 
+  gate_desc <- sprintf("direction gate (bias-favouring shift): %s",
+                       if (isTRUE(direction_ok)) "yes" else "no")
+
   diff_note <- sprintf(
-    "%s(all) = %.3f [zone = %s]; %s(excl. high-RoB) = %.3f [zone = %s]; %s; %s; %s",
+    "%s(all) = %.3f [zone = %s]; %s(excl. high-RoB) = %.3f [zone = %s]; %s; %s; %s; %s",
     sm_label, .disp(te_all), za,
     sm_label, .disp(te_low), zl,
-    inflation_str, threshold_note, sv_desc
+    inflation_str, gate_desc, threshold_note, sv_desc
   )
 
   list(
@@ -431,8 +504,12 @@ assess_rob <- function(rob, meta_obj,
     zone_low        = zl,
     sign_flips      = sign_flips,
     inflates        = inflates,
+    direction_ok    = direction_ok,
     inflation_ratio = inflation_ratio,
-    note            = paste0(diff_note, ". ", rule_desc)
+    note            = paste0(
+      diff_note, ". ", rule_desc,
+      if (!is.null(gate_note)) paste0(". ", gate_note) else ""
+    )
   )
 }
 
