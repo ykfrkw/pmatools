@@ -157,8 +157,9 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   pi_note <- if (prediction) " PrI = 95 percent prediction interval." else ""
 
   base_note <- paste0(
-    "GRADE certainty: ", certainty_label, ". ",
-    "Assessment based on BMJ 2025 Core GRADE series (Guyatt et al.). ",
+    "Certainty rating (Core GRADE series): ", certainty_label, ". ",
+    "Assessment based on BMJ 2025 Core GRADE series (Guyatt et al.); ",
+    "not an official GRADE Working Group assessment. ",
     "CI = confidence interval.", pi_note, " ",
     "Intervention rate (Risk with ", label_intervention, ") = ",
     "intervention-arm event rate computed from baseline risk and pooled ",

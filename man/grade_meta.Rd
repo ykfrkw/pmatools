@@ -2,7 +2,7 @@
 % Please edit documentation in R/grade_meta.R
 \name{grade_meta}
 \alias{grade_meta}
-\title{Assess GRADE certainty of evidence from a meta-analysis object}
+\title{Assess certainty of evidence (Core GRADE series) from a meta-analysis object}
 \usage{
 grade_meta(
   meta_obj,

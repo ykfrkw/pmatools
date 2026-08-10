@@ -1,20 +1,24 @@
 Package: pmatools
-Title: Pairwise Meta-Analysis with GRADE Certainty Assessment
-Version: 0.3.4
+Title: Pairwise Meta-Analysis with Certainty Ratings Following the Core
+    GRADE Series
+Version: 0.4.0
 Authors@R: person("Yuki", "Furukawa", email = "furukawa.y.psy@gmail.com",
                   role = c("aut", "cre"))
-Description: End-to-end pairwise meta-analysis pipeline with GRADE certainty
-    assessment, Summary of Findings table, and reproducible export bundle.
+Description: End-to-end pairwise meta-analysis pipeline with certainty
+    ratings following the Core GRADE series, Summary of Findings table,
+    and reproducible export bundle. pmatools implements the Core GRADE
+    series (Guyatt et al., BMJ 2025), which summarizes GRADE guidance;
+    it is not an official GRADE Working Group tool.
     Wraps the {meta} package for data ingestion (long/wide), random- or
     common-effect pooling, contour-enhanced funnel plots with Egger's test,
-    and auto-laid-out forest plots. GRADE follows the BMJ 2025 Core GRADE
-    series (Guyatt et al.): Risk of Bias (BMJ Fig 2 weight-based dominance
-    plus inflation threshold), Inconsistency (BMJ Fig 2 flowchart with a
-    clinical decision Threshold), Indirectness (manual), Imprecision
+    and auto-laid-out forest plots. Certainty ratings follow the BMJ 2025
+    Core GRADE series (Guyatt et al.): Risk of Bias (BMJ Fig 2 weight-based
+    dominance plus inflation threshold), Inconsistency (BMJ Fig 2 flowchart
+    with a clinical decision Threshold), Indirectness (manual), Imprecision
     (CI vs Threshold + Optimal Information Size from Threshold), and Publication Bias
     (Egger / unpublished-studies flowchart). Outputs SoF flextable, multi-
-    outcome GRADE table, and Appendix report (docx/html/pdf/md), and
-    bundles everything plus a reproducible analysis.R into a ZIP archive.
+    outcome evidence-profile table, and Appendix report (docx/html/pdf/md),
+    and bundles everything plus a reproducible analysis.R into a ZIP archive.
 License: CC BY 4.0 + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

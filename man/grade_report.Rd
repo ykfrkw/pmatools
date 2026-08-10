@@ -2,7 +2,7 @@
 % Please edit documentation in R/grade_report.R
 \name{grade_report}
 \alias{grade_report}
-\title{Generate a GRADE appendix report}
+\title{Generate a certainty-of-evidence appendix report (Core GRADE series)}
 \usage{
 grade_report(
   outcomes,
@@ -11,7 +11,7 @@ grade_report(
   format = "docx",
   output_dir = getwd(),
   output_file = "grade_report",
-  title = "GRADE Certainty of Evidence Assessment",
+  title = "Certainty of Evidence Assessment (Core GRADE series)",
   show_domains = TRUE,
   per = 1000,
   prediction = FALSE,
@@ -33,7 +33,8 @@ grade_report(
 
 \item{output_file}{Base filename without extension. Default \code{"grade_report"}.}
 
-\item{title}{Report title. Default \code{"GRADE Certainty of Evidence Assessment"}.}
+\item{title}{Report title. Default
+\code{"Certainty of Evidence Assessment (Core GRADE series)"}.}
 
 \item{show_domains}{Logical. Show per-domain columns in the SoF table (default TRUE).}
 
@@ -51,7 +52,7 @@ grade_report(
 Invisibly returns a character vector of output file paths.
 }
 \description{
-Generate a GRADE appendix report
+Generate a certainty-of-evidence appendix report (Core GRADE series)
 }
 \examples{
 \dontrun{

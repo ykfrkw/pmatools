@@ -38,7 +38,7 @@
 #                  TE_all < TE_low indicates inflation toward favorable
 #   NULL         : direction unknown; use |TE_all| > |TE_low| (further from null)
 
-#' Assess the Risk of Bias GRADE domain (internal)
+#' Assess the Risk of Bias domain (Core GRADE series; internal)
 #'
 #' Applies the MECE 5-rule zone-based flowchart documented at the top of this
 #' file whenever `rob` is a per-study vector (or column name); scalar GRADE

@@ -94,5 +94,5 @@ contributes nothing to the pooled estimate.}
 }
 }
 \details{
-This is a reference-only diagnostic. It does not drive the GRADE judgment.
+This is a reference-only diagnostic. It does not drive the certainty judgment.
 }
