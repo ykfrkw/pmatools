@@ -14,7 +14,9 @@ grade_report(
   title = "GRADE Certainty of Evidence Assessment",
   show_domains = TRUE,
   per = 1000,
-  prediction = FALSE
+  prediction = FALSE,
+  label_intervention = "intervention",
+  label_control = "control"
 )
 }
 \arguments{
@@ -39,6 +41,11 @@ grade_report(
 
 \item{prediction}{Logical. Show 95 percent prediction interval in the Effect column
 (default FALSE).}
+
+\item{label_intervention, label_control}{Arm labels for the
+"Risk with ..." columns of the SoF flextable (passed to
+\code{grade_table}). Defaults are \code{"intervention"} and
+\code{"control"}.}
 }
 \value{
 Invisibly returns a character vector of output file paths.

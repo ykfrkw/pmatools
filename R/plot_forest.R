@@ -79,7 +79,8 @@ plot_forest <- function(meta_obj,
   long_lbl <- !is.null(studlab) && any(nchar(as.character(studlab)) > 30)
   fs_lab <- if (isTRUE(auto_layout) && long_lbl) 0.85 else 1
 
-  # Optional N + event columns: Exp event, Exp N, Ctrl event, Ctrl N order.
+  # Optional N + event columns: intervention event, intervention N,
+  # control event, control N order.
   has_events <- isTRUE(show_events) &&
                 !is.null(meta_obj$event.e) && !is.null(meta_obj$event.c)
   has_n      <- isTRUE(show_n) &&
@@ -89,19 +90,19 @@ plot_forest <- function(meta_obj,
   left_labs <- "Study"
   if (has_events) {
     left_cols <- c(left_cols, "event.e")
-    left_labs <- c(left_labs, "Events Exp")
+    left_labs <- c(left_labs, "Events\nIntervention")
   }
   if (has_n) {
     left_cols <- c(left_cols, "n.e")
-    left_labs <- c(left_labs, "N Exp")
+    left_labs <- c(left_labs, "N\nIntervention")
   }
   if (has_events) {
     left_cols <- c(left_cols, "event.c")
-    left_labs <- c(left_labs, "Events Ctrl")
+    left_labs <- c(left_labs, "Events\nControl")
   }
   if (has_n) {
     left_cols <- c(left_cols, "n.c")
-    left_labs <- c(left_labs, "N Ctrl")
+    left_labs <- c(left_labs, "N\nControl")
   }
 
   effect_label <- if (!is.null(sm) && nzchar(sm)) {

@@ -23,6 +23,10 @@
 #' @param per Denominator for SoF rate columns (default 1000).
 #' @param prediction Logical. Show 95 percent prediction interval in the Effect column
 #'   (default FALSE).
+#' @param label_intervention,label_control Arm labels for the
+#'   "Risk with ..." columns of the SoF flextable (passed to
+#'   \code{grade_table}). Defaults are \code{"intervention"} and
+#'   \code{"control"}.
 #'
 #' @return Invisibly returns a character vector of output file paths.
 #'
@@ -46,7 +50,9 @@ grade_report <- function(outcomes,
                          title        = "GRADE Certainty of Evidence Assessment",
                          show_domains = TRUE,
                          per          = 1000,
-                         prediction   = FALSE) {
+                         prediction   = FALSE,
+                         label_intervention = "intervention",
+                         label_control      = "control") {
 
   if (!is.list(outcomes) || !all(vapply(outcomes, inherits, logical(1), "pmatools"))) {
     rlang::abort("outcomes must be a named list of pmatools objects.")
@@ -92,7 +98,9 @@ grade_report <- function(outcomes,
       .check_pkg("flextable")
       out_paths <- c(out_paths,
         .write_docx(outcomes, primary, palette, title, show_domains,
-                    per, prediction, base_path))
+                    per, prediction, base_path,
+                    label_intervention = label_intervention,
+                    label_control      = label_control))
       message("Written: ", base_path)
     }
   }
@@ -179,7 +187,7 @@ grade_report <- function(outcomes,
                            per = 1000, prediction = FALSE) {
   per_str <- format(per, big.mark = ",", scientific = FALSE)
   hdr <- paste0("| Outcome | k | N | Control rate (per ", per_str,
-                ") | Exp. rate (per ", per_str, ") | Effect (95% CI) | Certainty |")
+                ") | Intervention rate (per ", per_str, ") | Effect (95% CI) | Certainty |")
   sep <- "|---|---|---|---|---|---|---|"
 
   rows <- c()
@@ -213,7 +221,9 @@ grade_report <- function(outcomes,
 # Word (docx) output using officer + flextable
 # --------------------------------------------------------------------------
 .write_docx <- function(outcomes, primary, palette, title, show_domains,
-                         per, prediction, path) {
+                         per, prediction, path,
+                         label_intervention = "intervention",
+                         label_control      = "control") {
   doc <- officer::read_docx()
 
   doc <- officer::body_add_par(doc, title, style = "heading 1")
@@ -226,7 +236,10 @@ grade_report <- function(outcomes,
   doc <- officer::body_add_par(doc, "Summary of Findings", style = "heading 2")
 
   ft <- grade_table(outcomes, primary = primary, palette = palette,
-                    show_domains = show_domains, per = per, prediction = prediction)
+                    show_domains = show_domains, per = per,
+                    prediction = prediction,
+                    label_intervention = label_intervention,
+                    label_control      = label_control)
   doc <- flextable::body_add_flextable(doc, ft)
   doc <- officer::body_add_par(doc, "", style = "Normal")
 
