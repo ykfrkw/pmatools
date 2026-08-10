@@ -65,11 +65,18 @@
 #'   \code{inconsistency_threshold_side = "opposite_sides"}.
 #'   \code{"yes"} / \code{"no"}: is the inconsistency explained by a credible subgroup?
 #' @param threshold (v0.2) Numeric clinical decision Threshold (a minimally
-#'   important effect on the analysis scale). Used in Inconsistency Step 2
-#'   (3-zone classification of point estimates around \eqn{\pm}Threshold),
-#'   in Imprecision (CI-vs-Threshold check, Zeng et al. BMJ 2025), and feeds
-#'   the OIS calculation in Imprecision when explicit OIS values are not
-#'   supplied. The same Threshold is used across all three domains.
+#'   important effect). This is a cross-cutting parameter shared by the three
+#'   Threshold-aware domains — it is not a Risk-of-Bias-specific setting:
+#'   \itemize{
+#'     \item Inconsistency: Step 2 3-zone classification of study point
+#'       estimates around \eqn{\pm}Threshold.
+#'     \item Imprecision: CI-vs-Threshold check (Zeng et al. BMJ 2025) and
+#'       the OIS calculation when explicit OIS values are not supplied.
+#'     \item Risk of bias: sensitivity comparison of the pooled estimate with
+#'       vs without high-RoB studies, zone-classified around
+#'       \eqn{\pm}Threshold.
+#'   }
+#'   The same Threshold is used across all three domains.
 #' @param threshold_scale (v0.2) How to interpret \code{threshold}. One of:
 #'   \itemize{
 #'     \item \code{"auto"} (default): infer from \code{meta_obj$sm}
@@ -81,8 +88,24 @@
 #'       \code{1.25} for a 25 percent relative effect); internally
 #'       converted to \code{log(threshold)}.
 #'     \item \code{"ard"}: \code{threshold} is an absolute risk difference
-#'       (binary outcomes only).
+#'       (binary outcomes only; a proportion, e.g., \code{0.05} for 50 per
+#'       1,000). When the effect measure is a ratio (OR/RR/HR; RoM
+#'       approximated as RR), the ARD Threshold is converted to an
+#'       equivalent ratio at the baseline risk (see
+#'       \code{threshold_baseline}): RR uses
+#'       \eqn{T = (p_0 + ARD) / p_0}, OR uses
+#'       \eqn{T = odds(p_0 + ARD) / odds(p_0)}, and HR is approximated by
+#'       the RR formula (accurate only for low event rates; interpret with
+#'       care).
 #'   }
+#' @param threshold_baseline (v0.4) Baseline (control-arm) risk as a
+#'   proportion in (0, 1) (e.g., \code{0.18} for 180 per 1,000), used to
+#'   convert an absolute Threshold (\code{threshold_scale = "ard"}) to the
+#'   ratio scale when the effect measure is OR/RR/HR/RoM. If \code{NULL}
+#'   (default), the pooled control event rate
+#'   (\eqn{\sum event_c / \sum n_c}) of \code{meta_obj} is used; if that is
+#'   unavailable too, an informative error is raised. Ignored unless an ARD
+#'   Threshold requires conversion.
 #' @param outcome_name Optional label for the outcome (used in SoF table).
 #' @param outcome_type \code{"relative"} (RR/OR/HR, null = 1) or
 #'   \code{"absolute"} (MD/SMD, null = 0). Default \code{"relative"}.
@@ -161,6 +184,7 @@ grade_meta <- function(meta_obj,
                        inconsistency_subgroup_explained = NULL,
                        threshold                        = NULL,
                        threshold_scale                  = "auto",
+                       threshold_baseline               = NULL,
                        outcome_name                     = NULL,
                        outcome_type                     = c("relative", "absolute"),
                        ois_events                       = NULL,
@@ -189,9 +213,16 @@ grade_meta <- function(meta_obj,
   starting_quality <- score_to_certainty(start_score)
 
   # --- resolve Threshold to TE scale (used by RoB, Inconsistency, Imprecision) ---
-  threshold_resolved <- threshold_to_te_scale(threshold, threshold_scale, meta_obj$sm)
+  threshold_resolved <- threshold_to_te_scale(
+    threshold, threshold_scale, meta_obj$sm,
+    threshold_baseline = threshold_baseline,
+    meta_obj           = meta_obj
+  )
   threshold_internal <- threshold_resolved$threshold_internal
   threshold_kind     <- threshold_resolved$threshold_kind
+  threshold_ard      <- threshold_resolved$threshold_ard
+  threshold_note     <- threshold_resolved$threshold_note
+  threshold_p0       <- threshold_resolved$threshold_baseline
 
   # --- domain assessments ---
   d_rob   <- assess_rob(rob, meta_obj,
@@ -223,8 +254,23 @@ grade_meta <- function(meta_obj,
     ois_delta          = ois_delta,
     ois_sd             = ois_sd,
     threshold_internal = threshold_internal,
-    threshold_kind     = threshold_kind
+    threshold_kind     = threshold_kind,
+    threshold_ard      = threshold_ard,
+    threshold_p0       = threshold_p0
   )
+
+  # Absolute-threshold conversion note: surface it in every Threshold-aware
+  # domain so the baseline-risk assumption is auditable per domain.
+  if (!is.null(threshold_note)) {
+    append_threshold_note <- function(d) {
+      d$notes <- ifelse(is.na(d$notes), threshold_note,
+                        paste0(d$notes, " | ", threshold_note))
+      d
+    }
+    d_rob   <- append_threshold_note(d_rob)
+    d_incon <- append_threshold_note(d_incon)
+    d_impre <- append_threshold_note(d_impre)
+  }
 
   d_pubias <- assess_pubias(
     meta_obj,
@@ -255,6 +301,9 @@ grade_meta <- function(meta_obj,
       threshold          = threshold,
       threshold_scale    = threshold_scale,
       threshold_internal = threshold_internal,
+      threshold_ard      = threshold_ard,
+      threshold_note     = threshold_note,
+      threshold_baseline = threshold_p0,
       meta               = meta_obj
     ),
     class = "pmatools"

@@ -58,7 +58,9 @@ assess_imprecision <- function(meta_obj,
                                ois_delta          = NULL,
                                ois_sd             = NULL,
                                threshold_internal = NULL,
-                               threshold_kind     = NULL) {
+                               threshold_kind     = NULL,
+                               threshold_ard      = NULL,
+                               threshold_p0       = NULL) {
   if (isTRUE(meta_obj$random)) {
     lower <- meta_obj$lower.random
     upper <- meta_obj$upper.random
@@ -136,6 +138,15 @@ assess_imprecision <- function(meta_obj,
       !is.null(threshold_internal) && !is.na(threshold_internal) &&
       threshold_internal != 0) {
     if (outcome_type == "relative") {
+      # ARD Threshold converted to the ratio scale: anchor ois_p0 to the same
+      # baseline risk that was used for the conversion, for consistency.
+      if (is.null(ois_p0) && !is.null(threshold_ard) &&
+          !is.null(threshold_p0) && is.finite(threshold_p0)) {
+        ois_p0 <- threshold_p0
+        threshold_used_note <- sprintf(
+          " (ois_p0 from threshold baseline risk = %.4f)", ois_p0
+        )
+      }
       # Auto-fall back ois_p0 to control-arm pooled proportion if missing
       if (is.null(ois_p0)) {
         cer <- tryCatch(.compute_control_risk(meta_obj, method = "simple"),
@@ -149,7 +160,11 @@ assess_imprecision <- function(meta_obj,
       }
       if (is.null(ois_p1) && !is.null(ois_p0)) {
         sm_local <- meta_obj$sm %||% ""
-        if (identical(threshold_kind, "ard")) {
+        if (!is.null(threshold_ard) && is.finite(threshold_ard)) {
+          # ARD Threshold with a ratio sm: threshold_internal is on the log
+          # scale, so use the raw ARD for the risk arithmetic.
+          ois_p1 <- ois_p0 + threshold_ard
+        } else if (identical(threshold_kind, "ard")) {
           ois_p1 <- ois_p0 + threshold_internal
         } else if (identical(sm_local, "OR")) {
           # OR scale: invert odds, not risk. RR-style p1 = p0 * exp(Threshold)

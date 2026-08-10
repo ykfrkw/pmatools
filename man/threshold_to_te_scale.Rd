@@ -4,7 +4,13 @@
 \alias{threshold_to_te_scale}
 \title{Convert a user-supplied Threshold to the meta TE scale}
 \usage{
-threshold_to_te_scale(threshold, threshold_scale = "auto", sm = NULL)
+threshold_to_te_scale(
+  threshold,
+  threshold_scale = "auto",
+  sm = NULL,
+  threshold_baseline = NULL,
+  meta_obj = NULL
+)
 }
 \arguments{
 \item{threshold}{Numeric Threshold value.}
@@ -13,17 +19,55 @@ threshold_to_te_scale(threshold, threshold_scale = "auto", sm = NULL)
 \code{"ratio"}, or \code{"ard"}.}
 
 \item{sm}{The effect measure from \code{meta_obj$sm}, used when
-\code{threshold_scale = "auto"}.}
+\code{threshold_scale = "auto"} and to decide whether an
+\code{"ard"} Threshold needs conversion to the ratio scale.}
+
+\item{threshold_baseline}{Optional baseline (control-arm) risk as a
+proportion in (0, 1). Only used when \code{threshold_scale = "ard"} and
+\code{sm} is a ratio measure (OR / RR / HR / RoM); see Details.}
+
+\item{meta_obj}{Optional meta object. When \code{threshold_baseline} is
+\code{NULL}, the pooled control event rate
+(\eqn{\sum event_c / \sum n_c}) is used as the baseline risk fallback.}
 }
 \value{
-A list with \code{threshold_internal} (numeric on TE scale) and
-\code{threshold_kind} (the resolved scale, useful for downstream
-branching like ARD-vs-ratio in OIS).
+A list with:
+\describe{
+\item{threshold_internal}{Numeric on the TE scale (log scale for ratio
+measures).}
+\item{threshold_kind}{The resolved scale (useful for downstream
+branching like ARD-vs-ratio in OIS).}
+\item{threshold_ard}{The raw absolute risk difference. Non-\code{NULL}
+only when an \code{"ard"} Threshold was converted to the ratio scale.}
+\item{threshold_note}{Human-readable conversion note (eg,
+\code{"Absolute threshold 50 per 1000 at baseline risk 180 per 1000
+      (equivalent RR 1.28)"}). Non-\code{NULL} only on ARD-to-ratio
+conversion.}
+\item{threshold_baseline}{The baseline risk actually used for the
+conversion. Non-\code{NULL} only on ARD-to-ratio conversion.}
+}
 }
 \description{
 Internal helper. Translates the user's Threshold input (with its declared
 scale) into a value on the same scale as \code{meta_obj$TE}. Used by the
 Inconsistency and Imprecision domains to anchor judgments to a clinical
 decision Threshold.
+}
+\details{
+When \code{threshold_scale = "ard"} and \code{sm} is a ratio measure, the
+ARD Threshold is converted to an equivalent ratio at the baseline risk
+\eqn{p_0} (from \code{threshold_baseline}, else the pooled control event
+rate of \code{meta_obj}; an error is raised if neither is available):
+\itemize{
+\item RR: \eqn{T = (p_0 + ARD) / p_0}
+\item OR: \eqn{T = odds(p_0 + ARD) / odds(p_0)} with
+\eqn{odds(p) = p / (1 - p)}
+\item HR / RoM: approximated by the RR formula. Caveat: the RR
+approximation for HR is accurate only for low event rates / short
+follow-up; interpret with care.
+}
+\code{threshold_internal} is then \eqn{\log T}. For non-ratio effect
+measures, \code{threshold_scale = "ard"} keeps the previous pass-through
+behaviour (\code{threshold_internal = threshold}).
 }
 \keyword{internal}

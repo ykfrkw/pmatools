@@ -199,12 +199,19 @@ chinn_smd_to_or <- function(smd, ci_lower = NULL, ci_upper = NULL) {
 #'
 #' @return A list with \code{threshold_user} (user-facing value) and
 #'   \code{threshold_scale} (one of \code{"ratio"}, \code{"te_scale"},
-#'   \code{"ard"}). Returns \code{NULL} if the effect measure is unrecognized.
+#'   \code{"ard"}). For binary ratio measures (OR / RR / HR) the list
+#'   additionally contains \code{threshold_absolute}, a nested list with
+#'   \code{threshold_user} and \code{threshold_scale = "ard"} suggesting a
+#'   conventional absolute risk difference threshold (0.05, ie 50 per 1,000)
+#'   for use with \code{threshold_scale = "ard"} in
+#'   \code{\link{grade_meta}}. Returns \code{NULL} if the effect measure is
+#'   unrecognized.
 #'
 #' @details
 #' Defaults:
 #' \itemize{
 #'   \item OR / RR / HR: 1.20–1.25 on the ratio scale
+#'     (plus an absolute suggestion of ARD 0.05 in \code{threshold_absolute})
 #'   \item RoM: 1.10 (10 percent ratio of means)
 #'   \item SMD: 0.20 (Cohen's small)
 #'   \item MD: 0.20 \eqn{\times} pooled SD (Cohen's small in raw units)
@@ -216,10 +223,15 @@ suggest_threshold <- function(meta_obj) {
   sm <- meta_obj$sm
   if (is.null(sm)) return(NULL)
 
+  ard_suggest <- list(threshold_user = 0.05, threshold_scale = "ard")
+
   switch(sm,
-    "OR"  = list(threshold_user = 1.25,  threshold_scale = "ratio"),
-    "RR"  = list(threshold_user = 1.20,  threshold_scale = "ratio"),
-    "HR"  = list(threshold_user = 1.20,  threshold_scale = "ratio"),
+    "OR"  = list(threshold_user = 1.25,  threshold_scale = "ratio",
+                 threshold_absolute = ard_suggest),
+    "RR"  = list(threshold_user = 1.20,  threshold_scale = "ratio",
+                 threshold_absolute = ard_suggest),
+    "HR"  = list(threshold_user = 1.20,  threshold_scale = "ratio",
+                 threshold_absolute = ard_suggest),
     "RoM" = list(threshold_user = 1.10,  threshold_scale = "ratio"),
     "ARD" = list(threshold_user = 0.05,  threshold_scale = "ard"),
     "SMD" = list(threshold_user = 0.20,  threshold_scale = "te_scale"),
@@ -300,16 +312,55 @@ compute_pooled_sd <- function(meta_obj) {
 #' @param threshold_scale One of \code{"auto"}, \code{"te_scale"},
 #'   \code{"ratio"}, or \code{"ard"}.
 #' @param sm The effect measure from \code{meta_obj$sm}, used when
-#'   \code{threshold_scale = "auto"}.
+#'   \code{threshold_scale = "auto"} and to decide whether an
+#'   \code{"ard"} Threshold needs conversion to the ratio scale.
+#' @param threshold_baseline Optional baseline (control-arm) risk as a
+#'   proportion in (0, 1). Only used when \code{threshold_scale = "ard"} and
+#'   \code{sm} is a ratio measure (OR / RR / HR / RoM); see Details.
+#' @param meta_obj Optional meta object. When \code{threshold_baseline} is
+#'   \code{NULL}, the pooled control event rate
+#'   (\eqn{\sum event_c / \sum n_c}) is used as the baseline risk fallback.
 #'
-#' @return A list with \code{threshold_internal} (numeric on TE scale) and
-#'   \code{threshold_kind} (the resolved scale, useful for downstream
-#'   branching like ARD-vs-ratio in OIS).
+#' @return A list with:
+#'   \describe{
+#'     \item{threshold_internal}{Numeric on the TE scale (log scale for ratio
+#'       measures).}
+#'     \item{threshold_kind}{The resolved scale (useful for downstream
+#'       branching like ARD-vs-ratio in OIS).}
+#'     \item{threshold_ard}{The raw absolute risk difference. Non-\code{NULL}
+#'       only when an \code{"ard"} Threshold was converted to the ratio scale.}
+#'     \item{threshold_note}{Human-readable conversion note (eg,
+#'       \code{"Absolute threshold 50 per 1000 at baseline risk 180 per 1000
+#'       (equivalent RR 1.28)"}). Non-\code{NULL} only on ARD-to-ratio
+#'       conversion.}
+#'     \item{threshold_baseline}{The baseline risk actually used for the
+#'       conversion. Non-\code{NULL} only on ARD-to-ratio conversion.}
+#'   }
+#'
+#' @details
+#' When \code{threshold_scale = "ard"} and \code{sm} is a ratio measure, the
+#' ARD Threshold is converted to an equivalent ratio at the baseline risk
+#' \eqn{p_0} (from \code{threshold_baseline}, else the pooled control event
+#' rate of \code{meta_obj}; an error is raised if neither is available):
+#' \itemize{
+#'   \item RR: \eqn{T = (p_0 + ARD) / p_0}
+#'   \item OR: \eqn{T = odds(p_0 + ARD) / odds(p_0)} with
+#'     \eqn{odds(p) = p / (1 - p)}
+#'   \item HR / RoM: approximated by the RR formula. Caveat: the RR
+#'     approximation for HR is accurate only for low event rates / short
+#'     follow-up; interpret with care.
+#' }
+#' \code{threshold_internal} is then \eqn{\log T}. For non-ratio effect
+#' measures, \code{threshold_scale = "ard"} keeps the previous pass-through
+#' behaviour (\code{threshold_internal = threshold}).
 #'
 #' @keywords internal
-threshold_to_te_scale <- function(threshold, threshold_scale = "auto", sm = NULL) {
+threshold_to_te_scale <- function(threshold, threshold_scale = "auto", sm = NULL,
+                                  threshold_baseline = NULL, meta_obj = NULL) {
   if (is.null(threshold) || is.na(threshold)) {
-    return(list(threshold_internal = NULL, threshold_kind = NULL))
+    return(list(threshold_internal = NULL, threshold_kind = NULL,
+                threshold_ard = NULL, threshold_note = NULL,
+                threshold_baseline = NULL))
   }
 
   if (!is.numeric(threshold) || length(threshold) != 1) {
@@ -339,11 +390,103 @@ threshold_to_te_scale <- function(threshold, threshold_scale = "auto", sm = NULL
     rlang::abort("threshold_scale must be one of 'auto', 'te_scale', 'ratio', 'ard'.")
   }
 
+  # ARD Threshold with a ratio effect measure: convert to the ratio scale at
+  # the baseline risk (previously a silent pass-through, which compared a raw
+  # ARD against log-ratio TEs).
+  if (scale == "ard" && !is.null(sm) && sm %in% c("OR", "RR", "HR", "RoM")) {
+    return(.ard_threshold_to_ratio(threshold, sm, threshold_baseline, meta_obj))
+  }
+
   threshold_internal <- switch(scale,
     "te_scale" = threshold,
     "ratio"    = log(threshold),
     "ard"      = threshold
   )
 
-  list(threshold_internal = threshold_internal, threshold_kind = scale)
+  list(threshold_internal = threshold_internal, threshold_kind = scale,
+       threshold_ard = NULL, threshold_note = NULL, threshold_baseline = NULL)
+}
+
+#' Convert an absolute risk difference Threshold to the log-ratio scale
+#'
+#' @param ard Positive absolute risk difference (proportion, eg 0.05).
+#' @param sm Ratio effect measure ("OR", "RR", "HR", "RoM").
+#' @param threshold_baseline Baseline (control-arm) risk in (0, 1) or NULL.
+#' @param meta_obj meta object used for the pooled-CER fallback, or NULL.
+#' @return Same list structure as \code{threshold_to_te_scale()}.
+#' @keywords internal
+#' @noRd
+.ard_threshold_to_ratio <- function(ard, sm, threshold_baseline = NULL,
+                                    meta_obj = NULL) {
+  if (!is.finite(ard) || ard <= 0) {
+    rlang::abort(paste0(
+      "threshold_scale = 'ard' with sm = '", sm, "' requires a positive ",
+      "absolute risk difference expressed as a proportion ",
+      "(e.g., 0.05 for 50 per 1,000)."
+    ))
+  }
+
+  # Resolve baseline risk: explicit threshold_baseline > pooled control event
+  # rate from the meta object > actionable error.
+  p0 <- NULL
+  if (!is.null(threshold_baseline)) {
+    if (!is.numeric(threshold_baseline) || length(threshold_baseline) != 1 ||
+        !is.finite(threshold_baseline) ||
+        threshold_baseline <= 0 || threshold_baseline >= 1) {
+      rlang::abort(paste0(
+        "threshold_baseline must be a single control-arm risk strictly ",
+        "between 0 and 1 (e.g., 0.18 for 180 per 1,000)."
+      ))
+    }
+    p0 <- threshold_baseline
+  } else if (!is.null(meta_obj)) {
+    cer <- tryCatch(.compute_control_risk(meta_obj, method = "simple"),
+                    error = function(e) NULL)
+    if (!is.null(cer) && is.finite(cer) && cer > 0 && cer < 1) {
+      p0 <- cer
+    }
+  }
+  if (is.null(p0)) {
+    rlang::abort(paste0(
+      "An absolute (ARD) threshold with sm = '", sm, "' requires a baseline ",
+      "(control-arm) risk to convert it to the ratio scale. Supply ",
+      "threshold_baseline (a proportion in (0, 1), e.g., 0.18 for 180 per ",
+      "1,000), or use a meta-analysis with control-arm event data ",
+      "(event.c / n.c) so the pooled control event rate can be used."
+    ))
+  }
+
+  p1 <- p0 + ard
+  if (p1 >= 1) {
+    rlang::abort(sprintf(paste0(
+      "threshold (ARD = %g) plus baseline risk (%g) implies an event rate ",
+      ">= 1 (%g). Use a smaller ARD threshold or baseline risk."),
+      ard, p0, p1
+    ))
+  }
+
+  t_ratio <- if (identical(sm, "OR")) {
+    (p1 / (1 - p1)) / (p0 / (1 - p0))
+  } else {
+    # RR exact; HR and RoM approximated as RR (see Details / caveat).
+    p1 / p0
+  }
+
+  approx_str <- if (sm %in% c("HR", "RoM")) {
+    sprintf("; %s approximated as RR", sm)
+  } else {
+    ""
+  }
+  note <- sprintf(
+    "Absolute threshold %g per 1000 at baseline risk %g per 1000 (equivalent %s %.2f%s)",
+    1000 * ard, 1000 * p0, sm, t_ratio, approx_str
+  )
+
+  list(
+    threshold_internal = log(t_ratio),
+    threshold_kind     = "ard",
+    threshold_ard      = ard,
+    threshold_note     = note,
+    threshold_baseline = p0
+  )
 }

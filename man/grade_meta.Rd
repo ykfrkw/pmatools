@@ -18,6 +18,7 @@ grade_meta(
   inconsistency_subgroup_explained = NULL,
   threshold = NULL,
   threshold_scale = "auto",
+  threshold_baseline = NULL,
   outcome_name = NULL,
   outcome_type = c("relative", "absolute"),
   ois_events = NULL,
@@ -93,11 +94,18 @@ side of the clinical threshold, or spread across both sides?}
 \code{"yes"} / \code{"no"}: is the inconsistency explained by a credible subgroup?}
 
 \item{threshold}{(v0.2) Numeric clinical decision Threshold (a minimally
-important effect on the analysis scale). Used in Inconsistency Step 2
-(3-zone classification of point estimates around \eqn{\pm}Threshold),
-in Imprecision (CI-vs-Threshold check, Zeng et al. BMJ 2025), and feeds
-the OIS calculation in Imprecision when explicit OIS values are not
-supplied. The same Threshold is used across all three domains.}
+important effect). This is a cross-cutting parameter shared by the three
+Threshold-aware domains — it is not a Risk-of-Bias-specific setting:
+\itemize{
+\item Inconsistency: Step 2 3-zone classification of study point
+estimates around \eqn{\pm}Threshold.
+\item Imprecision: CI-vs-Threshold check (Zeng et al. BMJ 2025) and
+the OIS calculation when explicit OIS values are not supplied.
+\item Risk of bias: sensitivity comparison of the pooled estimate with
+vs without high-RoB studies, zone-classified around
+\eqn{\pm}Threshold.
+}
+The same Threshold is used across all three domains.}
 
 \item{threshold_scale}{(v0.2) How to interpret \code{threshold}. One of:
 \itemize{
@@ -110,8 +118,25 @@ scale as \code{meta_obj$TE} (log scale for ratios, raw for MD/SMD).
 \code{1.25} for a 25 percent relative effect); internally
 converted to \code{log(threshold)}.
 \item \code{"ard"}: \code{threshold} is an absolute risk difference
-(binary outcomes only).
+(binary outcomes only; a proportion, e.g., \code{0.05} for 50 per
+1,000). When the effect measure is a ratio (OR/RR/HR; RoM
+approximated as RR), the ARD Threshold is converted to an
+equivalent ratio at the baseline risk (see
+\code{threshold_baseline}): RR uses
+\eqn{T = (p_0 + ARD) / p_0}, OR uses
+\eqn{T = odds(p_0 + ARD) / odds(p_0)}, and HR is approximated by
+the RR formula (accurate only for low event rates; interpret with
+care).
 }}
+
+\item{threshold_baseline}{(v0.4) Baseline (control-arm) risk as a
+proportion in (0, 1) (e.g., \code{0.18} for 180 per 1,000), used to
+convert an absolute Threshold (\code{threshold_scale = "ard"}) to the
+ratio scale when the effect measure is OR/RR/HR/RoM. If \code{NULL}
+(default), the pooled control event rate
+(\eqn{\sum event_c / \sum n_c}) of \code{meta_obj} is used; if that is
+unavailable too, an informative error is raised. Ignored unless an ARD
+Threshold requires conversion.}
 
 \item{outcome_name}{Optional label for the outcome (used in SoF table).}
 

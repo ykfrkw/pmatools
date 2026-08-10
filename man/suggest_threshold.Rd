@@ -13,7 +13,13 @@ suggest_threshold(meta_obj)
 \value{
 A list with \code{threshold_user} (user-facing value) and
 \code{threshold_scale} (one of \code{"ratio"}, \code{"te_scale"},
-\code{"ard"}). Returns \code{NULL} if the effect measure is unrecognized.
+\code{"ard"}). For binary ratio measures (OR / RR / HR) the list
+additionally contains \code{threshold_absolute}, a nested list with
+\code{threshold_user} and \code{threshold_scale = "ard"} suggesting a
+conventional absolute risk difference threshold (0.05, ie 50 per 1,000)
+for use with \code{threshold_scale = "ard"} in
+\code{\link{grade_meta}}. Returns \code{NULL} if the effect measure is
+unrecognized.
 }
 \description{
 Returns a conventional clinical decision Threshold (a minimally important
@@ -25,6 +31,7 @@ Threshold whenever available.
 Defaults:
 \itemize{
 \item OR / RR / HR: 1.20–1.25 on the ratio scale
+(plus an absolute suggestion of ARD 0.05 in \code{threshold_absolute})
 \item RoM: 1.10 (10 percent ratio of means)
 \item SMD: 0.20 (Cohen's small)
 \item MD: 0.20 \eqn{\times} pooled SD (Cohen's small in raw units)
