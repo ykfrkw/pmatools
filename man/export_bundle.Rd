@@ -109,6 +109,7 @@ Character. Absolute path to the created ZIP file.
 \description{
 Bundles every artifact of the analysis into a single ZIP: the long-format
 CSV, a reproducible \code{analysis.R} script, results.txt, forest/funnel plots,
-the SoF table, and the GRADE appendix. The bundled \code{analysis.R} runs
+the SoF table, and the certainty appendix (Core GRADE series). The
+bundled \code{analysis.R} runs
 standalone with \code{library(pmatools)} and the bundled CSV.
 }

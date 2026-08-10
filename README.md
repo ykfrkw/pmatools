@@ -1,8 +1,10 @@
 # pmatools
 
-**End-to-end pairwise meta-analysis with GRADE certainty assessment**
+**End-to-end pairwise meta-analysis with certainty ratings following the Core GRADE series**
 
-`pmatools` is an R package that runs the full pairwise meta-analysis pipeline — from data ingestion (long or wide format) through pooled effect estimation (binary or continuous) and forest/funnel plots — and rates the resulting evidence with the **GRADE** approach following the **BMJ 2025 Core GRADE series** (Guyatt G et al., BMJ 2025). It produces a Summary of Findings flextable, a multi-outcome GRADE table, and a full Appendix report (docx/html/pdf/md), and bundles every artifact plus a reproducible `analysis.R` script into a single ZIP.
+`pmatools` is an R package that runs the full pairwise meta-analysis pipeline — from data ingestion (long or wide format) through pooled effect estimation (binary or continuous) and forest/funnel plots — and rates the certainty of the resulting evidence following the **BMJ 2025 Core GRADE series** (Guyatt G et al., BMJ 2025). It produces a Summary of Findings flextable, a multi-outcome evidence-profile table, and a full Appendix report (docx/html/pdf/md), and bundles every artifact plus a reproducible `analysis.R` script into a single ZIP.
+
+> **Disclaimer**: `pmatools` implements the Core GRADE series (Guyatt et al., BMJ 2025), which summarizes GRADE guidance; it is not an official GRADE Working Group tool.
 
 A wizard-style Shiny front-end lives in the companion repository [pairwise_meta_analysis](https://yuki-furukawa.shinyapps.io/pairwise_meta_analysis/) (deployed on shinyapps.io).
 
@@ -23,7 +25,7 @@ devtools::load_all(".", reset = TRUE)
 
 ## Quick start
 
-End-to-end: data -> meta-analysis -> GRADE -> SoF -> ZIP.
+End-to-end: data -> meta-analysis -> certainty rating (Core GRADE series) -> SoF -> ZIP.
 
 ```r
 library(pmatools)
@@ -42,7 +44,8 @@ ma <- run_ma(data,
 plot_forest(ma, title = "CBT-I for depression")
 plot_funnel(ma)
 
-# 4. GRADE certainty (per-study RoB; Threshold drives RoB / Inconsistency / Imprecision)
+# 4. Certainty rating, Core GRADE series (per-study RoB; Threshold drives
+#    RoB / Inconsistency / Imprecision)
 g <- grade_meta(ma,
                 study_design = "RCT",
                 rob          = data$rob[data$treat == "CBT-I"],
@@ -50,6 +53,18 @@ g <- grade_meta(ma,
                 threshold    = 1.25,    # OR-scale Threshold (auto-detected)
                 ois_p0       = 0.25,
                 outcome_name = "Depression response")
+
+# 4b. Alternative (v0.4): specify the Threshold on the absolute scale.
+#     50 per 1,000 ARD, converted to the OR scale at a 25% baseline risk.
+g_abs <- grade_meta(ma,
+                    study_design       = "RCT",
+                    rob                = data$rob[data$treat == "CBT-I"],
+                    small_values       = "undesirable",
+                    threshold          = 0.05,   # absolute risk difference
+                    threshold_scale    = "ard",
+                    threshold_baseline = 0.25,   # control-arm risk (default: pooled)
+                    ois_p0             = 0.25,
+                    outcome_name       = "Depression response")
 
 print(g)
 sof_table(g)                 # pastel palette, rates per 1,000
@@ -62,9 +77,9 @@ export_bundle(ma, g, output_dir = "outputs", bundle_name = "cbti_depression")
 
 `outputs/cbti_depression.zip` contains: `data_long.csv`, `analysis.R` (re-runs the
 analysis with `library(pmatools)`), `results.txt`, forest/funnel PDF+PNG, the SoF
-docx, and the GRADE Appendix docx.
+docx, and the certainty Appendix docx (Core GRADE series).
 
-### Shorter version: GRADE-only on an existing meta object
+### Shorter version: certainty rating only, on an existing meta object
 
 ```r
 m <- meta::metabin(event.e = c(10,15,20), n.e = c(50,60,70),
@@ -72,6 +87,9 @@ m <- meta::metabin(event.e = c(10,15,20), n.e = c(50,60,70),
                    studlab = c("A","B","C"), sm = "OR",
                    prediction = TRUE)
 
+# v0.4 breaking change: every manual domain-judgment override (scalar rob,
+# indirectness != "no", inconsistency, imprecision, pubias_funnel_asymmetry)
+# requires a matching *_rationale argument.
 g <- grade_meta(m, study_design = "RCT", rob = "some_concerns",
                 rob_rationale = "RoB2 consensus: some concerns from missing outcome data",
                 small_values = "undesirable", indirectness = "no",
@@ -98,7 +116,7 @@ GRADE certainty starts at **High** for RCTs (or **Low** for observational studie
 
 ---
 
-## The five GRADE domains
+## The five Core GRADE domains
 
 ### Overview
 
@@ -403,7 +421,7 @@ grade_meta(m,
 the auto Egger judgment from visual inspection can pass
 `pubias_funnel_asymmetry = "yes"` or `"no"`.
 
-**Trim-and-fill diagnostics.** Trim-and-fill no longer drives the GRADE
+**Trim-and-fill diagnostics.** Trim-and-fill no longer drives the certainty
 judgment (the 2-tier Egger rule supersedes the previous sign-flip escalation),
 but the imputed studies and adjusted random-effects summary are still
 informative. They are available through `plot_trimfill_forest(g)` for display
@@ -416,7 +434,7 @@ registry/protocol entries supplied via `missing_df` (columns `studlab`, `n`,
 `results_known`) plus auto-detected studies whose effect estimate is `NA`
 (e.g. all-zero events). Missing rows show a status string in place of an
 estimate and contribute nothing to pooling. Reference-only diagnostic — it
-does not drive the GRADE judgment.
+does not drive the certainty judgment.
 
 ```r
 miss <- data.frame(
@@ -497,7 +515,7 @@ J Affect Disord. 2024;367:359-366. doi:10.1016/j.jad.2024.09.017
 
 > **Note on sample data:** `cbti_depression.csv` is a synthetic dataset that reproduces the structure of the original data. All study names, effect sizes, and sample sizes are fictional.
 
-### GRADE assessment code
+### Certainty assessment code (Core GRADE series)
 
 ```r
 m_response <- metabin(
@@ -596,9 +614,9 @@ grade_report(
 )
 ```
 
-### `evidence_profile()` — single-outcome GRADE Evidence Profile
+### `evidence_profile()` — single-outcome Evidence Profile (Core GRADE series)
 
-Canonical GRADE / BMJ Evidence Profile layout for one outcome:
+Evidence Profile layout of the BMJ 2025 Core GRADE series for one outcome:
 **Outcome | No of studies (N) | Design | Risk of bias | Inconsistency |
 Indirectness | Imprecision | Other considerations | Certainty**, with numbered
 footnotes for every rated-down domain.
@@ -687,7 +705,7 @@ rare$primary                         # primary result as a regular meta object
 rare$method_table                    # all methods: estimate, CI, zero-cell handling
 plot_rare_sensitivity_forest(rare)   # method-comparison forest
 
-g <- grade_meta(rare$primary, ...)                 # GRADE proceeds as usual
+g <- grade_meta(rare$primary, ...)                 # certainty rating proceeds as usual
 export_bundle(rare$primary, g, rare = rare, ...)   # adds rare-event diagnostics to ZIP
 ```
 
@@ -792,7 +810,7 @@ Generates a multi-outcome flextable with optional primary/secondary grouping.
 
 ### `grade_report(outcomes, primary, palette, format, output_dir, output_file, title, show_domains, per, prediction)`
 
-Exports a full GRADE appendix in docx / html / pdf / md format.
+Exports a full certainty appendix (Core GRADE series) in docx / html / pdf / md format.
 
 ---
 

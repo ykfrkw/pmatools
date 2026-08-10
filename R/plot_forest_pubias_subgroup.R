@@ -25,7 +25,7 @@
 #'     contributes nothing to the pooled estimate.}
 #' }
 #'
-#' This is a reference-only diagnostic. It does not drive the GRADE judgment.
+#' This is a reference-only diagnostic. It does not drive the certainty judgment.
 #'
 #' @param meta_obj A `meta` object (from \code{\link{run_ma}} or
 #'   \code{\link[meta]{metabin}}/\code{\link[meta]{metacont}}).

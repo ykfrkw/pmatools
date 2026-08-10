@@ -2,7 +2,7 @@
 #
 # BMJ 2025 Core GRADE シリーズに準拠した確実性評価を {meta} オブジェクトから実施する。
 
-#' Assess GRADE certainty of evidence from a meta-analysis object
+#' Assess certainty of evidence (Core GRADE series) from a meta-analysis object
 #'
 #' @description
 #' Run the BMJ 2025 Core GRADE assessment on a meta-analysis object and
@@ -390,7 +390,7 @@ grade_meta <- function(meta_obj,
 
 #' @export
 print.pmatools <- function(x, ...) {
-  cat("\n-- GRADE Certainty Assessment ---------------------------\n")
+  cat("\n-- Certainty Assessment (Core GRADE series) -------------\n")
   cat(sprintf(" Outcome      : %s\n", x$outcome_name))
   cat(sprintf(" Study design : %s  (starting quality: %s)\n",
               x$study_design, x$starting_quality))

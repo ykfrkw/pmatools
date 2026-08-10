@@ -5,7 +5,8 @@
 #' @description
 #' Bundles every artifact of the analysis into a single ZIP: the long-format
 #' CSV, a reproducible `analysis.R` script, results.txt, forest/funnel plots,
-#' the SoF table, and the GRADE appendix. The bundled `analysis.R` runs
+#' the SoF table, and the certainty appendix (Core GRADE series). The
+#' bundled `analysis.R` runs
 #' standalone with `library(pmatools)` and the bundled CSV.
 #'
 #' @param ma A `meta` object from \code{\link{run_ma}}.
@@ -286,7 +287,7 @@ export_bundle <- function(ma,
     invisible(path)
   }
 
-  # 6a. grade_table.docx — GRADE Evidence Profile
+  # 6a. grade_table.docx — Evidence Profile (Core GRADE series)
   if ("grade_table" %in% include) {
     ep_ft <- evidence_profile(grade,
                               other_text      = other_text,
@@ -435,7 +436,7 @@ export_bundle <- function(ma,
   writeLines("", con)
 
   writeLines("================================================================", con)
-  writeLines("[ GRADE assessment ]", con)
+  writeLines("[ Certainty assessment (Core GRADE series) ]", con)
   writeLines("================================================================", con)
   grade_print <- utils::capture.output(print(grade))
   writeLines(grade_print, con)

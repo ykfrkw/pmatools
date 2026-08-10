@@ -282,13 +282,13 @@ test_that("non-meta object raises error", {
 test_that("print.pmatools outputs without error", {
   m <- make_metabin()
   g <- suppressWarnings(grade_meta(m))
-  expect_output(print(g), "GRADE Certainty")
+  expect_output(print(g), "Certainty Assessment \\(Core GRADE series\\)")
 })
 
 test_that("summary.pmatools outputs without error", {
   m <- make_metabin()
   g <- suppressWarnings(grade_meta(m))
-  expect_output(summary(g), "GRADE Certainty")
+  expect_output(summary(g), "Certainty Assessment \\(Core GRADE series\\)")
 })
 
 # ---- sof_table() ----------------------------------------------------------

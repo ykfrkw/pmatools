@@ -2,7 +2,7 @@
 % Please edit documentation in R/evidence_profile.R
 \name{evidence_profile}
 \alias{evidence_profile}
-\title{GRADE Evidence Profile flextable for a single outcome}
+\title{Evidence Profile flextable (Core GRADE series) for a single outcome}
 \usage{
 evidence_profile(
   grade,
@@ -28,5 +28,5 @@ of the auto-domain calculations.}
 A \code{flextable}.
 }
 \description{
-GRADE Evidence Profile flextable for a single outcome
+Evidence Profile flextable (Core GRADE series) for a single outcome
 }
