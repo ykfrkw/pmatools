@@ -18,6 +18,7 @@ make_metabin_ep <- function() {
 make_grade_ep <- function() {
   m <- make_metabin_ep()
   suppressWarnings(grade_meta(m, study_design = "RCT", rob = "no",
+                              rob_rationale = "Consensus RoB2: all domains low risk",
                               indirectness = "no",
                               outcome_name = "EP Outcome"))
 }

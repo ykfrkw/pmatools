@@ -8,14 +8,19 @@ grade_meta(
   meta_obj,
   study_design = c("RCT", "obs"),
   rob = NULL,
+  rob_rationale = NULL,
   rob_dominant_threshold = 0.6,
   rob_inflation_threshold = 0.1,
   small_values = NULL,
   indirectness = "no",
+  indirectness_rationale = NULL,
   inconsistency = NULL,
+  inconsistency_rationale = NULL,
   inconsistency_ci_diff = NULL,
   inconsistency_threshold_side = NULL,
   inconsistency_subgroup_explained = NULL,
+  imprecision = NULL,
+  imprecision_rationale = NULL,
   threshold = NULL,
   threshold_scale = "auto",
   threshold_baseline = NULL,
@@ -33,7 +38,8 @@ grade_meta(
   pubias_small_industry = NULL,
   pubias_funnel_asymmetry = NULL,
   pubias_unpublished = NULL,
-  pubias_registry_complete = NULL
+  pubias_registry_complete = NULL,
+  pubias_rationale = NULL
 )
 }
 \arguments{
@@ -52,19 +58,41 @@ Fig 2 flowchart applied: domination check then direction-of-bias check.
 \item A column name in \code{meta_obj$data} containing per-study RoB judgments
 — same flowchart logic applied.
 \item \code{NULL} (default): treated as \code{"no"}.
-}}
+}
+\strong{Breaking change (v0.4.0)}: passing a scalar GRADE level bypasses
+the automated flowchart and therefore requires \code{rob_rationale}.}
+
+\item{rob_rationale}{Free-text justification, required whenever \code{rob}
+is supplied as a scalar GRADE level (manual override of the automated
+Risk of Bias flowchart). Recorded in the domain notes as
+\code{"Manual override (<judgment>): <rationale>"} and propagated to
+\code{\link{evidence_profile}}, \code{\link{grade_report}} and
+\code{\link{export_bundle}} outputs (Core GRADE transparency principle).
+Not used for per-study vectors or column-name input (automated
+assessment). Default \code{NULL}.}
 
 \item{rob_dominant_threshold}{Deprecated (v0.3.1+; accepted but ignored).
 The Risk-of-Bias flowchart no longer uses a weight-share dominance gate;
 the direction-and-magnitude check is now run whenever at least one
 high-RoB study is present.}
 
-\item{rob_inflation_threshold}{(v0.2) Minimum \emph{relative} inflation
-\eqn{(|TE_{all}| - |TE_{low}|) / |TE_{low}|} required to rate down for
-risk of bias when the evidence is dominated. Default \code{0.10}
-(10 percent). Set to \code{0} to restore v0.1.0 behavior (any direction-
-consistent change rates down). Only used when \code{rob} is a vector
-or column name.}
+\item{rob_inflation_threshold}{(v0.2) Threshold for the relative change of
+the pooled estimate when high-RoB studies are excluded, computed on the
+absolute analysis scale: \eqn{(|TE_{all}| - |TE_{low}|) / |TE_{low}|},
+where \eqn{TE_{low}} is the inverse-variance weighted mean of the
+low/some-concerns RoB studies. Default \code{0.10} (10 percent).
+A downgrade under this criterion requires BOTH (a) the relative change to
+be \emph{strictly} greater than the threshold (\code{>}; a change exactly at
+the threshold does not rate down) AND (b) the shift to be in the
+bias-favouring direction per \code{small_values}: only shifts that would
+make the apparent effect look more favourable (over-estimation) count.
+Shifts toward a smaller or less favourable effect never rate down under
+this criterion, even when their magnitude exceeds the threshold; in that
+case the domain note states explicitly why no downgrade was applied.
+When every study is high-RoB, no low/some-RoB comparator pool exists and
+the domain is rated \code{"serious"} (rate down 2 levels) unconditionally.
+Set to \code{0} to restore v0.1.0 behavior (any bias-favouring change
+rates down). Only used when \code{rob} is a vector or column name.}
 
 \item{small_values}{Are small outcome values desirable?
 \code{"desirable"} if small values are good (eg, mortality, symptom severity) or
@@ -75,11 +103,28 @@ when dominated. Only used when \code{rob} is a vector or column name.
 (Consistent with \code{netmetaviz} \code{small_values} parameter.)}
 
 \item{indirectness}{Indirectness judgment. Same format as \code{rob} (scalar/vector/column).
-Default \code{"no"}.}
+Default \code{"no"}.
+\strong{Breaking change (v0.4.0)}: a scalar value other than the default
+\code{"no"} is a manual override and requires
+\code{indirectness_rationale}. \code{"no"} (no downgrade) never requires
+a rationale, so default calls are unaffected.}
+
+\item{indirectness_rationale}{Free-text justification, required whenever
+\code{indirectness} is supplied as a scalar GRADE level other than
+\code{"no"}. See \code{rob_rationale} for how it is recorded.
+Default \code{NULL}.}
 
 \item{inconsistency}{Overall inconsistency scalar judgment. One of
 \code{"no"}, \code{"some"}, \code{"serious"}, \code{"very_serious"}.
-If provided, flowchart parameters are ignored.}
+If provided, flowchart parameters are ignored.
+\strong{Breaking change (v0.4.0)}: this scalar override requires
+\code{inconsistency_rationale}. The manual flowchart inputs
+(\code{inconsistency_ci_diff} etc.) do not.}
+
+\item{inconsistency_rationale}{Free-text justification, required whenever
+\code{inconsistency} is supplied (manual override of the flowchart /
+automated assessment). See \code{rob_rationale} for how it is recorded.
+Default \code{NULL}.}
 
 \item{inconsistency_ci_diff}{\code{"yes"} / \code{"no"}: Are there important
 differences in point estimates AND limited CI overlap? (BMJ Core GRADE 3 Fig 2
@@ -92,6 +137,18 @@ side of the clinical threshold, or spread across both sides?}
 \item{inconsistency_subgroup_explained}{Required when
 \code{inconsistency_threshold_side = "opposite_sides"}.
 \code{"yes"} / \code{"no"}: is the inconsistency explained by a credible subgroup?}
+
+\item{imprecision}{Optional overall imprecision scalar judgment. One of
+\code{"no"}, \code{"some_concerns"}, \code{"serious"} (legacy
+\code{"some"} / \code{"very_serious"} accepted). If provided, the
+automated imprecision assessment (CI-vs-null/Threshold and OIS checks)
+is bypassed entirely and \code{imprecision_rationale} is required.
+Default \code{NULL} (automated assessment).}
+
+\item{imprecision_rationale}{Free-text justification, required whenever
+\code{imprecision} is supplied (manual override of the automated
+assessment). See \code{rob_rationale} for how it is recorded.
+Default \code{NULL}.}
 
 \item{threshold}{(v0.2) Numeric clinical decision Threshold (a minimally
 important effect). This is a cross-cutting parameter shared by the three
@@ -185,7 +242,10 @@ small AND industry-sponsored? (BMJ Core GRADE Fig 5 Step 1). Default \code{NULL}
 \item{pubias_funnel_asymmetry}{\code{"yes"} / \code{"no"}: Does visual funnel plot
 asymmetry and/or statistical test strongly suggest publication bias?
 Only used when k \eqn{\geq} 10. If \code{NULL} (default), Egger's test is
-run automatically.}
+run automatically.
+\strong{Breaking change (v0.4.0)}: supplying this argument replaces the
+automated Egger's test with a manual visual judgment and therefore
+requires \code{pubias_rationale}.}
 
 \item{pubias_unpublished}{\code{"yes"} / \code{"no"}: Is there documentation of
 unpublished studies (eg, in trial registry or FDA)? Only used when k < 10.
@@ -195,6 +255,13 @@ If \code{NULL} (default), assumed \code{"no"} with a warning.}
 rule-out for fields where pre-registration is universal and all registered
 trials can be accounted for. \code{"yes"} short-circuits the publication
 bias domain to "no" regardless of Egger's test or k. Default \code{NULL}.}
+
+\item{pubias_rationale}{Free-text justification, required whenever
+\code{pubias_funnel_asymmetry} is supplied (manual override of the
+automated Egger's test). The informational inputs
+\code{pubias_small_industry}, \code{pubias_unpublished} and
+\code{pubias_registry_complete} do not require a rationale. See
+\code{rob_rationale} for how it is recorded. Default \code{NULL}.}
 }
 \value{
 An S3 object of class \code{pmatools} containing:
@@ -215,7 +282,9 @@ return per-domain judgments and final certainty.
 \dontrun{
 library(meta)
 m <- metabin(Ee, Ne, Ec, Nc, studlab = study, data = Olkin1995, sm = "RR")
-g <- grade_meta(m, study_design = "RCT", rob = "some", outcome_name = "Mortality")
+g <- grade_meta(m, study_design = "RCT", rob = "some",
+                rob_rationale = "RoB2 consensus: some concerns from missing outcome data",
+                outcome_name = "Mortality")
 print(g)
 sof_table(g)
 }

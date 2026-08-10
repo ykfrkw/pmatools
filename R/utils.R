@@ -135,8 +135,25 @@ validate_grade_level <- function(x, arg = "argument") {
 }
 
 # 確実性ドメイン判定をサマリ tibble にまとめる
-make_domain_row <- function(domain, judgment, auto, notes = NA_character_) {
+#
+# rationale: free-text justification for a manual override of an automated
+# domain judgment (Core GRADE transparency principle). When non-NULL it is
+# composed into `notes` as "Manual override (<judgment>): <rationale>",
+# prepended with the existing " | " separator style so downstream consumers
+# (evidence_profile footnotes via .first_sentence(), grade_report notes
+# columns) surface the rationale automatically.
+make_domain_row <- function(domain, judgment, auto, notes = NA_character_,
+                            rationale = NULL) {
   judgment <- .normalize_grade_level(judgment)
+  if (!is.null(rationale)) {
+    override_note <- sprintf("Manual override (%s): %s", judgment,
+                             trimws(rationale))
+    notes <- if (is.na(notes) || !nzchar(notes)) {
+      override_note
+    } else {
+      paste(override_note, notes, sep = " | ")
+    }
+  }
   tibble::tibble(
     domain    = domain,
     judgment  = judgment,
@@ -144,6 +161,25 @@ make_domain_row <- function(domain, judgment, auto, notes = NA_character_) {
     auto      = auto,
     notes     = notes
   )
+}
+
+# GRADE transparency gate for manual overrides (v0.4.0, breaking change).
+# Overriding an automated domain judgment requires a written justification.
+# Aborts unless `rationale` is a single non-NA, non-empty, non-whitespace
+# string. Returns the rationale invisibly on success.
+.check_override_rationale <- function(rationale, arg, domain_label) {
+  ok <- is.character(rationale) && length(rationale) == 1L &&
+        !is.na(rationale) && nzchar(trimws(rationale))
+  if (!ok) {
+    rlang::abort(sprintf(
+      paste0(
+        "Overriding the %s judgment requires %s: state why the automated ",
+        "assessment was replaced (Core GRADE transparency principle)."
+      ),
+      domain_label, arg
+    ))
+  }
+  invisible(rationale)
 }
 
 # --------------------------------------------------------------------------

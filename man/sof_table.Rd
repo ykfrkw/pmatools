@@ -68,7 +68,8 @@ Generate a Summary of Findings (SoF) table as a flextable
 }
 \examples{
 \dontrun{
-g <- grade_meta(m, study_design = "RCT", rob = "some")
+g <- grade_meta(m, study_design = "RCT", rob = "some",
+                rob_rationale = "RoB2 consensus: some concerns from missing outcome data")
 sof_table(g)
 sof_table(g, per = 100)
 sof_table(g, prediction = TRUE)

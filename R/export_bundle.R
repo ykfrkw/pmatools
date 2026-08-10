@@ -511,17 +511,25 @@ export_bundle <- function(ma,
     subgroup_arg     = .subgroup_arg(ma_args$subgroup),
     study_design     = grade$study_design,
     rob_arg          = .arg_lit(grade_args$rob,                    fallback = "NULL"),
+    rob_rationale_arg = .arg_lit(grade_args$rob_rationale,         fallback = "NULL"),
     rob_dom_threshold= grade_args$rob_dominant_threshold$value     %||% 0.60,
     rob_inf_threshold= grade_args$rob_inflation_threshold$value    %||% 0.10,
     small_values_arg = .arg_lit(grade_args$small_values,           fallback = "NULL"),
     indirectness_arg = .arg_lit(grade_args$indirectness,           fallback = shQuote("no")),
+    indirectness_rationale_arg =
+      .arg_lit(grade_args$indirectness_rationale,           fallback = "NULL"),
     inconsistency_arg= .arg_lit(grade_args$inconsistency,          fallback = "NULL"),
+    inconsistency_rationale_arg =
+      .arg_lit(grade_args$inconsistency_rationale,          fallback = "NULL"),
     inconsistency_ci_diff_arg =
       .arg_lit(grade_args$inconsistency_ci_diff,            fallback = "NULL"),
     inconsistency_side_arg =
       .arg_lit(grade_args$inconsistency_threshold_side,     fallback = "NULL"),
     inconsistency_subgroup_arg =
       .arg_lit(grade_args$inconsistency_subgroup_explained, fallback = "NULL"),
+    imprecision_arg  = .arg_lit(grade_args$imprecision,            fallback = "NULL"),
+    imprecision_rationale_arg =
+      .arg_lit(grade_args$imprecision_rationale,            fallback = "NULL"),
     threshold_arg    = .arg_lit(grade_args$threshold,              fallback = if (!is.null(grade$threshold)) format(grade$threshold) else "NULL"),
     threshold_scale  = grade_args$threshold_scale$value             %||% (grade$threshold_scale %||% "auto"),
     ois_outcome_type = grade$outcome_type,
@@ -546,6 +554,7 @@ export_bundle <- function(ma,
     pubias_funnel_arg         = .arg_lit(grade_args$pubias_funnel_asymmetry, fallback = "NULL"),
     pubias_unpub_arg          = .arg_lit(grade_args$pubias_unpublished,      fallback = "NULL"),
     pubias_registry_arg       = .arg_lit(grade_args$pubias_registry_complete, fallback = "NULL"),
+    pubias_rationale_arg      = .arg_lit(grade_args$pubias_rationale,         fallback = "NULL"),
     outcome_name     = grade$outcome_name,
     per              = per,
     sof_prediction   = if (isTRUE(prediction)) "TRUE" else "FALSE",

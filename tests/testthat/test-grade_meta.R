@@ -64,34 +64,45 @@ make_mock_dominated <- function(te_all, te_low_only,
 
 test_that("grade_meta returns pmatools object", {
   m <- make_metabin()
-  g <- grade_meta(m, study_design = "RCT", rob = "no", indirectness = "no")
+  g <- grade_meta(m, study_design = "RCT", rob = "no",
+                  rob_rationale = "Consensus RoB2: all domains low risk",
+                  indirectness = "no")
   expect_s3_class(g, "pmatools")
 })
 
 test_that("RCT starts at High certainty with no concerns", {
   m <- make_metabin()
-  g <- grade_meta(m, study_design = "RCT", rob = "no", indirectness = "no")
+  g <- grade_meta(m, study_design = "RCT", rob = "no",
+                  rob_rationale = "Consensus RoB2: all domains low risk",
+                  indirectness = "no")
   expect_true(g$starting_quality == "High")
   expect_true(g$certainty %in% c("High", "Moderate", "Low", "Very Low"))
 })
 
 test_that("obs starts at Low certainty", {
   m <- make_metabin()
-  g <- grade_meta(m, study_design = "obs", rob = "no")
+  g <- grade_meta(m, study_design = "obs", rob = "no",
+                  rob_rationale = "Consensus RoB2: all domains low risk")
   expect_equal(g$starting_quality, "Low")
 })
 
 test_that("rob = 'some' downgrades by 1", {
   m <- make_metabin()
-  g_no   <- grade_meta(m, study_design = "RCT", rob = "no",   indirectness = "no")
-  g_some <- grade_meta(m, study_design = "RCT", rob = "some", indirectness = "no")
+  g_no   <- grade_meta(m, study_design = "RCT", rob = "no",
+                       rob_rationale = "Consensus RoB2: all domains low risk",
+                       indirectness = "no")
+  g_some <- grade_meta(m, study_design = "RCT", rob = "some",
+                       rob_rationale = "Consensus RoB2: some concerns overall",
+                       indirectness = "no")
   diff <- g_no$certainty_score - g_some$certainty_score
   expect_true(diff >= 0)
 })
 
 test_that("very_serious rob downgrades by 2", {
   m <- make_metabin()
-  g <- grade_meta(m, study_design = "RCT", rob = "very_serious", indirectness = "no")
+  g <- grade_meta(m, study_design = "RCT", rob = "very_serious",
+                  rob_rationale = "Consensus RoB2: high risk in most domains",
+                  indirectness = "no")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   expect_equal(rob_row$downgrade, -2)
 })
@@ -144,7 +155,8 @@ test_that("inconsistency scalar overrides flowchart", {
   m <- make_metabin()
   # Legacy "very_serious" is normalized to canonical "serious" (-2) under the
   # v0.3+ 3-level system.
-  g <- grade_meta(m, inconsistency = "very_serious")
+  g <- grade_meta(m, inconsistency = "very_serious",
+                  inconsistency_rationale = "Clinically divergent effects across settings")
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_equal(incon_row$judgment, "serious")
   expect_false(incon_row$auto)

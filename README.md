@@ -73,6 +73,7 @@ m <- meta::metabin(event.e = c(10,15,20), n.e = c(50,60,70),
                    prediction = TRUE)
 
 g <- grade_meta(m, study_design = "RCT", rob = "some_concerns",
+                rob_rationale = "RoB2 consensus: some concerns from missing outcome data",
                 small_values = "undesirable", indirectness = "no",
                 outcome_name = "My Outcome")
 print(g)
@@ -139,10 +140,11 @@ Legacy labels are still accepted and normalized: `"some"` → `"some_concerns"` 
 
 ### 1. Risk of Bias (5-rule MECE zone-based decision; aligned with BMJ Core GRADE 4)
 
-**Scalar input — flowchart bypassed:**
+**Scalar input — flowchart bypassed** (v0.4.0+: requires `rob_rationale`):
 
 ```r
-grade_meta(m, rob = "serious")   # used as-is
+grade_meta(m, rob = "serious",
+           rob_rationale = "RoB2 consensus: high risk of bias in most domains")
 ```
 
 **Per-study vector — 5-rule zone decision applied:**
@@ -232,10 +234,13 @@ rob_vec <- unname(rob_map[df$rob_d])
 grade_meta(m, rob = rob_vec, ...)   # works directly
 ```
 
-**Manual override:**
+**Manual override** (v0.4.0+: a scalar override requires `rob_rationale` —
+Core GRADE transparency principle):
 ```r
-grade_meta(m, rob = "no")        # bypass flowchart entirely
-grade_meta(m, rob = "serious")   # force rate-down regardless of weights
+grade_meta(m, rob = "no",        # bypass flowchart entirely
+           rob_rationale = "RoB2 consensus: all domains low risk")
+grade_meta(m, rob = "serious",   # force rate-down regardless of weights
+           rob_rationale = "RoB2 consensus: high risk of bias in most domains")
 ```
 
 **Visual companion: `plot_forest_rob()`.** Re-runs the meta-analysis with a
@@ -291,9 +296,10 @@ grade_meta(m,
 **Supplementary statistics** (always computed and noted, never the primary driver):
 I², tau², Q p-value.
 
-**Scalar override:**
+**Scalar override** (v0.4.0+: requires `inconsistency_rationale`):
 ```r
-grade_meta(m, inconsistency = "serious")   # overrides flowchart entirely (−2)
+grade_meta(m, inconsistency = "serious",   # overrides flowchart entirely (−2)
+           inconsistency_rationale = "Clinically divergent effects across settings")
 ```
 
 ---
@@ -441,7 +447,9 @@ print(g)   # inspect domain_assessments
 g_override <- grade_meta(m,
   study_design  = "RCT",
   rob           = "some_concerns",  # override: single overall judgment
+  rob_rationale = "RoB2 consensus: some concerns from missing outcome data",
   inconsistency = "serious",        # override: clinical judgment → serious
+  inconsistency_rationale = "Clinically divergent effects across settings",
   indirectness  = "no",
   outcome_name  = "Depression response (manual override)")
 ```
