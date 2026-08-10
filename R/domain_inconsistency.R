@@ -34,7 +34,8 @@ assess_inconsistency <- function(meta_obj,
                                  inconsistency_ci_diff            = NULL,
                                  inconsistency_threshold_side     = NULL,
                                  inconsistency_subgroup_explained = NULL,
-                                 threshold_internal               = NULL) {
+                                 threshold_internal               = NULL,
+                                 rationale                        = NULL) {
 
   # ----- Statistics (always computed for notes) -----
   i2_pct <- if (!is.null(meta_obj$I2) && !is.na(meta_obj$I2)) {
@@ -52,16 +53,21 @@ assess_inconsistency <- function(meta_obj,
   )
 
   # ----- Path A: scalar override -----
+  # v0.4.0 (breaking): the scalar override replaces the flowchart / automated
+  # assessment, so inconsistency_rationale is mandatory.
   if (!is.null(inconsistency)) {
     validate_grade_level(inconsistency, "inconsistency")
+    .check_override_rationale(rationale, "inconsistency_rationale",
+                              "Inconsistency")
     return(make_domain_row(
-      domain   = "Inconsistency",
-      judgment = inconsistency,
-      auto     = FALSE,
-      notes    = paste0(
+      domain    = "Inconsistency",
+      judgment  = inconsistency,
+      auto      = FALSE,
+      notes     = paste0(
         "Overall judgment provided by user (scalar; flowchart not applied). ",
         stat_note
-      )
+      ),
+      rationale = rationale
     ))
   }
 

@@ -14,6 +14,7 @@ make_common_only_grade <- function() {
   ma <- run_ma(data, outcome_type = "binary", sm = "OR",
                random = FALSE, common = TRUE)
   g  <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
                                     outcome_name = "Common only"))
   g

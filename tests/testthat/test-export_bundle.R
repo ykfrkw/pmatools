@@ -18,6 +18,7 @@ make_meta_for_bundle <- function() {
 test_that("export_bundle creates ZIP with expected files (data + script + results)", {
   ma <- make_meta_for_bundle()
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
                                     outcome_name = "Test"))
   out_dir <- tempfile()
@@ -38,6 +39,7 @@ test_that("export_bundle creates ZIP with expected files (data + script + result
 test_that("export_bundle generated analysis.R parses as valid R", {
   ma <- make_meta_for_bundle()
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
                                     outcome_name = "Test"))
   out_dir <- tempfile()
@@ -60,6 +62,7 @@ test_that("export_bundle generated analysis.R parses as valid R", {
 test_that("analysis.R renders all GRADE arguments and run_ma arm labels", {
   ma <- make_meta_for_bundle()
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
                                     outcome_name = "Test"))
   out_dir <- tempfile()
@@ -112,6 +115,7 @@ test_that("analysis.R renders all GRADE arguments and run_ma arm labels", {
 test_that("analysis.R falls back to sensible GRADE defaults when specs absent", {
   ma <- make_meta_for_bundle()
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
                                     outcome_name = "Test"))
   out_dir <- tempfile()
@@ -147,6 +151,7 @@ test_that("export_bundle includes rare-event artifacts when supplied", {
   rare <- run_rare_ma(d, effect_scale = "OR")
   ma <- rare$primary
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
                                     outcome_name = "Rare Test"))
   out_dir <- tempfile()
@@ -171,6 +176,7 @@ test_that("export_bundle script reruns rare-event methods when rare object suppl
   rare <- run_rare_ma(d, effect_scale = "OR")
   ma <- rare$primary
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
                                     outcome_name = "Rare Test"))
   out_dir <- tempfile()

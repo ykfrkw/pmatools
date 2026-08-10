@@ -93,7 +93,8 @@ test_that("Q3 auto: Egger p >= 0.05 -> no", {
 # --- Q3 (k >= 10): manual visual override -----------------------------------
 test_that("Q3 manual 'yes' -> some_concerns regardless of Egger", {
   m <- make_symmetric()  # Egger says no
-  g <- grade_meta(m, pubias_funnel_asymmetry = "yes")
+  g <- grade_meta(m, pubias_funnel_asymmetry = "yes",
+                  pubias_rationale = "Contour-enhanced funnel plot visually asymmetric")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   expect_equal(pb$judgment, "some_concerns")
   expect_match(pb$notes, "manual")
@@ -101,7 +102,8 @@ test_that("Q3 manual 'yes' -> some_concerns regardless of Egger", {
 
 test_that("Q3 manual 'no' -> no regardless of Egger", {
   m <- make_strong_asymmetry()  # Egger says serious
-  g <- grade_meta(m, pubias_funnel_asymmetry = "no")
+  g <- grade_meta(m, pubias_funnel_asymmetry = "no",
+                  pubias_rationale = "Asymmetry driven by heterogeneity, not small-study bias")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   expect_equal(pb$judgment, "no")
   expect_match(pb$notes, "rules out funnel-plot asymmetry")

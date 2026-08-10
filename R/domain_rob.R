@@ -42,7 +42,8 @@ assess_rob <- function(rob, meta_obj,
                        rob_dominant_threshold  = NULL,   # accepted but ignored (deprecated)
                        rob_inflation_threshold = 0.10,
                        small_values            = NULL,
-                       threshold_internal      = NULL) {
+                       threshold_internal      = NULL,
+                       rationale               = NULL) {
   k <- meta_obj$k
 
   # NULL -> default "no"
@@ -65,15 +66,19 @@ assess_rob <- function(rob, meta_obj,
   }
   if (is.factor(rob)) rob <- as.character(rob)
 
-  # Scalar GRADE level (after normalisation): bypass flowchart
+  # Scalar GRADE level (after normalisation): bypass flowchart.
+  # v0.4.0 (breaking): a scalar override replaces the automated flowchart, so
+  # a written justification (rob_rationale) is mandatory.
   if (length(rob) == 1 && is.character(rob)) {
     rob_norm <- .normalize_rob_level(rob)
     if (rob_norm %in% GRADE_LEVELS) {
+      .check_override_rationale(rationale, "rob_rationale", "Risk of Bias")
       return(make_domain_row(
-        domain   = "Risk of bias",
-        judgment = rob_norm,
-        auto     = FALSE,
-        notes    = "Overall judgment provided by user (scalar; flowchart not applied)."
+        domain    = "Risk of bias",
+        judgment  = rob_norm,
+        auto      = FALSE,
+        notes     = "Overall judgment provided by user (scalar; flowchart not applied).",
+        rationale = rationale
       ))
     }
     # Treat as column name

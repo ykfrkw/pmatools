@@ -22,6 +22,16 @@
 #'       — same flowchart logic applied.
 #'     \item \code{NULL} (default): treated as \code{"no"}.
 #'   }
+#'   \strong{Breaking change (v0.4.0)}: passing a scalar GRADE level bypasses
+#'   the automated flowchart and therefore requires \code{rob_rationale}.
+#' @param rob_rationale Free-text justification, required whenever \code{rob}
+#'   is supplied as a scalar GRADE level (manual override of the automated
+#'   Risk of Bias flowchart). Recorded in the domain notes as
+#'   \code{"Manual override (<judgment>): <rationale>"} and propagated to
+#'   \code{\link{evidence_profile}}, \code{\link{grade_report}} and
+#'   \code{\link{export_bundle}} outputs (Core GRADE transparency principle).
+#'   Not used for per-study vectors or column-name input (automated
+#'   assessment). Default \code{NULL}.
 #' @param rob_dominant_threshold Deprecated (v0.3.1+; accepted but ignored).
 #'   The Risk-of-Bias flowchart no longer uses a weight-share dominance gate;
 #'   the direction-and-magnitude check is now run whenever at least one
@@ -41,9 +51,24 @@
 #'   (Consistent with \code{netmetaviz} \code{small_values} parameter.)
 #' @param indirectness Indirectness judgment. Same format as \code{rob} (scalar/vector/column).
 #'   Default \code{"no"}.
+#'   \strong{Breaking change (v0.4.0)}: a scalar value other than the default
+#'   \code{"no"} is a manual override and requires
+#'   \code{indirectness_rationale}. \code{"no"} (no downgrade) never requires
+#'   a rationale, so default calls are unaffected.
+#' @param indirectness_rationale Free-text justification, required whenever
+#'   \code{indirectness} is supplied as a scalar GRADE level other than
+#'   \code{"no"}. See \code{rob_rationale} for how it is recorded.
+#'   Default \code{NULL}.
 #' @param inconsistency Overall inconsistency scalar judgment. One of
 #'   \code{"no"}, \code{"some"}, \code{"serious"}, \code{"very_serious"}.
 #'   If provided, flowchart parameters are ignored.
+#'   \strong{Breaking change (v0.4.0)}: this scalar override requires
+#'   \code{inconsistency_rationale}. The manual flowchart inputs
+#'   (\code{inconsistency_ci_diff} etc.) do not.
+#' @param inconsistency_rationale Free-text justification, required whenever
+#'   \code{inconsistency} is supplied (manual override of the flowchart /
+#'   automated assessment). See \code{rob_rationale} for how it is recorded.
+#'   Default \code{NULL}.
 #' @param inconsistency_ci_diff \code{"yes"} / \code{"no"}: Are there important
 #'   differences in point estimates AND limited CI overlap? (BMJ Core GRADE 3 Fig 2
 #'   Step 1). Required for flowchart; if NULL, falls back to I^2-based assessment.
@@ -72,6 +97,16 @@
 #'     \item \code{"ard"}: \code{threshold} is an absolute risk difference
 #'       (binary outcomes only).
 #'   }
+#' @param imprecision Optional overall imprecision scalar judgment. One of
+#'   \code{"no"}, \code{"some_concerns"}, \code{"serious"} (legacy
+#'   \code{"some"} / \code{"very_serious"} accepted). If provided, the
+#'   automated imprecision assessment (CI-vs-null/Threshold and OIS checks)
+#'   is bypassed entirely and \code{imprecision_rationale} is required.
+#'   Default \code{NULL} (automated assessment).
+#' @param imprecision_rationale Free-text justification, required whenever
+#'   \code{imprecision} is supplied (manual override of the automated
+#'   assessment). See \code{rob_rationale} for how it is recorded.
+#'   Default \code{NULL}.
 #' @param outcome_name Optional label for the outcome (used in SoF table).
 #' @param outcome_type \code{"relative"} (RR/OR/HR, null = 1) or
 #'   \code{"absolute"} (MD/SMD, null = 0). Default \code{"relative"}.
@@ -109,6 +144,15 @@
 #'   asymmetry and/or statistical test strongly suggest publication bias?
 #'   Only used when k \eqn{\geq} 10. If \code{NULL} (default), Egger's test is
 #'   run automatically.
+#'   \strong{Breaking change (v0.4.0)}: supplying this argument replaces the
+#'   automated Egger's test with a manual visual judgment and therefore
+#'   requires \code{pubias_rationale}.
+#' @param pubias_rationale Free-text justification, required whenever
+#'   \code{pubias_funnel_asymmetry} is supplied (manual override of the
+#'   automated Egger's test). The informational inputs
+#'   \code{pubias_small_industry}, \code{pubias_unpublished} and
+#'   \code{pubias_registry_complete} do not require a rationale. See
+#'   \code{rob_rationale} for how it is recorded. Default \code{NULL}.
 #' @param pubias_unpublished \code{"yes"} / \code{"no"}: Is there documentation of
 #'   unpublished studies (eg, in trial registry or FDA)? Only used when k < 10.
 #'   If \code{NULL} (default), assumed \code{"no"} with a warning.
@@ -131,7 +175,9 @@
 #' \dontrun{
 #' library(meta)
 #' m <- metabin(Ee, Ne, Ec, Nc, studlab = study, data = Olkin1995, sm = "RR")
-#' g <- grade_meta(m, study_design = "RCT", rob = "some", outcome_name = "Mortality")
+#' g <- grade_meta(m, study_design = "RCT", rob = "some",
+#'                 rob_rationale = "RoB2 consensus: some concerns from missing outcome data",
+#'                 outcome_name = "Mortality")
 #' print(g)
 #' sof_table(g)
 #' }
@@ -140,14 +186,19 @@
 grade_meta <- function(meta_obj,
                        study_design                     = c("RCT", "obs"),
                        rob                              = NULL,
+                       rob_rationale                    = NULL,
                        rob_dominant_threshold           = 0.60,
                        rob_inflation_threshold          = 0.10,
                        small_values                     = NULL,
                        indirectness                     = "no",
+                       indirectness_rationale           = NULL,
                        inconsistency                    = NULL,
+                       inconsistency_rationale          = NULL,
                        inconsistency_ci_diff            = NULL,
                        inconsistency_threshold_side     = NULL,
                        inconsistency_subgroup_explained = NULL,
+                       imprecision                      = NULL,
+                       imprecision_rationale            = NULL,
                        threshold                        = NULL,
                        threshold_scale                  = "auto",
                        outcome_name                     = NULL,
@@ -164,7 +215,8 @@ grade_meta <- function(meta_obj,
                        pubias_small_industry            = NULL,
                        pubias_funnel_asymmetry          = NULL,
                        pubias_unpublished               = NULL,
-                       pubias_registry_complete         = NULL) {
+                       pubias_registry_complete         = NULL,
+                       pubias_rationale                 = NULL) {
 
   # --- input check ---
   if (!inherits(meta_obj, "meta")) {
@@ -187,9 +239,11 @@ grade_meta <- function(meta_obj,
                         rob_dominant_threshold  = rob_dominant_threshold,
                         rob_inflation_threshold = rob_inflation_threshold,
                         small_values            = small_values,
-                        threshold_internal      = threshold_internal)
+                        threshold_internal      = threshold_internal,
+                        rationale               = rob_rationale)
 
-  d_indir <- assess_indirectness(indirectness, meta_obj)
+  d_indir <- assess_indirectness(indirectness, meta_obj,
+                                 rationale = indirectness_rationale)
 
   d_incon <- assess_inconsistency(
     meta_obj,
@@ -197,30 +251,54 @@ grade_meta <- function(meta_obj,
     inconsistency_ci_diff            = inconsistency_ci_diff,
     inconsistency_threshold_side     = inconsistency_threshold_side,
     inconsistency_subgroup_explained = inconsistency_subgroup_explained,
-    threshold_internal               = threshold_internal
+    threshold_internal               = threshold_internal,
+    rationale                        = inconsistency_rationale
   )
 
-  d_impre <- assess_imprecision(
-    meta_obj,
-    outcome_type       = outcome_type,
-    ois_events         = ois_events,
-    ois_n              = ois_n,
-    ois_alpha          = ois_alpha,
-    ois_beta           = ois_beta,
-    ois_p0             = ois_p0,
-    ois_p1             = ois_p1,
-    ois_delta          = ois_delta,
-    ois_sd             = ois_sd,
-    threshold_internal = threshold_internal,
-    threshold_kind     = threshold_kind
-  )
+  # Imprecision: scalar override bypasses the automated assessment entirely
+  # (v0.4.0). Requires imprecision_rationale (Core GRADE transparency).
+  d_impre <- if (!is.null(imprecision)) {
+    if (!is.character(imprecision) || length(imprecision) != 1L) {
+      rlang::abort(paste0(
+        "imprecision must be a single GRADE level ",
+        "('no', 'some_concerns', 'serious') or NULL."
+      ))
+    }
+    validate_grade_level(imprecision, "imprecision")
+    .check_override_rationale(imprecision_rationale, "imprecision_rationale",
+                              "Imprecision")
+    make_domain_row(
+      domain    = "Imprecision",
+      judgment  = imprecision,
+      auto      = FALSE,
+      notes     = paste0("Overall judgment provided by user (scalar; ",
+                         "automated assessment not applied)."),
+      rationale = imprecision_rationale
+    )
+  } else {
+    assess_imprecision(
+      meta_obj,
+      outcome_type       = outcome_type,
+      ois_events         = ois_events,
+      ois_n              = ois_n,
+      ois_alpha          = ois_alpha,
+      ois_beta           = ois_beta,
+      ois_p0             = ois_p0,
+      ois_p1             = ois_p1,
+      ois_delta          = ois_delta,
+      ois_sd             = ois_sd,
+      threshold_internal = threshold_internal,
+      threshold_kind     = threshold_kind
+    )
+  }
 
   d_pubias <- assess_pubias(
     meta_obj,
     pubias_small_industry    = pubias_small_industry,
     pubias_funnel_asymmetry  = pubias_funnel_asymmetry,
     pubias_unpublished       = pubias_unpublished,
-    pubias_registry_complete = pubias_registry_complete
+    pubias_registry_complete = pubias_registry_complete,
+    rationale                = pubias_rationale
   )
 
   domains <- dplyr::bind_rows(d_rob, d_indir, d_incon, d_impre, d_pubias)
