@@ -18,7 +18,7 @@ plot_forest(
   favors_left = NULL,
   favors_right = NULL,
   addrow_above = 0,
-  addrow_below = 1,
+  addrow_below = NULL,
   ...
 )
 }
@@ -55,6 +55,16 @@ event count columns (\code{event.e}, \code{event.c}).}
 the left and right of the x-axis (e.g., "Favors Control" / "Favors
 Treatment"). Passed to \code{meta::forest()} as \code{label.left} /
 \code{label.right}.}
+
+\item{addrow_above}{Number of blank rows above the pooled summary
+(passed as \code{addrow.overall}).}
+
+\item{addrow_below}{Number of blank rows between the pooled summary and
+the heterogeneity/test statistics printed at the bottom (passed as
+\code{addrows.below.overall}). Default \code{NULL} computes the value
+from the drawn content so the heterogeneity text clears the x-axis
+band, the \code{label.left}/\code{label.right} row, and any
+\code{xlab} row (see \code{.auto_addrow_below()}).}
 
 \item{...}{Additional arguments passed to \code{\link[meta]{forest}}.}
 }

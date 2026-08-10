@@ -61,7 +61,10 @@
 #'   subgroup view always shows a single combined "No" column.
 #' @param show_events Logical, fallback-only (see \code{show_n}).
 #' @param addrow_above,addrow_below Number of blank rows above/below the
-#'   overall pooled effect line.
+#'   overall pooled effect line. \code{addrow_below = NULL} (default) is
+#'   computed from the drawn content so the bottom heterogeneity/test text
+#'   clears the x-axis band and any \code{label.left}/\code{label.right}
+#'   row (see \code{.auto_addrow_below()}).
 #' @param ... Additional arguments forwarded to \code{\link[meta]{forest.meta}}.
 #'
 #' @return Invisibly NULL. Side effect: draws on the active graphics device.
@@ -78,7 +81,7 @@ plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
                                         show_n       = TRUE,
                                         show_events  = FALSE,
                                         addrow_above = 0,
-                                        addrow_below = 1,
+                                        addrow_below = NULL,
                                         ...) {
   if (!inherits(meta_obj, "meta")) {
     rlang::abort("plot_forest_pubias_subgroup: meta_obj must be a meta-analysis object.")
@@ -239,6 +242,17 @@ plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
 
   par_old <- graphics::par(mar = c(5, 4, 1, 2))
   on.exit(graphics::par(par_old), add = TRUE)
+
+  # Dynamic bottom spacing (see plot_forest.R): keep the heterogeneity/test
+  # text clear of the x-axis band and the label.left/label.right row.
+  dots <- list(...)
+  if (is.null(addrow_below)) {
+    addrow_below <- .auto_addrow_below(
+      has_favors = .nzchar1(favors_left) || .nzchar1(favors_right) ||
+                   .nzchar1(dots$label.left) || .nzchar1(dots$label.right),
+      has_xlab   = .nzchar1(dots$xlab)
+    )
+  }
 
   effect_lab <- if (is_ratio) sprintf("%s (95%% CI)", sm) else "Effect (95% CI)"
 

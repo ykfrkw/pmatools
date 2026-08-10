@@ -33,6 +33,40 @@ test_that("plot_forest_rob accepts word-form and legacy RoB labels plus NA", {
   )
 })
 
+test_that("plot_forest_rob accepts explicit addrow_below with favors labels", {
+  # Regression guard for the reviewer-reported overlap between the bottom
+  # heterogeneity/test text and the axis / favors labels: an explicit
+  # addrow_below must be honored alongside the subgroup layout.
+  m   <- make_metabin_pfr()
+  rob <- c("L", "L", "S", "S", "H", "H")
+  with_null_device(
+    expect_silent(plot_forest_rob(
+      m, rob = rob,
+      favors_left  = "Favors treatment",
+      favors_right = "Favors control",
+      addrow_below = 3
+    ))
+  )
+})
+
+test_that("plot_forest_rob computes bottom spacing when addrow_below is NULL", {
+  m   <- make_metabin_pfr()
+  rob <- c("L", "L", "S", "S", "H", "H")
+  with_null_device(
+    expect_silent(plot_forest_rob(
+      m, rob = rob,
+      favors_left  = "Favors treatment",
+      favors_right = "Favors control"
+    ))
+  )
+})
+
+test_that(".auto_addrow_below scales with favors labels and xlab", {
+  expect_identical(.auto_addrow_below(), 2L)
+  expect_identical(.auto_addrow_below(has_favors = TRUE), 3L)
+  expect_identical(.auto_addrow_below(has_favors = TRUE, has_xlab = TRUE), 4L)
+})
+
 test_that("plot_forest_rob draws a placeholder on length mismatch", {
   m <- make_metabin_pfr()
   with_null_device({
