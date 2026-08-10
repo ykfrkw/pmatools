@@ -28,7 +28,8 @@
   explicitly, including the direction reasoning, so readers do not conclude
   the threshold was ignored.
 * Forest plots use dynamic bottom spacing, eliminating overlap between the
-  plot body and the heterogeneity text for large numbers of studies.
+  heterogeneity/test text and the x-axis band, "favors" labels, and axis
+  titles; trim-and-fill and Peto annotations now render on dedicated rows.
 
 ## Branding
 
