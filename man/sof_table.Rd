@@ -13,6 +13,8 @@ sof_table(
   baseline_risk = NULL,
   threshold_label = NULL,
   chinn_invert = FALSE,
+  label_intervention = "intervention",
+  label_control = "control",
   ...
 )
 }
@@ -24,16 +26,16 @@ sof_table(
 \code{"classic"} uses saturated backgrounds with white text.}
 
 \item{per}{Denominator for event rate columns. \code{1000} (default) or
-\code{100}. Controls the scale of the "Control rate" and "Exp. rate"
-columns.}
+\code{100}. Controls the scale of the "Risk with control" and
+"Risk with intervention" columns.}
 
 \item{prediction}{Logical. If \code{TRUE} (default \code{FALSE}), the
 Effect column also shows the 95 percent prediction interval on a second line,
 provided the meta object was run with \code{prediction = TRUE}.}
 
 \item{convert_smd_to_or}{(v0.2) Logical. If \code{TRUE} and the meta
-object uses \code{sm = "SMD"} or \code{"MD"}, the Control rate /
-Exp. rate columns display dichotomised event rates derived via Chinn's
+object uses \code{sm = "SMD"} or \code{"MD"}, the "Risk with control" /
+"Risk with intervention" columns display dichotomised event rates derived via Chinn's
 formula (\eqn{\log OR = SMD \times \pi / \sqrt{3}}). Requires
 \code{baseline_risk} (numeric in (0,1)) representing the proportion
 of control patients meeting the threshold of clinical interest.}
@@ -50,6 +52,11 @@ Shown in the table footer when \code{convert_smd_to_or = TRUE}.}
 before applying Chinn's formula so that a negative-is-better SMD (e.g.,
 symptom severity reduction) yields OR > 1 in the dichotomised rate
 columns. Only relevant when \code{convert_smd_to_or = TRUE}.}
+
+\item{label_intervention, label_control}{Arm labels used in the
+"Risk with ..." column headers (GRADEpro vocabulary), e.g.
+\code{label_intervention = "CBT-I"}, \code{label_control = "placebo"}.
+Defaults are \code{"intervention"} and \code{"control"}.}
 
 \item{...}{Additional arguments (currently unused).}
 }

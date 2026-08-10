@@ -7,14 +7,14 @@
 #'   \code{"pastel"} (default) uses soft backgrounds with colored text.
 #'   \code{"classic"} uses saturated backgrounds with white text.
 #' @param per Denominator for event rate columns. \code{1000} (default) or
-#'   \code{100}. Controls the scale of the "Control rate" and "Exp. rate"
-#'   columns.
+#'   \code{100}. Controls the scale of the "Risk with control" and
+#'   "Risk with intervention" columns.
 #' @param prediction Logical. If \code{TRUE} (default \code{FALSE}), the
 #'   Effect column also shows the 95 percent prediction interval on a second line,
 #'   provided the meta object was run with \code{prediction = TRUE}.
 #' @param convert_smd_to_or (v0.2) Logical. If \code{TRUE} and the meta
-#'   object uses \code{sm = "SMD"} or \code{"MD"}, the Control rate /
-#'   Exp. rate columns display dichotomised event rates derived via Chinn's
+#'   object uses \code{sm = "SMD"} or \code{"MD"}, the "Risk with control" /
+#'   "Risk with intervention" columns display dichotomised event rates derived via Chinn's
 #'   formula (\eqn{\log OR = SMD \times \pi / \sqrt{3}}). Requires
 #'   \code{baseline_risk} (numeric in (0,1)) representing the proportion
 #'   of control patients meeting the threshold of clinical interest.
@@ -28,6 +28,10 @@
 #'   before applying Chinn's formula so that a negative-is-better SMD (e.g.,
 #'   symptom severity reduction) yields OR > 1 in the dichotomised rate
 #'   columns. Only relevant when \code{convert_smd_to_or = TRUE}.
+#' @param label_intervention,label_control Arm labels used in the
+#'   "Risk with ..." column headers (GRADEpro vocabulary), e.g.
+#'   \code{label_intervention = "CBT-I"}, \code{label_control = "placebo"}.
+#'   Defaults are \code{"intervention"} and \code{"control"}.
 #' @param ... Additional arguments (currently unused).
 #'
 #' @return A \code{flextable} object suitable for printing, Word export, etc.
@@ -49,6 +53,8 @@ sof_table <- function(x, palette = c("pastel", "classic"),
                       baseline_risk     = NULL,
                       threshold_label   = NULL,
                       chinn_invert      = FALSE,
+                      label_intervention = "intervention",
+                      label_control      = "control",
                       ...) {
   if (!inherits(x, "pmatools")) {
     rlang::abort("x must be a pmatools object from grade_meta().")
@@ -100,23 +106,23 @@ sof_table <- function(x, palette = c("pastel", "classic"),
 
   per_str <- format(per, big.mark = ",", scientific = FALSE)
   headers <- c(
-    "Outcome", "Studies (k)", "Participants (N)",
-    paste0("Control rate\n(per ", per_str, ")"),
-    paste0("Exp. rate\n(per ", per_str, ")"),
-    "Effect (95% CI)",
-    "Certainty of evidence"
+    "Outcome",
+    "No. of participants\n(studies)",
+    paste0("Risk with ", label_control, "\n(per ", per_str, ")"),
+    paste0("Risk with ", label_intervention, "\n(per ", per_str, ")"),
+    .effect_header(meta_obj$sm),
+    "Certainty of the evidence\n(Core GRADE series)"
   )
 
   certainty_cell <- paste0(certainty_label, "\n", certainty_sym)
 
   df <- data.frame(
     col1 = x$outcome_name,
-    col2 = as.character(k),
-    col3 = if (is.na(n_total)) "NR" else format(n_total, big.mark = ","),
-    col4 = cer_str,
-    col5 = ier_str,
-    col6 = effect_str,
-    col7 = certainty_cell,
+    col2 = .n_participants_studies(k, n_total, x$study_design),
+    col3 = cer_str,
+    col4 = ier_str,
+    col5 = effect_str,
+    col6 = certainty_cell,
     stringsAsFactors = FALSE
   )
   names(df) <- headers
@@ -128,21 +134,20 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   ft <- flextable::font(ft, fontname = "Arial", part = "all")
   ft <- flextable::align(ft, align = "center", part = "header")
   ft <- flextable::align(ft, align = "left",   part = "body")
-  ft <- flextable::align(ft, j = 2:3, align = "center", part = "body")
+  ft <- flextable::align(ft, j = 2, align = "center", part = "body")
 
-  cert_col <- headers[7]
+  cert_col <- headers[6]
   ft <- flextable::bg(ft,    j = cert_col, bg    = cell_colors$bg,   part = "body")
   ft <- flextable::color(ft, j = cert_col, color = cell_colors$text, part = "body")
   ft <- flextable::bold(ft,  j = cert_col, part = "body")
   ft <- flextable::align(ft, j = cert_col, align = "center", part = "body")
 
   ft <- flextable::width(ft, j = 1, width = 1.4)
-  ft <- flextable::width(ft, j = 2, width = 0.6)
-  ft <- flextable::width(ft, j = 3, width = 0.9)
-  ft <- flextable::width(ft, j = 4, width = 1.3)
-  ft <- flextable::width(ft, j = 5, width = 1.4)
-  ft <- flextable::width(ft, j = 6, width = 1.6)
-  ft <- flextable::width(ft, j = 7, width = 1.4)
+  ft <- flextable::width(ft, j = 2, width = 1.2)
+  ft <- flextable::width(ft, j = 3, width = 1.3)
+  ft <- flextable::width(ft, j = 4, width = 1.4)
+  ft <- flextable::width(ft, j = 5, width = 1.5)
+  ft <- flextable::width(ft, j = 6, width = 1.5)
 
   ft <- flextable::bg(ft,    bg = "#2C3E50", part = "header")
   ft <- flextable::color(ft, color = "white", part = "header")
@@ -154,8 +159,9 @@ sof_table <- function(x, palette = c("pastel", "classic"),
     "GRADE certainty: ", certainty_label, ". ",
     "Assessment based on BMJ 2025 Core GRADE series (Guyatt et al.). ",
     "CI = confidence interval.", pi_note, " ",
-    "Exp. rate = experimental (intervention) arm event rate computed from ",
-    "baseline risk and pooled relative effect."
+    "Intervention rate (Risk with ", label_intervention, ") = ",
+    "intervention-arm event rate computed from baseline risk and pooled ",
+    "relative effect."
   )
   ft <- flextable::add_footer_lines(ft, values = base_note)
 
@@ -202,6 +208,39 @@ sof_table <- function(x, palette = c("pastel", "classic"),
 # --------------------------------------------------------------------------
 # Helpers (shared with grade_table.R via package namespace)
 # --------------------------------------------------------------------------
+
+# Combined "No of participants (studies)" cell, GRADEpro style:
+# "1,234 (12 RCTs)"; falls back to "(12 studies)" when the study design
+# is unavailable.
+.n_participants_studies <- function(k, n_total, study_design = NULL) {
+  k <- as.integer(k)
+  design_lbl <- if (is.null(study_design) || length(study_design) != 1L ||
+                    is.na(study_design) || !nzchar(study_design)) {
+    if (k == 1L) "study" else "studies"
+  } else if (toupper(study_design) == "RCT") {
+    if (k == 1L) "RCT" else "RCTs"
+  } else if (tolower(study_design) %in% c("obs", "observational")) {
+    if (k == 1L) "observational study" else "observational studies"
+  } else {
+    if (k == 1L) "study" else "studies"
+  }
+  n_str <- if (is.na(n_total)) "NR" else format(n_total, big.mark = ",")
+  sprintf("%s (%d %s)", n_str, k, design_lbl)
+}
+
+# GRADEpro-style effect column header, by summary measure
+.effect_header <- function(sm) {
+  if (!is.null(sm) && length(sm) == 1L && !is.na(sm) &&
+      sm %in% c("RR", "OR", "HR", "IRR", "RoM")) {
+    "Relative effect\n(95% CI)"
+  } else if (identical(sm, "MD")) {
+    "Mean difference\n(95% CI)"
+  } else if (identical(sm, "SMD")) {
+    "Standardized mean difference\n(95% CI)"
+  } else {
+    "Effect\n(95% CI)"
+  }
+}
 
 .total_n <- function(meta_obj) {
   n_e <- if (!is.null(meta_obj$n.e)) sum(meta_obj$n.e, na.rm = TRUE) else NA

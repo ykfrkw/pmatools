@@ -10,7 +10,9 @@ grade_table(
   palette = c("pastel", "classic"),
   show_domains = TRUE,
   per = 1000,
-  prediction = FALSE
+  prediction = FALSE,
+  label_intervention = "intervention",
+  label_control = "control"
 )
 }
 \arguments{
@@ -32,6 +34,10 @@ If \code{NULL} (default), no grouping header is added.}
 
 \item{prediction}{Logical (default \code{FALSE}); when \code{TRUE}, the
 95 percent prediction interval is shown in the Effect column.}
+
+\item{label_intervention, label_control}{Arm labels used in the
+"Risk with ..." column headers (GRADEpro vocabulary).
+Defaults are \code{"intervention"} and \code{"control"}.}
 }
 \value{
 A \code{flextable} object.

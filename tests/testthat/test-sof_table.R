@@ -32,19 +32,66 @@ test_that(".pooled_estimate falls back to common when random is absent", {
 test_that("sof_table shows the effect for a common-effect-only analysis", {
   g  <- make_common_only_grade()
   ft <- sof_table(g)
-  eff <- ft$body$dataset[["Effect (95% CI)"]]
+  eff <- ft$body$dataset[[grep("^Relative effect", names(ft$body$dataset))]]
   expect_false(identical(eff, "NR"))
   expect_match(eff, "^OR ")
-  # Exp. rate column derived from the common-effect pool, not "-"
-  ier <- ft$body$dataset[[grep("^Exp. rate", names(ft$body$dataset))]]
+  # Intervention rate column derived from the common-effect pool, not "-"
+  ier <- ft$body$dataset[[grep("^Risk with intervention",
+                               names(ft$body$dataset))]]
   expect_false(identical(ier, "-"))
+})
+
+test_that("sof_table uses GRADEpro-aligned column headers", {
+  g  <- make_common_only_grade()
+  ft <- sof_table(g)
+  hdrs <- names(ft$body$dataset)
+  expect_identical(hdrs, c(
+    "Outcome",
+    "No. of participants\n(studies)",
+    "Risk with control\n(per 1,000)",
+    "Risk with intervention\n(per 1,000)",
+    "Relative effect\n(95% CI)",
+    "Certainty of the evidence\n(Core GRADE series)"
+  ))
+  # No legacy experimental-rate vocabulary anywhere
+  expect_no_match(paste(hdrs, collapse = " "), "Exp\\. rate")
+  # Combined participants (studies) cell: "330 (3 RCTs)"
+  np <- ft$body$dataset[[hdrs[2]]]
+  expect_match(np, "^360 \\(3 RCTs\\)$")
+  # Footnote uses the Intervention rate wording
+  expect_match(.footer_text(ft), "Intervention rate")
+  expect_no_match(.footer_text(ft), "Exp\\. rate")
+})
+
+test_that("sof_table honours custom arm labels", {
+  g  <- make_common_only_grade()
+  ft <- sof_table(g, label_intervention = "CBT-I", label_control = "placebo")
+  hdrs <- names(ft$body$dataset)
+  expect_true("Risk with placebo\n(per 1,000)" %in% hdrs)
+  expect_true("Risk with CBT-I\n(per 1,000)" %in% hdrs)
 })
 
 test_that("grade_table shows the effect for a common-effect-only analysis", {
   g  <- make_common_only_grade()
   ft <- grade_table(list("Common only" = g))
-  eff <- ft$body$dataset[["Effect (95% CI)"]]
+  eff <- ft$body$dataset[[grep("^Relative effect", names(ft$body$dataset))]]
   expect_false(any(eff == "NR"))
+})
+
+test_that("grade_table uses GRADEpro-aligned column headers", {
+  g  <- make_common_only_grade()
+  ft <- grade_table(list("Common only" = g))
+  hdrs <- names(ft$body$dataset)
+  expect_identical(hdrs[1:6], c(
+    "Outcome",
+    "No. of participants\n(studies)",
+    "Risk with control\n(per 1,000)",
+    "Risk with intervention\n(per 1,000)",
+    "Relative effect\n(95% CI)",
+    "Certainty of the evidence\n(Core GRADE series)"
+  ))
+  np <- ft$body$dataset[[hdrs[2]]]
+  expect_match(np, "^360 \\(3 RCTs\\)$")
 })
 
 test_that("random-effects pool still preferred when available", {
