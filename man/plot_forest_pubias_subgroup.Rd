@@ -17,7 +17,7 @@ plot_forest_pubias_subgroup(
   show_n = TRUE,
   show_events = FALSE,
   addrow_above = 0,
-  addrow_below = 1,
+  addrow_below = NULL,
   ...
 )
 }
@@ -65,7 +65,10 @@ subgroup view always shows a single combined "No" column.}
 \item{show_events}{Logical, fallback-only (see \code{show_n}).}
 
 \item{addrow_above, addrow_below}{Number of blank rows above/below the
-overall pooled effect line.}
+overall pooled effect line. \code{addrow_below = NULL} (default) is
+computed from the drawn content so the bottom heterogeneity/test text
+clears the x-axis band and any \code{label.left}/\code{label.right}
+row (see \code{.auto_addrow_below()}).}
 
 \item{...}{Additional arguments forwarded to \code{\link[meta]{forest.meta}}.}
 }

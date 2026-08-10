@@ -62,10 +62,19 @@ plot_trimfill_forest <- function(x, ...) {
     fmt_te(te_orig), fmt_te(te_adj)
   )
 
-  meta::forest(tf, ...)
+  # meta::forest() is grid-based: mtext() on the base-graphics layer either
+  # errors on a fresh device (so the annotation silently vanished) or lands
+  # at stale base coordinates on top of the heterogeneity band. Route the
+  # annotation through text.addline1 instead, which meta lays out on its own
+  # row below the heterogeneity statistics.
+  args <- list(x = tf, ...)
+  if (is.null(args$text.addline1)) args$text.addline1 <- sub_label
   tryCatch(
-    graphics::mtext(sub_label, side = 1, line = 3.0, cex = 0.85, adj = 0),
-    error = function(e) invisible(NULL)
+    do.call(meta::forest, args),
+    error = function(e) {
+      args$text.addline1 <- NULL
+      tryCatch(do.call(meta::forest, args), error = function(e2) NULL)
+    }
   )
 
   invisible(tf)

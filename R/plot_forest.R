@@ -33,6 +33,14 @@
 #'   the left and right of the x-axis (e.g., "Favors Control" / "Favors
 #'   Treatment"). Passed to \code{meta::forest()} as \code{label.left} /
 #'   \code{label.right}.
+#' @param addrow_above Number of blank rows above the pooled summary
+#'   (passed as \code{addrow.overall}).
+#' @param addrow_below Number of blank rows between the pooled summary and
+#'   the heterogeneity/test statistics printed at the bottom (passed as
+#'   \code{addrows.below.overall}). Default \code{NULL} computes the value
+#'   from the drawn content so the heterogeneity text clears the x-axis
+#'   band, the \code{label.left}/\code{label.right} row, and any
+#'   \code{xlab} row (see \code{.auto_addrow_below()}).
 #' @param ... Additional arguments passed to \code{\link[meta]{forest}}.
 #'
 #' @return Invisibly NULL. Side effect: draws on the active graphics device.
@@ -51,10 +59,25 @@ plot_forest <- function(meta_obj,
                         favors_left  = NULL,
                         favors_right = NULL,
                         addrow_above = 0,
-                        addrow_below = 1,
+                        addrow_below = NULL,
                         ...) {
   if (!inherits(meta_obj, "meta")) {
     rlang::abort("plot_forest: meta_obj must be a meta-analysis object.")
+  }
+
+  # Dynamic bottom spacing: meta::forest() prints the heterogeneity/test
+  # lines `addrows.below.overall` rows below the pooled summary, while the
+  # x-axis band (with tick labels), the label.left/label.right row, and any
+  # xlab occupy the same vertical region. A fixed value of 1 made the
+  # heterogeneity text overlap those elements (reviewer report), so when
+  # the caller does not pin a value we derive it from the drawn content.
+  dots <- list(...)
+  if (is.null(addrow_below)) {
+    has_favors <- .nzchar1(favors_left) || .nzchar1(favors_right) ||
+                  .nzchar1(dots$label.left) || .nzchar1(dots$label.right)
+    has_xlab   <- .nzchar1(dots$xlab)
+    addrow_below <- .auto_addrow_below(has_favors = has_favors,
+                                       has_xlab   = has_xlab)
   }
 
   k  <- meta_obj$k
@@ -65,8 +88,9 @@ plot_forest <- function(meta_obj,
   if (is.null(label_e)) label_e <- meta_obj$label.e
   if (is.null(label_c)) label_c <- meta_obj$label.c
 
-  # auto_layout: x-limits + tight margins (top minimal, bottom enough for
-  # axis tick labels AND heterogeneity row without overlap)
+  # auto_layout: x-limits + base-graphics margins. Note: meta::forest() draws
+  # with grid, so par(mar) only affects base-graphics fallbacks (plot.new /
+  # abline); bottom-of-plot spacing is handled via addrow_below above.
   par_old <- NULL
   if (isTRUE(auto_layout)) {
     if (is.null(xlim)) xlim <- .auto_xlim(meta_obj)
@@ -183,6 +207,29 @@ plot_forest <- function(meta_obj,
   }
 
   invisible(NULL)
+}
+
+# --------------------------------------------------------------------------
+# Dynamic bottom spacing below the pooled summary
+# --------------------------------------------------------------------------
+# meta::forest() is grid-based, so par(mar) does not move its layout; the
+# lever that separates the bottom heterogeneity/test text from the x-axis is
+# `addrows.below.overall`. The axis line plus tick labels occupy ~2 rows;
+# label.left/label.right add one more row under the axis, and a non-empty
+# xlab yet another (mirrors meta's own default heuristic in forest.meta).
+# Subgroup heterogeneity lines print inline under each subgroup diamond and
+# the bottom text block (overall heterogeneity + test-for-subgroup lines)
+# grows the grid layout row by row on its own, so no subgroup-count term is
+# needed here.
+.auto_addrow_below <- function(has_favors = FALSE, has_xlab = FALSE) {
+  2L + as.integer(isTRUE(has_favors)) + as.integer(isTRUE(has_xlab))
+}
+
+# TRUE when x is a length>=1 non-NA character-like scalar with content
+.nzchar1 <- function(x) {
+  if (is.null(x) || length(x) == 0L) return(FALSE)
+  x <- as.character(x)[1]
+  !is.na(x) && nzchar(x)
 }
 
 # --------------------------------------------------------------------------
