@@ -179,6 +179,14 @@ evidence_profile <- function(grade,
     }
   }
 
+  thr_note <- grade$threshold_note %||% NULL
+  if (!is.null(thr_note) && !is.na(thr_note) && nzchar(thr_note)) {
+    ft <- flextable::add_footer_lines(
+      ft,
+      values = paste0("Threshold: ", thr_note, ".")
+    )
+  }
+
   ft <- flextable::add_footer_lines(
     ft,
     values = paste0(
