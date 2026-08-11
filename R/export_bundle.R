@@ -516,9 +516,22 @@ export_bundle <- function(ma,
     rob_dom_threshold= grade_args$rob_dominant_threshold$value     %||% 0.60,
     rob_inf_threshold= grade_args$rob_inflation_threshold$value    %||% 0.10,
     small_values_arg = .arg_lit(grade_args$small_values,           fallback = "NULL"),
-    indirectness_arg = .arg_lit(grade_args$indirectness,           fallback = shQuote("no")),
-    indirectness_rationale_arg =
-      .arg_lit(grade_args$indirectness_rationale,           fallback = "NULL"),
+    # Indirectness: with a Core GRADE 5 subdomain table the scalar argument and
+    # its rationale are derived from the recorded judgment, so the bundled
+    # script reproduces (or omits) the override exactly.
+    indirectness_arg = if (!is.null(grade$indirectness_subdomains)) {
+      .indirectness_arg_lit(grade)
+    } else {
+      .arg_lit(grade_args$indirectness, fallback = shQuote("no"))
+    },
+    indirectness_rationale_arg = if (!is.null(grade$indirectness_subdomains)) {
+      .indirectness_rationale_lit(grade)
+    } else {
+      .arg_lit(grade_args$indirectness_rationale, fallback = "NULL")
+    },
+    indirectness_subdomains_arg = .indirectness_subdomains_lit(
+      grade_args$indirectness_subdomains %||% grade$indirectness_subdomains
+    ),
     inconsistency_arg= .arg_lit(grade_args$inconsistency,          fallback = "NULL"),
     inconsistency_rationale_arg =
       .arg_lit(grade_args$inconsistency_rationale,          fallback = "NULL"),
@@ -640,6 +653,54 @@ export_bundle <- function(ma,
                                 note))[[1]]
   if (length(m) < 2L || !nzchar(m[2])) return("NULL")
   deparse(m[2])
+}
+
+# --------------------------------------------------------------------------
+# Indirectness subdomains (Core GRADE 5) -> analysis.R literals
+# --------------------------------------------------------------------------
+
+# Scalar `indirectness` literal for the bundled script: NULL when the recorded
+# judgment is the worst-case subdomain default, the recorded level otherwise
+# (which grade_meta() then treats as a manual override).
+.indirectness_arg_lit <- function(grade) {
+  sub <- grade$indirectness_subdomains
+  if (is.null(sub) || !nrow(sub)) return(shQuote("no"))
+  worst  <- .indirectness_worst_case(sub)
+  actual <- .indirectness_domain_judgment(grade)
+  if (identical(worst, actual)) "NULL" else shQuote(actual)
+}
+
+# Recover the override rationale from the domain notes so the regenerated call
+# passes grade_meta()'s transparency gate.
+.indirectness_rationale_lit <- function(grade) {
+  if (is.null(grade$indirectness_subdomains)) return("NULL")
+  r <- .indirectness_override_rationale(grade)
+  if (is.null(r)) return("NULL")
+  paste(deparse(r, width.cutoff = 500L), collapse = "")
+}
+
+# Literalise the subdomain table as a data.frame() call. Accepts a plain
+# data.frame or a {value, ...} spec.
+.indirectness_subdomains_lit <- function(spec) {
+  df <- if (is.data.frame(spec)) {
+    spec
+  } else if (is.list(spec) && is.data.frame(spec$value)) {
+    spec$value
+  } else {
+    NULL
+  }
+  if (is.null(df) || nrow(df) == 0) return("NULL")
+
+  cols <- intersect(c("subdomain", "target", "evidence", "judgment"), names(df))
+  if (length(cols) == 0) return("NULL")
+
+  vec_lit <- function(v) {
+    paste(deparse(as.character(v), width.cutoff = 500L), collapse = "")
+  }
+  lines <- paste0("    ", format(cols), " = ",
+                  vapply(cols, function(cl) vec_lit(df[[cl]]), character(1)))
+  paste0("data.frame(\n", paste(lines, collapse = ",\n"),
+         ",\n    stringsAsFactors = FALSE\n  )")
 }
 
 .arg_lit <- function(spec, fallback = "NULL") {
