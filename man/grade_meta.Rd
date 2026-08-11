@@ -9,7 +9,11 @@ grade_meta(
   study_design = c("RCT", "obs"),
   rob = NULL,
   rob_rationale = NULL,
+  rob_some_concerns = c("low", "high"),
+  rob_overrides = NULL,
+  rob_override_rationale = NULL,
   rob_dominant_threshold = 0.6,
+  rob_refit = TRUE,
   rob_inflation_threshold = 0.1,
   small_values = NULL,
   indirectness = "no",
@@ -76,10 +80,44 @@ Risk of Bias flowchart). Recorded in the domain notes as
 Not used for per-study vectors or column-name input (automated
 assessment). Default \code{NULL}.}
 
-\item{rob_dominant_threshold}{Deprecated (v0.3.1+; accepted but ignored).
-The Risk-of-Bias flowchart no longer uses a weight-share dominance gate;
-the direction-and-magnitude check is now run whenever at least one
-high-RoB study is present.}
+\item{rob_some_concerns}{(v0.5) How studies rated \code{"some concerns"}
+are folded into the binary low/high classification that BMJ Core GRADE 4
+Fig 2 operates on. \code{"low"} (default, previous behaviour) or
+\code{"high"}. Changing it changes which studies count toward the
+high-RoB weight share and therefore the dominance gate. Only used when
+\code{rob} is a vector or column name.}
+
+\item{rob_overrides}{(v0.5) Optional named character vector of study-level
+Risk-of-Bias overrides keyed on \code{meta_obj$studlab}, e.g.
+\code{c("Smith 2020" = "high")}. Values accept the same vocabulary as
+\code{rob}. Keys that match no study label abort (a typo must never be
+silently ignored). Every override is recorded in the domain notes as
+\code{"Study-level override: <studlab> <from> -> <to> (<rationale>)"}.}
+
+\item{rob_override_rationale}{(v0.5) Named character vector of
+justifications, one per \code{rob_overrides} key. A missing rationale
+aborts (Core GRADE transparency principle). Default \code{NULL}.}
+
+\item{rob_dominant_threshold}{(v0.5, reinstated) Weight share at or above
+which the body of evidence counts as \emph{dominated} by high-RoB studies
+in BMJ Core GRADE 4 Fig 2 (first decision node). Default \code{0.60};
+the comparison is \code{>=}, so exactly 60 percent counts as dominated.
+The share is computed from the inverse-variance study weights; when those
+are unavailable the count share is used instead and the domain note says
+so. When neither is computable, dominance is assumed (conservative).
+\strong{This argument was deprecated and ignored in v0.3.1-v0.4.0}; the
+retirement is retracted because the gate is the entry node of Fig 2.
+Only used when \code{rob} is a vector or column name.}
+
+\item{rob_refit}{(v0.5) Logical, default \code{TRUE}. When the flowchart
+reaches the "use low risk of bias studies only" leaf (not dominated, but
+a substantial difference between the high- and low-RoB estimates), refit
+the meta-analysis on the low-RoB subset so that every downstream domain,
+the rating target, the baseline risk and the SoF table use the restricted
+estimate. Set to \code{FALSE} to keep the full analysis and receive the
+recommendation only (\code{$rob_analysis_set} is still
+\code{"low_only"}). A refit is skipped, with a warning, when fewer than
+two low-RoB studies remain or when \code{update()} fails.}
 
 \item{rob_inflation_threshold}{(v0.2) Threshold for the relative change of
 the pooled estimate when high-RoB studies are excluded, computed on the
@@ -352,7 +390,13 @@ automatically rather than supplied by the user.}
 tibble (\code{subdomain}, \code{target}, \code{evidence},
 \code{judgment}, \code{grade_level}), or \code{NULL} when none was
 supplied. Render it with \code{\link{indirectness_table}}.}
-\item{meta}{The original meta object.}
+\item{meta}{The meta object every domain was assessed on: the refitted
+low-RoB analysis when one was performed, otherwise the original.}
+\item{meta_full}{The original (all-studies) meta object.}
+\item{rob_analysis_set}{\code{"all"} or \code{"low_only"} — the analysis
+set BMJ Core GRADE 4 Fig 2 recommends.}
+\item{rob_refit}{\code{TRUE} when the low-RoB refit was actually
+performed.}
 }
 }
 \description{

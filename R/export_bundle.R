@@ -513,7 +513,17 @@ export_bundle <- function(ma,
     study_design     = grade$study_design,
     rob_arg          = .arg_lit(grade_args$rob,                    fallback = "NULL"),
     rob_rationale_arg = .arg_lit(grade_args$rob_rationale,         fallback = "NULL"),
+    rob_some_concerns = grade_args$rob_some_concerns$value          %||% "low",
+    rob_overrides_arg = .named_chr_lit(grade_args$rob_overrides),
+    rob_override_rationale_arg = .named_chr_lit(grade_args$rob_override_rationale),
     rob_dom_threshold= grade_args$rob_dominant_threshold$value     %||% 0.60,
+    # rob_refit: fall back to what the stored object actually did, so the
+    # bundled script reproduces the analysis set that produced these numbers.
+    rob_refit_arg    = .arg_lit(
+      grade_args$rob_refit,
+      fallback = if (identical(grade$rob_analysis_set, "low_only") &&
+                     !isTRUE(grade$rob_refit)) "FALSE" else "TRUE"
+    ),
     rob_inf_threshold= grade_args$rob_inflation_threshold$value    %||% 0.10,
     small_values_arg = .arg_lit(grade_args$small_values,           fallback = "NULL"),
     # Indirectness: with a Core GRADE 5 subdomain table the scalar argument and
@@ -701,6 +711,24 @@ export_bundle <- function(ma,
                   vapply(cols, function(cl) vec_lit(df[[cl]]), character(1)))
   paste0("data.frame(\n", paste(lines, collapse = ",\n"),
          ",\n    stringsAsFactors = FALSE\n  )")
+}
+
+# Render a *named* character vector as an R literal, e.g.
+#   c('Smith 2020' = 'high', 'Jones 2019' = 'low')
+# .arg_lit()'s "vector" origin drops names, which would silently break
+# rob_overrides / rob_override_rationale (both keyed on studlab) in the
+# bundled script. Names are quoted rather than backticked so labels with
+# spaces round-trip.
+.named_chr_lit <- function(spec, fallback = "NULL") {
+  v <- if (is.list(spec) && !is.null(spec$origin)) spec$value else spec
+  if (is.list(v)) v <- unlist(v)
+  if (is.null(v) || length(v) == 0L) return(fallback)
+  nms <- names(v)
+  if (is.null(nms) || any(is.na(nms)) || any(!nzchar(nms))) return(fallback)
+  paste0("c(",
+         paste(sprintf("%s = %s", shQuote(nms), shQuote(as.character(v))),
+               collapse = ", "),
+         ")")
 }
 
 .arg_lit <- function(spec, fallback = "NULL") {

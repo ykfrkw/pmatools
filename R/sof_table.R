@@ -167,6 +167,15 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   )
   ft <- flextable::add_footer_lines(ft, values = base_note)
 
+  # Risk-of-bias analysis set (Core GRADE 4 Fig 2). A refit silently changes
+  # every number in this table, so it must always be stated; the unapplied
+  # recommendation is stated too, so the reader knows the shown estimate is
+  # not the one the flowchart points at.
+  rob_set_note <- .rob_analysis_set_note(x)
+  if (!is.null(rob_set_note)) {
+    ft <- flextable::add_footer_lines(ft, values = rob_set_note)
+  }
+
   # Publication bias not formally assessed -> prominent qualitative-judgment
   # footnote (see domain_pubias.R)
   pubias_qual_note <- .pubias_qualitative_note(x)
@@ -210,6 +219,26 @@ sof_table <- function(x, palette = c("pastel", "classic"),
 # --------------------------------------------------------------------------
 # Helpers (shared with grade_table.R via package namespace)
 # --------------------------------------------------------------------------
+
+# Footer sentence describing which studies the effect estimate rests on.
+# Returns NULL for the ordinary "all studies" case.
+.rob_analysis_set_note <- function(x) {
+  if (isTRUE(x$rob_refit)) {
+    k_low  <- x$meta$k
+    k_full <- x$meta_full$k %||% k_low
+    return(sprintf(paste0(
+      "Effect estimate restricted to low risk of bias studies (n = %d of %d) ",
+      "per Core GRADE 4 Fig 2."), k_low, k_full))
+  }
+  if (identical(x$rob_analysis_set, "low_only")) {
+    return(paste0(
+      "Core GRADE 4 Fig 2 recommends restricting the analysis to low risk of ",
+      "bias studies; the effect estimate shown includes all studies ",
+      "(rob_refit = FALSE)."
+    ))
+  }
+  NULL
+}
 
 # Combined "No of participants (studies)" cell, GRADEpro style:
 # "1,234 (12 RCTs)"; falls back to "(12 studies)" when the study design

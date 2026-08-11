@@ -2,6 +2,14 @@ library(testthat)
 
 skip_if_not_installed("meta")
 
+# These fixtures exercise the direction-of-bias check (the 5 zone rules). Every
+# one carries 80% of the weight on the high-RoB study, so under the v0.5
+# Core GRADE 4 Fig 2 flowchart they all take the *dominated* branch, where the
+# 5-rule verdict is used verbatim — which is why none of the expectations below
+# changed when the dominance gate was reinstated. The non-dominated branch (no
+# downgrade; analysis-set recommendation instead) is covered in
+# test-rob_flowchart.R.
+#
 # Mock dominated meta object: 1 large high-RoB study + 2 small low-RoB studies.
 # TE values supplied here are on the analysis scale (log scale for RR/OR).
 # `te_all` is the random-effects pooled estimate; `te_low_only` is set as the
