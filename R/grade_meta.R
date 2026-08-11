@@ -32,10 +32,40 @@
 #'   \code{\link{export_bundle}} outputs (Core GRADE transparency principle).
 #'   Not used for per-study vectors or column-name input (automated
 #'   assessment). Default \code{NULL}.
-#' @param rob_dominant_threshold Deprecated (v0.3.1+; accepted but ignored).
-#'   The Risk-of-Bias flowchart no longer uses a weight-share dominance gate;
-#'   the direction-and-magnitude check is now run whenever at least one
-#'   high-RoB study is present.
+#' @param rob_some_concerns (v0.5) How studies rated \code{"some concerns"}
+#'   are folded into the binary low/high classification that BMJ Core GRADE 4
+#'   Fig 2 operates on. \code{"low"} (default, previous behaviour) or
+#'   \code{"high"}. Changing it changes which studies count toward the
+#'   high-RoB weight share and therefore the dominance gate. Only used when
+#'   \code{rob} is a vector or column name.
+#' @param rob_overrides (v0.5) Optional named character vector of study-level
+#'   Risk-of-Bias overrides keyed on \code{meta_obj$studlab}, e.g.
+#'   \code{c("Smith 2020" = "high")}. Values accept the same vocabulary as
+#'   \code{rob}. Keys that match no study label abort (a typo must never be
+#'   silently ignored). Every override is recorded in the domain notes as
+#'   \code{"Study-level override: <studlab> <from> -> <to> (<rationale>)"}.
+#' @param rob_override_rationale (v0.5) Named character vector of
+#'   justifications, one per \code{rob_overrides} key. A missing rationale
+#'   aborts (Core GRADE transparency principle). Default \code{NULL}.
+#' @param rob_dominant_threshold (v0.5, reinstated) Weight share at or above
+#'   which the body of evidence counts as \emph{dominated} by high-RoB studies
+#'   in BMJ Core GRADE 4 Fig 2 (first decision node). Default \code{0.60};
+#'   the comparison is \code{>=}, so exactly 60 percent counts as dominated.
+#'   The share is computed from the inverse-variance study weights; when those
+#'   are unavailable the count share is used instead and the domain note says
+#'   so. When neither is computable, dominance is assumed (conservative).
+#'   \strong{This argument was deprecated and ignored in v0.3.1-v0.4.0}; the
+#'   retirement is retracted because the gate is the entry node of Fig 2.
+#'   Only used when \code{rob} is a vector or column name.
+#' @param rob_refit (v0.5) Logical, default \code{TRUE}. When the flowchart
+#'   reaches the "use low risk of bias studies only" leaf (not dominated, but
+#'   a substantial difference between the high- and low-RoB estimates), refit
+#'   the meta-analysis on the low-RoB subset so that every downstream domain,
+#'   the rating target, the baseline risk and the SoF table use the restricted
+#'   estimate. Set to \code{FALSE} to keep the full analysis and receive the
+#'   recommendation only (\code{$rob_analysis_set} is still
+#'   \code{"low_only"}). A refit is skipped, with a warning, when fewer than
+#'   two low-RoB studies remain or when \code{update()} fails.
 #' @param rob_inflation_threshold (v0.2) Threshold for the relative change of
 #'   the pooled estimate when high-RoB studies are excluded, computed on the
 #'   absolute analysis scale: \eqn{(|TE_{all}| - |TE_{low}|) / |TE_{low}|},
@@ -244,7 +274,13 @@
 #'     \item{rating_target_note}{How the target was derived (or overridden).}
 #'     \item{rating_target_auto}{\code{TRUE} when the target was derived
 #'       automatically rather than supplied by the user.}
-#'     \item{meta}{The original meta object.}
+#'     \item{meta}{The meta object every domain was assessed on: the refitted
+#'       low-RoB analysis when one was performed, otherwise the original.}
+#'     \item{meta_full}{The original (all-studies) meta object.}
+#'     \item{rob_analysis_set}{\code{"all"} or \code{"low_only"} — the analysis
+#'       set BMJ Core GRADE 4 Fig 2 recommends.}
+#'     \item{rob_refit}{\code{TRUE} when the low-RoB refit was actually
+#'       performed.}
 #'   }
 #'
 #' @examples
@@ -269,7 +305,11 @@ grade_meta <- function(meta_obj,
                        study_design                     = c("RCT", "obs"),
                        rob                              = NULL,
                        rob_rationale                    = NULL,
+                       rob_some_concerns                = c("low", "high"),
+                       rob_overrides                    = NULL,
+                       rob_override_rationale           = NULL,
                        rob_dominant_threshold           = 0.60,
+                       rob_refit                        = TRUE,
                        rob_inflation_threshold          = 0.10,
                        small_values                     = NULL,
                        indirectness                     = "no",
@@ -309,9 +349,14 @@ grade_meta <- function(meta_obj,
   if (!inherits(meta_obj, "meta")) {
     rlang::abort("meta_obj must be an object of class 'meta' (from the {meta} package).")
   }
-  study_design   <- match.arg(study_design)
-  outcome_type   <- match.arg(outcome_type)
-  threshold_type <- match.arg(threshold_type)
+  study_design      <- match.arg(study_design)
+  outcome_type      <- match.arg(outcome_type)
+  threshold_type    <- match.arg(threshold_type)
+  # Validated by .check_rob_some_concerns() rather than match.arg() so that a
+  # bad value gets the message explaining what the setting does.
+  rob_some_concerns <- .check_rob_some_concerns(
+    if (length(rob_some_concerns) > 1L) rob_some_concerns[1] else rob_some_concerns
+  )
 
   # --- Core GRADE 2 Fig 2 step 1: the chosen threshold must be explicit ---
   # "mid" means importance is being judged, which is impossible without a MID.
@@ -323,6 +368,9 @@ grade_meta <- function(meta_obj,
   starting_quality <- score_to_certainty(start_score)
 
   # --- resolve Threshold to TE scale (used by RoB, Inconsistency, Imprecision) ---
+  # `meta_full` is the all-studies analysis; `meta_obj` is rebound below to
+  # the refitted low-RoB analysis when Core GRADE 4 Fig 2 calls for one.
+  meta_full          <- meta_obj
   threshold_resolved <- threshold_to_te_scale(
     threshold, threshold_scale, meta_obj$sm,
     threshold_baseline = threshold_baseline,
@@ -334,7 +382,69 @@ grade_meta <- function(meta_obj,
   threshold_note     <- threshold_resolved$threshold_note
   threshold_p0       <- threshold_resolved$threshold_baseline
 
+  # --- Risk of bias first (Core GRADE 4 Fig 2) ---
+  # RoB is assessed on the full analysis and may hand back the recommendation
+  # to restrict the evidence to low-RoB studies. Everything downstream (rating
+  # target, the other domains, baseline risk, SoF) then works from the
+  # restricted analysis, so RoB has to run before them.
+  d_rob   <- assess_rob(rob, meta_obj,
+                        rob_some_concerns       = rob_some_concerns,
+                        rob_overrides           = rob_overrides,
+                        rob_override_rationale  = rob_override_rationale,
+                        rob_dominant_threshold  = rob_dominant_threshold,
+                        rob_inflation_threshold = rob_inflation_threshold,
+                        small_values            = small_values,
+                        threshold_internal      = threshold_internal,
+                        rationale               = rob_rationale)
+  rob_analysis_set <- attr(d_rob, "analysis_set") %||% "all"
+  rob_high_idx     <- attr(d_rob, "high_idx")
+
+  # The RoB domain note is written against the full analysis, so it keeps the
+  # threshold note that was resolved above even if an ARD threshold is
+  # re-resolved after the refit.
+  if (!is.null(threshold_note)) {
+    d_rob <- .append_domain_note(d_rob, threshold_note)
+  }
+
+  # --- act on the "use low risk of bias studies only" leaf ---
+  refit_done <- FALSE
+  if (identical(rob_analysis_set, "low_only") && isTRUE(rob_refit)) {
+    refit_res  <- .refit_low_rob(meta_obj, rob_high_idx)
+    meta_obj   <- refit_res$meta
+    refit_done <- isTRUE(refit_res$refit)
+    d_rob      <- .append_domain_note(d_rob, refit_res$note)
+
+    # An absolute (ARD) threshold is anchored to the pooled control-arm risk,
+    # which the restricted analysis changes; re-resolve it so the downstream
+    # domains judge against the right equivalent ratio.
+    if (refit_done && identical(threshold_kind, "ard")) {
+      threshold_resolved <- threshold_to_te_scale(
+        threshold, threshold_scale, meta_obj$sm,
+        threshold_baseline = threshold_baseline,
+        meta_obj           = meta_obj
+      )
+      threshold_internal <- threshold_resolved$threshold_internal
+      threshold_kind     <- threshold_resolved$threshold_kind
+      threshold_ard      <- threshold_resolved$threshold_ard
+      threshold_note     <- threshold_resolved$threshold_note
+      threshold_p0       <- threshold_resolved$threshold_baseline
+      d_rob <- .append_domain_note(d_rob, paste0(
+        "Absolute (ARD) threshold re-resolved on the restricted analysis ",
+        "because the pooled baseline risk changed."
+      ))
+    }
+  } else if (identical(rob_analysis_set, "low_only")) {
+    d_rob <- .append_domain_note(d_rob, paste0(
+      "rob_refit = FALSE: the recommendation to use low risk of bias studies ",
+      "only is reported but not applied; the pooled estimate still includes ",
+      "all studies."
+    ))
+  }
+
   # --- Core GRADE 2 Fig 2 steps 2-3: target of the certainty rating ---
+  # Derived from the point estimate of the analysis actually being rated, so
+  # this must sit after the refit and before the Imprecision domain (which
+  # consumes target_info$threshold_for_imprecision).
   auto_target <- .derive_rating_target(
     te_point           = .pooled_te(meta_obj),
     threshold_internal = threshold_internal,
@@ -345,14 +455,7 @@ grade_meta <- function(meta_obj,
   target_info <- .resolve_rating_target(rating_target, rating_target_rationale,
                                         auto_target, threshold_internal)
 
-  # --- domain assessments ---
-  d_rob   <- assess_rob(rob, meta_obj,
-                        rob_dominant_threshold  = rob_dominant_threshold,
-                        rob_inflation_threshold = rob_inflation_threshold,
-                        small_values            = small_values,
-                        threshold_internal      = threshold_internal,
-                        rationale               = rob_rationale)
-
+  # --- remaining domain assessments (on the possibly refitted analysis) ---
   d_indir <- assess_indirectness(indirectness, meta_obj,
                                  rationale = indirectness_rationale)
 
@@ -416,16 +519,11 @@ grade_meta <- function(meta_obj,
                           paste0(d_impre$notes, " | ", target_info$note))
 
   # Absolute-threshold conversion note: surface it in every Threshold-aware
-  # domain so the baseline-risk assumption is auditable per domain.
+  # domain so the baseline-risk assumption is auditable per domain. (Risk of
+  # bias already carries the pre-refit note, appended above.)
   if (!is.null(threshold_note)) {
-    append_threshold_note <- function(d) {
-      d$notes <- ifelse(is.na(d$notes), threshold_note,
-                        paste0(d$notes, " | ", threshold_note))
-      d
-    }
-    d_rob   <- append_threshold_note(d_rob)
-    d_incon <- append_threshold_note(d_incon)
-    d_impre <- append_threshold_note(d_impre)
+    d_incon <- .append_domain_note(d_incon, threshold_note)
+    d_impre <- .append_domain_note(d_impre, threshold_note)
   }
 
   d_pubias <- assess_pubias(
@@ -465,10 +563,22 @@ grade_meta <- function(meta_obj,
       threshold_ard      = threshold_ard,
       threshold_note     = threshold_note,
       threshold_baseline = threshold_p0,
-      meta               = meta_obj
+      meta               = meta_obj,
+      meta_full          = meta_full,
+      rob_analysis_set   = rob_analysis_set,
+      rob_refit          = refit_done
     ),
     class = "pmatools"
   )
+}
+
+# Append a sentence to a domain row's notes, preserving the " | " separator
+# style (and the row's attributes, which assess_rob() uses to carry the
+# analysis-set recommendation).
+.append_domain_note <- function(d, note) {
+  if (is.null(note) || !nzchar(note)) return(d)
+  d$notes <- ifelse(is.na(d$notes), note, paste0(d$notes, " | ", note))
+  d
 }
 
 #' @export
@@ -484,6 +594,12 @@ print.pmatools <- function(x, ...) {
                 target_label,
                 x$threshold_type %||% "?",
                 if (isTRUE(x$rating_target_auto)) ", auto" else ", manual"))
+  }
+  if (isTRUE(x$rob_refit)) {
+    cat(sprintf(" Analysis set : low risk of bias studies only (%d of %d studies)\n",
+                x$meta$k, x$meta_full$k))
+  } else if (identical(x$rob_analysis_set, "low_only")) {
+    cat(" Analysis set : all studies (Core GRADE 4 Fig 2 recommends low risk of bias studies only)\n")
   }
   cat("\n Domain assessments:\n")
 

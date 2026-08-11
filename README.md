@@ -209,7 +209,33 @@ grade_meta(m, rob = "serious",
            rob_rationale = "RoB2 consensus: high risk of bias in most domains")
 ```
 
-**Per-study vector — 5-rule zone decision applied:**
+**Per-study vector — Core GRADE 4 Fig 2 flowchart applied:**
+
+Studies are first folded into a binary low / high classification
+(`rob_some_concerns` decides which side "some concerns" lands on), then the
+figure's first node asks whether the high-RoB studies **dominate** the
+evidence — whether they carry at least `rob_dominant_threshold` (default
+`0.60`, compared with `>=`) of the inverse-variance weight.
+
+```
+w_high >= rob_dominant_threshold ?
+├── yes → check direction of bias (the 5-rule zone decision below)
+│           bias could account for the effect / its absence → rate down
+│           bias would under-estimate the effect             → do not rate down
+└── no  → appreciable evidence from low-RoB studies?
+          substantial difference between the high- and low-RoB estimates?
+            ├── yes → do not rate down; use low risk of bias studies only
+            └── no  → do not rate down; use all studies
+```
+
+The non-dominated branch **never rates the domain down**. When it lands on
+"use low risk of bias studies only", `grade_meta()` refits the meta-analysis on
+the low-RoB subset (`rob_refit = TRUE`, the default), so every other domain,
+the rating target and the SoF table use the restricted estimate. The original
+analysis stays available as `$meta_full`; `$rob_analysis_set` and `$rob_refit`
+record what happened, and `sof_table()` footnotes the restriction.
+
+**Direction-of-bias check (dominated branch) — 5-rule zone decision:**
 
 `pmatools` classifies the pooled effect from all studies (`TE_all`) and the
 IV-weighted pooled effect of low / some-RoB studies (`TE_low`) into one of three
@@ -273,10 +299,28 @@ zone collapses to `{0}`, so only sign flips can change zones. The algorithm
 reduces to a sign-flip check (rule 5 vs rule 2/3); rule 1 and rule 4 cannot
 fire.
 
-**Backward-compatibility note.** `rob_dominant_threshold` is still accepted but
-ignored: the 5-rule decision is run whenever at least one high-RoB study is
-present. The previous CI-overlap and CI-significance branches were removed
-because they are subsumed by the zone-and-magnitude comparison.
+**Dominance gate: deprecation retracted.** `rob_dominant_threshold` was
+deprecated in v0.3.1 ("accepted but ignored"), on the reasoning that the
+zone-and-magnitude comparison subsumed it. That decision is **retracted** in
+the current development version: the gate is the first decision node of Core
+GRADE 4 Fig 2, and the two branches beneath it are not interchangeable — one
+can rate down, the other only chooses the analysis set. The argument is live
+again with its original default of `0.60`. (The CI-overlap and CI-significance
+branches removed in v0.3.1 stay removed; they really are subsumed by the
+zone comparison.)
+
+**Study-level overrides.** A single study's classification can be corrected
+without rebuilding the vector. Both arguments are named character vectors
+keyed on `studlab`; a key that matches no study label is an error, and every
+override needs a written rationale:
+
+```r
+grade_meta(m,
+  rob                    = rob_vec,
+  rob_overrides          = c("Smith 2020" = "high"),
+  rob_override_rationale = c("Smith 2020" = "Unblinded outcome assessment"),
+  ...)
+```
 
 **Cochrane RoB 2.0 labels accepted directly** — no pre-mapping needed:
 
@@ -806,7 +850,11 @@ grade_meta(
 
   ## Risk of Bias
   rob           = NULL,            # scalar | vector length k | column name | NULL
-  rob_dominant_threshold = 0.60,   # fraction above which evidence is "dominated"
+  rob_some_concerns      = "low",  # fold "some concerns" into "low" | "high"
+  rob_overrides          = NULL,   # named chr, keyed on studlab
+  rob_override_rationale = NULL,   # named chr, same keys
+  rob_dominant_threshold = 0.60,   # weight share at/above which evidence is "dominated"
+  rob_refit              = TRUE,   # refit on low-RoB studies when Fig 2 says so
   small_values  = NULL,            # "undesirable" | "desirable" | NULL (conservative)
 
   ## Indirectness

@@ -14,8 +14,42 @@
   "N <= 30% of OIS" rule forced a two-level rate-down regardless of where the
   CI sat. Analyses with a moderate effect, a CI clear of the threshold and a
   small sample size no longer rate down.
+* Risk of bias now follows the Core GRADE 4 Fig 2 flowchart literally, and the
+  **weight-share dominance gate is reinstated**. `rob_dominant_threshold` was
+  deprecated in v0.3.1 ("accepted but ignored") on the reasoning that the
+  zone-and-magnitude comparison subsumed it; **that decision is retracted**,
+  because the gate is the first decision node of Fig 2 and the two branches
+  below it are not interchangeable. The direction-of-bias check now runs only
+  when high-RoB studies carry at least `rob_dominant_threshold` (default 0.60,
+  compared with `>=`) of the inverse-variance weight. The non-dominated branch
+  of the figure **never rates the domain down**; it decides which studies the
+  analysis should use. Risk of bias therefore rates down noticeably less often
+  than in v0.3.1–v0.4.0, and a body of evidence in which a minority of the
+  weight is at high risk of bias can no longer be downgraded for it.
+* When the flowchart reaches "use low risk of bias studies only", the
+  meta-analysis is **refitted on the low-RoB subset** by default
+  (`rob_refit = TRUE`). Every downstream domain, the rating target, the
+  baseline risk and the SoF table then use the restricted estimate, so pooled
+  numbers can change without any change to the input data. The refit is
+  announced with a message, recorded in the Risk-of-bias notes, shown by
+  `print()`, and footnoted in `sof_table()`. Set `rob_refit = FALSE` to keep
+  the full analysis and receive the recommendation only.
 
 ## New features
+
+* `grade_meta()` gains `rob_some_concerns` (`"low"`, default, or `"high"`):
+  which side of the binary low/high classification studies rated "some
+  concerns" are folded into. It changes the high-RoB weight share and
+  therefore the dominance gate.
+* `grade_meta()` gains `rob_overrides` / `rob_override_rationale`, named
+  character vectors keyed on `studlab`, for correcting a single study's
+  risk-of-bias level without rebuilding the whole vector. Every override needs
+  a rationale and is recorded in the domain notes; a key that matches no study
+  label aborts rather than being silently ignored.
+* `grade_meta()` returns `$meta_full` (the all-studies analysis),
+  `$rob_analysis_set` (`"all"` / `"low_only"`) and `$rob_refit`. `$meta` is now
+  the analysis every domain was assessed on, which is the refitted one when a
+  refit happened.
 
 * Rating target (Core GRADE 2 Fig 2): `grade_meta()` derives the target of the
   certainty rating from the pooled point estimate
@@ -30,7 +64,9 @@
   ratio CI ratio >= 2.5) and the continuous 400-per-group (total N 800) rule
   of thumb.
 * The reproducibility script in `export_bundle()` renders the new arguments,
-  including the rationale for a manual target override.
+  including the rationale for a manual target override and the risk-of-bias
+  settings (`rob_some_concerns`, `rob_overrides`, `rob_override_rationale`,
+  `rob_dominant_threshold`, `rob_refit`).
 
 # pmatools 0.4.0
 
