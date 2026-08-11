@@ -106,11 +106,17 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
 
   k           <- meta_obj$k
   n_total     <- .total_n(meta_obj)
-  cer_str     <- .format_cer(baseline_for_display, per)
+  # Number formatting differs by style: GRADEpro keeps "306 per 1,000" and a
+  # semicolon-separated CI, BMJ prints "306 per 1000" with a "to" separator
+  # throughout (see .bmj_number_format()).
+  nf          <- .bmj_number_format(style)
+  cer_str     <- .format_cer(baseline_for_display, per, big_mark = nf$big_mark)
   ier_str     <- if (chinn_active) {
-    .format_ier_chinn(meta_obj, baseline_risk, per, invert = isTRUE(chinn_invert))
+    .format_ier_chinn(meta_obj, baseline_risk, per, invert = isTRUE(chinn_invert),
+                      big_mark = nf$big_mark, ci_sep = nf$ci_sep)
   } else {
-    .format_ier(meta_obj, x$baseline_risk, per)
+    .format_ier(meta_obj, x$baseline_risk, per,
+                big_mark = nf$big_mark, ci_sep = nf$ci_sep)
   }
   # Asterisk-mark CER/EER when Chinn dichotomisation is active
   if (chinn_active) {
@@ -377,15 +383,27 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
   s
 }
 
+# Denominator label for the "per N" phrasing. GRADEpro keeps the thousands
+# separator ("per 1,000"); BMJ prints it bare ("per 1000"), so callers pass
+# big_mark = FALSE. Defaults reproduce the GRADEpro output exactly.
+.per_label <- function(per, big_mark = TRUE) {
+  if (isTRUE(big_mark)) {
+    format(per, big.mark = ",", scientific = FALSE)
+  } else {
+    format(per, scientific = FALSE, trim = TRUE)
+  }
+}
+
 # Control event rate: baseline_risk displayed per 'per' units (no CI)
-.format_cer <- function(baseline_risk, per = 1000) {
+.format_cer <- function(baseline_risk, per = 1000, big_mark = TRUE) {
   if (is.null(baseline_risk)) return("-")
-  per_str <- format(per, big.mark = ",", scientific = FALSE)
+  per_str <- .per_label(per, big_mark)
   sprintf("%d per %s", round(baseline_risk * per), per_str)
 }
 
 # Experimental (intervention) event rate: derived from baseline + relative effect
-.format_ier <- function(meta_obj, baseline_risk, per = 1000) {
+.format_ier <- function(meta_obj, baseline_risk, per = 1000,
+                        big_mark = TRUE, ci_sep = "; ") {
   if (is.null(baseline_risk)) return("-")
   sm <- meta_obj$sm
   if (is.null(sm) || !sm %in% c("RR", "OR", "HR", "IRR")) return("-")
@@ -399,17 +417,18 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
 
   if (is.null(p1_est)) return("-")
 
-  per_str <- format(per, big.mark = ",", scientific = FALSE)
-  sprintf("%d per %s\n(%d; %d)",
+  per_str <- .per_label(per, big_mark)
+  sprintf("%d per %s\n(%d%s%d)",
           round(p1_est * per), per_str,
-          round(p1_lo  * per),
+          round(p1_lo  * per), ci_sep,
           round(p1_hi  * per))
 }
 
 # Experimental rate via Chinn (SMD/MD -> OR -> p1)
 # `invert = TRUE` flips the SMD sign before applying the formula, so a
 # negative-is-better SMD (e.g., depression severity reduction) yields OR > 1.
-.format_ier_chinn <- function(meta_obj, baseline_risk, per = 1000, invert = FALSE) {
+.format_ier_chinn <- function(meta_obj, baseline_risk, per = 1000, invert = FALSE,
+                              big_mark = TRUE, ci_sep = "; ") {
   if (is.null(baseline_risk)) return("-")
   pooled <- .pooled_estimate(meta_obj)
   est <- pooled$est
@@ -437,10 +456,10 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
 
   if (is.null(p1_est)) return("-")
 
-  per_str <- format(per, big.mark = ",", scientific = FALSE)
-  sprintf("%d per %s\n(%d; %d)",
+  per_str <- .per_label(per, big_mark)
+  sprintf("%d per %s\n(%d%s%d)",
           round(p1_est * per), per_str,
-          round(p1_lo  * per),
+          round(p1_lo  * per), ci_sep,
           round(p1_hi  * per))
 }
 

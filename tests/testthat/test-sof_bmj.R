@@ -173,6 +173,115 @@ test_that("grade_table style = 'gradepro' keeps its column headers", {
   expect_identical(.body_col(ft, 1), "Mortality")
 })
 
+# --- number formatting: BMJ drops the thousands separator, "to" everywhere ---
+
+test_that("bmj rates print without a thousands separator", {
+  ft <- sof_table(make_binary(), style = "bmj")
+  expect_identical(.body_col(ft, 4), "333 per 1000")
+  expect_no_match(.body_col(ft, 4), ",")
+  expect_no_match(.body_col(ft, 5), ",")
+  expect_no_match(.body_col(ft, 6), ",")
+})
+
+test_that("the bmj intervention CI is separated by 'to', not ';'", {
+  ft  <- sof_table(make_binary(), style = "bmj")
+  ier <- .body_col(ft, 5)
+  expect_identical(ier, "251 per 1000\n(203 to 310)")
+  expect_no_match(ier, ";")
+  # The relative effect column agrees (Phase D already used "to").
+  expect_identical(.body_col(ft, 3), "Risk ratio 0.75 (0.61 to 0.93)")
+  expect_no_match(.body_col(ft, 3), ";")
+})
+
+test_that("all three absolute-effect columns share one 'per N' format", {
+  for (p in c(1000, 100)) {
+    ft <- sof_table(make_binary(), style = "bmj", per = p)
+    want <- paste0("per ", p)          # "per 1000" / "per 100", no separator
+    for (j in 4:6) {
+      expect_match(.body_col(ft, j), want, fixed = TRUE)
+      expect_no_match(.body_col(ft, j), ",")
+    }
+  }
+})
+
+test_that("per = 100 keeps the bmj cells intact", {
+  ft <- sof_table(make_binary(), style = "bmj", per = 100)
+  expect_identical(.body_col(ft, 4), "33 per 100")
+  expect_identical(.body_col(ft, 5), "25 per 100\n(20 to 31)")
+  expect_identical(.body_col(ft, 6), "8 fewer per 100 (13 fewer to 2 fewer)")
+})
+
+test_that("the multi-outcome bmj table formats numbers the same way", {
+  g  <- make_binary()
+  ft <- grade_table(list("Mortality" = g), style = "bmj")
+  expect_identical(.body_col(ft, 4), "333 per 1000")
+  expect_identical(.body_col(ft, 5), "251 per 1000\n(203 to 310)")
+  expect_identical(.body_col(ft, 6), "82 fewer per 1000 (131 fewer to 23 fewer)")
+})
+
+test_that("the Chinn rate columns follow the style they are rendered in", {
+  g <- make_continuous()
+
+  bmj <- sof_table(g, style = "bmj", convert_smd_to_or = TRUE,
+                   baseline_risk = 0.3)
+  expect_match(.body_col(bmj, 5), "per 1000\n\\([0-9]+ to [0-9]+\\) \\*$")
+  expect_no_match(.body_col(bmj, 4), ",")
+  expect_no_match(.body_col(bmj, 5), ";")
+
+  gp <- sof_table(g, convert_smd_to_or = TRUE, baseline_risk = 0.3)
+  expect_match(.body_col(gp, 3), "^[0-9]+ per 1,000 \\*$")
+  expect_match(.body_col(gp, 4), "per 1,000\n\\([0-9]+; [0-9]+\\) \\*$")
+})
+
+test_that("the gradepro cells are byte-for-byte what they were", {
+  # Hard-coded snapshot: the shared .format_cer()/.format_ier() helpers gained
+  # big_mark/ci_sep arguments for the BMJ style, and their defaults must keep
+  # reproducing the GRADEpro output exactly.
+  g <- make_binary()
+
+  ft <- sof_table(g)
+  expect_identical(unname(unlist(lapply(ft$body$dataset, as.character))), c(
+    "Mortality",
+    "360 (3 RCTs)",
+    "333 per 1,000",
+    "251 per 1,000\n(203; 310)",
+    "RR 0.75 (0.61; 0.93)",
+    paste0("High\n", CERTAINTY_SYMBOLS_UNICODE[["High"]])
+  ))
+
+  ft100 <- sof_table(g, per = 100)
+  expect_identical(unname(unlist(lapply(ft100$body$dataset, as.character))), c(
+    "Mortality",
+    "360 (3 RCTs)",
+    "33 per 100",
+    "25 per 100\n(20; 31)",
+    "RR 0.75 (0.61; 0.93)",
+    paste0("High\n", CERTAINTY_SYMBOLS_UNICODE[["High"]])
+  ))
+
+  # grade_table()'s GRADEpro rows share the same helpers.
+  gt <- grade_table(list("Mortality" = g))
+  expect_identical(.body_col(gt, 3), "333 per 1,000")
+  expect_identical(.body_col(gt, 4), "251 per 1,000\n(203; 310)")
+})
+
+test_that("the shared helpers default to the gradepro formatting", {
+  g <- make_binary()
+  expect_identical(.format_cer(0.333, 1000), "333 per 1,000")
+  expect_identical(.format_cer(0.333, 1000, big_mark = FALSE), "333 per 1000")
+  expect_identical(.format_ier(g$meta, 0.333, 1000),
+                   .format_ier(g$meta, 0.333, 1000,
+                               big_mark = TRUE, ci_sep = "; "))
+  expect_match(.format_ier(g$meta, 0.333, 1000, big_mark = FALSE,
+                           ci_sep = " to "),
+               "^[0-9]+ per 1000\n\\([0-9]+ to [0-9]+\\)$")
+
+  expect_identical(.bmj_number_format("gradepro"),
+                   list(big_mark = TRUE, ci_sep = "; "))
+  expect_identical(.bmj_number_format("bmj"),
+                   list(big_mark = FALSE, ci_sep = " to "))
+})
+
 # --- D-2: the Difference column --------------------------------------------
 
 test_that("a beneficial effect reads 'fewer' and a harmful one 'more'", {

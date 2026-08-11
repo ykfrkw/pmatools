@@ -15,6 +15,23 @@
 
 # --- small formatting helpers ----------------------------------------------
 
+# Number formatting switch for the shared SoF helpers (.format_cer(),
+# .format_ier(), .format_ier_chinn() in sof_table.R).
+#
+# The BMJ tables print rates without a thousands separator ("578 per 1000")
+# and separate every confidence interval with "to" ("129 fewer to 42 fewer",
+# "0.69 to 0.89"), so all three absolute-effect columns read alike. GRADEpro
+# keeps "306 per 1,000" and "(174; 245)"; those are the helpers' defaults, so
+# passing the "gradepro" values here is a no-op by construction.
+.bmj_number_format <- function(style = c("gradepro", "bmj")) {
+  style <- match.arg(style)
+  if (identical(style, "bmj")) {
+    list(big_mark = FALSE, ci_sep = " to ")
+  } else {
+    list(big_mark = TRUE,  ci_sep = "; ")
+  }
+}
+
 # BMJ spells the effect measure out ("Hazard ratio 0.78") rather than
 # abbreviating it ("HR 0.78").
 .bmj_measure_name <- function(sm) {
@@ -187,7 +204,8 @@
   if (is.null(est) || length(est) != 1L || !is.finite(est)) return("-")
 
   sm <- meta_obj$sm %||% ""
-  per_str <- format(per, scientific = FALSE, trim = TRUE)
+  # Same denominator label as the control/intervention columns (no separator).
+  per_str <- .per_label(per, big_mark = FALSE)
 
   if (sm %in% c("RR", "OR", "HR", "IRR")) {
     if (is.null(baseline_risk)) return("-")
@@ -245,14 +263,19 @@
     label_intervention
   }
 
+  nf <- .bmj_number_format("bmj")
+
   list(
     outcome   = outcome_cell,
     n         = .n_participants_studies_bmj(meta_obj$k, .total_n(meta_obj),
                                             g$study_design),
     effect    = .format_effect_bmj(meta_obj, g$outcome_type,
                                    prediction = prediction),
-    cer       = cer_str %||% .format_cer(g$baseline_risk, per),
-    ier       = ier_str %||% .format_ier(meta_obj, g$baseline_risk, per),
+    cer       = cer_str %||% .format_cer(g$baseline_risk, per,
+                                         big_mark = nf$big_mark),
+    ier       = ier_str %||% .format_ier(meta_obj, g$baseline_risk, per,
+                                         big_mark = nf$big_mark,
+                                         ci_sep   = nf$ci_sep),
     diff      = .format_difference(meta_obj, g$baseline_risk, per, unit,
                                    g$outcome_type),
     certainty = cert_cell,
