@@ -124,23 +124,43 @@ step4_server <- function(input, output, session, state) {
   # pressing the always-active button before running the analysis produced
   # a confusing ERROR.zip. The downloadHandler keeps its own guards as a
   # second line of defense (e.g. state cleared between render and click).
+  .blocked_note <- function(...) {
+    htmltools::div(
+      class = "pma-card-subtitle",
+      style = paste(
+        "border: 1px dashed hsl(var(--border));",
+        "border-radius: 6px;",
+        "padding: 0.75rem;",
+        "margin-top: 0.5rem;",
+        "text-align: center;"
+      ),
+      ...
+    )
+  }
+
   output$download_zip_ui <- shiny::renderUI({
     if (is.null(state$ma) || is.null(state$grade)) {
       missing <- c(
         if (is.null(state$ma)) "Step 2 (run the meta-analysis)",
-        if (is.null(state$grade)) "Step 3 (open the GRADE assessment)"
+        if (is.null(state$grade)) "Step 3 (open the Certainty assessment)"
       )
-      return(htmltools::div(
-        class = "pma-card-subtitle",
-        style = paste(
-          "border: 1px dashed hsl(var(--border));",
-          "border-radius: 6px;",
-          "padding: 0.75rem;",
-          "margin-top: 0.5rem;",
-          "text-align: center;"
-        ),
+      return(.blocked_note(
         paste0("Download unavailable - complete ",
                paste(missing, collapse = " and "), " first.")
+      ))
+    }
+    # W4-A output gate: the ZIP (which includes the GRADE Evidence Profile /
+    # SoF docx) stays locked until every certainty domain has been reviewed
+    # and confirmed in Step 3. Navigation itself is never blocked.
+    unconf <- pma_unconfirmed_domains(state$domain_confirmed)
+    if (length(unconf)) {
+      return(.blocked_note(
+        htmltools::p(style = "margin: 0;",
+          htmltools::strong("Download locked - certainty assessment incomplete.")),
+        htmltools::p(style = "margin: 0.25rem 0 0;",
+          paste0("Review and confirm the following in Step 3 (enter inputs ",
+                 "or tick 'I have reviewed this domain'): ",
+                 paste(unconf, collapse = ", "), "."))
       ))
     }
     shiny::downloadButton("download_zip", "Download ZIP",
@@ -162,7 +182,19 @@ step4_server <- function(input, output, session, state) {
       }
       if (is.null(state$grade)) {
         shiny::showNotification(
-          "Cannot export: please open Step 3 (GRADE) at least once before downloading.",
+          "Cannot export: please open Step 3 (Certainty assessment) at least once before downloading.",
+          type = "error", duration = NULL
+        )
+        return()
+      }
+      # Second line of defense for the W4-A output gate (the button should
+      # not even render while domains are unconfirmed).
+      unconf <- pma_unconfirmed_domains(state$domain_confirmed)
+      if (length(unconf)) {
+        shiny::showNotification(
+          paste0("Cannot export: review and confirm every certainty domain ",
+                 "in Step 3 first. Unconfirmed: ",
+                 paste(unconf, collapse = ", "), "."),
           type = "error", duration = NULL
         )
         return()

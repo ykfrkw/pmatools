@@ -41,16 +41,20 @@ EDU_COPY <- list(
       why   = NULL
     ),
     step3 = list(
-      title = "Step 3: GRADE",
+      title = "Step 3: Certainty assessment (Core GRADE series)",
       what  = paste0(
         "This step rates the certainty of evidence: your confidence that ",
         "the estimate above reflects the true effect. GRADE starts at ",
         "High for randomized trials (or Low for observational studies) ",
         "and rates DOWN for concerns in five domains: Risk of Bias, ",
         "Inconsistency, Indirectness, Imprecision, and Publication Bias. ",
-        "Each domain explains its algorithm, shows the computed judgment, ",
-        "and lets you override if your clinical judgment differs. Only ",
-        "Indirectness requires your input - it cannot be derived from data."
+        "First set the decision threshold (it drives three of the five ",
+        "domains), then work through each domain: it explains its ",
+        "algorithm, shows the computed judgment, and lets you override if ",
+        "your clinical judgment differs - a written rationale is required ",
+        "for every manual override. You can move freely between tabs, but ",
+        "the final certainty and the Step 4 export stay marked incomplete ",
+        "until every domain has been reviewed and confirmed."
       ),
       why   = NULL
     ),
@@ -89,8 +93,9 @@ EDU_COPY <- list(
         "with bias-favouring inflation > 10 percent -> rate down 1; (4) ",
         "zones differ but on the same side of the null -> rate down 1; (5) ",
         "zones differ across the null (above <-> below) -> rate down 2. ",
-        "Note: the Threshold entered here is shared with Inconsistency and ",
-        "Imprecision; one Threshold drives all three domains."
+        "Note: the Threshold is set once in the 'Decision threshold' tab ",
+        "and shared with Inconsistency and Imprecision; one Threshold ",
+        "drives all three domains."
       )
     ),
 
@@ -128,14 +133,16 @@ EDU_COPY <- list(
         "do trial participants resemble the target patients? ",
         "Intervention: is the intervention deliverable as studied? ",
         "Comparator: is it representative of usual care? Outcome: is it ",
-        "patient-important, or a surrogate? The app defaults to 'No ",
-        "concerns', but this is the only domain whose value comes purely ",
-        "from your judgment, so please review before exporting."
+        "patient-important, or a surrogate? The app does not preselect a ",
+        "rating: this is the only domain whose value comes purely from ",
+        "your judgment, so choose a rating yourself before exporting ",
+        "(any rating other than 'No' requires a written rationale)."
       ),
       banner   = paste0(
-        "Auto-defaulted to 'No' - please review and confirm or override ",
-        "below. This is the only domain that cannot be informed by your ",
-        "data."
+        "No rating selected yet - please choose one below. This is the ",
+        "only domain that cannot be informed by your data; the certainty ",
+        "rating stays marked incomplete until you select a rating (or ",
+        "explicitly confirm the domain)."
       )
     ),
 
@@ -185,6 +192,22 @@ EDU_COPY <- list(
         "unpublished studies are documented in registries or regulatory ",
         "databases. Yes -> rate down 1."
       )
+    )
+  ),
+
+  threshold_tab = list(
+    intro = paste0(
+      "The decision threshold is the smallest effect that would be ",
+      "clinically meaningful - the effect size at which you would change ",
+      "a management decision. It plays a cross-cutting role in Core ",
+      "GRADE: Risk of Bias asks whether restricting to low-risk-of-bias ",
+      "studies moves the estimate across the threshold; Inconsistency ",
+      "asks whether study estimates fall on opposite sides of it; and ",
+      "Imprecision uses it as the target effect for the Optimal ",
+      "Information Size and CI judgments. Set it once here - the domain ",
+      "tabs display it read-only. For binary outcomes Core GRADE ",
+      "recommends thinking on the absolute scale (events per 1,000 ",
+      "patients), which is the default below."
     )
   ),
 

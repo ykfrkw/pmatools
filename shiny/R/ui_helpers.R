@@ -35,7 +35,7 @@ pma_help <- function(text) {
 
 # Stepper (4 steps) - each step is a clickable actionLink
 pma_stepper <- function(current_step) {
-  steps <- c("Data", "Meta-analysis", "GRADE", "Export")
+  steps <- c("Data", "Meta-analysis", "Certainty", "Export")
   htmltools::div(
     class = "pma-stepper",
     lapply(seq_along(steps), function(i) {
@@ -56,6 +56,30 @@ pma_stepper <- function(current_step) {
       )
     })
   )
+}
+
+# ----- W4-A output gate: shared confirmation-domain labels -----
+# Named after the keys of the state$domain_confirmed logical vector set in
+# step3_server(); used by both Step 3 (banner/badge) and Step 4 (export gate).
+PMA_DOMAIN_LABELS <- c(
+  threshold     = "Decision threshold",
+  rob           = "Risk of Bias",
+  inconsistency = "Inconsistency",
+  indirectness  = "Indirectness",
+  imprecision   = "Imprecision",
+  pubias        = "Publication bias"
+)
+
+# Human-readable labels of the domains not yet confirmed. `conf` is the
+# named logical vector from state$domain_confirmed (NULL = nothing
+# confirmed yet, e.g. before Step 3 was opened).
+pma_unconfirmed_domains <- function(conf) {
+  keys <- names(PMA_DOMAIN_LABELS)
+  if (is.null(conf)) return(unname(PMA_DOMAIN_LABELS))
+  ok <- vapply(keys, function(k) {
+    k %in% names(conf) && isTRUE(conf[[k]])
+  }, logical(1))
+  unname(PMA_DOMAIN_LABELS[keys[!ok]])
 }
 
 # GRADE certainty badge
