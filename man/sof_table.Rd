@@ -6,9 +6,12 @@
 \usage{
 sof_table(
   x,
+  style = c("gradepro", "bmj"),
   palette = c("pastel", "classic"),
   per = 1000,
   prediction = FALSE,
+  follow_up = NULL,
+  unit = NULL,
   convert_smd_to_or = FALSE,
   baseline_risk = NULL,
   threshold_label = NULL,
@@ -21,6 +24,13 @@ sof_table(
 \arguments{
 \item{x}{A \code{pmatools} object (from \code{\link{grade_meta}}).}
 
+\item{style}{(v0.5) Table layout. \code{"gradepro"} (default) keeps the
+GRADEpro-style layout. \code{"bmj"} switches to the BMJ Core GRADE
+presentation: outcome and follow-up, participants and design, relative
+effect, a spanning "Absolute effects (95\% CI)" block (control /
+intervention / difference), certainty with its rate-down reason, and a
+plain language summary (Core GRADE 2 Table 1).}
+
 \item{palette}{Color palette for the certainty cell.
 \code{"pastel"} (default) uses soft backgrounds with colored text.
 \code{"classic"} uses saturated backgrounds with white text.}
@@ -32,6 +42,15 @@ sof_table(
 \item{prediction}{Logical. If \code{TRUE} (default \code{FALSE}), the
 Effect column also shows the 95 percent prediction interval on a second line,
 provided the meta object was run with \code{prediction = TRUE}.}
+
+\item{follow_up}{(v0.5) Optional free-text time frame shown under the
+outcome name in the \code{"bmj"} style, e.g.
+\code{"Follow-up: longest, range 7.7-60 months"}. \code{NULL} (default)
+omits the line. Ignored by the \code{"gradepro"} style.}
+
+\item{unit}{(v0.5) Optional unit for the Difference column of the
+\code{"bmj"} style with continuous outcomes, e.g. \code{"days"}.
+Ignored for relative effect measures and by the \code{"gradepro"} style.}
 
 \item{convert_smd_to_or}{(v0.2) Logical. If \code{TRUE} and the meta
 object uses \code{sm = "SMD"} or \code{"MD"}, the "Risk with control" /
@@ -74,6 +93,8 @@ sof_table(g)
 sof_table(g, per = 100)
 sof_table(g, prediction = TRUE)
 sof_table(g, palette = "classic")
+sof_table(g, style = "bmj",
+          follow_up = "Follow-up: longest, range 7.7-60 months")
 flextable::save_as_docx(sof_table(g), path = "sof.docx")
 }
 

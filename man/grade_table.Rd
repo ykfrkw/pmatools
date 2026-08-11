@@ -7,10 +7,13 @@
 grade_table(
   outcomes,
   primary = NULL,
+  style = c("gradepro", "bmj"),
   palette = c("pastel", "classic"),
   show_domains = TRUE,
   per = 1000,
   prediction = FALSE,
+  follow_up = NULL,
+  unit = NULL,
   label_intervention = "intervention",
   label_control = "control"
 )
@@ -23,17 +26,29 @@ Names become the outcome labels.}
 primary outcomes. All others are treated as secondary.
 If \code{NULL} (default), no grouping header is added.}
 
+\item{style}{(v0.5) Table layout: \code{"gradepro"} (default) or
+\code{"bmj"}. See \code{\link{sof_table}}.}
+
 \item{palette}{Color palette for certainty cells.
 \code{"pastel"} (default) uses soft backgrounds with colored text.
 \code{"classic"} uses saturated backgrounds with white text.}
 
-\item{show_domains}{Logical (default \code{TRUE}). Add domain symbol columns.}
+\item{show_domains}{Logical (default \code{TRUE}). Add domain symbol columns.
+Ignored by the \code{"bmj"} style, which has no domain columns.}
 
 \item{per}{Denominator for SoF rate columns. \code{1000} (default) or
 \code{100}.}
 
 \item{prediction}{Logical (default \code{FALSE}); when \code{TRUE}, the
 95 percent prediction interval is shown in the Effect column.}
+
+\item{follow_up}{(v0.5) Follow-up / time frame text for the \code{"bmj"}
+style: a character vector named by outcome, or a single unnamed value
+applied to every outcome. \code{NULL} (default) omits the line.}
+
+\item{unit}{(v0.5) Unit for the Difference column of the \code{"bmj"} style
+with continuous outcomes; same named-vector convention as
+\code{follow_up}.}
 
 \item{label_intervention, label_control}{Arm labels used in the
 "Risk with ..." column headers (GRADEpro vocabulary).
