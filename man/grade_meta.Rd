@@ -14,6 +14,7 @@ grade_meta(
   small_values = NULL,
   indirectness = "no",
   indirectness_rationale = NULL,
+  indirectness_subdomains = NULL,
   inconsistency = NULL,
   inconsistency_rationale = NULL,
   inconsistency_ci_diff = NULL,
@@ -117,6 +118,32 @@ a rationale, so default calls are unaffected.}
 \code{indirectness} is supplied as a scalar GRADE level other than
 \code{"no"}. See \code{rob_rationale} for how it is recorded.
 Default \code{NULL}.}
+
+\item{indirectness_subdomains}{(v0.5) Optional Core GRADE 5 subdomain
+judgment table. A data.frame / tibble (or an equivalent list) with:
+\describe{
+\item{subdomain}{Required. Subdomain label, typically
+\code{"Population"}, \code{"Intervention"}, \code{"Comparison"},
+\code{"Outcome"}. Any order, subset, or extra subdomain is accepted;
+duplicate labels abort.}
+\item{target}{Optional. The target question for that subdomain (display
+only).}
+\item{evidence}{Optional. The evidence found (display only).}
+\item{judgment}{Required. One of \code{"yes"}, \code{"probably_yes"},
+\code{"probably_no"}, \code{"no"} — the answer to "Is the evidence
+sufficiently direct?". Case and separator variants
+(\code{"Probably No"}, \code{"probably-no"}) are accepted.}
+}
+\code{yes} / \code{probably_yes} contribute \code{"no"},
+\code{probably_no} contributes \code{"some_concerns"} and \code{no}
+contributes \code{"serious"}; the domain judgment defaults to the worst
+case across subdomains. Supplying \code{indirectness} as a scalar
+alongside overrides that default and then requires
+\code{indirectness_rationale} (a restatement of the default value needs
+none). Cannot be combined with per-study vector or column-name
+\code{indirectness} input. The normalised table is returned as
+\code{indirectness_subdomains} on the result object and rendered by
+\code{\link{indirectness_table}}. Default \code{NULL}.}
 
 \item{inconsistency}{Overall inconsistency scalar judgment. One of
 \code{"no"}, \code{"some"}, \code{"serious"}, \code{"very_serious"}.
@@ -321,6 +348,10 @@ An S3 object of class \code{pmatools} containing:
 \item{rating_target_note}{How the target was derived (or overridden).}
 \item{rating_target_auto}{\code{TRUE} when the target was derived
 automatically rather than supplied by the user.}
+\item{indirectness_subdomains}{The normalised Core GRADE 5 subdomain
+tibble (\code{subdomain}, \code{target}, \code{evidence},
+\code{judgment}, \code{grade_level}), or \code{NULL} when none was
+supplied. Render it with \code{\link{indirectness_table}}.}
 \item{meta}{The original meta object.}
 }
 }

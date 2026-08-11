@@ -25,12 +25,28 @@
   decides which threshold Imprecision evaluates the CI against. Supplying
   `rating_target` manually overrides the derivation and requires
   `rating_target_rationale`.
+* Indirectness subdomains (Core GRADE 5): `grade_meta()` gains
+  `indirectness_subdomains`, a Population / Intervention / Comparison /
+  Outcome table judged on the 4-point scale `"yes"` / `"probably_yes"` /
+  `"probably_no"` / `"no"` (aliases such as `"Probably No"` accepted).
+  `yes`/`probably_yes` do not rate down, `probably_no` rates down 1 level and
+  `no` rates down 2; the domain judgment defaults to the worst case across
+  subdomains, and a scalar `indirectness` may still override it with
+  `indirectness_rationale`. The normalised table is returned as
+  `$indirectness_subdomains` (`domain_assessments` keeps its one-row-per-domain
+  schema).
+* New `indirectness_table()` renders those subdomain judgments as a flextable
+  in the BMJ Core GRADE 5 publication format: target question, evidence found,
+  a colour-graded 4-option judgment row with the recorded answer ticked, and a
+  merged "Judgment across subdomains" row carrying the overall judgment.
 * Imprecision notes record which Fig 4 path produced the judgment, including
   the CI ratio rule for binary outcomes (relative risk CI ratio >= 3, odds
   ratio CI ratio >= 2.5) and the continuous 400-per-group (total N 800) rule
   of thumb.
 * The reproducibility script in `export_bundle()` renders the new arguments,
-  including the rationale for a manual target override.
+  including the rationale for a manual target override and the full
+  `indirectness_subdomains` table (with the scalar override only when it
+  actually replaced the worst-case default).
 
 # pmatools 0.4.0
 

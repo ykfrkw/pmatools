@@ -36,6 +36,7 @@ g <- grade_meta(
   small_values            = {{small_values_arg}},
   indirectness            = {{indirectness_arg}},
   indirectness_rationale  = {{indirectness_rationale_arg}},
+  indirectness_subdomains = {{indirectness_subdomains_arg}},
   inconsistency           = {{inconsistency_arg}},
   inconsistency_rationale = {{inconsistency_rationale_arg}},
   inconsistency_ci_diff            = {{inconsistency_ci_diff_arg}},
