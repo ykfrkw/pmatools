@@ -533,6 +533,26 @@ export_bundle <- function(ma,
       .arg_lit(grade_args$imprecision_rationale,            fallback = "NULL"),
     threshold_arg    = .arg_lit(grade_args$threshold,              fallback = if (!is.null(grade$threshold)) format(grade$threshold) else "NULL"),
     threshold_scale  = grade_args$threshold_scale$value             %||% (grade$threshold_scale %||% "auto"),
+    threshold_type   = grade_args$threshold_type$value              %||% (grade$threshold_type %||% "mid"),
+    # require_threshold: the bundled script must reproduce the original call
+    # even when it deliberately ran without a MID.
+    require_threshold_arg = .arg_lit(
+      grade_args$require_threshold,
+      fallback = if (identical(grade$threshold_type, "mid") &&
+                     is.null(grade$threshold)) "FALSE" else "TRUE"
+    ),
+    rating_target_arg = .arg_lit(
+      grade_args$rating_target,
+      fallback = if (isFALSE(grade$rating_target_auto) &&
+                     !is.null(grade$rating_target)) {
+        shQuote(grade$rating_target)
+      } else {
+        "NULL"
+      }
+    ),
+    rating_target_rationale_arg =
+      .arg_lit(grade_args$rating_target_rationale,
+               fallback = .rating_target_rationale_lit(grade)),
     ois_outcome_type = grade$outcome_type,
     ois_events_arg   = .arg_lit(grade_args$ois_events,             fallback = "NULL"),
     ois_n_arg        = .arg_lit(grade_args$ois_n,                  fallback = "NULL"),
@@ -605,6 +625,23 @@ export_bundle <- function(ma,
 }
 
 # Convert a {value, origin, col} spec (or plain value) to an R literal string
+# Recover the rating-target rationale from the stored note so the bundled
+# script reproduces a manual target override (grade_meta() requires the
+# rationale whenever rating_target is supplied). The note is written by
+# .resolve_rating_target() as "... | Manual override (<target>): <rationale>
+# | Auto-derived target would have been: <target>."
+.rating_target_rationale_lit <- function(grade) {
+  if (isTRUE(grade$rating_target_auto) || is.null(grade$rating_target)) {
+    return("NULL")
+  }
+  note <- grade$rating_target_note
+  if (is.null(note) || is.na(note)) return("NULL")
+  m <- regmatches(note, regexec("Manual override \\([^)]*\\): (.*?) \\| Auto-derived",
+                                note))[[1]]
+  if (length(m) < 2L || !nzchar(m[2])) return("NULL")
+  deparse(m[2])
+}
+
 .arg_lit <- function(spec, fallback = "NULL") {
   if (is.null(spec)) return(fallback)
   if (is.list(spec) && !is.null(spec$origin)) {

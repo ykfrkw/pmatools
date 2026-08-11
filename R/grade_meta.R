@@ -89,6 +89,43 @@
 #' @param inconsistency_subgroup_explained Required when
 #'   \code{inconsistency_threshold_side = "opposite_sides"}.
 #'   \code{"yes"} / \code{"no"}: is the inconsistency explained by a credible subgroup?
+#' @param threshold_type (v0.5) Which threshold the certainty rating is
+#'   anchored to (Core GRADE 2 Fig 2, step 1). One of:
+#'   \itemize{
+#'     \item \code{"mid"} (default): "Are you interested in whether there is
+#'       an important effect or not?" — requires a minimal important
+#'       difference (\code{threshold}).
+#'     \item \code{"null"}: "Are you interested in whether there is a true
+#'       underlying effect, benefit or harm?" — the null is the threshold and
+#'       a MID is optional.
+#'   }
+#'   With \code{threshold_type = "mid"} and no \code{threshold}, the call
+#'   aborts unless \code{require_threshold = FALSE}.
+#' @param require_threshold (v0.5) Gate for the above. \code{TRUE} (default)
+#'   makes a MID mandatory when \code{threshold_type = "mid"}. Set to
+#'   \code{FALSE} to run without a MID (backward-compatible escape hatch); the
+#'   rating target then falls back to a non-null effect and imprecision is
+#'   judged against the null.
+#' @param rating_target (v0.5) Target of the certainty rating (Core GRADE 2
+#'   Fig 2). \code{NULL} (default) derives it automatically from the pooled
+#'   point estimate:
+#'   \tabular{llll}{
+#'     \strong{threshold_type} \tab \strong{point estimate} \tab
+#'       \strong{target} \tab \strong{imprecision threshold} \cr
+#'     \code{"mid"}  \tab \eqn{|TE| >} MID    \tab \code{"important_effect"}        \tab \eqn{\pm}MID \cr
+#'     \code{"mid"}  \tab \eqn{|TE| \le} MID  \tab \code{"little_to_no_difference"} \tab \eqn{\pm}MID \cr
+#'     \code{"null"} \tab very near null      \tab \code{"little_to_no_difference"} \tab \eqn{\pm}MID \cr
+#'     \code{"null"} \tab not near null       \tab \code{"non_null_effect"}         \tab null (0) \cr
+#'   }
+#'   "Very near null" is operationalized as \eqn{|TE| \le} MID; with no MID
+#'   supplied, nearness cannot be judged and the target falls back to
+#'   \code{"non_null_effect"} (recorded in \code{rating_target_note}).
+#'   Supplying a value overrides the automatic derivation and requires
+#'   \code{rating_target_rationale}.
+#' @param rating_target_rationale Free-text justification, required whenever
+#'   \code{rating_target} is supplied (manual override of the Core GRADE 2
+#'   Fig 2 derivation). See \code{rob_rationale} for how it is recorded.
+#'   Default \code{NULL}.
 #' @param threshold (v0.2) Numeric clinical decision Threshold (a minimally
 #'   important effect). This is a cross-cutting parameter shared by the three
 #'   Threshold-aware domains — it is not a Risk-of-Bias-specific setting:
@@ -202,6 +239,11 @@
 #'     \item{certainty_score}{Numeric score (1–4).}
 #'     \item{starting_quality}{Starting certainty label.}
 #'     \item{outcome_name}{Outcome label.}
+#'     \item{threshold_type}{\code{"mid"} or \code{"null"} (Core GRADE 2 Fig 2).}
+#'     \item{rating_target}{Target of the certainty rating.}
+#'     \item{rating_target_note}{How the target was derived (or overridden).}
+#'     \item{rating_target_auto}{\code{TRUE} when the target was derived
+#'       automatically rather than supplied by the user.}
 #'     \item{meta}{The original meta object.}
 #'   }
 #'
@@ -209,11 +251,17 @@
 #' \dontrun{
 #' library(meta)
 #' m <- metabin(Ee, Ne, Ec, Nc, studlab = study, data = Olkin1995, sm = "RR")
+#' # threshold_type defaults to "mid", which requires a threshold (MID).
 #' g <- grade_meta(m, study_design = "RCT", rob = "some",
 #'                 rob_rationale = "RoB2 consensus: some concerns from missing outcome data",
+#'                 threshold = 1.2, threshold_scale = "ratio",
 #'                 outcome_name = "Mortality")
 #' print(g)
+#' print(g$rating_target)
 #' sof_table(g)
+#'
+#' # Rating certainty in a true underlying effect instead (null threshold).
+#' g_null <- grade_meta(m, threshold_type = "null", outcome_name = "Mortality")
 #' }
 #'
 #' @export
@@ -233,9 +281,13 @@ grade_meta <- function(meta_obj,
                        inconsistency_subgroup_explained = NULL,
                        imprecision                      = NULL,
                        imprecision_rationale            = NULL,
+                       threshold_type                   = c("mid", "null"),
                        threshold                        = NULL,
                        threshold_scale                  = "auto",
                        threshold_baseline               = NULL,
+                       rating_target                    = NULL,
+                       rating_target_rationale          = NULL,
+                       require_threshold                = TRUE,
                        outcome_name                     = NULL,
                        outcome_type                     = c("relative", "absolute"),
                        ois_events                       = NULL,
@@ -257,8 +309,14 @@ grade_meta <- function(meta_obj,
   if (!inherits(meta_obj, "meta")) {
     rlang::abort("meta_obj must be an object of class 'meta' (from the {meta} package).")
   }
-  study_design <- match.arg(study_design)
-  outcome_type <- match.arg(outcome_type)
+  study_design   <- match.arg(study_design)
+  outcome_type   <- match.arg(outcome_type)
+  threshold_type <- match.arg(threshold_type)
+
+  # --- Core GRADE 2 Fig 2 step 1: the chosen threshold must be explicit ---
+  # "mid" means importance is being judged, which is impossible without a MID.
+  .check_threshold_type_gate(meta_obj, threshold_type, threshold,
+                             require_threshold)
 
   # --- starting certainty ---
   start_score     <- if (study_design == "RCT") 4L else 2L
@@ -275,6 +333,17 @@ grade_meta <- function(meta_obj,
   threshold_ard      <- threshold_resolved$threshold_ard
   threshold_note     <- threshold_resolved$threshold_note
   threshold_p0       <- threshold_resolved$threshold_baseline
+
+  # --- Core GRADE 2 Fig 2 steps 2-3: target of the certainty rating ---
+  auto_target <- .derive_rating_target(
+    te_point           = .pooled_te(meta_obj),
+    threshold_internal = threshold_internal,
+    threshold_type     = threshold_type,
+    sm                 = meta_obj$sm,
+    threshold_kind     = threshold_kind
+  )
+  target_info <- .resolve_rating_target(rating_target, rating_target_rationale,
+                                        auto_target, threshold_internal)
 
   # --- domain assessments ---
   d_rob   <- assess_rob(rob, meta_obj,
@@ -332,9 +401,19 @@ grade_meta <- function(meta_obj,
       threshold_internal = threshold_internal,
       threshold_kind     = threshold_kind,
       threshold_ard      = threshold_ard,
-      threshold_p0       = threshold_p0
+      threshold_p0       = threshold_p0,
+      rating_target      = target_info$target,
+      threshold_type     = threshold_type,
+      threshold_for_imprecision = target_info$threshold_for_imprecision
     )
   }
+
+  # Record how the rating target was chosen in the Imprecision notes: the
+  # target decides which threshold Fig 4 evaluates the CI against, so the two
+  # must be auditable together (and the note then propagates to
+  # evidence_profile / grade_report / export_bundle).
+  d_impre$notes <- ifelse(is.na(d_impre$notes), target_info$note,
+                          paste0(d_impre$notes, " | ", target_info$note))
 
   # Absolute-threshold conversion note: surface it in every Threshold-aware
   # domain so the baseline-risk assumption is auditable per domain.
@@ -376,6 +455,10 @@ grade_meta <- function(meta_obj,
       outcome_name       = if (is.null(outcome_name)) "Outcome" else outcome_name,
       outcome_type       = outcome_type,
       baseline_risk      = .resolve_baseline_risk(baseline_risk, meta_obj, ois_p0),
+      threshold_type     = threshold_type,
+      rating_target      = target_info$target,
+      rating_target_note = target_info$note,
+      rating_target_auto = is.null(rating_target),
       threshold          = threshold,
       threshold_scale    = threshold_scale,
       threshold_internal = threshold_internal,
@@ -394,6 +477,14 @@ print.pmatools <- function(x, ...) {
   cat(sprintf(" Outcome      : %s\n", x$outcome_name))
   cat(sprintf(" Study design : %s  (starting quality: %s)\n",
               x$study_design, x$starting_quality))
+  if (!is.null(x$rating_target)) {
+    target_label <- unname(RATING_TARGET_LABELS[x$rating_target])
+    if (is.na(target_label)) target_label <- x$rating_target
+    cat(sprintf(" Rating target: %s  (threshold: %s%s)\n",
+                target_label,
+                x$threshold_type %||% "?",
+                if (isTRUE(x$rating_target_auto)) ", auto" else ", manual"))
+  }
   cat("\n Domain assessments:\n")
 
   d <- x$domain_assessments

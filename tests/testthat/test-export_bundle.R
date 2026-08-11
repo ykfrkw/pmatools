@@ -20,7 +20,7 @@ test_that("export_bundle creates ZIP with expected files (data + script + result
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
                                     rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
-                                    outcome_name = "Test"))
+                                    outcome_name = "Test", threshold_type = "null"))
   out_dir <- tempfile()
   dir.create(out_dir)
 
@@ -41,7 +41,7 @@ test_that("export_bundle generated analysis.R parses as valid R", {
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
                                     rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
-                                    outcome_name = "Test"))
+                                    outcome_name = "Test", threshold_type = "null"))
   out_dir <- tempfile()
   dir.create(out_dir)
 
@@ -64,7 +64,7 @@ test_that("analysis.R renders all GRADE arguments and run_ma arm labels", {
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
                                     rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
-                                    outcome_name = "Test"))
+                                    outcome_name = "Test", threshold_type = "null"))
   out_dir <- tempfile()
   dir.create(out_dir)
 
@@ -117,7 +117,7 @@ test_that("analysis.R falls back to sensible GRADE defaults when specs absent", 
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
                                     rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
-                                    outcome_name = "Test"))
+                                    outcome_name = "Test", threshold_type = "null"))
   out_dir <- tempfile()
   dir.create(out_dir)
 
@@ -134,6 +134,11 @@ test_that("analysis.R falls back to sensible GRADE defaults when specs absent", 
   expect_match(txt, "ois_events              = NULL",           fixed = TRUE)
   expect_match(txt, "ois_alpha               = 0.05",           fixed = TRUE)
   expect_match(txt, "ois_beta                = 0.2",            fixed = TRUE)
+  # Core GRADE 2 entry gate: the target/threshold choice must round-trip.
+  expect_match(txt, 'threshold_type          = "null"',         fixed = TRUE)
+  expect_match(txt, "require_threshold       = TRUE",           fixed = TRUE)
+  expect_match(txt, "rating_target           = NULL",           fixed = TRUE)
+  expect_match(txt, "rating_target_rationale = NULL",           fixed = TRUE)
   expect_match(txt, "pubias_registry_complete = NULL",          fixed = TRUE)
   expect_match(txt, "inconsistency_ci_diff            = NULL",  fixed = TRUE)
   # baseline_risk auto-resolved to the pooled control rate (60/180)
@@ -145,6 +150,30 @@ test_that("analysis.R falls back to sensible GRADE defaults when specs absent", 
   expect_false(is.null(parsed))
 })
 
+test_that("analysis.R reproduces a manual rating-target override", {
+  ma <- make_meta_for_bundle()
+  g <- suppressWarnings(grade_meta(
+    ma, study_design = "RCT", outcome_name = "Test",
+    threshold_type = "null",
+    rating_target = "non_null_effect",
+    rating_target_rationale = "Panel rated certainty in any true effect"
+  ))
+  out_dir <- tempfile(); dir.create(out_dir)
+  zip_path <- export_bundle(ma, g, output_dir = out_dir,
+                            bundle_name = "target_bundle",
+                            include = c("script"))
+  unz_dir <- tempfile(); dir.create(unz_dir)
+  zip::unzip(zip_path, exdir = unz_dir)
+  txt <- paste(readLines(file.path(unz_dir, "analysis.R"), warn = FALSE),
+               collapse = "\n")
+
+  expect_match(txt, "rating_target           = 'non_null_effect'", fixed = TRUE)
+  # The rationale is mandatory for the override, so the script must carry it
+  # or it would abort on re-run.
+  expect_match(txt, "Panel rated certainty in any true effect", fixed = TRUE)
+  expect_false(is.null(tryCatch(parse(text = txt), error = function(e) NULL)))
+})
+
 test_that("export_bundle includes rare-event artifacts when supplied", {
   d <- ingest_data(system.file("extdata", "rare_events_mock.csv", package = "pmatools"),
                    format = "long")
@@ -153,7 +182,7 @@ test_that("export_bundle includes rare-event artifacts when supplied", {
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
                                     rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
-                                    outcome_name = "Rare Test"))
+                                    outcome_name = "Rare Test", threshold_type = "null"))
   out_dir <- tempfile()
   dir.create(out_dir)
 
@@ -178,7 +207,7 @@ test_that("export_bundle script reruns rare-event methods when rare object suppl
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
                                     rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
-                                    outcome_name = "Rare Test"))
+                                    outcome_name = "Rare Test", threshold_type = "null"))
   out_dir <- tempfile()
   dir.create(out_dir)
 

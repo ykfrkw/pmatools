@@ -49,7 +49,7 @@ make_small_meta <- function() {
 test_that("pubias_registry_complete = 'yes' short-circuits to 'no'", {
   m <- make_strong_asymmetry()  # would otherwise be 'serious' via Egger
   g <- grade_meta(m, pubias_registry_complete = "yes",
-                  pubias_small_industry = "yes")  # would otherwise be -1
+                  pubias_small_industry = "yes", threshold_type = "null")  # would otherwise be -1
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   expect_equal(pb$judgment, "no")
   expect_match(pb$notes, "STRUCTURAL RULE-OUT")
@@ -58,7 +58,7 @@ test_that("pubias_registry_complete = 'yes' short-circuits to 'no'", {
 # --- Q1: small + industry-sponsored -----------------------------------------
 test_that("Q1: pubias_small_industry = 'yes' -> some_concerns", {
   m <- make_symmetric()
-  g <- grade_meta(m, pubias_small_industry = "yes")
+  g <- grade_meta(m, pubias_small_industry = "yes", threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   expect_equal(pb$judgment, "some_concerns")
   expect_match(pb$notes, "Q1:")
@@ -67,7 +67,7 @@ test_that("Q1: pubias_small_industry = 'yes' -> some_concerns", {
 # --- Q3 (k >= 10): 2-tier auto Egger ----------------------------------------
 test_that("Q3 auto: Egger p < 0.01 -> serious (-2)", {
   m <- make_strong_asymmetry()
-  g <- grade_meta(m)
+  g <- grade_meta(m, threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   expect_equal(pb$judgment, "serious")
   expect_match(pb$notes, "p < 0.01")
@@ -76,7 +76,7 @@ test_that("Q3 auto: Egger p < 0.01 -> serious (-2)", {
 
 test_that("Q3 auto: 0.01 <= Egger p < 0.05 -> some_concerns (-1)", {
   m <- make_mild_asymmetry()
-  g <- grade_meta(m)
+  g <- grade_meta(m, threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   expect_equal(pb$judgment, "some_concerns")
   expect_match(pb$notes, "0.01 <= p < 0.05")
@@ -84,7 +84,7 @@ test_that("Q3 auto: 0.01 <= Egger p < 0.05 -> some_concerns (-1)", {
 
 test_that("Q3 auto: Egger p >= 0.05 -> no", {
   m <- make_symmetric()
-  g <- grade_meta(m)
+  g <- grade_meta(m, threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   expect_equal(pb$judgment, "no")
   expect_match(pb$notes, "p >= 0.05")
@@ -94,7 +94,7 @@ test_that("Q3 auto: Egger p >= 0.05 -> no", {
 test_that("Q3 manual 'yes' -> some_concerns regardless of Egger", {
   m <- make_symmetric()  # Egger says no
   g <- grade_meta(m, pubias_funnel_asymmetry = "yes",
-                  pubias_rationale = "Contour-enhanced funnel plot visually asymmetric")
+                  pubias_rationale = "Contour-enhanced funnel plot visually asymmetric", threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   expect_equal(pb$judgment, "some_concerns")
   expect_match(pb$notes, "manual")
@@ -103,7 +103,7 @@ test_that("Q3 manual 'yes' -> some_concerns regardless of Egger", {
 test_that("Q3 manual 'no' -> no regardless of Egger", {
   m <- make_strong_asymmetry()  # Egger says serious
   g <- grade_meta(m, pubias_funnel_asymmetry = "no",
-                  pubias_rationale = "Asymmetry driven by heterogeneity, not small-study bias")
+                  pubias_rationale = "Asymmetry driven by heterogeneity, not small-study bias", threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   expect_equal(pb$judgment, "no")
   expect_match(pb$notes, "rules out funnel-plot asymmetry")
@@ -112,7 +112,7 @@ test_that("Q3 manual 'no' -> no regardless of Egger", {
 # --- Q4 (k < 10) ------------------------------------------------------------
 test_that("Q4: k < 10, pubias_unpublished = 'yes' -> some_concerns", {
   m <- make_small_meta()
-  g <- grade_meta(m, pubias_unpublished = "yes")
+  g <- grade_meta(m, pubias_unpublished = "yes", threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   expect_equal(pb$judgment, "some_concerns")
   expect_match(pb$notes, "Q4:")
@@ -120,7 +120,7 @@ test_that("Q4: k < 10, pubias_unpublished = 'yes' -> some_concerns", {
 
 test_that("Q4: k < 10, pubias_unpublished = 'no' -> no", {
   m <- make_small_meta()
-  g <- grade_meta(m, pubias_unpublished = "no")
+  g <- grade_meta(m, pubias_unpublished = "no", threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   expect_equal(pb$judgment, "no")
 })
@@ -146,7 +146,7 @@ test_that("Egger not computable (k >= 10) -> 'no' with prominent qualitative not
 test_that("k < 10 with no manual input -> note flags qualitative assessment", {
   m <- make_small_meta()
   g <- NULL
-  expect_warning(g <- grade_meta(m), regexp = "pubias_unpublished")
+  expect_warning(g <- grade_meta(m, threshold_type = "null"), regexp = "pubias_unpublished")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   expect_equal(pb$judgment, "no")
   expect_match(pb$notes, "QUALITATIVE ASSESSMENT REQUIRED")
@@ -155,18 +155,18 @@ test_that("k < 10 with no manual input -> note flags qualitative assessment", {
 
 test_that("manual pubias input suppresses the qualitative marker", {
   m <- make_small_meta()
-  g <- grade_meta(m, pubias_unpublished = "no")
+  g <- grade_meta(m, pubias_unpublished = "no", threshold_type = "null")
   expect_null(.pubias_qualitative_note(g))
 
   m10 <- make_symmetric()
-  g10 <- grade_meta(m10)  # Egger runs fine
+  g10 <- grade_meta(m10, threshold_type = "null")  # Egger runs fine
   expect_null(.pubias_qualitative_note(g10))
 })
 
 # --- meta object passthrough + plot helpers ---------------------------------
 test_that("grade_meta() exposes the meta object via $meta and plot helpers accept pmatools", {
   m <- make_symmetric()
-  g <- grade_meta(m)
+  g <- grade_meta(m, threshold_type = "null")
   expect_true(inherits(g$meta, "meta"))
   # plot_funnel and plot_trimfill_forest must accept a pmatools object.
   pdf(NULL)

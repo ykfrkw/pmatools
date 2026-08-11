@@ -90,9 +90,13 @@ m <- meta::metabin(event.e = c(10,15,20), n.e = c(50,60,70),
 # v0.4 breaking change: every manual domain-judgment override (scalar rob,
 # indirectness != "no", inconsistency, imprecision, pubias_funnel_asymmetry)
 # requires a matching *_rationale argument.
+# v0.5 breaking change: threshold_type defaults to "mid", which requires a
+# threshold. Use threshold_type = "null" to rate certainty in a true
+# underlying effect, or require_threshold = FALSE to run without a MID.
 g <- grade_meta(m, study_design = "RCT", rob = "some_concerns",
                 rob_rationale = "RoB2 consensus: some concerns from missing outcome data",
                 small_values = "undesirable", indirectness = "no",
+                threshold = 1.25, threshold_scale = "ratio",
                 outcome_name = "My Outcome")
 print(g)
 sof_table(g)
@@ -155,6 +159,46 @@ Legacy labels are still accepted and normalized: `"some"` → `"some_concerns"` 
 ---
 
 ## Domain-by-domain logic
+
+### 0. Target of the certainty rating (BMJ Core GRADE 2, Fig 2)
+
+Before any domain is judged, Core GRADE asks *what* the certainty is about.
+`grade_meta()` makes that choice explicit and mandatory.
+
+```r
+# "Is there an important effect or not?" -> MID threshold (default).
+# A threshold is REQUIRED; the error message quotes suggest_threshold().
+grade_meta(m, threshold_type = "mid", threshold = 1.25, threshold_scale = "ratio")
+
+# "Is there a true underlying effect, benefit or harm?" -> null threshold.
+grade_meta(m, threshold_type = "null")
+
+# Escape hatch: keep the pre-0.5 MID-free behaviour.
+grade_meta(m, require_threshold = FALSE)
+```
+
+The target is then derived from the pooled point estimate:
+
+| `threshold_type` | point estimate | target | threshold used by Imprecision |
+|---|---|---|---|
+| `"mid"`  | \|TE\| > MID   | `important_effect`        | ±MID |
+| `"mid"`  | \|TE\| ≤ MID   | `little_to_no_difference` | ±MID |
+| `"null"` | very near null | `little_to_no_difference` | ±MID |
+| `"null"` | not near null  | `non_null_effect`         | null (0) |
+
+"Very near null" is operationalized as \|TE\| ≤ MID (Core GRADE 2 gives no
+numeric definition). Without a MID, nearness cannot be judged and the target
+falls back to `non_null_effect`. The result is on the object as
+`$rating_target`, `$rating_target_note` and `$rating_target_auto`, is printed
+by `print()`, and is appended to the Imprecision domain notes.
+
+Override it — with a mandatory rationale — when the panel disagrees:
+
+```r
+grade_meta(m, threshold = 1.25, threshold_scale = "ratio",
+           rating_target = "little_to_no_difference",
+           rating_target_rationale = "Panel targets an unimportant effect")
+```
 
 ### 1. Risk of Bias (5-rule MECE zone-based decision; aligned with BMJ Core GRADE 4)
 
@@ -339,26 +383,38 @@ grade_meta(m, indirectness = indirectness_vec)       # per-study vector
 
 ---
 
-### 4. Imprecision (auto — BMJ Core GRADE 2)
+### 4. Imprecision (auto — BMJ Core GRADE 2, Fig 4)
 
-**Algorithm:**
+**Algorithm (Core GRADE 2 Fig 4):**
 
 ```
-"serious" (−2):
-  CI contains both ±Thresholds (clinically important benefit AND harm
-  both plausible; only when a Threshold is supplied), OR
-  total events (binary) / total N (continuous) ≤ 30% of OIS
+Does the CI cross the chosen threshold?
+  (the target of the rating decides which threshold — see §0 above)
 
-"some_concerns" (−1):
-  Threshold supplied : CI crosses exactly one Threshold
-  Threshold absent   : CI crosses the null (0 on log scale for OR/RR/HR;
-                       0 for MD/SMD)
-  Either way         : OIS not met (but > 30%)
+Yes -> rate down one level                                        (−1)
+       rate down two levels when the CI crosses BOTH thresholds   (−2)
+       (important benefit and important harm)
+       -> sample size is NOT considered on this path
 
-"no" (0):
-  CI within or beyond Threshold (or, without Threshold, does not cross
-  the null) AND OIS met (or not specified)
+No  -> effect moderate       -> do not rate down                   (0)
+                                (the OIS is not consulted at all)
+    -> effect implausibly large -> OIS approach:
+         Continuous: N >= OIS (or 800)  -> do not rate down        (0)
+                     N <  OIS           -> rate down one level    (−1)
+                     N <  30% of OIS    -> rate down two levels   (−2)
+         Binary:     RR CI ratio >= 3 or OR CI ratio >= 2.5
+                                        -> rate down two levels   (−2)
+                     otherwise, calculate OIS:
+                       N >= OIS         -> do not rate down        (0)
+                       N <  OIS         -> rate down one level    (−1)
 ```
+
+"Implausibly large" follows the paper's binary wording (relative risk
+reduction > 40% certainly, > 30% possibly). Core GRADE 2 does not define it
+for continuous outcomes; pmatools uses Cohen's convention (standardized
+effect >= 0.8) there and says so in the domain notes. The CI ratio is the
+upper CI bound divided by the lower bound on the ratio scale (Fig 4 caption).
+The domain notes always record which Fig 4 path produced the judgment.
 
 **OIS specification options:**
 

@@ -30,7 +30,7 @@ make_mock_meta <- function(te_vec, i2 = 0.5, tau2 = 0.05) {
 
 test_that("ci_diff = 'no' -> judgment 'no'", {
   m <- make_mock_meta(c(0.2, 0.3, 0.4), i2 = 0.6)
-  g <- grade_meta(m, inconsistency_ci_diff = "no")
+  g <- grade_meta(m, inconsistency_ci_diff = "no", threshold_type = "null")
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_equal(row$judgment, "no")
   expect_false(row$auto)
@@ -40,7 +40,7 @@ test_that("majority_one_side -> 'no'", {
   m <- make_mock_meta(c(0.2, 0.3, 0.4), i2 = 0.6)
   g <- grade_meta(m,
     inconsistency_ci_diff        = "yes",
-    inconsistency_threshold_side = "majority_one_side"
+    inconsistency_threshold_side = "majority_one_side", threshold_type = "null"
   )
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_equal(row$judgment, "no")
@@ -51,7 +51,7 @@ test_that("opposite_sides + subgroup explained -> 'no'", {
   g <- grade_meta(m,
     inconsistency_ci_diff            = "yes",
     inconsistency_threshold_side     = "opposite_sides",
-    inconsistency_subgroup_explained = "yes"
+    inconsistency_subgroup_explained = "yes", threshold_type = "null"
   )
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_equal(row$judgment, "no")
@@ -62,7 +62,7 @@ test_that("opposite_sides + no subgroup -> 'serious'", {
   g <- grade_meta(m,
     inconsistency_ci_diff            = "yes",
     inconsistency_threshold_side     = "opposite_sides",
-    inconsistency_subgroup_explained = "no"
+    inconsistency_subgroup_explained = "no", threshold_type = "null"
   )
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_equal(row$judgment, "serious")
@@ -72,7 +72,7 @@ test_that("opposite_sides + no subgroup -> 'serious'", {
 
 test_that("auto Step 1: I^2 <= 25% -> 'no' regardless of Q p", {
   m <- make_mock_meta(c(0.1, 0.1, 0.1), i2 = 0.20, tau2 = 0)
-  g <- grade_meta(m)
+  g <- grade_meta(m, threshold_type = "null")
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_equal(row$judgment, "no")
   expect_true(row$auto)
@@ -80,7 +80,7 @@ test_that("auto Step 1: I^2 <= 25% -> 'no' regardless of Q p", {
 
 test_that("auto Step 1: I^2 > 25% triggers Step 2", {
   m <- make_mock_meta(c(-0.5, 0.5, -0.5), i2 = 0.60)
-  g <- grade_meta(m)
+  g <- grade_meta(m, threshold_type = "null")
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   # opposite-sided TEs -> 'serious'
   expect_equal(row$judgment, "serious")
@@ -113,7 +113,7 @@ test_that("auto Step 2 without Threshold: all TE > 0 -> majority_one_side -> 'no
   # Without Threshold the trivial zone collapses to {0}: all 3 TE > 0 ->
   # n_above = 3, share 100% -> consistent direction -> do not rate down.
   m <- make_mock_meta(c(0.20, 0.30, 0.40), i2 = 0.60)
-  g <- grade_meta(m)
+  g <- grade_meta(m, threshold_type = "null")
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_equal(row$judgment, "no")
   expect_true(grepl("vs null", row$notes))
