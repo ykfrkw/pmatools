@@ -37,6 +37,23 @@
 
 ## New features
 
+* BMJ Core GRADE Summary of Findings layout: `sof_table()` and `grade_table()`
+  gain `style = "bmj"` (the GRADEpro layout stays the default and is
+  unchanged). The BMJ style presents outcome and follow-up, participants with
+  the study design spelled out, the relative effect with its measure spelled
+  out, a spanning "Absolute effects (95% CI)" block (control arm, intervention
+  arm and a new **Difference** column, e.g. "88 fewer per 1000 (129 fewer to
+  42 fewer)"), certainty with the domains that pulled it down, and a plain
+  language summary. New arguments `follow_up` and `unit` supply the time frame
+  and the unit of a continuous difference.
+* Plain language summaries (Core GRADE 2 Table 1): the statements are carried
+  verbatim and chosen from the certainty level, `threshold_type` and
+  `rating_target`. Objects created before the Core GRADE 2 entry gate (no
+  `$rating_target`) simply omit the column.
+* The Core GRADE 4 analysis-set note now travels with every output. In
+  `grade_table()` the refitted outcome's row carries a numbered footnote
+  marker, so a table mixing analysis sets says which rows were restricted; the
+  `grade_report()` outcome sections state it too.
 * `grade_meta()` gains `rob_some_concerns` (`"low"`, default, or `"high"`):
   which side of the binary low/high classification studies rated "some
   concerns" are folded into. It changes the high-RoB weight share and

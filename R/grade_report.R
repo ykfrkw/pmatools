@@ -156,7 +156,18 @@ grade_report <- function(outcomes,
         g$certainty, CERTAINTY_SYMBOLS[[g$certainty]],
         g$starting_quality, g$study_design
       ),
-      "",
+      ""
+    )
+
+    # Core GRADE 4 Fig 2 analysis set: a low-RoB refit changes every number
+    # reported for this outcome, so the note travels with the outcome.
+    rob_set_note <- .rob_analysis_set_note(g)
+    if (!is.null(rob_set_note)) {
+      lines <- c(lines, paste0("*Analysis set: ", rob_set_note, "*"), "")
+    }
+
+    lines <- c(
+      lines,
       "| Domain | Judgment | Downgrade | Notes |",
       "|--------|----------|-----------|-------|"
     )
@@ -264,6 +275,12 @@ grade_report <- function(outcomes,
       g$certainty, CERTAINTY_SYMBOLS[[g$certainty]],
       g$starting_quality, g$study_design
     ), style = "Normal")
+
+    rob_set_note <- .rob_analysis_set_note(g)
+    if (!is.null(rob_set_note)) {
+      doc <- officer::body_add_par(doc, paste0("Analysis set: ", rob_set_note),
+                                   style = "Normal")
+    }
 
     d <- g$domain_assessments
     detail_df <- data.frame(

@@ -3,6 +3,19 @@
 #' Generate a Summary of Findings (SoF) table as a flextable
 #'
 #' @param x A \code{pmatools} object (from \code{\link{grade_meta}}).
+#' @param style (v0.5) Table layout. \code{"gradepro"} (default) keeps the
+#'   GRADEpro-style layout. \code{"bmj"} switches to the BMJ Core GRADE
+#'   presentation: outcome and follow-up, participants and design, relative
+#'   effect, a spanning "Absolute effects (95% CI)" block (control /
+#'   intervention / difference), certainty with its rate-down reason, and a
+#'   plain language summary (Core GRADE 2 Table 1).
+#' @param follow_up (v0.5) Optional free-text time frame shown under the
+#'   outcome name in the \code{"bmj"} style, e.g.
+#'   \code{"Follow-up: longest, range 7.7-60 months"}. \code{NULL} (default)
+#'   omits the line. Ignored by the \code{"gradepro"} style.
+#' @param unit (v0.5) Optional unit for the Difference column of the
+#'   \code{"bmj"} style with continuous outcomes, e.g. \code{"days"}.
+#'   Ignored for relative effect measures and by the \code{"gradepro"} style.
 #' @param palette Color palette for the certainty cell.
 #'   \code{"pastel"} (default) uses soft backgrounds with colored text.
 #'   \code{"classic"} uses saturated backgrounds with white text.
@@ -44,12 +57,17 @@
 #' sof_table(g, per = 100)
 #' sof_table(g, prediction = TRUE)
 #' sof_table(g, palette = "classic")
+#' sof_table(g, style = "bmj",
+#'           follow_up = "Follow-up: longest, range 7.7-60 months")
 #' flextable::save_as_docx(sof_table(g), path = "sof.docx")
 #' }
 #'
 #' @export
-sof_table <- function(x, palette = c("pastel", "classic"),
+sof_table <- function(x, style = c("gradepro", "bmj"),
+                      palette = c("pastel", "classic"),
                       per = 1000, prediction = FALSE,
+                      follow_up = NULL,
+                      unit      = NULL,
                       convert_smd_to_or = FALSE,
                       baseline_risk     = NULL,
                       threshold_label   = NULL,
@@ -60,6 +78,7 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   if (!inherits(x, "pmatools")) {
     rlang::abort("x must be a pmatools object from grade_meta().")
   }
+  style   <- match.arg(style)
   palette <- match.arg(palette)
   pal     <- CERTAINTY_PALETTES[[palette]]
 
@@ -98,6 +117,22 @@ sof_table <- function(x, palette = c("pastel", "classic"),
     if (cer_str != "-") cer_str <- paste0(cer_str, " *")
     if (ier_str != "-") ier_str <- paste0(ier_str, " *")
   }
+
+  # BMJ Core GRADE presentation is a different table shape entirely, so it is
+  # built by its own routine; everything below stays the GRADEpro layout.
+  if (identical(style, "bmj")) {
+    return(.sof_table_bmj(
+      x, pal = pal, per = per, prediction = prediction,
+      cer_str = cer_str, ier_str = ier_str,
+      baseline_for_display = baseline_for_display,
+      follow_up = follow_up, unit = unit,
+      chinn_active = chinn_active, chinn_invert = chinn_invert,
+      threshold_label = threshold_label,
+      label_intervention = label_intervention,
+      label_control      = label_control
+    ))
+  }
+
   effect_str  <- .format_effect(meta_obj, x$outcome_type,
                                 prediction = prediction)
 

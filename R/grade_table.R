@@ -7,10 +7,19 @@
 #' @param primary Character vector of outcome names that are classified as
 #'   primary outcomes. All others are treated as secondary.
 #'   If \code{NULL} (default), no grouping header is added.
+#' @param style (v0.5) Table layout: \code{"gradepro"} (default) or
+#'   \code{"bmj"}. See \code{\link{sof_table}}.
 #' @param palette Color palette for certainty cells.
 #'   \code{"pastel"} (default) uses soft backgrounds with colored text.
 #'   \code{"classic"} uses saturated backgrounds with white text.
 #' @param show_domains Logical (default \code{TRUE}). Add domain symbol columns.
+#'   Ignored by the \code{"bmj"} style, which has no domain columns.
+#' @param follow_up (v0.5) Follow-up / time frame text for the \code{"bmj"}
+#'   style: a character vector named by outcome, or a single unnamed value
+#'   applied to every outcome. \code{NULL} (default) omits the line.
+#' @param unit (v0.5) Unit for the Difference column of the \code{"bmj"} style
+#'   with continuous outcomes; same named-vector convention as
+#'   \code{follow_up}.
 #' @param per Denominator for SoF rate columns. \code{1000} (default) or
 #'   \code{100}.
 #' @param prediction Logical (default \code{FALSE}); when \code{TRUE}, the
@@ -34,10 +43,13 @@
 #' @export
 grade_table <- function(outcomes,
                         primary      = NULL,
+                        style        = c("gradepro", "bmj"),
                         palette      = c("pastel", "classic"),
                         show_domains = TRUE,
                         per          = 1000,
                         prediction   = FALSE,
+                        follow_up    = NULL,
+                        unit         = NULL,
                         label_intervention = "intervention",
                         label_control      = "control") {
   if (!is.list(outcomes) || length(outcomes) == 0) {
@@ -47,6 +59,7 @@ grade_table <- function(outcomes,
     rlang::abort("All elements of outcomes must be pmatools objects.")
   }
 
+  style   <- match.arg(style)
   palette <- match.arg(palette)
   pal     <- CERTAINTY_PALETTES[[palette]]
 
@@ -66,6 +79,33 @@ grade_table <- function(outcomes,
   } else {
     prim_nms <- character(0)
     sec_nms  <- character(0)
+  }
+
+  # Risk-of-bias analysis set (Core GRADE 4 Fig 2). The set can differ between
+  # outcomes, so the note is attached to the row it applies to via a numbered
+  # marker rather than stated once for the whole table.
+  rob_notes  <- character(0)
+  rob_marker <- stats::setNames(rep(NA_integer_, length(nms)), nms)
+  for (nm in nms) {
+    note <- .rob_analysis_set_note(outcomes[[nm]])
+    if (!is.null(note)) {
+      rob_notes <- c(rob_notes, note)
+      rob_marker[[nm]] <- length(rob_notes)
+    }
+  }
+  disp <- function(nm) {
+    if (is.na(rob_marker[[nm]])) nm else paste0(nm, " [", rob_marker[[nm]], "]")
+  }
+
+  if (identical(style, "bmj")) {
+    return(.grade_table_bmj(
+      outcomes, nms = nms, prim_nms = prim_nms, sec_nms = sec_nms,
+      primary = primary, pal = pal, per = per, prediction = prediction,
+      follow_up = follow_up, unit = unit,
+      label_intervention = label_intervention,
+      label_control      = label_control,
+      disp = disp, rob_notes = rob_notes
+    ))
   }
 
   # Effect header: sm-specific when all outcomes share one, generic otherwise
@@ -94,7 +134,7 @@ grade_table <- function(outcomes,
 
   add_outcome <- function(nm) {
     row_idx <<- row_idx + 1L
-    r <- .build_row(nm, outcomes[[nm]], show_domains, per, prediction)
+    r <- .build_row(disp(nm), outcomes[[nm]], show_domains, per, prediction)
     names(r) <- hdrs
     all_rows[[length(all_rows) + 1L]] <<- r
     outcome_map[[as.character(row_idx)]] <<- nm
@@ -176,6 +216,13 @@ grade_table <- function(outcomes,
     if (show_domains) " Domain columns: RoB=Risk of bias; Ind=Indirectness; Inc=Inconsistency; Imp=Imprecision; PB=Publication bias." else ""
   )
   ft <- flextable::add_footer_lines(ft, values = footnote)
+
+  # Per-outcome risk-of-bias analysis-set notes, keyed to the [n] markers on
+  # the Outcome cells.
+  for (i in seq_along(rob_notes)) {
+    ft <- flextable::add_footer_lines(
+      ft, values = sprintf("[%d] %s", i, rob_notes[i]))
+  }
 
   # Publication bias not formally assessed -> per-outcome qualitative-judgment
   # footnote (see domain_pubias.R)
