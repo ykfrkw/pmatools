@@ -54,6 +54,10 @@ step4_ui <- function() {
                             target = "_blank",
                             "Guyatt G, et al. Core GRADE 1: Overview. BMJ 2025.")),
         htmltools::tags$li(
+          htmltools::tags$a(href = "https://doi.org/10.1136/bmj-2024-081904",
+                            target = "_blank",
+                            "Guyatt G, et al. Core GRADE 2: Certainty rating target, imprecision. BMJ 2025.")),
+        htmltools::tags$li(
           htmltools::tags$a(href = "https://doi.org/10.1136/bmj-2024-081905",
                             target = "_blank",
                             "Guyatt G, et al. Core GRADE 3: Inconsistency. BMJ 2025.")),
