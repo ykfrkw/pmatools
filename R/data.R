@@ -1,10 +1,13 @@
-#' CBT-I for Depression Response: 17-trial dataset
+#' CBT-I for Depression Response: 18-trial synthetic dataset
 #'
-#' Per-arm aggregated dataset for 17 randomized trials of cognitive
+#' Per-arm aggregated dataset for 18 randomized trials of cognitive
 #' behavioral therapy for insomnia (CBT-I) as adjunct treatment for major
 #' depressive disorder (MDD) with comorbid insomnia, with depression
 #' response (>= 50 percent reduction on a depression severity scale) as
 #' the binary outcome.
+#'
+#' All study names, effect sizes, and sample sizes are synthetic: the
+#' dataset reproduces the structure (not the values) of the source review.
 #'
 #' Source: Furukawa Y, Nagaoka D, Sato S, et al. Cognitive behavioral
 #' therapy for insomnia to treat major depressive disorder with comorbid
@@ -14,7 +17,9 @@
 #' Multi-arm CBT-I trials are aggregated to a single CBT-I row per study
 #' by summing events and sample sizes across CBT-I arms.
 #'
-#' @format A data frame with 34 rows (17 studies x 2 arms) and 7 columns:
+#' @format A data frame with 36 rows (18 studies x 2 arms) and 7 columns
+#'   (the lean analysis subset; the full synthetic extraction with all
+#'   variables is bundled as \code{inst/extdata/cbti_depression.csv}):
 #' \describe{
 #'   \item{study}{Study identifier (first author + year).}
 #'   \item{arm}{Arm label within the study (mirrors \code{treatment}).}

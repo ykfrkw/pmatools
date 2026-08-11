@@ -146,7 +146,7 @@ test_that("analysis.R falls back to sensible GRADE defaults when specs absent", 
 })
 
 test_that("export_bundle includes rare-event artifacts when supplied", {
-  d <- ingest_data(testthat::test_path("../../inst/extdata/rare_events_mock.csv"),
+  d <- ingest_data(system.file("extdata", "rare_events_mock.csv", package = "pmatools"),
                    format = "long")
   rare <- run_rare_ma(d, effect_scale = "OR")
   ma <- rare$primary
@@ -171,7 +171,7 @@ test_that("export_bundle includes rare-event artifacts when supplied", {
 })
 
 test_that("export_bundle script reruns rare-event methods when rare object supplied", {
-  d <- ingest_data(testthat::test_path("../../inst/extdata/rare_events_mock.csv"),
+  d <- ingest_data(system.file("extdata", "rare_events_mock.csv", package = "pmatools"),
                    format = "long")
   rare <- run_rare_ma(d, effect_scale = "OR")
   ma <- rare$primary

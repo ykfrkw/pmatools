@@ -122,6 +122,7 @@ run_rare_ma <- function(data,
 #'   exp(-threshold) and exp(threshold).
 #' @param favors_left,favors_right Optional labels shown on the left and right
 #'   of the x-axis.
+#' @param ... Additional arguments passed to \code{\link[meta]{forest}}.
 #'
 #' @return Invisibly \code{NULL}. Draws on the active graphics device.
 #' @export

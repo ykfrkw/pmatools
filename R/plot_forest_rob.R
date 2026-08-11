@@ -17,6 +17,7 @@
 #'   \code{"Critical concerns"}. \code{NA}, \code{""} and \code{"?"} are
 #'   tolerated (kept as their own group labeled \code{"unknown"}); any other
 #'   unrecognized label is bucketed into \code{"unknown"} with a warning.
+#' @param ... Additional arguments passed to \code{\link{plot_forest}}.
 #'
 #' @return Invisibly NULL. Side effect: draws on the active graphics device.
 #'

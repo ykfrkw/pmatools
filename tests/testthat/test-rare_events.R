@@ -3,7 +3,7 @@ library(testthat)
 skip_if_not_installed("meta")
 
 test_that("rare-events mock sample ingests as 20 rows and 10 studies", {
-  path <- testthat::test_path("../../inst/extdata/rare_events_mock.csv")
+  path <- system.file("extdata", "rare_events_mock.csv", package = "pmatools")
   d <- ingest_data(path, format = "long")
 
   expect_equal(nrow(d), 20)
@@ -12,7 +12,7 @@ test_that("rare-events mock sample ingests as 20 rows and 10 studies", {
 })
 
 test_that("rare-events mock sample triggers rare flow without total-events rule", {
-  path <- testthat::test_path("../../inst/extdata/rare_events_mock.csv")
+  path <- system.file("extdata", "rare_events_mock.csv", package = "pmatools")
   d <- ingest_data(path, format = "long")
   diag <- rare_event_diagnostics(d)
 
@@ -24,7 +24,7 @@ test_that("rare-events mock sample triggers rare flow without total-events rule"
 })
 
 test_that("regular CBT-I sample does not trigger rare flow", {
-  path <- testthat::test_path("../../inst/extdata/cbti_depression.csv")
+  path <- system.file("extdata", "cbti_depression.csv", package = "pmatools")
   d <- ingest_data(path, format = "long")
   d <- d[!is.na(d$event), , drop = FALSE]
   diag <- rare_event_diagnostics(
@@ -38,7 +38,7 @@ test_that("regular CBT-I sample does not trigger rare flow", {
 })
 
 test_that("rare MA returns method table and sensitivity forest renders", {
-  path <- testthat::test_path("../../inst/extdata/rare_events_mock.csv")
+  path <- system.file("extdata", "rare_events_mock.csv", package = "pmatools")
   d <- ingest_data(path, format = "long")
   rare <- run_rare_ma(d, effect_scale = "OR")
 

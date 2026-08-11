@@ -18,6 +18,8 @@ labels as \code{\link{grade_meta}} (case-insensitive): \code{"L"/"S"/"H"},
 \code{"Critical concerns"}. \code{NA}, \code{""} and \code{"?"} are
 tolerated (kept as their own group labeled \code{"unknown"}); any other
 unrecognized label is bucketed into \code{"unknown"} with a warning.}
+
+\item{...}{Additional arguments passed to \code{\link{plot_forest}}.}
 }
 \value{
 Invisibly NULL. Side effect: draws on the active graphics device.

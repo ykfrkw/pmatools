@@ -26,6 +26,8 @@ exp(-threshold) and exp(threshold).}
 
 \item{favors_left, favors_right}{Optional labels shown on the left and right
 of the x-axis.}
+
+\item{...}{Additional arguments passed to \code{\link[meta]{forest}}.}
 }
 \value{
 Invisibly \code{NULL}. Draws on the active graphics device.

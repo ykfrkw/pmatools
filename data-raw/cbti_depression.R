@@ -14,4 +14,10 @@ cbti_depression <- read.csv(
   stringsAsFactors = FALSE
 )
 
+# Keep only the columns documented in R/data.R (the lean teaching subset);
+# the full extraction stays available in inst/extdata/cbti_depression.csv.
+cbti_depression <- cbti_depression[
+  , c("study", "arm", "year", "treatment", "n_randomized", "d_r", "rob_d")
+]
+
 usethis::use_data(cbti_depression, overwrite = TRUE)
