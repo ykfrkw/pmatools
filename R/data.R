@@ -8,6 +8,9 @@
 #'
 #' All study names, effect sizes, and sample sizes are synthetic: the
 #' dataset reproduces the structure (not the values) of the source review.
+#' Seventeen trials report the outcome and enter the pooled estimate; the
+#' remaining trial has \code{d_r = NA} and serves as a missing-results
+#' example for the publication-bias / ROB-ME workflow.
 #'
 #' Source: Furukawa Y, Nagaoka D, Sato S, et al. Cognitive behavioral
 #' therapy for insomnia to treat major depressive disorder with comorbid
