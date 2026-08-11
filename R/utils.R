@@ -166,18 +166,23 @@ make_domain_row <- function(domain, judgment, auto, notes = NA_character_,
 # GRADE transparency gate for manual overrides (v0.4.0, breaking change).
 # Overriding an automated domain judgment requires a written justification.
 # Aborts unless `rationale` is a single non-NA, non-empty, non-whitespace
-# string. Returns the rationale invisibly on success.
-.check_override_rationale <- function(rationale, arg, domain_label) {
+# string. Returns the rationale invisibly on success. `hint` appends a
+# call-site-specific sentence telling the user how to avoid the override
+# altogether (used by the Indirectness subdomain path).
+.check_override_rationale <- function(rationale, arg, domain_label,
+                                      hint = NULL) {
   ok <- is.character(rationale) && length(rationale) == 1L &&
         !is.na(rationale) && nzchar(trimws(rationale))
   if (!ok) {
-    rlang::abort(sprintf(
+    msg <- sprintf(
       paste0(
         "Overriding the %s judgment requires %s: state why the automated ",
         "assessment was replaced (Core GRADE transparency principle)."
       ),
       domain_label, arg
-    ))
+    )
+    if (!is.null(hint)) msg <- paste(msg, hint)
+    rlang::abort(msg)
   }
   invisible(rationale)
 }

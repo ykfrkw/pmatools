@@ -174,6 +174,90 @@ test_that("analysis.R reproduces a manual rating-target override", {
   expect_false(is.null(tryCatch(parse(text = txt), error = function(e) NULL)))
 })
 
+# ---- .arg_lit() origin validation ------------------------------------------
+# Regression: an unrecognised origin used to fall through to the plain-value
+# branch, which cannot handle a list, and returned the "NULL" fallback. The
+# bundled analysis.R then silently dropped the argument and reproduced a
+# different analysis.
+
+test_that(".arg_lit round-trips every recognised origin", {
+  expect_equal(.arg_lit(list(origin = "null")), "NULL")
+  expect_equal(.arg_lit(list(origin = "column", col = "rob_d")), "data$rob_d")
+  expect_equal(.arg_lit(list(origin = "scalar", value = "undesirable")),
+               shQuote("undesirable"))
+  expect_equal(.arg_lit(list(origin = "scalar", value = TRUE)), "TRUE")
+  expect_equal(.arg_lit(list(origin = "scalar", value = 0.25)), "0.25")
+  expect_equal(.arg_lit(list(origin = "vector", value = c("no", "serious"))),
+               "c('no', 'serious')")
+  # Plain values and absent specs keep their old behaviour
+  expect_equal(.arg_lit(NULL, fallback = "0.05"), "0.05")
+  expect_equal(.arg_lit("yes"), shQuote("yes"))
+})
+
+test_that(".arg_lit aborts on an unknown origin instead of emitting NULL", {
+  expect_error(.arg_lit(list(origin = "value", value = "desirable")),
+               regexp = "Unknown argument spec origin")
+  expect_error(.arg_lit(list(origin = "value", value = "desirable")),
+               regexp = "null, column, scalar, vector", fixed = TRUE)
+  expect_error(.arg_lit(list(origin = 42L, value = 1)),
+               regexp = "Unknown argument spec origin")
+})
+
+test_that("export_bundle surfaces a typo'd grade_args origin", {
+  ma <- make_meta_for_bundle()
+  g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    rob_rationale = "Consensus RoB2: all low",
+                                    outcome_name = "Test",
+                                    threshold_type = "null"))
+  out_dir <- tempfile(); dir.create(out_dir)
+  expect_error(
+    export_bundle(ma, g, output_dir = out_dir, bundle_name = "bad_origin",
+                  include = c("script"),
+                  grade_args = list(
+                    small_values = list(origin = "value", value = "desirable")
+                  )),
+    regexp = "Unknown argument spec origin"
+  )
+})
+
+# ---- generated-script syntax check -----------------------------------------
+
+test_that(".check_script_parses accepts valid R and aborts on broken R", {
+  expect_true(.check_script_parses("x <- c(1, 2)\nsummary(x)\n"))
+  expect_error(.check_script_parses("grade_meta(\n  rob = c(1, 2\n"),
+               regexp = "not syntactically valid R")
+  expect_error(.check_script_parses("grade_meta(\n  rob = c(1, 2\n"),
+               regexp = "bug in pmatools")
+})
+
+test_that(".render_analysis_script refuses to write an unparseable script", {
+  ma <- make_meta_for_bundle()
+  g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    rob_rationale = "Consensus RoB2: all low",
+                                    outcome_name = "Test",
+                                    threshold_type = "null"))
+  out_path <- tempfile(fileext = ".R")
+
+  # Stand in for a future literalisation bug: the renderer must propagate the
+  # syntax-check failure and leave no half-written analysis.R behind.
+  local_mocked_bindings(
+    .check_script_parses = function(rendered) {
+      rlang::abort(paste0(
+        "The generated analysis.R is not syntactically valid R and would not ",
+        "be reproducible."
+      ))
+    }
+  )
+  expect_error(
+    .render_analysis_script(ma, g, ma_args = list(), grade_args = list(),
+                            per = 1000, prediction = FALSE,
+                            convert_smd_to_or = FALSE, baseline_risk = NULL,
+                            threshold_label = NULL, out_path = out_path),
+    regexp = "not syntactically valid R"
+  )
+  expect_false(file.exists(out_path))
+})
+
 test_that("export_bundle includes rare-event artifacts when supplied", {
   d <- ingest_data(system.file("extdata", "rare_events_mock.csv", package = "pmatools"),
                    format = "long")

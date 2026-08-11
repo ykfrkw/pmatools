@@ -91,8 +91,12 @@
 #'   when dominated. Only used when \code{rob} is a vector or column name.
 #'   (Consistent with \code{netmetaviz} \code{small_values} parameter.)
 #' @param indirectness Indirectness judgment. Same format as \code{rob} (scalar/vector/column).
-#'   Default \code{"no"}.
-#'   \strong{Breaking change (v0.4.0)}: a scalar value other than the default
+#'   Default \code{NULL}, which is treated as \code{"no"} (no downgrade). Pass
+#'   \code{NULL} — rather than \code{"no"} — whenever no manual judgment is
+#'   intended, so that programmatic callers (\code{do.call()}, Shiny UIs) that
+#'   always supply every argument are not mistaken for manual overrides of an
+#'   \code{indirectness_subdomains} table.
+#'   \strong{Breaking change (v0.4.0)}: a scalar value other than
 #'   \code{"no"} is a manual override and requires
 #'   \code{indirectness_rationale}. \code{"no"} (no downgrade) never requires
 #'   a rationale, so default calls are unaffected.
@@ -118,10 +122,11 @@
 #'   \code{yes} / \code{probably_yes} contribute \code{"no"},
 #'   \code{probably_no} contributes \code{"some_concerns"} and \code{no}
 #'   contributes \code{"serious"}; the domain judgment defaults to the worst
-#'   case across subdomains. Supplying \code{indirectness} as a scalar
-#'   alongside overrides that default and then requires
+#'   case across subdomains. Supplying \code{indirectness} as a non-\code{NULL}
+#'   scalar alongside overrides that default and then requires
 #'   \code{indirectness_rationale} (a restatement of the default value needs
-#'   none). Cannot be combined with per-study vector or column-name
+#'   none); leave \code{indirectness} at its \code{NULL} default to accept the
+#'   worst case. Cannot be combined with per-study vector or column-name
 #'   \code{indirectness} input. The normalised table is returned as
 #'   \code{indirectness_subdomains} on the result object and rendered by
 #'   \code{\link{indirectness_table}}. Default \code{NULL}.
@@ -341,7 +346,7 @@ grade_meta <- function(meta_obj,
                        rob_refit                        = TRUE,
                        rob_inflation_threshold          = 0.10,
                        small_values                     = NULL,
-                       indirectness                     = "no",
+                       indirectness                     = NULL,
                        indirectness_rationale           = NULL,
                        indirectness_subdomains          = NULL,
                        inconsistency                    = NULL,
@@ -390,11 +395,14 @@ grade_meta <- function(meta_obj,
 
   # --- Core GRADE 5 Indirectness subdomains (PICO) ---
   # With a subdomain table the domain judgment defaults to the worst case, and
-  # `indirectness` becomes an optional manual override. The documented default
-  # ("no") must therefore be distinguishable from an explicit user value.
+  # `indirectness` becomes an optional manual override. "No judgment supplied"
+  # is therefore encoded as NULL rather than detected with missing(): callers
+  # that always pass every argument (do.call(), the Shiny UI) would otherwise
+  # have their pass-through of the old "no" default read as an override.
+  # assess_indirectness() maps NULL back to "no" when no subdomains are given,
+  # so behaviour without a subdomain table is unchanged.
   indirectness_sub_tbl <-
     .normalize_indirectness_subdomains(indirectness_subdomains)
-  indirectness_override <- if (missing(indirectness)) NULL else indirectness
 
   # --- Core GRADE 2 Fig 2 step 1: the chosen threshold must be explicit ---
   # "mid" means importance is being judged, which is impossible without a MID.
@@ -495,7 +503,7 @@ grade_meta <- function(meta_obj,
 
   # --- remaining domain assessments (on the possibly refitted analysis) ---
   d_indir <- assess_indirectness(
-    if (is.null(indirectness_sub_tbl)) indirectness else indirectness_override,
+    indirectness,
     meta_obj,
     rationale  = indirectness_rationale,
     subdomains = indirectness_sub_tbl
