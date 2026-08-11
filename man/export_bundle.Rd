@@ -73,7 +73,9 @@ NULL, the function attempts to reconstruct from \code{ma$data}.}
 
 \item{grade_args}{Optional named list of \code{grade_meta()} argument
 specifications with \code{value}/\code{origin}/\code{col} slots, used to render
-\code{analysis.R} faithfully. See SPEC.md.}
+\code{analysis.R} faithfully. \code{origin} must be one of \code{"null"}, \code{"column"},
+\code{"scalar"}, or \code{"vector"}; any other value aborts rather than rendering
+the argument as \code{NULL}. See SPEC.md.}
 
 \item{ma_args}{Optional named list of \code{run_ma()} argument specifications.}
 

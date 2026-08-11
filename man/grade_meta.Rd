@@ -16,7 +16,7 @@ grade_meta(
   rob_refit = TRUE,
   rob_inflation_threshold = 0.1,
   small_values = NULL,
-  indirectness = "no",
+  indirectness = NULL,
   indirectness_rationale = NULL,
   indirectness_subdomains = NULL,
   inconsistency = NULL,
@@ -146,8 +146,12 @@ when dominated. Only used when \code{rob} is a vector or column name.
 (Consistent with \code{netmetaviz} \code{small_values} parameter.)}
 
 \item{indirectness}{Indirectness judgment. Same format as \code{rob} (scalar/vector/column).
-Default \code{"no"}.
-\strong{Breaking change (v0.4.0)}: a scalar value other than the default
+Default \code{NULL}, which is treated as \code{"no"} (no downgrade). Pass
+\code{NULL} — rather than \code{"no"} — whenever no manual judgment is
+intended, so that programmatic callers (\code{do.call()}, Shiny UIs) that
+always supply every argument are not mistaken for manual overrides of an
+\code{indirectness_subdomains} table.
+\strong{Breaking change (v0.4.0)}: a scalar value other than
 \code{"no"} is a manual override and requires
 \code{indirectness_rationale}. \code{"no"} (no downgrade) never requires
 a rationale, so default calls are unaffected.}
@@ -175,10 +179,11 @@ sufficiently direct?". Case and separator variants
 \code{yes} / \code{probably_yes} contribute \code{"no"},
 \code{probably_no} contributes \code{"some_concerns"} and \code{no}
 contributes \code{"serious"}; the domain judgment defaults to the worst
-case across subdomains. Supplying \code{indirectness} as a scalar
-alongside overrides that default and then requires
+case across subdomains. Supplying \code{indirectness} as a non-\code{NULL}
+scalar alongside overrides that default and then requires
 \code{indirectness_rationale} (a restatement of the default value needs
-none). Cannot be combined with per-study vector or column-name
+none); leave \code{indirectness} at its \code{NULL} default to accept the
+worst case. Cannot be combined with per-study vector or column-name
 \code{indirectness} input. The normalised table is returned as
 \code{indirectness_subdomains} on the result object and rendered by
 \code{\link{indirectness_table}}. Default \code{NULL}.}

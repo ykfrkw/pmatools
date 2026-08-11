@@ -37,7 +37,9 @@
 #'   NULL, the function attempts to reconstruct from `ma$data`.
 #' @param grade_args Optional named list of `grade_meta()` argument
 #'   specifications with `value`/`origin`/`col` slots, used to render
-#'   `analysis.R` faithfully. See SPEC.md.
+#'   `analysis.R` faithfully. `origin` must be one of `"null"`, `"column"`,
+#'   `"scalar"`, or `"vector"`; any other value aborts rather than rendering
+#'   the argument as `NULL`. See SPEC.md.
 #' @param ma_args Optional named list of `run_ma()` argument specifications.
 #' @param forest_display Optional named list of arguments forwarded to
 #'   \code{\link{plot_forest}} when rendering the bundled forest plot.
@@ -532,7 +534,10 @@ export_bundle <- function(ma,
     indirectness_arg = if (!is.null(grade$indirectness_subdomains)) {
       .indirectness_arg_lit(grade)
     } else {
-      .arg_lit(grade_args$indirectness, fallback = shQuote("no"))
+      # Fall back to NULL, grade_meta()'s documented default, rather than to a
+      # literal "no": a hardcoded scalar would read as a manual override if the
+      # regenerated script were later given an indirectness_subdomains table.
+      .arg_lit(grade_args$indirectness, fallback = "NULL")
     },
     indirectness_rationale_arg = if (!is.null(grade$indirectness_subdomains)) {
       .indirectness_rationale_lit(grade)
@@ -613,8 +618,30 @@ export_bundle <- function(ma,
                                 else ""
                               })
 
+  # Safety net: a literalisation helper that emits malformed R would otherwise
+  # ship a bundle whose analysis.R cannot even be sourced. Fail here instead.
+  .check_script_parses(rendered)
+
   writeLines(rendered, out_path)
   invisible(out_path)
+}
+
+# Abort when the rendered analysis.R is not syntactically valid R, quoting the
+# parser message (which carries the offending line) so the faulty literal is
+# findable.
+.check_script_parses <- function(rendered) {
+  txt <- paste(as.character(rendered), collapse = "\n")
+  err <- tryCatch({
+    parse(text = txt)
+    NULL
+  }, error = function(e) conditionMessage(e))
+  if (is.null(err)) return(invisible(TRUE))
+
+  rlang::abort(paste0(
+    "The generated analysis.R is not syntactically valid R and would not be ",
+    "reproducible. This is a bug in pmatools' script rendering. Parser said: ",
+    err
+  ))
 }
 
 .rare_script_block <- function(rare) {
@@ -731,19 +758,35 @@ export_bundle <- function(ma,
          ")")
 }
 
+# Origins understood by .arg_lit(). Anything else is a caller bug: silently
+# falling through would emit `NULL` for that argument and the "reproducible"
+# script would then reproduce a different analysis.
+ARG_LIT_ORIGINS <- c("null", "column", "scalar", "vector")
+
 .arg_lit <- function(spec, fallback = "NULL") {
   if (is.null(spec)) return(fallback)
   if (is.list(spec) && !is.null(spec$origin)) {
-    if (spec$origin == "null") return("NULL")
-    if (spec$origin == "column") return(paste0("data$", spec$col))
-    if (spec$origin == "scalar") {
+    origin <- spec$origin
+    if (length(origin) != 1L || !is.character(origin) ||
+        !origin %in% ARG_LIT_ORIGINS) {
+      rlang::abort(paste0(
+        "Unknown argument spec origin: ",
+        paste(deparse(origin, width.cutoff = 500L), collapse = ""),
+        ". Accepted origins are: ", paste(ARG_LIT_ORIGINS, collapse = ", "),
+        ". An unrecognised origin would silently render this argument as NULL ",
+        "in the bundled analysis.R and break reproducibility."
+      ))
+    }
+    if (origin == "null") return("NULL")
+    if (origin == "column") return(paste0("data$", spec$col))
+    if (origin == "scalar") {
       v <- spec$value
       if (is.null(v)) return("NULL")
       if (is.character(v)) return(shQuote(v))
       if (is.logical(v))   return(as.character(v))
       if (is.numeric(v))   return(format(v))
     }
-    if (spec$origin == "vector") {
+    if (origin == "vector") {
       v <- spec$value
       return(paste0("c(", paste(if (is.character(v)) shQuote(v) else v,
                                 collapse = ", "), ")"))

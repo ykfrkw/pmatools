@@ -29,6 +29,9 @@
 # override that default; a value different from the default requires
 # `indirectness_rationale` (Core GRADE transparency principle). Supplying the
 # same value as the default is a harmless restatement and needs no rationale.
+# "No override" is `indirectness = NULL` (or the argument left out): NULL — not
+# the string "no" — is what grade_meta() defaults to, so callers that always
+# pass every argument do not accidentally override the subdomain worst case.
 
 # 4-point subdomain answer scale (Core GRADE 5)
 INDIRECTNESS_ANSWERS <- c("yes", "probably_yes", "probably_no", "no")
@@ -350,7 +353,17 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
     ))
   }
 
-  .check_override_rationale(rationale, "indirectness_rationale", "Indirectness")
+  # The hint matters for programmatic callers (do.call(), Shiny) that pass every
+  # argument: forwarding a default "no" alongside a subdomain table reads as an
+  # override here, and omitting the argument (or passing NULL) is the fix.
+  .check_override_rationale(
+    rationale, "indirectness_rationale", "Indirectness",
+    hint = paste0(
+      "If no override was intended, omit `indirectness` or pass ",
+      "`indirectness = NULL` so the worst-case subdomain judgment (",
+      gsub("_", " ", worst), ") is used."
+    )
+  )
   make_domain_row(
     domain    = "Indirectness",
     judgment  = ind_norm,

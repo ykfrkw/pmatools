@@ -186,6 +186,70 @@ test_that("subdomains cannot be combined with per-study vector input", {
   )
 })
 
+test_that("the override error tells the user how to keep the worst case", {
+  expect_error(
+    grade_with_subdomains(bmj_subdomains(), indirectness = "serious"),
+    regexp = "omit `indirectness` or pass `indirectness = NULL`",
+    fixed  = FALSE
+  )
+  expect_error(
+    grade_with_subdomains(bmj_subdomains(), indirectness = "serious"),
+    regexp = "worst-case subdomain judgment \\(some concerns\\)"
+  )
+})
+
+# Regression: the override used to be detected with missing(), which is FALSE
+# for do.call() and for UIs that always pass every argument. Forwarding the
+# old "no" default then looked like an override and aborted on the missing
+# rationale. NULL — not missing() — now encodes "no manual judgment".
+test_that("do.call() with indirectness = NULL keeps the subdomain worst case", {
+  args <- list(
+    meta_obj                = make_metabin_ind(),
+    threshold_type          = "null",
+    indirectness            = NULL,
+    indirectness_rationale  = NULL,
+    indirectness_subdomains = bmj_subdomains()
+  )
+  g <- suppressWarnings(do.call(grade_meta, args))
+  expect_equal(indir_row(g)$judgment, "some_concerns")
+  expect_match(indir_row(g)$notes, "Overall \\(worst case\\): some concerns\\.")
+  expect_false(grepl("Manual override", indir_row(g)$notes))
+})
+
+test_that("do.call() forwarding an explicit 'no' is still an override", {
+  # Explicitly saying "no" alongside a worst case of some_concerns remains a
+  # deliberate override and keeps requiring a rationale.
+  args <- list(
+    meta_obj                = make_metabin_ind(),
+    threshold_type          = "null",
+    indirectness            = "no",
+    indirectness_subdomains = bmj_subdomains()
+  )
+  expect_error(suppressWarnings(do.call(grade_meta, args)),
+               regexp = "requires indirectness_rationale")
+
+  args$indirectness_rationale <- "Panel judged the outcome definition adequate"
+  g <- suppressWarnings(do.call(grade_meta, args))
+  expect_equal(indir_row(g)$judgment, "no")
+  expect_match(indir_row(g)$notes, "Worst-case default \\(some concerns\\) replaced")
+})
+
+test_that("do.call() without subdomains is unchanged by the NULL default", {
+  base_args <- list(meta_obj = make_metabin_ind(), threshold_type = "null")
+  g_omitted <- suppressWarnings(do.call(grade_meta, base_args))
+  g_null    <- suppressWarnings(
+    do.call(grade_meta, c(base_args, list(indirectness = NULL)))
+  )
+  g_no      <- suppressWarnings(
+    do.call(grade_meta, c(base_args, list(indirectness = "no")))
+  )
+  expect_equal(indir_row(g_omitted)$judgment, "no")
+  expect_equal(indir_row(g_null)$judgment, "no")
+  expect_equal(indir_row(g_no)$judgment, "no")
+  expect_equal(indir_row(g_null)$notes, indir_row(g_no)$notes)
+  expect_equal(indir_row(g_omitted)$notes, indir_row(g_no)$notes)
+})
+
 test_that("subdomains cannot be combined with column-name input", {
   expect_error(
     grade_with_subdomains(bmj_subdomains(), indirectness = "indir_col"),

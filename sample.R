@@ -124,9 +124,25 @@ print(table(df$rob_d))
 ##
 ## Domain-by-domain rationale:
 ##
+## [Entry gate — BMJ Core GRADE 2, Fig 2 step 1]
+##
+##   Before any domain is judged, Core GRADE 2 asks what the certainty rating
+##   is *about*. That is fixed by `threshold_type`:
+##     "mid"  = certainty in whether the effect is IMPORTANT → a minimal
+##              important difference (MID) is mandatory, because "important"
+##              is undefinable without one. grade_meta() aborts if it is
+##              missing (pass require_threshold = FALSE to override).
+##     "null" = certainty in whether there is ANY true (non-null) effect →
+##              no MID needed. See section 4b.
+##   Here we rate importance, so a MID is supplied. suggest_threshold(m_response)
+##   returns the conventional OR 1.25 for binary outcomes; a review-specific,
+##   published or expert-derived MID is always preferable.
+##
 ## [Risk of Bias — BMJ Core GRADE 4, Fig 2]
 ##
-##   small_values = "undesirable": large OR = more response = desirable.
+##   small_values = "undesirable": small values (low response rates) are bad,
+##   so a large OR = more response = desirable. This defines which direction
+##   of shift counts as bias-favouring.
 ##   Domination check (threshold 60%):
 ##     6/17 studies are Serious-RoB, but Henry2020 (n=3,352, "Some concerns")
 ##     dominates the weight. High-RoB weight ≈ 38% < 60% → NOT dominated.
@@ -135,23 +151,36 @@ print(table(df$rob_d))
 ##   If dominated, the package automatically compares:
 ##     TE(all studies) vs TE(excl. high-RoB)
 ##     small_values = "undesirable": TE_all > TE_low → inflates → rate down
+##   Which side "Some concerns" studies land on is itself a review decision:
+##   see rob_some_concerns in section 6b.
 ##
 ## [Indirectness — BMJ Core GRADE 5]
 ##   Population/intervention/comparator/outcome are directly applicable.
 ##   → "no" concern.
+##   NOTE: `indirectness` defaults to NULL, which is read as "no". Passing
+##   "no" explicitly (as below) is equivalent here, but it is NOT equivalent
+##   once an `indirectness_subdomains` table is supplied — there any non-NULL
+##   scalar is a manual override of the subdomain worst case. See section 4c.
 ##
 ## [Inconsistency — BMJ Core GRADE 3, Fig 2]
 ##   I² ≈ 36%, tau² ≈ 0.17, Q p ≈ 0.07.
-##   Note: point estimates are mostly in the same direction (OR > 1), but
-##   CIs vary in width. There are important CI differences → ci_diff = "yes".
-##   Most estimates are on one side of the threshold (OR > 1) → majority_one_side.
-##   → Do not rate down.
-##   (I² stats are supplementary and noted in the output.)
+##   Left at NULL → the flowchart runs automatically: I² > 25% triggers step 2,
+##   which tallies where the per-study estimates sit relative to ±MID. All 17
+##   studies are on the benefit side (13 above the MID, 4 in the trivial zone),
+##   so there is no opposite-direction disagreement — but no single zone holds
+##   ≥ 80% either, so the magnitude of benefit is genuinely heterogeneous.
+##   → Rate down 1 level.
+##   (I² statistics are supplementary and reported in the domain note.)
+##   Override manually if the panel disagrees:
+##     inconsistency_ci_diff        = "yes"
+##     inconsistency_threshold_side = "majority_one_side"
 ##
-## [Imprecision — BMJ Core GRADE 4]
-##   OR 2.30 [1.64, 3.23] does not cross null (log OR = 0).
+## [Imprecision — BMJ Core GRADE 4, Fig 4]
+##   OR 2.30 [1.64, 3.23] lies entirely beyond the MID, so the effect is
+##   definitively important and the Fig 4 "implausibly large effect" branch
+##   sends the judgment to the OIS check.
 ##   OIS: using baseline response rate ~25% and expected experimental ~40%,
-##        power 80%, α = 0.05 → auto-calculated target events.
+##        power 80%, α = 0.05 → auto-calculated target events; met.
 ##
 ## [Publication Bias — BMJ Core GRADE 4, Fig 5]
 ##   Studies are not predominantly small and industry-sponsored (k=17, many
@@ -161,19 +190,21 @@ g_response <- grade_meta(
   meta_obj               = m_response,
   study_design           = "RCT",
 
+  ## Entry gate (BMJ Core GRADE 2 Fig 2 step 1)
+  threshold_type         = "mid",            # rating certainty in IMPORTANCE
+  threshold              = 1.25,             # MID on the OR scale
+  threshold_scale        = "ratio",          # 1.25 is an OR, not a log OR
+
   ## Risk of Bias
   rob                    = rob_vec,          # per-study Cochrane RoB2 labels → flowchart
   rob_dominant_threshold = 0.60,             # default: >60% weight = dominated
-  small_values           = "undesirable",    # large OR = desirable (response outcome)
+  small_values           = "undesirable",    # small values are bad → large OR desirable
 
   ## Indirectness
-  indirectness           = "no",
+  indirectness           = "no",             # NULL (the default) means the same here
 
   ## Inconsistency (BMJ Core GRADE 3 flowchart — auto-computed when NULL)
-  ## Leave NULL → auto-detects from I², tau², Q p, and per-study TE direction
-  ## Override manually if needed:
-  ## inconsistency_ci_diff        = "yes"
-  ## inconsistency_threshold_side = "majority_one_side"
+  ## Leave NULL → auto-detects from I², tau², Q p, and per-study TE zone tally
 
   ## Imprecision (OIS auto-calculated)
   outcome_type           = "relative",
@@ -191,8 +222,120 @@ g_response <- grade_meta(
 
 print(g_response)
 summary(g_response)
-## Expected: Moderate (High − inconsistency no − imprecision no = High,
-##   unless OIS is not met)
+## Expected: Moderate (High − inconsistency 1 level = Moderate; the rating
+##   target is auto-derived as "Important effect" because the point estimate
+##   sits beyond the MID)
+
+
+## ── 4b. Entry gate variants — threshold_type and rating_target ───────────────
+##
+## [BMJ Core GRADE 2, Fig 2 steps 1-3]
+##
+## Step 1 fixes the threshold; steps 2-3 derive the *rating target* from where
+## the point estimate falls relative to it. pmatools does that automatically:
+##
+##   |point estimate| beyond the MID  → "Important effect"
+##   |point estimate| inside the MID  → "Little to no difference"
+##   no MID (threshold_type = "null") → "Non-null effect"
+##
+## The target matters because Imprecision is judged against it: an
+## "Important effect" rating asks whether the CI excludes the MID, whereas a
+## "Non-null effect" rating only asks whether it excludes the null.
+
+## (i) No MID available → rate certainty in a non-null effect.
+g_null <- grade_meta(
+  meta_obj       = m_response,
+  study_design   = "RCT",
+  rob            = rob_vec,
+  small_values   = "undesirable",
+  threshold_type = "null",                   # no MID needed on this path
+  outcome_type   = "relative",
+  ois_p0 = 0.25, ois_p1 = 0.40,
+  pubias_small_industry = "no",
+  outcome_name   = "Depression response (no MID: non-null effect target)"
+)
+cat("\nAuto-derived rating target without a MID:", g_null$rating_target, "\n")
+
+## (ii) Manual override of the auto-derived target. Because this replaces a
+##      Core GRADE 2 Fig 2 derivation, a written rationale is MANDATORY —
+##      grade_meta() aborts without one (transparency principle).
+g_target <- grade_meta(
+  meta_obj                = m_response,
+  study_design            = "RCT",
+  rob                     = rob_vec,
+  small_values            = "undesirable",
+  threshold_type          = "mid",
+  threshold               = 1.25,
+  threshold_scale         = "ratio",
+  rating_target           = "non_null_effect",
+  rating_target_rationale = paste(
+    "The guideline panel rated certainty in whether CBT-I has any effect on",
+    "depression response, not in whether the effect exceeds the MID, because",
+    "no acceptable alternative treatment exists for this population."
+  ),
+  outcome_type = "relative",
+  ois_p0 = 0.25, ois_p1 = 0.40,
+  pubias_small_industry = "no",
+  outcome_name = "Depression response (manual rating target)"
+)
+cat("Manual rating target:", g_target$rating_target,
+    "| auto-derived:", g_target$rating_target_auto, "\n")
+
+
+## ── 4c. Indirectness subdomains (PICO) ───────────────────────────────────────
+##
+## [Indirectness — BMJ Core GRADE 5]
+##
+## Core GRADE 5 asks the indirectness question separately for each element of
+## the PICO, on a 4-point scale ("Is the evidence sufficiently direct?"):
+##
+##   yes / probably_yes → no downgrade
+##   probably_no        → serious indirectness      (rate down 1)
+##   no                 → very serious indirectness (rate down 2)
+##
+## The domain judgment defaults to the WORST case across subdomains, and
+## indirectness_table() renders the reasoning in the BMJ publication format.
+
+ind_sub <- data.frame(
+  subdomain = c("Population", "Intervention", "Comparison", "Outcome"),
+  target    = c("Adults with major depressive disorder and comorbid insomnia",
+                "Cognitive behavioural therapy for insomnia (CBT-I)",
+                "Treatment as usual or attention control",
+                "Depression response (>=50% reduction in depression severity)"),
+  evidence  = c(paste("17 RCTs; most recruited from sleep or psychiatry clinics,",
+                      "broadly representative of the target population."),
+                paste("Both therapist-delivered and digital CBT-I; both are",
+                      "used in practice."),
+                paste("Comparators ranged from waitlist to active attention",
+                      "control, which inflates the contrast against waitlist."),
+                paste("Response was derived from continuous depression scales",
+                      "at 8-12 weeks; longer-term response was not measured.")),
+  judgment  = c("yes", "probably_yes", "probably_no", "probably_yes"),
+  stringsAsFactors = FALSE
+)
+
+g_indirect <- grade_meta(
+  meta_obj                = m_response,
+  study_design            = "RCT",
+  rob                     = rob_vec,
+  small_values            = "undesirable",
+  threshold_type          = "mid",
+  threshold               = 1.25,
+  threshold_scale         = "ratio",
+  indirectness_subdomains = ind_sub,
+  ## `indirectness` is deliberately NOT passed. Leave it at its NULL default
+  ## whenever the subdomain worst case should stand: any non-NULL scalar is
+  ## treated as a manual override and then requires indirectness_rationale.
+  outcome_type            = "relative",
+  ois_p0 = 0.25, ois_p1 = 0.40,
+  pubias_small_industry   = "no",
+  outcome_name            = "Depression response (PICO subdomains)"
+)
+print(g_indirect)
+
+## → Viewer ペインに Core GRADE 5 形式の subdomain 表が表示される
+ft_indirect <- indirectness_table(g_indirect)
+print(ft_indirect)
 
 
 ## ── 5. Summary of Findings table (single outcome) ────────────────────────────
@@ -212,10 +355,17 @@ print(ft_pi)
 
 
 ## ── 5b. Absolute effect (ARD per 1,000) — 3 ways to set baseline_risk ────────
+##
+## All three variants rate the same outcome as section 4, so they keep the same
+## entry gate (threshold_type = "mid", MID = OR 1.25) and the same direction
+## convention (small_values = "undesirable": a low response rate is bad).
+## Only the baseline risk used for the absolute effect differs.
+
 ## Method 1: explicit numeric (e.g., from published baseline event rate)
 g_br_explicit <- grade_meta(
   meta_obj     = m_response, study_design = "RCT",
-  rob          = rob_vec, outcome_favors = "high",
+  rob          = rob_vec, small_values = "undesirable",
+  threshold_type = "mid", threshold = 1.25, threshold_scale = "ratio",
   outcome_type = "relative",
   baseline_risk = 0.25,           # <-- direct specification
   outcome_name = "Depression response (baseline_risk = 0.25)"
@@ -225,7 +375,8 @@ sof_table(g_br_explicit)
 ## Method 2: simple pooled control-arm proportion
 g_br_simple <- grade_meta(
   meta_obj     = m_response, study_design = "RCT",
-  rob          = rob_vec, outcome_favors = "high",
+  rob          = rob_vec, small_values = "undesirable",
+  threshold_type = "mid", threshold = 1.25, threshold_scale = "ratio",
   outcome_type = "relative",
   baseline_risk = "simple",       # <-- sum(events_c) / sum(n_c)
   outcome_name = "Depression response (simple)"
@@ -236,13 +387,28 @@ cat("Simple pooled baseline risk:", round(g_br_simple$baseline_risk, 3), "\n")
 ## Method 3: GLMM-pooled via metaprop (logit back-transform)
 g_br_metaprop <- grade_meta(
   meta_obj     = m_response, study_design = "RCT",
-  rob          = rob_vec, outcome_favors = "high",
+  rob          = rob_vec, small_values = "undesirable",
+  threshold_type = "mid", threshold = 1.25, threshold_scale = "ratio",
   outcome_type = "relative",
   baseline_risk = "metaprop",     # <-- meta::metaprop() GLMM
   outcome_name = "Depression response (metaprop)"
 )
 sof_table(g_br_metaprop)
 cat("metaprop baseline risk:", round(g_br_metaprop$baseline_risk, 3), "\n")
+
+## An absolute MID is also allowed and is what Core GRADE 2 prefers whenever a
+## baseline risk is available: threshold_scale = "ard" expresses the MID as a
+## risk difference (here 5 more responders per 100) and pmatools converts it to
+## the OR scale using the pooled baseline risk.
+g_br_ard <- grade_meta(
+  meta_obj     = m_response, study_design = "RCT",
+  rob          = rob_vec, small_values = "undesirable",
+  threshold_type = "mid", threshold = 0.05, threshold_scale = "ard",
+  outcome_type = "relative",
+  baseline_risk = "simple",
+  outcome_name = "Depression response (absolute MID = 5%)"
+)
+print(g_br_ard)
 
 
 ## ── 6. Sensitivity: restrict to low/some RoB studies ─────────────────────────
@@ -261,7 +427,10 @@ g_sens <- grade_meta(
   study_design           = "RCT",
   rob                    = rob_sens,
   rob_dominant_threshold = 0.60,
-  outcome_favors         = "high",
+  small_values           = "undesirable",    # same outcome direction as section 4
+  threshold_type         = "mid",
+  threshold              = 1.25,
+  threshold_scale        = "ratio",
   indirectness           = "no",
   inconsistency_ci_diff  = "yes",
   inconsistency_threshold_side = "majority_one_side",
@@ -269,6 +438,47 @@ g_sens <- grade_meta(
   outcome_name = "Depression response (sensitivity: low/some RoB only)"
 )
 print(g_sens)
+
+
+## ── 6b. rob_some_concerns — where "Some concerns" studies land ───────────────
+##
+## [Risk of Bias — BMJ Core GRADE 4, Fig 2]
+##
+## The Core GRADE 4 flowchart is binary: every study is either low or high risk
+## of bias. RoB 2.0 has three levels, so the review must decide which side
+## "Some concerns" falls on. `rob_some_concerns` makes that decision explicit:
+##
+##   "low"  (default) — lenient; only "Serious concerns" studies count as high
+##   "high"           — conservative; "Some concerns" studies count as high too
+##
+## In this dataset the choice moves the high-RoB weight share from 38% to 84%,
+## which flips the first flowchart node from "not dominated" to "dominated" and
+## makes the package compare the all-studies estimate with the low-RoB-only
+## estimate. Reporting both is good practice when the classification is
+## debatable. (Here the shift is 9.9%, just inside the 10% inflation
+## threshold, so the domain is still not rated down.)
+
+g_conservative <- grade_meta(
+  meta_obj          = m_response,
+  study_design      = "RCT",
+  rob               = rob_vec,
+  rob_some_concerns = "high",                # <-- conservative classification
+  rob_refit         = TRUE,                  # apply the "low RoB only" leaf if reached
+  small_values      = "undesirable",
+  threshold_type    = "mid",
+  threshold         = 1.25,
+  threshold_scale   = "ratio",
+  outcome_type      = "relative",
+  ois_p0 = 0.25, ois_p1 = 0.40,
+  pubias_small_industry = "no",
+  outcome_name      = "Depression response (rob_some_concerns = 'high')"
+)
+print(g_conservative)
+
+cat("\nRoB domain note (conservative classification):\n")
+d_cons <- g_conservative$domain_assessments
+cat(d_cons$notes[d_cons$domain == "Risk of bias"], "\n")
+cat("Analysis set actually used:", g_conservative$rob_analysis_set, "\n")
 
 
 ## ── 7. Multi-outcome GRADE table ─────────────────────────────────────────────
@@ -281,7 +491,12 @@ g_insomnia <- grade_meta(
   study_design           = "RCT",
   rob                    = rob_vec,
   rob_dominant_threshold = 0.60,
-  outcome_favors         = "high",
+  ## Remission is a benefit outcome too: a low remission rate is bad, so small
+  ## values are undesirable and a large OR is the favourable direction.
+  small_values           = "undesirable",
+  threshold_type         = "mid",
+  threshold              = 1.25,
+  threshold_scale        = "ratio",
   indirectness           = "no",
   inconsistency_ci_diff  = "yes",
   inconsistency_threshold_side = "majority_one_side",
