@@ -12,6 +12,10 @@ step4_ui <- function() {
     pma_card(
       title = "Summary of Findings (all saved outcomes)",
       shiny::uiOutput("sof_intro_block"),
+      # Dataset-provenance guard: warns when saved outcomes came from a
+      # dataset other than the one currently loaded. Warning only - the
+      # export is never blocked (see output$sof_stale_warning).
+      shiny::uiOutput("sof_stale_warning"),
       # Kept as a sibling (not nested inside combined_sof_block) so changing
       # the grouping re-renders the table without rebuilding the selector.
       shiny::uiOutput("sof_primary_ui"),
@@ -110,6 +114,12 @@ step4_server <- function(input, output, session, state) {
   # vendored grade_table() consumes, so no reshaping is needed here.
   saved_outcomes <- shiny::reactive(pma_outcomes_list(state$outcomes))
 
+  # Signature of the dataset currently loaded in Step 1; saved outcomes whose
+  # own signature differs were rated on other data (pma_outcomes_stale()).
+  current_signature <- shiny::reactive(pma_dataset_signature(state$data))
+  n_stale_outcomes  <- shiny::reactive(
+    sum(pma_outcomes_stale(saved_outcomes(), current_signature())))
+
   # Arm labels for the "Risk with ..." column headers. Reuse the Step 2 arm
   # values when they exist so the combined table speaks the same
   # Intervention / Control vocabulary as the rest of the wizard.
@@ -163,6 +173,13 @@ step4_server <- function(input, output, session, state) {
       else EDU_COPY$multi_outcome$step4_intro)
   })
 
+  # Warning banner above the combined SoF preview. Deliberately does NOT
+  # gate the download: the user decides whether the mixed rows belong.
+  output$sof_stale_warning <- shiny::renderUI({
+    pma_stale_warning_banner(n_stale_outcomes())
+  })
+  shiny::outputOptions(output, "sof_stale_warning", suspendWhenHidden = FALSE)
+
   output$combined_sof_block <- shiny::renderUI({
     outs <- saved_outcomes()
     if (length(outs) == 0) return(NULL)
@@ -177,7 +194,8 @@ step4_server <- function(input, output, session, state) {
     }
     htmltools::tagList(
       htmltools::div(style = "margin-top: 1rem; overflow-x: auto;", body),
-      pma_saved_outcomes_ui(outs, delete_input_id = "outcome_delete")
+      pma_saved_outcomes_ui(outs, delete_input_id = "outcome_delete",
+                            signature = current_signature())
     )
   })
 

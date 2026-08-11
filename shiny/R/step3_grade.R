@@ -2051,9 +2051,16 @@ step3_server <- function(input, output, session, state) {
   })
   shiny::outputOptions(output, "save_outcome_panel", suspendWhenHidden = FALSE)
 
+  # Signature of the dataset currently loaded in Step 1. Used both to stamp
+  # newly saved outcomes and to flag already-saved ones that came from a
+  # different dataset (see pma_dataset_signature()).
+  .current_signature <- shiny::reactive(pma_dataset_signature(state$data))
+
   .store_outcome <- function(key, g) {
     outs <- pma_outcomes_list(state$outcomes)
     attr(g, "pma_saved_at") <- Sys.time()
+    # Provenance stamp: which dataset this rating was made on.
+    attr(g, PMA_DATASET_SIGNATURE_ATTR) <- pma_dataset_signature(state$data)
     outs[[key]] <- g
     state$outcomes <- outs
     shiny::showNotification(
@@ -2105,9 +2112,16 @@ step3_server <- function(input, output, session, state) {
   })
 
   output$saved_outcomes_list <- shiny::renderUI({
-    pma_saved_outcomes_ui(state$outcomes,
-                          delete_input_id = "outcome_delete",
-                          empty_text = EDU_COPY$multi_outcome$list_empty)
+    outs <- pma_outcomes_list(state$outcomes)
+    sig  <- .current_signature()
+    n_stale <- sum(pma_outcomes_stale(outs, sig))
+    htmltools::tagList(
+      pma_stale_warning_banner(n_stale),
+      pma_saved_outcomes_ui(outs,
+                            delete_input_id = "outcome_delete",
+                            empty_text = EDU_COPY$multi_outcome$list_empty,
+                            signature = sig)
+    )
   })
   shiny::outputOptions(output, "saved_outcomes_list", suspendWhenHidden = FALSE)
 
