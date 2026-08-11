@@ -6,6 +6,21 @@ step4_ui <- function() {
   htmltools::tagList(
     pma_step_header(s$title, s$what),
 
+    # Multi-outcome Summary of Findings, assembled from the assessments
+    # saved on the Step 3 "Final certainty" tab. Shown before the bundle
+    # settings so the user can check the table they are about to export.
+    pma_card(
+      title = "Summary of Findings (all saved outcomes)",
+      shiny::uiOutput("sof_intro_block"),
+      # Kept as a sibling (not nested inside combined_sof_block) so changing
+      # the grouping re-renders the table without rebuilding the selector.
+      shiny::uiOutput("sof_primary_ui"),
+      shinycssloaders::withSpinner(
+        shiny::uiOutput("combined_sof_block"),
+        type = 4, color = "#0f172a", size = 0.6,
+        proxy.height = "120px")
+    ),
+
     pma_card(
       title = "Bundle settings",
       shiny::textInput("bundle_name", "Bundle name (no extension)",
@@ -20,11 +35,12 @@ step4_ui <- function() {
           "Funnel plot (PDF + PNG)"                                    = "funnel",
           "Trim-and-fill funnel (PDF + PNG, k>=10)"                    = "funnel_trimfill",
           "Publication bias missing-results forest (PDF + PNG, k>=10)" = "pubias_missing_forest",
-          "GRADE Evidence Profile + SoF table (docx)"                  = "grade_table"
+          "GRADE Evidence Profile + SoF table (docx)"                  = "grade_table",
+          "Combined SoF table across saved outcomes (docx)"            = "sof_combined"
         ),
         selected = c("data","script","results","forest","forest_rob",
                      "funnel","funnel_trimfill","pubias_missing_forest",
-                     "grade_table")),
+                     "grade_table","sof_combined")),
       shiny::uiOutput("rare_export_note"),
       # The Download button is rendered server-side so it only appears once
       # Steps 2-3 have produced results (see output$download_zip_ui).
@@ -87,6 +103,128 @@ step4_ui <- function() {
 }
 
 step4_server <- function(input, output, session, state) {
+
+  # ----- Multi-outcome Summary of Findings --------------------------------
+  # state$outcomes is a named list of pmatools objects saved on the Step 3
+  # "Final certainty" tab (see pma_outcomes_list()). It is exactly what the
+  # vendored grade_table() consumes, so no reshaping is needed here.
+  saved_outcomes <- shiny::reactive(pma_outcomes_list(state$outcomes))
+
+  # Arm labels for the "Risk with ..." column headers. Reuse the Step 2 arm
+  # values when they exist so the combined table speaks the same
+  # Intervention / Control vocabulary as the rest of the wizard.
+  .arm_labels <- function() {
+    e <- input$experimental_label
+    c_ <- input$control_label
+    list(
+      intervention = if (!is.null(e) && length(e) == 1 && nzchar(e)) e else "intervention",
+      control      = if (!is.null(c_) && length(c_) == 1 && nzchar(c_)) c_ else "control"
+    )
+  }
+
+  combined_sof <- shiny::reactive({
+    outs <- saved_outcomes()
+    if (length(outs) == 0) return(NULL)
+    primary <- input$sof_primary
+    primary <- primary[primary %in% names(outs)]
+    if (length(primary) == 0) primary <- NULL
+    arms <- .arm_labels()
+    tryCatch(
+      grade_table(
+        outs,
+        primary            = primary,
+        per                = state$display$per        %||% 1000,
+        prediction         = isTRUE(state$display$prediction),
+        label_intervention = arms$intervention,
+        label_control      = arms$control
+      ),
+      error = function(e) {
+        structure(list(message = conditionMessage(e)), class = "pma_sof_error")
+      }
+    )
+  })
+
+  output$sof_primary_ui <- shiny::renderUI({
+    outs <- saved_outcomes()
+    if (length(outs) == 0) return(NULL)
+    shiny::selectizeInput(
+      "sof_primary", "Primary outcome(s) (optional grouping)",
+      choices  = names(outs),
+      selected = shiny::isolate(input$sof_primary),
+      multiple = TRUE, width = "100%",
+      options  = list(placeholder = "None - single ungrouped table")
+    )
+  })
+
+  output$sof_intro_block <- shiny::renderUI({
+    htmltools::p(
+      class = "pma-card-subtitle",
+      if (length(saved_outcomes()) == 0) EDU_COPY$multi_outcome$step4_empty
+      else EDU_COPY$multi_outcome$step4_intro)
+  })
+
+  output$combined_sof_block <- shiny::renderUI({
+    outs <- saved_outcomes()
+    if (length(outs) == 0) return(NULL)
+    ft <- combined_sof()
+    body <- if (inherits(ft, "pma_sof_error")) {
+      htmltools::p(paste("Combined SoF render error:", ft$message))
+    } else {
+      tryCatch(flextable::htmltools_value(ft),
+               error = function(e)
+                 htmltools::p(paste("Combined SoF render error:",
+                                    conditionMessage(e))))
+    }
+    htmltools::tagList(
+      htmltools::div(style = "margin-top: 1rem; overflow-x: auto;", body),
+      pma_saved_outcomes_ui(outs, delete_input_id = "outcome_delete")
+    )
+  })
+
+  # Write a flextable into a landscape .docx. Mirrors the helper that lives
+  # inside the vendored export_bundle(); duplicated here because that one is
+  # function-local and the vendored package must not be edited.
+  .save_landscape_docx <- function(ft, path) {
+    doc <- officer::read_docx()
+    doc <- flextable::body_add_flextable(doc, ft)
+    doc <- officer::body_end_section_landscape(doc, w = 11, h = 8.5)
+    print(doc, target = path)
+    invisible(path)
+  }
+
+  # Append sof_table_combined.docx to the ZIP that export_bundle() produced.
+  # Done here rather than inside export_bundle() so the vendored package
+  # stays untouched; zip::zip_append writes into the existing archive.
+  .append_combined_sof <- function(zip_path) {
+    outs <- saved_outcomes()
+    if (length(outs) == 0) return(invisible(FALSE))
+    ft <- combined_sof()
+    if (is.null(ft) || inherits(ft, "pma_sof_error")) {
+      shiny::showNotification(
+        paste0("Combined SoF table skipped: ",
+               if (inherits(ft, "pma_sof_error")) ft$message else "not available"),
+        type = "warning", duration = 8)
+      return(invisible(FALSE))
+    }
+    dir <- tempfile("pmatools_sof_combined_")
+    on.exit(unlink(dir, recursive = TRUE), add = TRUE)
+    dir.create(dir)
+    path <- file.path(dir, "sof_table_combined.docx")
+    ok <- tryCatch({
+      .save_landscape_docx(ft, path)
+      zip::zip_append(zipfile = zip_path,
+                      files   = basename(path),
+                      root    = dir)
+      TRUE
+    }, error = function(e) {
+      shiny::showNotification(
+        paste("Combined SoF table could not be added to the ZIP:",
+              conditionMessage(e)),
+        type = "warning", duration = 8)
+      FALSE
+    })
+    invisible(ok)
+  }
 
   output$rare_export_note <- shiny::renderUI({
     if (!isTRUE(state$rare_mode_active)) return(NULL)
@@ -214,7 +352,7 @@ step4_server <- function(input, output, session, state) {
                                         "forest","forest_rob","funnel",
                                         "funnel_trimfill",
                                         "pubias_missing_forest",
-                                        "grade_table")
+                                        "grade_table", "sof_combined")
 
         rob_vec <- .export_covariate(state$ma, "rob", default = "*")
 
@@ -248,8 +386,15 @@ step4_server <- function(input, output, session, state) {
           pubias_missing_df  = state$pubias_missing
         )
         shiny::incProgress(0.75, detail = "Packaging ZIP...")
+        # Multi-outcome SoF: added to the archive after export_bundle() has
+        # built it. Additive - the single-outcome Evidence Profile and SoF
+        # docx above are untouched.
+        if ("sof_combined" %in% include) {
+          shiny::incProgress(0.02, detail = "Adding combined SoF table...")
+          .append_combined_sof(out)
+        }
         file.copy(out, file)
-        shiny::incProgress(0.10, detail = "Done.")
+        shiny::incProgress(0.08, detail = "Done.")
       },
       error = function(e) {
         msg <- conditionMessage(e)

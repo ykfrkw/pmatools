@@ -229,5 +229,43 @@ EDU_COPY <- list(
     SMD = "Cohen's small effect size (0.20) is widely accepted as the smallest clinically meaningful SMD.",
     MD  = "Auto-suggested as 0.20 times the pooled SD (Cohen's small in raw units). Replace with a published threshold for your outcome whenever possible.",
     ARD = "A 5 percent absolute risk difference is a typical small clinically meaningful effect."
+  ),
+
+  # ----- Multiple outcomes -> one combined Summary of Findings table -----
+  # A systematic review normally reports every patient-important outcome in
+  # a single SoF table. This app rates one outcome at a time (Steps 2-3);
+  # saving each completed rating builds the multi-outcome table for Step 4.
+  multi_outcome = list(
+    save_intro = paste0(
+      "A Summary of Findings table normally reports every patient-important ",
+      "outcome of the review, one row per outcome. This app rates one ",
+      "outcome at a time. When you are satisfied with the certainty rating ",
+      "shown above, save it here: then go back to Step 2, select the next ",
+      "outcome, work through Step 3 again, and save that one too. Step 4 ",
+      "assembles every saved outcome into a single Summary of Findings table."
+    ),
+    save_locked = paste0(
+      "Saving is locked until every certainty domain has been reviewed and ",
+      "confirmed. Provide inputs in each tab, or tick 'I have reviewed this ",
+      "domain', then come back here."
+    ),
+    list_empty = paste0(
+      "No outcomes saved yet. Saved outcomes stay in this session even when ",
+      "you go back to Step 2 and rate a different outcome."
+    ),
+    step4_intro = paste0(
+      "One row per saved outcome, using the certainty rating that was in ",
+      "place when you saved it. Mark the outcomes that your protocol ",
+      "prespecified as primary to group them under a 'Primary outcomes' ",
+      "heading; leave the field empty for an ungrouped table. The ",
+      "single-outcome Evidence Profile and Summary of Findings for the ",
+      "outcome currently open in Step 3 are exported as well."
+    ),
+    step4_empty = paste0(
+      "No saved outcomes yet. Save a certainty assessment on the Step 3 ",
+      "'Final certainty' tab to build a multi-outcome Summary of Findings ",
+      "table. Without saved outcomes the export contains the single-outcome ",
+      "Evidence Profile and Summary of Findings only."
+    )
   )
 )

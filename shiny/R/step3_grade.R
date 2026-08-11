@@ -588,6 +588,19 @@ step3_ui <- function() {
               )
             )
           ),
+          htmltools::hr(),
+
+          # ----- Save this outcome for the multi-outcome SoF table -----
+          # Sits at the end of the Final certainty tab: this is the point in
+          # the wizard where the rating for one outcome is complete, and the
+          # natural place to bank it before going back to Step 2 for the
+          # next outcome.
+          htmltools::h5("Saved outcomes for the Summary of Findings table"),
+          htmltools::p(class = "pma-card-subtitle",
+                       EDU_COPY$multi_outcome$save_intro),
+          shiny::uiOutput("save_outcome_panel"),
+          shiny::uiOutput("saved_outcomes_list"),
+
           .grade_nav("grade_back_final", "Back: Publication bias",
                      "grade_next_final", "Next: Export")
         )
@@ -1954,21 +1967,159 @@ step3_server <- function(input, output, session, state) {
              error = function(e) htmltools::p(paste("SoF render error:", conditionMessage(e))))
   })
 
-  # ----- Outcome name default: track outcome_type unless the user has
-  # manually typed something custom. Uses observe (not observeEvent) so it
-  # fires both when outcome_type changes AND when outcome_name first appears
-  # (i.e., when Step 3 UI is rendered).
+  # ----- Outcome name default: follow the Step 2 outcome selection when the
+  # dataset is long-format with an `outcome` column, otherwise fall back to
+  # the effect-measure-flavoured default. Uses observe (not observeEvent) so
+  # it fires both when outcome_type / selected_outcome change AND when
+  # outcome_name first appears (i.e., when Step 3 UI is rendered).
+  #
+  # `.auto_name` remembers the last value this observer wrote, so a name the
+  # USER typed is never overwritten, while a name we auto-filled from a
+  # previous Step 2 outcome still tracks a later Step 2 switch. A plain
+  # environment (not reactiveVal) keeps the observer from re-triggering
+  # itself.
+  .auto_name <- new.env(parent = emptyenv())
+  .auto_name$last <- NULL
+
   shiny::observe({
     cur <- input$outcome_name
     if (is.null(cur)) return()
-    ot  <- input$outcome_type %||% "binary"
-    expected <- if (identical(ot, "binary"))
-                  "Depression response" else "Depression severity"
-    if (cur %in% c("", "Outcome", "Depression response", "Depression severity") &&
-        !identical(cur, expected)) {
+    expected <- pma_default_outcome_label(input$selected_outcome,
+                                          input$outcome_type %||% "binary")
+    auto_filled <- pma_auto_outcome_labels(.auto_name$last)
+    if (cur %in% auto_filled && !identical(cur, expected)) {
+      .auto_name$last <- expected
       shiny::updateTextInput(session, "outcome_name", value = expected)
     }
   })
+
+  # ----- Saving the current outcome into state$outcomes -------------------
+  # Key for the saved outcome: whatever is in the "Outcome label" field,
+  # which itself defaults to the Step 2 outcome selection (observer above).
+  # The label is what grade_table() prints in the Outcome column, so keeping
+  # the two identical avoids a second, divergent name field.
+  .save_key <- shiny::reactive({
+    nm <- trimws(input$outcome_name %||% "")
+    if (nzchar(nm)) nm else "Outcome"
+  })
+
+  .save_blocked_reasons <- shiny::reactive({
+    reasons <- character()
+    if (is.null(state$ma)) {
+      reasons <- c(reasons, "run the meta-analysis in Step 2")
+    }
+    if (is.null(grade_obj())) {
+      reasons <- c(reasons, "produce a certainty rating")
+    }
+    unconf <- pma_unconfirmed_domains(domain_confirmed())
+    if (length(unconf)) {
+      reasons <- c(reasons, paste0("review and confirm: ",
+                                   paste(unconf, collapse = ", ")))
+    }
+    reasons
+  })
+
+  output$save_outcome_panel <- shiny::renderUI({
+    reasons <- .save_blocked_reasons()
+    if (length(reasons)) {
+      # Same locked-note treatment as the Step 4 download gate: an
+      # unconfirmed assessment must not be banked into the SoF table.
+      return(htmltools::div(
+        class = "pma-card-subtitle",
+        style = paste(
+          "border: 1px dashed hsl(var(--border)); border-radius: 6px;",
+          "padding: 0.75rem; margin-top: 0.5rem;"),
+        htmltools::p(style = "margin: 0;",
+          htmltools::strong("Saving locked - certainty assessment incomplete.")),
+        htmltools::p(style = "margin: 0.25rem 0 0;",
+          paste0("To save this outcome, ", paste(reasons, collapse = "; "), "."))
+      ))
+    }
+    key <- .save_key()
+    htmltools::div(
+      style = "margin-top: 0.5rem;",
+      shiny::actionButton(
+        "save_outcome",
+        sprintf("Save this outcome's assessment as \"%s\"", key),
+        class = "btn btn-primary", style = "width: 100%;"),
+      htmltools::p(
+        class = "pma-card-subtitle",
+        style = "margin-top: 0.4rem;",
+        "Saved under the 'Outcome label' set above - edit it there to change ",
+        "the row label in the Summary of Findings table.")
+    )
+  })
+  shiny::outputOptions(output, "save_outcome_panel", suspendWhenHidden = FALSE)
+
+  .store_outcome <- function(key, g) {
+    outs <- pma_outcomes_list(state$outcomes)
+    attr(g, "pma_saved_at") <- Sys.time()
+    outs[[key]] <- g
+    state$outcomes <- outs
+    shiny::showNotification(
+      sprintf("Saved \"%s\" (%s certainty). %d outcome(s) ready for the combined Summary of Findings table.",
+              key, g$certainty %||% "-", length(outs)),
+      type = "message", duration = 5)
+  }
+
+  shiny::observeEvent(input$save_outcome, {
+    if (length(.save_blocked_reasons())) {
+      shiny::showNotification(
+        "Cannot save: review and confirm every certainty domain first.",
+        type = "error", duration = 6)
+      return()
+    }
+    g <- grade_obj()
+    if (is.null(g)) return()
+    key <- .save_key()
+    # grade_table() labels rows by list name, so the pmatools object's own
+    # outcome_name is aligned with the key for any downstream single-outcome
+    # use of the saved object.
+    g$outcome_name <- key
+    if (key %in% names(pma_outcomes_list(state$outcomes))) {
+      shiny::showModal(shiny::modalDialog(
+        title = "Outcome already saved",
+        htmltools::p(sprintf(
+          "\"%s\" is already in the saved list. Replace it with the current assessment?",
+          key)),
+        footer = htmltools::tagList(
+          shiny::modalButton("Cancel"),
+          shiny::actionButton("save_outcome_overwrite", "Replace",
+                              class = "btn btn-primary")
+        ),
+        easyClose = TRUE
+      ))
+      return()
+    }
+    .store_outcome(key, g)
+  })
+
+  shiny::observeEvent(input$save_outcome_overwrite, {
+    shiny::removeModal()
+    if (length(.save_blocked_reasons())) return()
+    g <- grade_obj()
+    if (is.null(g)) return()
+    key <- .save_key()
+    g$outcome_name <- key
+    .store_outcome(key, g)
+  })
+
+  output$saved_outcomes_list <- shiny::renderUI({
+    pma_saved_outcomes_ui(state$outcomes,
+                          delete_input_id = "outcome_delete",
+                          empty_text = EDU_COPY$multi_outcome$list_empty)
+  })
+  shiny::outputOptions(output, "saved_outcomes_list", suspendWhenHidden = FALSE)
+
+  shiny::observeEvent(input$outcome_delete, {
+    key  <- as.character(input$outcome_delete)[1]
+    outs <- pma_outcomes_list(state$outcomes)
+    if (!key %in% names(outs)) return()
+    outs[[key]] <- NULL
+    state$outcomes <- outs
+    shiny::showNotification(sprintf("Removed \"%s\" from the saved outcomes.", key),
+                            type = "message", duration = 4)
+  }, ignoreInit = TRUE)
 
   # ----- Per-study RoB / Indirectness editors (synced with Step 1) -----
   .step3_bulk_set <- function(col, value) {

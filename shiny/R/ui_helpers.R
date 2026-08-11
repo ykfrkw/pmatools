@@ -82,6 +82,103 @@ pma_unconfirmed_domains <- function(conf) {
   unname(PMA_DOMAIN_LABELS[keys[!ok]])
 }
 
+# ----- Saved outcomes (multi-outcome Summary of Findings) -----------------
+# state$outcomes is a NAMED LIST of pmatools objects (the value of
+# state$grade at the moment the user pressed "Save"), keyed by outcome
+# label, in insertion order. It is exactly the shape grade_table() expects,
+# so it can be passed straight through without reshaping. The save time is
+# carried as attr(<obj>, "pma_saved_at") because attributes survive both the
+# list round-trip and grade_table()'s inherits() check.
+
+# Default label for the outcome currently being rated. Long-format data with
+# an `outcome` column drives it from the Step 2 selection; otherwise it falls
+# back to an effect-measure-flavoured placeholder. Pure function so the rule
+# is testable without a Shiny session.
+pma_default_outcome_label <- function(selected_outcome = NULL,
+                                      outcome_type = "binary") {
+  if (!is.null(selected_outcome) && length(selected_outcome) == 1 &&
+      !is.na(selected_outcome) && nzchar(selected_outcome)) {
+    return(as.character(selected_outcome))
+  }
+  if (identical(outcome_type, "binary")) "Depression response" else "Depression severity"
+}
+
+# Labels this app may have auto-filled into the "Outcome label" field. A value
+# outside this set was typed by the user and must never be overwritten.
+pma_auto_outcome_labels <- function(last_auto = NULL) {
+  c("", "Outcome", "Depression response", "Depression severity", last_auto)
+}
+
+# Normalizes whatever is in state$outcomes into a valid named list.
+pma_outcomes_list <- function(outcomes) {
+  if (is.null(outcomes) || !is.list(outcomes) || length(outcomes) == 0) {
+    return(list())
+  }
+  keep <- vapply(outcomes, inherits, logical(1), "pmatools")
+  outcomes[keep]
+}
+
+# One-row-per-outcome summary used by the saved-outcome list UI.
+pma_outcome_summary_df <- function(outcomes) {
+  outcomes <- pma_outcomes_list(outcomes)
+  if (length(outcomes) == 0) {
+    return(data.frame(name = character(0), k = character(0),
+                      effect = character(0), certainty = character(0),
+                      stringsAsFactors = FALSE))
+  }
+  data.frame(
+    name = names(outcomes),
+    k = vapply(outcomes, function(g) {
+      k <- g$meta$k %||% NA_integer_
+      if (is.na(k)) "-" else as.character(k)
+    }, character(1)),
+    effect = vapply(outcomes, function(g) {
+      out <- tryCatch(.format_effect(g$meta, g$outcome_type), error = function(e) NA_character_)
+      if (is.null(out) || is.na(out)) "-" else gsub("\n", "; ", out)
+    }, character(1)),
+    certainty = vapply(outcomes, function(g) g$certainty %||% "-", character(1)),
+    stringsAsFactors = FALSE, row.names = NULL
+  )
+}
+
+# Saved-outcome list with a per-row Remove button. The buttons write the
+# outcome name to `delete_input_id` via Shiny.setInputValue rather than
+# creating one observer per row, so rows can come and go freely.
+pma_saved_outcomes_ui <- function(outcomes, delete_input_id = "outcome_delete",
+                                  empty_text = NULL) {
+  df <- pma_outcome_summary_df(outcomes)
+  if (nrow(df) == 0) {
+    if (is.null(empty_text)) return(NULL)
+    return(htmltools::p(class = "pma-card-subtitle", empty_text))
+  }
+  rows <- lapply(seq_len(nrow(df)), function(i) {
+    htmltools::div(
+      style = paste(
+        "display: flex; align-items: center; gap: 0.75rem;",
+        "padding: 0.5rem 0.25rem;",
+        "border-top: 1px solid hsl(var(--border));"),
+      htmltools::div(
+        style = "flex: 1 1 auto; min-width: 0;",
+        htmltools::div(style = "font-weight: 600;", df$name[i]),
+        htmltools::div(
+          style = "font-size: 0.8rem; color: hsl(var(--muted-foreground));",
+          sprintf("k = %s | %s", df$k[i], df$effect[i]))
+      ),
+      htmltools::div(pma_certainty_badge(df$certainty[i])),
+      htmltools::tags$button(
+        type  = "button",
+        class = "btn btn-secondary",
+        style = "padding: 0.2rem 0.6rem; font-size: 0.8rem;",
+        onclick = sprintf(
+          "Shiny.setInputValue('%s', %s, {priority: 'event'})",
+          delete_input_id,
+          jsonlite::toJSON(df$name[i], auto_unbox = TRUE)),
+        "Remove")
+    )
+  })
+  htmltools::div(style = "margin-top: 0.5rem;", rows)
+}
+
 # GRADE certainty badge
 pma_certainty_badge <- function(label) {
   cls <- switch(tolower(label),
