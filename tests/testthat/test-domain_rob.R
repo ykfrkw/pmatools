@@ -130,7 +130,7 @@ test_that("Fallback: Threshold not supplied + sign flip -> serious (rule 5)", {
   m <- make_mock_dominated(te_all = 1.0, te_low_only = -0.5)
   g <- grade_meta(m, rob = c("serious", "no", "no"),
                   small_values = NULL,
-                  rob_inflation_threshold = 0.10)
+                  rob_inflation_threshold = 0.10, threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   expect_equal(rob_row$judgment, "serious")
   expect_match(rob_row$notes, "Threshold not supplied")
@@ -142,7 +142,7 @@ test_that("Fallback: Threshold not supplied + same-sign small inflation -> no (r
   m <- make_mock_dominated(te_all = 0.04, te_low_only = 0.05)
   g <- grade_meta(m, rob = c("serious", "no", "no"),
                   small_values = "undesirable",
-                  rob_inflation_threshold = 0.10)
+                  rob_inflation_threshold = 0.10, threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   expect_equal(rob_row$judgment, "no")
   expect_match(rob_row$notes, "Rule 2")
@@ -205,7 +205,7 @@ test_that("small_values = NULL: no warning when the gate is not decisive", {
   expect_no_warning(
     grade_meta(m, rob = c("serious", "no", "no"),
                small_values = NULL,
-               rob_inflation_threshold = 0.10),
+               rob_inflation_threshold = 0.10, threshold_type = "null"),
     message = "small_values"
   )
 })
@@ -216,7 +216,7 @@ test_that("small_values = NULL: high-RoB toward null does NOT rate down", {
   m <- make_mock_dominated(te_all = 0.2, te_low_only = 1.1)
   g <- grade_meta(m, rob = c("serious", "no", "no"),
                   small_values = NULL,
-                  rob_inflation_threshold = 0.10)
+                  rob_inflation_threshold = 0.10, threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   expect_equal(rob_row$judgment, "no")
 })

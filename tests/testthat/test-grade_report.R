@@ -19,11 +19,11 @@ make_outcomes_gr <- function() {
   g1 <- suppressWarnings(grade_meta(m, study_design = "RCT", rob = "no",
                                     rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
-                                    outcome_name = "Outcome 1"))
+                                    outcome_name = "Outcome 1", threshold_type = "null"))
   g2 <- suppressWarnings(grade_meta(m, study_design = "RCT", rob = "some_concerns",
                                     rob_rationale = "Consensus RoB2: some concerns overall",
                                     indirectness = "no",
-                                    outcome_name = "Outcome 2"))
+                                    outcome_name = "Outcome 2", threshold_type = "null"))
   list("Outcome 1" = g1, "Outcome 2" = g2)
 }
 

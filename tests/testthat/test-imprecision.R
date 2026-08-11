@@ -36,22 +36,30 @@ wide_ci_meta <- function() {
 }
 
 # --------------------------------------------------------------------------
-# Rule (b): N or events <= 30% of OIS -> serious
+# OIS rules. Core GRADE 2 Fig 4 only reaches the OIS approach when the CI does
+# NOT cross the chosen threshold and the effect is implausibly large; when the
+# CI does cross it, Fig 4 rates down without considering sample size.
 # --------------------------------------------------------------------------
-test_that("Rule (b): events <= 30% of OIS triggers serious", {
+test_that("events <= 30% of OIS but CI crosses the threshold -> rate down one", {
   m <- small_meta()
   # Total events = 105, OIS = 1000 -> pct = 10.5% (well below 30%).
-  g <- suppressWarnings(grade_meta(m, ois_events = 1000))
+  # Expectation changed with the Fig 4 rewrite: the CI crosses the chosen
+  # (null) threshold, so Fig 4 stops at "rate down one level" and never
+  # consults the OIS; the previous implementation applied "<= 30% of OIS"
+  # unconditionally and returned "serious".
+  g <- suppressWarnings(grade_meta(m, ois_events = 1000, threshold_type = "null"))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
-  expect_equal(row$judgment, "serious")
-  expect_equal(row$downgrade, -2L)
-  expect_match(row$notes, "<= 30%", fixed = TRUE)
+  expect_equal(row$judgment, "some_concerns")
+  expect_equal(row$downgrade, -1L)
+  expect_match(row$notes, "OIS not applied on this Fig 4 path", fixed = TRUE)
 })
 
-test_that("Rule (b): events between 30% and 100% of OIS gives some_concerns", {
+test_that("events between 30% and 100% of OIS gives some_concerns", {
   m <- small_meta()
   # Total events = 105, OIS = 200 -> pct = 52.5%.
-  g <- suppressWarnings(grade_meta(m, ois_events = 200))
+  # Still -1 after the Fig 4 rewrite, but now because the CI crosses the null
+  # threshold rather than because the OIS was unmet.
+  g <- suppressWarnings(grade_meta(m, ois_events = 200, threshold_type = "null"))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_equal(row$judgment, "some_concerns")
   expect_equal(row$downgrade, -1L)
@@ -60,14 +68,14 @@ test_that("Rule (b): events between 30% and 100% of OIS gives some_concerns", {
   expect_match(row$notes, "observed 105 / target 200 events", fixed = TRUE)
 })
 
-test_that("Rule (b) for continuous: N <= 30% of OIS triggers serious", {
+test_that("continuous: large effect, CI clear of the threshold, N <= 30% of OIS -> serious", {
   m <- metacont(
     n.e = c(20, 25), mean.e = c(5, 6), sd.e = c(2, 2),
     n.c = c(20, 25), mean.c = c(7, 8), sd.c = c(2, 2),
     studlab = c("X", "Y"), sm = "MD", random = TRUE, common = FALSE
   )
   # Total N = 90, OIS = 1000 -> 9%.
-  g <- suppressWarnings(grade_meta(m, outcome_type = "absolute", ois_n = 1000))
+  g <- suppressWarnings(grade_meta(m, outcome_type = "absolute", ois_n = 1000, threshold_type = "null"))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_equal(row$judgment, "serious")
   expect_match(row$notes, "<= 30%", fixed = TRUE)

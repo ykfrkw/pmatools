@@ -21,9 +21,13 @@ grade_meta(
   inconsistency_subgroup_explained = NULL,
   imprecision = NULL,
   imprecision_rationale = NULL,
+  threshold_type = c("mid", "null"),
   threshold = NULL,
   threshold_scale = "auto",
   threshold_baseline = NULL,
+  rating_target = NULL,
+  rating_target_rationale = NULL,
+  require_threshold = TRUE,
   outcome_name = NULL,
   outcome_type = c("relative", "absolute"),
   ois_events = NULL,
@@ -150,6 +154,19 @@ Default \code{NULL} (automated assessment).}
 assessment). See \code{rob_rationale} for how it is recorded.
 Default \code{NULL}.}
 
+\item{threshold_type}{(v0.5) Which threshold the certainty rating is
+anchored to (Core GRADE 2 Fig 2, step 1). One of:
+\itemize{
+\item \code{"mid"} (default): "Are you interested in whether there is
+an important effect or not?" — requires a minimal important
+difference (\code{threshold}).
+\item \code{"null"}: "Are you interested in whether there is a true
+underlying effect, benefit or harm?" — the null is the threshold and
+a MID is optional.
+}
+With \code{threshold_type = "mid"} and no \code{threshold}, the call
+aborts unless \code{require_threshold = FALSE}.}
+
 \item{threshold}{(v0.2) Numeric clinical decision Threshold (a minimally
 important effect). This is a cross-cutting parameter shared by the three
 Threshold-aware domains — it is not a Risk-of-Bias-specific setting:
@@ -194,6 +211,34 @@ ratio scale when the effect measure is OR/RR/HR/RoM. If \code{NULL}
 (\eqn{\sum event_c / \sum n_c}) of \code{meta_obj} is used; if that is
 unavailable too, an informative error is raised. Ignored unless an ARD
 Threshold requires conversion.}
+
+\item{rating_target}{(v0.5) Target of the certainty rating (Core GRADE 2
+Fig 2). \code{NULL} (default) derives it automatically from the pooled
+point estimate:
+\tabular{llll}{
+\strong{threshold_type} \tab \strong{point estimate} \tab
+\strong{target} \tab \strong{imprecision threshold} \cr
+\code{"mid"}  \tab \eqn{|TE| >} MID    \tab \code{"important_effect"}        \tab \eqn{\pm}MID \cr
+\code{"mid"}  \tab \eqn{|TE| \le} MID  \tab \code{"little_to_no_difference"} \tab \eqn{\pm}MID \cr
+\code{"null"} \tab very near null      \tab \code{"little_to_no_difference"} \tab \eqn{\pm}MID \cr
+\code{"null"} \tab not near null       \tab \code{"non_null_effect"}         \tab null (0) \cr
+}
+"Very near null" is operationalized as \eqn{|TE| \le} MID; with no MID
+supplied, nearness cannot be judged and the target falls back to
+\code{"non_null_effect"} (recorded in \code{rating_target_note}).
+Supplying a value overrides the automatic derivation and requires
+\code{rating_target_rationale}.}
+
+\item{rating_target_rationale}{Free-text justification, required whenever
+\code{rating_target} is supplied (manual override of the Core GRADE 2
+Fig 2 derivation). See \code{rob_rationale} for how it is recorded.
+Default \code{NULL}.}
+
+\item{require_threshold}{(v0.5) Gate for the above. \code{TRUE} (default)
+makes a MID mandatory when \code{threshold_type = "mid"}. Set to
+\code{FALSE} to run without a MID (backward-compatible escape hatch); the
+rating target then falls back to a non-null effect and imprecision is
+judged against the null.}
 
 \item{outcome_name}{Optional label for the outcome (used in SoF table).}
 
@@ -271,6 +316,11 @@ An S3 object of class \code{pmatools} containing:
 \item{certainty_score}{Numeric score (1–4).}
 \item{starting_quality}{Starting certainty label.}
 \item{outcome_name}{Outcome label.}
+\item{threshold_type}{\code{"mid"} or \code{"null"} (Core GRADE 2 Fig 2).}
+\item{rating_target}{Target of the certainty rating.}
+\item{rating_target_note}{How the target was derived (or overridden).}
+\item{rating_target_auto}{\code{TRUE} when the target was derived
+automatically rather than supplied by the user.}
 \item{meta}{The original meta object.}
 }
 }
@@ -282,11 +332,17 @@ return per-domain judgments and final certainty.
 \dontrun{
 library(meta)
 m <- metabin(Ee, Ne, Ec, Nc, studlab = study, data = Olkin1995, sm = "RR")
+# threshold_type defaults to "mid", which requires a threshold (MID).
 g <- grade_meta(m, study_design = "RCT", rob = "some",
                 rob_rationale = "RoB2 consensus: some concerns from missing outcome data",
+                threshold = 1.2, threshold_scale = "ratio",
                 outcome_name = "Mortality")
 print(g)
+print(g$rating_target)
 sof_table(g)
+
+# Rating certainty in a true underlying effect instead (null threshold).
+g_null <- grade_meta(m, threshold_type = "null", outcome_name = "Mortality")
 }
 
 }

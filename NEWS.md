@@ -1,3 +1,37 @@
+# pmatools (development version)
+
+## Breaking changes
+
+* Core GRADE 2 entry gate: `grade_meta()` gains `threshold_type`, which
+  defaults to `"mid"` and makes a `threshold` (minimal important difference)
+  mandatory. Calls without a MID now abort; the error quotes the value
+  `suggest_threshold()` recommends for that effect measure. Use
+  `threshold_type = "null"` to rate certainty in a true underlying effect, or
+  `require_threshold = FALSE` to keep the previous MID-free behaviour.
+* Imprecision now follows the Core GRADE 2 Fig 4 flowchart. The optimal
+  information size is consulted only when the CI does **not** cross the chosen
+  threshold and the effect is implausibly large; previously the
+  "N <= 30% of OIS" rule forced a two-level rate-down regardless of where the
+  CI sat. Analyses with a moderate effect, a CI clear of the threshold and a
+  small sample size no longer rate down.
+
+## New features
+
+* Rating target (Core GRADE 2 Fig 2): `grade_meta()` derives the target of the
+  certainty rating from the pooled point estimate
+  (`"important_effect"` / `"little_to_no_difference"` / `"non_null_effect"`)
+  and exposes it as `$rating_target`, `$rating_target_note`,
+  `$rating_target_auto` and `$threshold_type`; `print()` shows it. The target
+  decides which threshold Imprecision evaluates the CI against. Supplying
+  `rating_target` manually overrides the derivation and requires
+  `rating_target_rationale`.
+* Imprecision notes record which Fig 4 path produced the judgment, including
+  the CI ratio rule for binary outcomes (relative risk CI ratio >= 3, odds
+  ratio CI ratio >= 2.5) and the continuous 400-per-group (total N 800) rule
+  of thumb.
+* The reproducibility script in `export_bundle()` renders the new arguments,
+  including the rationale for a manual target override.
+
 # pmatools 0.4.0
 
 ## Breaking changes
