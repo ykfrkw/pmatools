@@ -72,9 +72,20 @@ assess_pubias <- function(meta_obj,
                           pubias_small_industry    = NULL,
                           pubias_funnel_asymmetry  = NULL,
                           pubias_unpublished       = NULL,
-                          pubias_registry_complete = NULL) {
+                          pubias_registry_complete = NULL,
+                          rationale                = NULL) {
   k <- .pubias_effective_k(meta_obj)
   if (is.null(k) || is.na(k)) k <- 0L
+
+  # v0.4.0 (breaking): pubias_funnel_asymmetry is the explicit override path
+  # (a manual visual judgment replaces the automated Egger's test), so it
+  # always requires pubias_rationale. The other inputs
+  # (pubias_small_industry / pubias_unpublished / pubias_registry_complete)
+  # supply information the automated path cannot know and are not overrides.
+  if (!is.null(pubias_funnel_asymmetry)) {
+    .check_override_rationale(rationale, "pubias_rationale",
+                              "Publication bias")
+  }
 
   # --- Top-level: complete pre-registration coverage rules out pub bias -----
   if (!is.null(pubias_registry_complete)) {
@@ -122,7 +133,8 @@ assess_pubias <- function(meta_obj,
       meta_obj                = meta_obj,
       k                       = k,
       pubias_funnel_asymmetry = pubias_funnel_asymmetry,
-      q1_note                 = q1_note
+      q1_note                 = q1_note,
+      rationale               = rationale
     ))
   } else {
     return(.pubias_registry(
@@ -145,9 +157,11 @@ assess_pubias <- function(meta_obj,
 # --------------------------------------------------------------------------
 # Q3: k >= 10 -- statistical / visual asymmetry branch (2-tier Egger)
 # --------------------------------------------------------------------------
-.pubias_statistical <- function(meta_obj, k, pubias_funnel_asymmetry, q1_note) {
+.pubias_statistical <- function(meta_obj, k, pubias_funnel_asymmetry, q1_note,
+                                rationale = NULL) {
 
   # Manual override: visual inspection wins over Egger
+  # (pubias_rationale already validated in assess_pubias)
   if (!is.null(pubias_funnel_asymmetry)) {
     if (!pubias_funnel_asymmetry %in% c("yes", "no")) {
       rlang::abort("pubias_funnel_asymmetry must be 'yes' or 'no'.")
@@ -166,14 +180,15 @@ assess_pubias <- function(meta_obj,
       )
     }
     return(make_domain_row(
-      domain   = "Publication bias",
-      judgment = judgment,
-      auto     = FALSE,
-      notes    = paste0(
+      domain    = "Publication bias",
+      judgment  = judgment,
+      auto      = FALSE,
+      notes     = paste0(
         q1_note,
         sprintf("Q2: Statistical analysis feasible (k = %d >= 10). ", k),
         asym_desc, " [manual]"
-      )
+      ),
+      rationale = rationale
     ))
   }
 

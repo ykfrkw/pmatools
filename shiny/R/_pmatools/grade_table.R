@@ -15,6 +15,9 @@
 #'   \code{100}.
 #' @param prediction Logical (default \code{FALSE}); when \code{TRUE}, the
 #'   95 percent prediction interval is shown in the Effect column.
+#' @param label_intervention,label_control Arm labels used in the
+#'   "Risk with ..." column headers (GRADEpro vocabulary).
+#'   Defaults are \code{"intervention"} and \code{"control"}.
 #'
 #' @return A \code{flextable} object.
 #'
@@ -34,7 +37,9 @@ grade_table <- function(outcomes,
                         palette      = c("pastel", "classic"),
                         show_domains = TRUE,
                         per          = 1000,
-                        prediction   = FALSE) {
+                        prediction   = FALSE,
+                        label_intervention = "intervention",
+                        label_control      = "control") {
   if (!is.list(outcomes) || length(outcomes) == 0) {
     rlang::abort("outcomes must be a non-empty named list of pmatools objects.")
   }
@@ -63,7 +68,13 @@ grade_table <- function(outcomes,
     sec_nms  <- character(0)
   }
 
-  hdrs  <- .col_headers(show_domains, per)
+  # Effect header: sm-specific when all outcomes share one, generic otherwise
+  eff_hdrs <- unique(vapply(outcomes, function(g) .effect_header(g$meta$sm),
+                            character(1)))
+  eff_hdr  <- if (length(eff_hdrs) == 1L) eff_hdrs else "Effect\n(95% CI)"
+
+  hdrs  <- .col_headers(show_domains, per, eff_hdr,
+                        label_intervention, label_control)
   ncols <- length(hdrs)
 
   # Build rows, inserting group-label rows where needed
@@ -111,7 +122,7 @@ grade_table <- function(outcomes,
   ft <- flextable::font(ft, fontname = "Arial", part = "all")
   ft <- flextable::align(ft, align = "center", part = "header")
   ft <- flextable::align(ft, align = "left",   part = "body")
-  ft <- flextable::align(ft, j = 2:3, align = "center", part = "body")
+  ft <- flextable::align(ft, j = 2, align = "center", part = "body")
 
   # Group-label rows: merge, grey background, bold italic
   for (lr in label_rows) {
@@ -124,7 +135,7 @@ grade_table <- function(outcomes,
   }
 
   # Certainty cell color per outcome row
-  cert_col <- "Certainty"
+  cert_col <- hdrs[6]
   for (ri in names(outcome_map)) {
     i  <- as.integer(ri)
     nm <- outcome_map[[ri]]
@@ -140,21 +151,23 @@ grade_table <- function(outcomes,
   ft <- flextable::color(ft, color = "white", part = "header")
   ft <- flextable::bold(ft,  part = "header")
 
-  # Column widths (7 base cols: Outcome, k, N, CER, IER, Effect, Certainty)
+  # Column widths (6 base cols: Outcome, N (studies), CER, IER, Effect,
+  # Certainty)
   ft <- flextable::width(ft, j = 1, width = 1.4)
-  ft <- flextable::width(ft, j = 2, width = 0.6)
-  ft <- flextable::width(ft, j = 3, width = 0.9)
-  ft <- flextable::width(ft, j = 4, width = 1.2)
-  ft <- flextable::width(ft, j = 5, width = 1.3)
-  ft <- flextable::width(ft, j = 6, width = 1.5)
-  ft <- flextable::width(ft, j = 7, width = 1.3)
+  ft <- flextable::width(ft, j = 2, width = 1.1)
+  ft <- flextable::width(ft, j = 3, width = 1.2)
+  ft <- flextable::width(ft, j = 4, width = 1.3)
+  ft <- flextable::width(ft, j = 5, width = 1.4)
+  ft <- flextable::width(ft, j = 6, width = 1.4)
   if (show_domains) {
-    for (j in 8:12) ft <- flextable::width(ft, j = j, width = 0.7)
+    for (j in 7:11) ft <- flextable::width(ft, j = j, width = 0.7)
   }
 
   # Footer
   footnote <- paste0(
-    "GRADE certainty of evidence. BMJ 2025 Core GRADE (Guyatt et al.). ",
+    "Certainty of the evidence (Core GRADE series). ",
+    "Based on the BMJ 2025 Core GRADE series (Guyatt et al.); ",
+    "not an official GRADE Working Group assessment. ",
     CERTAINTY_SYMBOLS[["High"]], "=High  ",
     CERTAINTY_SYMBOLS[["Moderate"]], "=Moderate  ",
     CERTAINTY_SYMBOLS[["Low"]], "=Low  ",
@@ -196,12 +209,11 @@ grade_table <- function(outcomes,
 
   row <- data.frame(
     col1 = nm,
-    col2 = as.character(k),
-    col3 = if (is.na(n_total)) "NR" else format(n_total, big.mark = ","),
-    col4 = cer_str,
-    col5 = ier_str,
-    col6 = eff,
-    col7 = cert_str,
+    col2 = .n_participants_studies(k, n_total, g$study_design),
+    col3 = cer_str,
+    col4 = ier_str,
+    col5 = eff,
+    col6 = cert_str,
     stringsAsFactors = FALSE
   )
 
@@ -232,12 +244,17 @@ grade_table <- function(outcomes,
   )
 }
 
-.col_headers <- function(show_domains, per = 1000) {
+.col_headers <- function(show_domains, per = 1000,
+                         effect_header      = "Effect\n(95% CI)",
+                         label_intervention = "intervention",
+                         label_control      = "control") {
   per_str <- format(per, big.mark = ",", scientific = FALSE)
-  base <- c("Outcome", "Studies (k)", "Participants (N)",
-            paste0("Control rate\n(per ", per_str, ")"),
-            paste0("Exp. rate\n(per ", per_str, ")"),
-            "Effect (95% CI)", "Certainty")
+  base <- c("Outcome",
+            "No. of participants\n(studies)",
+            paste0("Risk with ", label_control, "\n(per ", per_str, ")"),
+            paste0("Risk with ", label_intervention, "\n(per ", per_str, ")"),
+            effect_header,
+            "Certainty of the evidence\n(Core GRADE series)")
   doms <- c("RoB", "Indir.", "Incon.", "Impre.", "PB")
   if (show_domains) c(base, doms) else base
 }

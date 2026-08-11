@@ -3,7 +3,7 @@
 # BMJ 2025 Core GRADE 5: 非直接性は臨床的判断が必要なため手動入力。
 # domain_rob.R と同じ入力パターンをサポート。
 
-assess_indirectness <- function(indirectness, meta_obj) {
+assess_indirectness <- function(indirectness, meta_obj, rationale = NULL) {
   k <- meta_obj$k
 
   # デフォルト: スカラ "no"
@@ -25,13 +25,22 @@ assess_indirectness <- function(indirectness, meta_obj) {
   }
 
   # スカラ
+  # v0.4.0 (breaking): any scalar other than the default "no" is a manual
+  # override and requires indirectness_rationale. "no" (= no downgrade, the
+  # documented default) stays exempt so default calls keep working.
   if (length(indirectness) == 1) {
     validate_grade_level(indirectness, "indirectness")
+    ind_norm <- .normalize_grade_level(indirectness)
+    if (!identical(ind_norm, "no")) {
+      .check_override_rationale(rationale, "indirectness_rationale",
+                                "Indirectness")
+    }
     return(make_domain_row(
-      domain   = "Indirectness",
-      judgment = indirectness,
-      auto     = FALSE,
-      notes    = "Overall judgment provided by user."
+      domain    = "Indirectness",
+      judgment  = ind_norm,
+      auto      = FALSE,
+      notes     = "Overall judgment provided by user.",
+      rationale = rationale
     ))
   }
 

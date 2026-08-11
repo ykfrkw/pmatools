@@ -30,14 +30,19 @@ g <- grade_meta(
   ma,
   study_design            = "{{study_design}}",
   rob                     = {{rob_arg}},
+  rob_rationale           = {{rob_rationale_arg}},
   rob_dominant_threshold  = {{rob_dom_threshold}},
   rob_inflation_threshold = {{rob_inf_threshold}},
   small_values            = {{small_values_arg}},
   indirectness            = {{indirectness_arg}},
+  indirectness_rationale  = {{indirectness_rationale_arg}},
   inconsistency           = {{inconsistency_arg}},
+  inconsistency_rationale = {{inconsistency_rationale_arg}},
   inconsistency_ci_diff            = {{inconsistency_ci_diff_arg}},
   inconsistency_threshold_side     = {{inconsistency_side_arg}},
   inconsistency_subgroup_explained = {{inconsistency_subgroup_arg}},
+  imprecision             = {{imprecision_arg}},
+  imprecision_rationale   = {{imprecision_rationale_arg}},
   threshold               = {{threshold_arg}},
   threshold_scale         = "{{threshold_scale}}",
   outcome_type            = "{{ois_outcome_type}}",
@@ -54,6 +59,7 @@ g <- grade_meta(
   pubias_funnel_asymmetry = {{pubias_funnel_arg}},
   pubias_unpublished      = {{pubias_unpub_arg}},
   pubias_registry_complete = {{pubias_registry_arg}},
+  pubias_rationale        = {{pubias_rationale_arg}},
   outcome_name            = "{{outcome_name}}"
 )
 
