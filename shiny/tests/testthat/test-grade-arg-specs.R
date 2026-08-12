@@ -1,41 +1,53 @@
 # pma_grade_arg_specs() (R/ui_helpers.R) builds the {value, origin} specs that
 # export_bundle() renders into the "reproducible" analysis.R.
 #
-# The behaviour under test is the always-emit-every-name rule. export_bundle()
-# looks specs up with `grade_args$<name>`, and `$` PARTIAL-MATCHES on lists: if
-# `inconsistency` were absent, `grade_args$inconsistency` would silently return
-# the `inconsistency_ci_diff` spec and write that answer into the wrong
-# argument of the exported call. A complete list makes every lookup exact.
-# Do not "simplify" this to only emit supplied names.
+# History worth keeping, because it explains why these tests are pointed at
+# absence rather than presence. export_bundle() used to look specs up with
+# `grade_args$<name>`, and `$` partial-matches on lists: with `inconsistency`
+# absent, `grade_args$inconsistency` returned the `inconsistency_ci_diff` spec
+# and wrote one question's answer into another argument of the exported call.
+# The app worked around it by emitting every registry name with a null spec.
+# pmatools now looks up exactly, so the workaround is gone and only the
+# arguments the reviewer actually set are emitted.
+#
+# The hazard is therefore the package's to prevent, but these tests still pin
+# the property that makes an exact lookup correct: an argument the reviewer
+# did not set must be ABSENT, not present-and-null. Note that the assertions
+# below use [[ ]], never $ -- `$` on the returned list would reintroduce the
+# very partial match this file is about.
 
-test_that("every registry name is emitted, in registry order", {
-  specs <- pma_grade_arg_specs(list())
-  expect_identical(names(specs), PMA_GRADE_ARGS_EXPORTED)
-  expect_true(all(vapply(specs, function(s) identical(s$origin, "null"),
-                         logical(1))))
+test_that("only the supplied arguments are emitted, in registry order", {
+  expect_identical(pma_grade_arg_specs(list()), list())
+
+  specs <- pma_grade_arg_specs(list(
+    small_values = "undesirable",
+    threshold    = 1.25
+  ))
+  # Registry order, not the caller's argument order.
+  expect_identical(names(specs),
+                   intersect(PMA_GRADE_ARGS_EXPORTED,
+                             c("small_values", "threshold")))
 })
 
-test_that("a prefix name cannot partial-match onto a longer sibling", {
+test_that("an unsupplied prefix name is absent, so an exact lookup finds nothing", {
   # `inconsistency` is a strict prefix of `inconsistency_ci_diff`,
   # `inconsistency_rationale`, `inconsistency_threshold_side` and
   # `inconsistency_subgroup_explained`. Supply only the longer one.
   specs <- pma_grade_arg_specs(list(inconsistency_ci_diff = 0.5))
 
-  expect_true("inconsistency" %in% names(specs))
-  expect_identical(specs$inconsistency$origin, "null")
-  expect_null(specs$inconsistency$value)
-  expect_identical(specs$inconsistency_ci_diff$value, 0.5)
+  expect_false("inconsistency" %in% names(specs))
+  expect_null(specs[["inconsistency"]])
+  expect_identical(specs[["inconsistency_ci_diff"]]$value, 0.5)
 
-  # Same hazard on the other prefix families.
-  expect_identical(pma_grade_arg_specs(
-    list(rob_rationale = "x"))$rob$origin, "null")
-  expect_identical(pma_grade_arg_specs(
-    list(threshold_scale = "ratio"))$threshold$origin, "null")
-  expect_identical(pma_grade_arg_specs(
-    list(imprecision_rationale = "x"))$imprecision$origin, "null")
-  expect_identical(pma_grade_arg_specs(
-    list(indirectness_subdomains = data.frame(a = 1)))$indirectness$origin,
-    "null")
+  # The other prefix families behave the same way.
+  expect_false("rob" %in% names(pma_grade_arg_specs(list(rob_rationale = "x"))))
+  expect_false("threshold" %in%
+                 names(pma_grade_arg_specs(list(threshold_scale = "ratio"))))
+  expect_false("imprecision" %in%
+                 names(pma_grade_arg_specs(list(imprecision_rationale = "x"))))
+  expect_false("indirectness" %in%
+                 names(pma_grade_arg_specs(
+                   list(indirectness_subdomains = data.frame(a = 1)))))
 })
 
 test_that("supplied values keep their value and get a valid origin", {
@@ -48,12 +60,12 @@ test_that("supplied values keep their value and get a valid origin", {
                                          stringsAsFactors = FALSE)
   ))
 
-  expect_identical(specs$threshold$value, 1.25)
-  expect_identical(specs$threshold$origin, "scalar")
-  expect_identical(specs$threshold_scale$origin, "scalar")
-  expect_identical(specs$rob$origin, "vector")
-  expect_identical(specs$rob$value, c("low", "high", "*"))
-  expect_identical(specs$indirectness_subdomains$origin, "scalar")
+  expect_identical(specs[["threshold"]]$value, 1.25)
+  expect_identical(specs[["threshold"]]$origin, "scalar")
+  expect_identical(specs[["threshold_scale"]]$origin, "scalar")
+  expect_identical(specs[["rob"]]$origin, "vector")
+  expect_identical(specs[["rob"]]$value, c("low", "high", "*"))
+  expect_identical(specs[["indirectness_subdomains"]]$origin, "scalar")
 
   # pmatools 0.5.0 aborts on anything outside this set, so nothing may leak
   # another string through.
@@ -73,7 +85,8 @@ test_that("pma_arg_spec() treats NA as 'not supplied', never as the string NA", 
 })
 
 test_that("unknown arguments are dropped rather than smuggled in", {
-  specs <- pma_grade_arg_specs(list(not_a_grade_meta_arg = 1))
+  specs <- pma_grade_arg_specs(list(not_a_grade_meta_arg = 1,
+                                    small_values         = "desirable"))
   expect_false("not_a_grade_meta_arg" %in% names(specs))
-  expect_identical(names(specs), PMA_GRADE_ARGS_EXPORTED)
+  expect_identical(names(specs), "small_values")
 })

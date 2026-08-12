@@ -504,13 +504,26 @@ RESPONDER_P0_DEFAULT <- 0.20
   if (is.null(dir)) {
     return(list(up = up, dn = dn, alg = character(), approx = character()))
   }
+  # The reason clause has to come from the pooled effect's own direction, not
+  # from the side that ended up exact. They usually agree, but they diverge on
+  # the fallback path: when the threshold is not smaller than the control-group
+  # risk the decrease-side conversion is undefined, so a below-the-null effect
+  # is converted on the increase side. Reading the word off exact_side there
+  # made this sentence assert "lies above the null" two lines above a caveat
+  # saying the opposite. dir$caveat explains the fallback, so say only that the
+  # side was chosen, not why, when the two disagree.
+  side_matches <- identical(dir$exact_side, dir$direction)
+  reason <- if (side_matches) {
+    sprintf(" because the pooled effect lies %s the null",
+            if (identical(dir$direction, "decrease")) "below" else "above")
+  } else {
+    ""
+  }
   alg <- sprintf(
     paste0("What the algorithm uses: a symmetric +/- log(%.3f) band, ",
-           "converted on the %s side because the pooled effect lies %s ",
-           "the null. That side is exact - %s %.3f is %+.0f per 1,000 at ",
-           "this control-group risk."),
-    dir$ratio, dir$exact_side,
-    if (identical(dir$exact_side, "decrease")) "below" else "above",
+           "converted on the %s side%s. That side is exact - %s %.3f is ",
+           "%+.0f per 1,000 at this control-group risk."),
+    dir$ratio, dir$exact_side, reason,
     sm, dir$exact_ratio, 1000 * dir$exact_ard)
   approx <- sprintf(
     paste0("The %s side is therefore the approximate one: the band's ",
