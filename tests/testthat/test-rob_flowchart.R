@@ -73,7 +73,7 @@ test_that("rob_some_concerns rejects anything but 'low' / 'high'", {
 # ---- B-2: dominance gate, inclusive boundary ------------------------------
 
 test_that("dominance gate switches at 55% with an inclusive boundary", {
-  # Updated (v0.5.1): the default moved from 0.60 to 0.55, the ">=55% weight
+  # Updated (v0.5): the default is 0.55, the ">=55% weight
   # = possibly dominating" candidate in the Core GRADE 4 Fig 2 footnote.
   # 54% -> not dominated; exactly 55% -> dominated; 56% -> dominated.
   # The 55% fixture uses c(11, 4.5, 4.5) rather than c(55, 22.5, 22.5): the
@@ -180,7 +180,7 @@ test_that("not dominated + no substantial difference: no downgrade, all", {
 })
 
 test_that("not dominated: substantial difference is judged on magnitude alone", {
-  # v0.5.1 (Core GRADE 4 p6): "whether low and high risk of bias studies
+  # v0.5 (Core GRADE 4 p6): "whether low and high risk of bias studies
   # suggest similar or substantially different magnitudes of effect" -- the
   # node is symmetric and does not ask about the direction of bias.
   #

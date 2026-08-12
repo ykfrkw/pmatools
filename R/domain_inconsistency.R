@@ -2,13 +2,13 @@
 #
 # BMJ 2025 Core GRADE 3, Fig 2 flowchart (preserved from v0.1.0).
 #
-# Threshold (v0.5.1): Core GRADE 3 Fig 2 node 2 reads, verbatim, "Evaluate point
+# Threshold (v0.5): Core GRADE 3 Fig 2 node 2 reads, verbatim, "Evaluate point
 # estimates of studies **in relation to chosen threshold**". The chosen
 # threshold is the one Core GRADE 2 Fig 2 resolved for the rating target, so
 # `threshold_chosen` is the SAME value the Imprecision domain uses
 # (target_info$threshold_for_imprecision): +/-MID for the important-effect and
 # little-to-no-difference targets, and the null (0) for a non-null-effect
-# target. Before v0.5.1 this domain received the raw MID even when Imprecision
+# target. Before v0.5 this domain received the raw MID even when Imprecision
 # was rating against the null, so the two domains could disagree about the
 # boundary; Fig 4 of Core GRADE 3 demonstrates that the choice reverses the
 # inconsistency verdict, so they must agree.
@@ -26,7 +26,7 @@
 #     yes -> judgment = "no" + note
 #     no  -> judgment = "some_concerns" (-1; see the -1 cap below)
 #
-# Rate down at most ONE level (v0.5.1). Core GRADE 3 (p5-6) verbatim:
+# Rate down at most ONE level (v0.5). Core GRADE 3 (p5-6) verbatim:
 #   "A final issue is consideration of rating down twice for inconsistency.
 #    Although this is a theoretical possibility, we have found compelling
 #    reason to rate down twice for inconsistency sufficiently unusual that it
@@ -35,7 +35,7 @@
 # "some_concerns" (-1). "serious" (-2) remains reachable only through the
 # scalar `inconsistency` override, which requires a written rationale.
 #
-# Auto Step 1 proxy: I^2 > 30%  (v0.5.1; v0.1.0-v0.5.1 used 25%, and v0.1.0
+# Auto Step 1 proxy: I^2 > 30%  (v0.5; v0.1.0-v0.4.0 used 25%, and v0.1.0
 #   also used "OR Q p < 0.10").
 #
 #   30% is the ONLY numeric value Core GRADE 3 offers, and it offers it
@@ -299,7 +299,7 @@ assess_inconsistency <- function(meta_obj,
   k <- length(te_vec)
   te_vec <- te_vec[!is.na(te_vec)]
 
-  # 2-level inconsistency classification (v0.5.1):
+  # 2-level inconsistency classification (v0.5):
   #   max single-zone share >= 80%               -> "no" (consistent direction)
   #   both directions have substantial mass      -> "some_concerns" (-1)
   #     (n_above/k >= 20% AND n_below/k >= 20%)

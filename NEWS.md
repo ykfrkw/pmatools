@@ -1,77 +1,11 @@
-# pmatools 0.5.1 (development version)
-
-## Source-attribution corrections
-
-A line-by-line comparison against the published Core GRADE 1-7 articles turned
-up places where pmatools presented its own operational choices as if they came
-from the source. These are corrected below. Only one judgment changes.
-
-* **Inconsistency: the automated Step 1 cut-off moves from `I² > 25%` to
-  `I² > 30%`** — the only number Core GRADE 3 puts on paper ("one will seldom
-  see serious inconsistency with I2 values <30%"). 25% had no source. Analyses
-  with 25% < I² ≤ 30% now stop at Step 1 and are not rated down. The domain
-  notes also now say that the I² gate is an automation surrogate for a step
-  Core GRADE 3 describes as visual ("Core GRADE relies on the visual inspection
-  of forest plots"), and that the 80% majority share (CINeMA) and 20%
-  each-side share (a pmatools convention) are not Core GRADE numbers either.
-  **This is the only behaviour change in this batch.**
-* `suggest_threshold()` gains a **`source`** field (`"core_grade_6"` or
-  `"package_convention"`), and for binary outcomes the **absolute** candidate
-  (ARD 0.05) is now the first candidate, with the ratio value moved to
-  `$threshold_ratio`. The Core GRADE series contains no ratio-scale MID, and
-  every binary MID it discusses is on the absolute scale. SMD 0.20 is the only
-  default with a source, and Core GRADE 6 hedges it. The entry-gate error
-  message says all of this. `threshold_scale = "auto"` is unaffected.
-* `indirectness_table()` is **no longer described as a "BMJ Core GRADE 5
-  publication format"** table. No table of that shape appears in the article
-  body, which carries only Table 1 (an adapted summary of findings table) and
-  Table 2 ("Summary of indirectness issues"). The layout, the 4-point answer
-  scale and the wording "Is the evidence sufficiently direct?" are pmatools
-  conventions; Core GRADE 5 instead grades the *likelihood* of rating down per
-  PICO element (Low / Intermediate / Substantial / High). The table footer and
-  the documentation now say so, including that Core GRADE 5 weighs the four
-  elements asymmetrically while the worst-case fold does not.
-* `rob_some_concerns` no longer implies Core GRADE 4 defines the fold. The
-  phrase "some concerns" does not occur in that article; it sets the binary
-  boundary by counting high-risk items and explicitly declines to settle the
-  count.
-* The count-share fallbacks (Risk of bias and Indirectness) and the extension
-  of the CI-ratio cut-off of 3 to HR / IRR are now flagged as pmatools
-  conventions in the notes.
-* `TE_low` in the risk-of-bias direction check is documented as **always a
-  fixed-effect estimate**, even under a random-effects parent model.
-* `chinn_smd_to_or()` and the SoF footnotes now state that Chinn's formula is
-  **not** Core GRADE 6's option 2 (normal distribution, MID-based, per study
-  before pooling), which is not implemented.
-* Indirectness domain notes use the Core GRADE wording ("not serious" /
-  "serious" / "very serious") instead of the risk-of-bias-derived "some
-  concerns". The stored level names are unchanged.
-* Plain language summary attribution corrected from Core GRADE 2 Table 1 to
-  **Core GRADE 6 Box 1** in the five places that still carried the old
-  citation, and the fourth selection input (the direction of the pooled point
-  estimate) is now documented.
-* `?grade_meta` and the README gain an **internal-name vs Core GRADE wording
-  table** (`"some_concerns"` = the source's "serious"; `"serious"` = its "very
-  serious"), and the README documents what Core GRADE covers that pmatools
-  does not: rating up non-randomised evidence for large effects and
-  dose-response, "extremely serious" (−3), the cross-domain gestalt step, and
-  four summary of findings features Core GRADE 6 asks for.
-* The README indirectness section gains the guideline / health technology
-  assessment distinction, the indirectness-vs-inconsistency test, the two
-  search scenarios, and the surrogate-outcome basis for rating down two levels
-  — all with the source's own wording.
-* The inconsistency documentation points at ICEMAN for subgroup credibility and
-  notes that pmatools is more permissive than Core GRADE 3, which asks for
-  separate PICO questions once credibility is moderate or high.
-* SPEC §5.2 rewritten to match the code (it still described a `≥ 0.75`
-  cut-off and a `(n_above + n_trivial)/k` formula retired in v0.5.1).
-* Imprecision: the OIS note read `<= 30%` while the decision used `< 30%`; the
-  display now matches Fig 4's "N<30% of OIS" node. The unused `rating_target` /
-  `threshold_type` arguments are documented as unused, and the notes now say
-  that Fig 4's *second* two-level condition (the plain language description
-  suggesting "may" rather than "likely") is not auto-assessed.
-
 # pmatools 0.5.0
+
+0.5.0 rebuilds all five certainty domains on the BMJ 2025 Core GRADE flowcharts
+(Core GRADE 2–5), adds the Core GRADE 2 entry gate and rating target, a
+multi-outcome workflow, and the BMJ Summary of Findings layout with Core GRADE 6
+plain language summaries. Several domains rate down **less** often than in
+0.4.0; re-running an existing analysis can therefore change its certainty
+rating without any change to the input data. Read the breaking changes first.
 
 ## Breaking changes
 
@@ -87,18 +21,45 @@ from the source. These are corrected below. Only one judgment changes.
   "N <= 30% of OIS" rule forced a two-level rate-down regardless of where the
   CI sat. Analyses with a moderate effect, a CI clear of the threshold and a
   small sample size no longer rate down.
+* Imprecision can reach two levels on the **null-threshold** path as well. Core
+  GRADE 2 (p6): "The two considerations also apply to imprecision judgments
+  when Core GRADE users choose the null as the threshold of interest ... The
+  finding that the CI is consistent with both benefit and important harm
+  motivates a plain language summary stating that the intervention 'may' result
+  in a benefit, and rating down two levels for imprecision." The −1 / −0
+  decision still turns on the null; only the two-level branch consults the MID,
+  so without a MID the judgment stops at −1.
+* The **binary** optimal information size is no longer parameterised from the
+  MID. Core GRADE 2 reserves the MID for continuous outcomes and asks binary
+  OIS for "a modest relative risk reduction, typically 20% or 25%": the new
+  `ois_rrr` (default `0.20`) gives `ois_p1 = ois_p0 * (1 - ois_rrr)`. An
+  explicit `ois_p1` still wins. The comparison is now in **participants**
+  (`sum(n.e) + sum(n.c)`) rather than events, following the Fig 4 caption
+  ("N=number of participants"); the implied event count is reported in the
+  notes, and supplying `ois_events` explicitly keeps the event-based
+  comparison. Continuous outcomes are unchanged and still use the MID
+  (`ois_delta`).
 * Risk of bias now follows the Core GRADE 4 Fig 2 flowchart literally, and the
   **weight-share dominance gate is reinstated**. `rob_dominant_threshold` was
   deprecated in v0.3.1 ("accepted but ignored") on the reasoning that the
   zone-and-magnitude comparison subsumed it; **that decision is retracted**,
   because the gate is the first decision node of Fig 2 and the two branches
   below it are not interchangeable. The direction-of-bias check now runs only
-  when high-RoB studies carry at least `rob_dominant_threshold` (default 0.60,
-  compared with `>=`) of the inverse-variance weight. The non-dominated branch
-  of the figure **never rates the domain down**; it decides which studies the
-  analysis should use. Risk of bias therefore rates down noticeably less often
-  than in v0.3.1–v0.4.0, and a body of evidence in which a minority of the
-  weight is at high risk of bias can no longer be downgraded for it.
+  when high-RoB studies carry at least `rob_dominant_threshold` of the
+  inverse-variance weight. The default is **0.55**, compared with `>=` — the
+  conservative of the two candidates in the Fig 2 footnote (">65% weight or
+  >=55% weight=possibly dominating"); pass `0.65` for the stricter reading.
+  The non-dominated branch of the figure **never rates the domain down**; it
+  decides which studies the analysis should use. Risk of bias therefore rates
+  down noticeably less often than in v0.3.1–v0.4.0, and a body of evidence in
+  which a minority of the weight is at high risk of bias can no longer be
+  downgraded for it.
+* On that non-dominated branch, "substantially different magnitudes of effect"
+  is judged on **magnitude alone**. Core GRADE 4 (p6) words the node
+  symmetrically, so the `small_values` direction gate is not applied there; it
+  stays on the dominated branch, whose node is explicitly "Check direction of
+  bias". A body of evidence whose low-risk-of-bias studies show the *larger*
+  effect no longer reads as "no substantial difference".
 * When the flowchart reaches "use low risk of bias studies only", the
   meta-analysis is **refitted on the low-RoB subset** by default
   (`rob_refit = TRUE`). Every downstream domain, the rating target, the
@@ -107,6 +68,59 @@ from the source. These are corrected below. Only one judgment changes.
   announced with a message, recorded in the Risk-of-bias notes, shown by
   `print()`, and footnoted in `sof_table()`. Set `rob_refit = FALSE` to keep
   the full analysis and receive the recommendation only.
+* **Automated risk-of-bias judgments now cap at one level.** The sign-flip rule
+  and the all-studies-high-RoB case used to return `"serious"` (−2). Core
+  GRADE 4 describes no automatic two-level risk-of-bias downgrade — every leaf
+  of Fig 2 reads "rate down" / "do not rate down", and the paper's only "two
+  levels" is about rating *up* observational evidence. −2 stays reachable
+  through the scalar override `rob = "serious"` with `rob_rationale`.
+* **Inconsistency: the automated Step 1 cut-off moves from `I² > 25%` to
+  `I² > 30%`** — the only number Core GRADE 3 puts on paper ("one will seldom
+  see serious inconsistency with I2 values <30%"). 25% had no source. Analyses
+  with 25% < I² ≤ 30% now stop at Step 1 and are not rated down.
+* Inconsistency now evaluates point estimates against the **chosen threshold**
+  rather than the raw MID. Core GRADE 3 Fig 2 node 2 reads "Evaluate point
+  estimates of studies in relation to chosen threshold", and that is the value
+  the rating target resolved for Imprecision: ±MID for an important-effect or
+  little-to-no-difference target, the null for a non-null-effect target.
+  Previously the two domains could judge the same analysis against different
+  boundaries, which Core GRADE 3 Fig 4 shows can reverse the verdict.
+* **Automated inconsistency judgments now cap at one level.** Opposite-sided
+  point estimates with no credible subgroup explanation used to return
+  `"serious"` (−2). Core GRADE 3: "we have found compelling reason to rate down
+  twice for inconsistency sufficiently unusual that it need not concern users
+  of Core GRADE." −2 requires `inconsistency = "serious"` with
+  `inconsistency_rationale`.
+* **Publication bias: the `p < 0.01 → "serious" (−2)` tier is removed.** Core
+  GRADE 4 Fig 5 never rates down two levels for publication bias, and its
+  asymmetry node is qualitative ("strongly suggests publication bias") with no
+  significance threshold attached. The surviving `p < 0.05` cut-off is labelled
+  a pmatools operational convention in the domain notes.
+* `pubias_registry_complete` is now consumed **after** the "most or all studies
+  small and industry sponsored" question, not as an entry-level rule-out. Fig 5
+  has no such node; evaluating the flag first let a body of small
+  industry-sponsored trials escape the Q1 downgrade on the user's assertion
+  alone. The note states that the rule-out is that assertion, not a figure node.
+* **Indirectness: per-study vectors and column names are aggregated by weight
+  share, not worst case.** A single indirect study out of twenty used to rate
+  the whole body of evidence down, which is the opposite of Core GRADE 5's
+  framing ("all or almost all evidence comes from younger people"). The share
+  of weight rated `"serious"` is tested first, then the share rated
+  `"some_concerns"` or `"serious"`, each against the new
+  `indirectness_dominant_threshold` (default `0.55`, matching
+  `rob_dominant_threshold`). Core GRADE 5 gives **no** numeric threshold, so
+  this one is a pmatools convention and every aggregated note says so. Weights
+  come from the inverse-variance study weights, with a count-share fallback.
+  The `indirectness_subdomains` table keeps its worst-case fold — subdomains
+  are facets of one judgment, not units of evidence.
+* `suggest_threshold()` gains a **`source`** field (`"core_grade_6"` or
+  `"package_convention"`), and for binary outcomes the **absolute** candidate
+  (ARD 0.05) is now the first candidate, with the ratio value moved to
+  `$threshold_ratio`. The Core GRADE series contains no ratio-scale MID, and
+  every binary MID it discusses is on the absolute scale. SMD 0.20 is the only
+  default with a source, and Core GRADE 6 hedges it. The entry-gate error
+  message says all of this. `threshold_scale = "auto"` in `grade_meta()` is
+  unaffected.
 * `export_bundle()` is now an S3 generic, so its **first argument is named
   `x`** rather than `ma`. Positional calls (`export_bundle(m, g, ...)`) are
   unaffected. Legacy named calls (`export_bundle(ma = m, grade = g, ...)`)
@@ -166,22 +180,23 @@ from the source. These are corrected below. Only one judgment changes.
   42 fewer)"), certainty with the domains that pulled it down, and a plain
   language summary. New arguments `follow_up` and `unit` supply the time frame
   and the unit of a continuous difference.
-* Plain language summaries (**Core GRADE 6 Box 1**): the statements are carried
-  verbatim and chosen from the certainty level, `threshold_type`,
-  `rating_target` and the **direction of the pooled point estimate**. Core
-  GRADE 6 Box 1 is the canonical source for summary of findings tables — it
-  summarises the earlier Core GRADE 2 Table 1 guidance and adds the guidance
-  specific to the null and MID thresholds. The practical consequence is that
-  the statements name the direction of the effect on the outcome (`reduces` /
-  `increases` / `has little to no effect`, e.g. "Treatment increases serious
-  adverse events") instead of Core GRADE 2 Table 1's fixed "benefit" wording,
-  which inverted the meaning of every harm outcome: an outcome with RR 2.42 for
-  serious adverse events used to be summarised as "Treatment likely has an
-  important benefit". Very low certainty now follows the Core GRADE 6 Table 1
-  wording, "We are very uncertain about the effect of X on Y". Objects created
-  before the Core GRADE 2 entry gate (no `$rating_target`) still simply omit
-  the column, as do rows with no usable pooled estimate to take a direction
-  from.
+* Plain language summaries (**Core GRADE 6 Box 1**): the statements are chosen
+  from the certainty level, `threshold_type`, `rating_target` and the
+  **direction of the pooled point estimate**. Box 1 is the canonical source for
+  summary of findings tables — it summarises the earlier Core GRADE 2 Table 1
+  guidance and adds the guidance specific to the null and MID thresholds.
+  Because Box 1's qualifiers name the direction of the effect on the outcome
+  (`reduces` / `increases` / `has little to no effect`, e.g. "Treatment
+  increases serious adverse events"), the statement reads correctly for harms;
+  Core GRADE 2 Table 1's fixed "benefit" wording would have summarised an RR of
+  2.42 for serious adverse events as "Treatment likely has an important
+  benefit". Very low certainty uses the Core GRADE 6 Table 1 sentence, "We are
+  very uncertain about the effect of X on Y". Box 1 leaves several cells
+  without a worked example; those statements are composed by applying its
+  qualifier list to the frame of the verbatim example in the same column, and
+  every frame records whether it is quoted or composed. Objects created before
+  the Core GRADE 2 entry gate (no `$rating_target`) simply omit the column, as
+  do rows with no usable pooled estimate to take a direction from.
 * The Core GRADE 4 analysis-set note now travels with every output. In
   `grade_table()` the refitted outcome's row carries a numbered footnote
   marker, so a table mixing analysis sets says which rows were restricted; the
@@ -220,10 +235,10 @@ from the source. These are corrected below. Only one judgment changes.
 * New `indirectness_table()` renders those subdomain judgments as a flextable:
   target question, evidence found, a colour-graded 4-option judgment row with
   the recorded answer ticked, and a merged "Judgment across subdomains" row
-  carrying the overall judgment. (This entry originally called the layout a
-  Core GRADE 5 publication table; that was wrong and is corrected in 0.5.1 —
-  the layout is a pmatools implementation of Core GRADE 5's per-PICO
-  reasoning, and no such table appears in the article body.)
+  carrying the overall judgment. The layout is a pmatools implementation of
+  Core GRADE 5's per-PICO reasoning, **not** a Core GRADE 5 publication format:
+  no table of that shape appears in the article body, and the table footer and
+  the documentation say so.
 * Imprecision notes record which Fig 4 path produced the judgment, including
   the CI ratio rule for binary outcomes (relative risk CI ratio >= 3, odds
   ratio CI ratio >= 2.5) and the continuous 400-per-group (total N 800) rule
@@ -234,6 +249,69 @@ from the source. These are corrected below. Only one judgment changes.
   `rob_dominant_threshold`, `rob_refit`), and the full
   `indirectness_subdomains` table (with the scalar override only when it
   actually replaced the worst-case default).
+
+## Bug fixes
+
+* `grade_meta()` decided whether a supplied `indirectness` was a manual
+  override of the subdomain worst case with `missing()`, which is `FALSE`
+  whenever the caller passes every argument — exactly what the Shiny app and
+  any `do.call()` wrapper do. The formal now defaults to `NULL` and the check
+  is `is.null()`. An explicit `"no"` is still an override, and the error says
+  to omit the argument (or pass `NULL`) when that was not the intent.
+* Imprecision: the OIS note read `<= 30%` while the decision used `< 30%`; the
+  display now matches the Fig 4 node "N<30% of OIS".
+* The bundled `sample.R` passed `outcome_favors =`, which stopped being a
+  `grade_meta()` formal when it was renamed to `small_values`, so the worked
+  example had not run for some time. It now also demonstrates the entry gate, a
+  rating-target override, indirectness subdomains and `rob_some_concerns`.
+
+## Documentation and provenance
+
+A line-by-line comparison against the published Core GRADE 1–7 articles turned
+up places where pmatools presented its own operational choices as if they came
+from the source. The judgments those readings changed are listed under Breaking
+changes above; the items below change wording only.
+
+* The count-share fallbacks (Risk of bias and Indirectness), the 80% majority
+  share (CINeMA) and 20% each-side share used by the inconsistency zone tally,
+  the `p < 0.05` publication-bias cut-off, both dominance thresholds, and the
+  extension of the CI-ratio cut-off of 3 to HR / IRR are now flagged as
+  pmatools conventions in the domain notes.
+* The inconsistency notes state that the I² gate is an automation surrogate for
+  a Step 1 that Core GRADE 3 describes as visual ("Core GRADE relies on the
+  visual inspection of forest plots"), and point at `plot_forest()` plus the
+  manual flowchart inputs as the faithful route.
+* `rob_some_concerns` no longer implies Core GRADE 4 defines the fold. The
+  phrase "some concerns" does not occur in that article; it sets the binary
+  boundary by counting high-risk items and explicitly declines to settle the
+  count.
+* `TE_low` in the risk-of-bias direction check is documented as **always a
+  fixed-effect estimate**, even under a random-effects parent model.
+* `chinn_smd_to_or()` and the SoF footnotes now state that Chinn's formula is
+  **not** Core GRADE 6's option 2 (normal distribution, MID-based, per study
+  before pooling), which is not implemented.
+* Indirectness domain notes use the Core GRADE wording ("not serious" /
+  "serious" / "very serious") instead of the risk-of-bias-derived "some
+  concerns". The stored level names are unchanged.
+* `?grade_meta` and the README gain an **internal-name vs Core GRADE wording
+  table** (`"some_concerns"` = the source's "serious"; `"serious"` = its "very
+  serious"), and the README documents what Core GRADE covers that pmatools
+  does not: rating up non-randomised evidence for large effects and
+  dose-response, "extremely serious" (−3), the cross-domain gestalt step, and
+  four summary of findings features Core GRADE 6 asks for.
+* The README indirectness section gains the guideline / health technology
+  assessment distinction, the indirectness-vs-inconsistency test, the two
+  search scenarios, and the surrogate-outcome basis for rating down two levels
+  — all with the source's own wording.
+* The inconsistency documentation points at ICEMAN for subgroup credibility and
+  notes that pmatools is more permissive than Core GRADE 3, which asks for
+  separate PICO questions once credibility is moderate or high.
+* SPEC §5.2 rewritten to match the code (it still described a `≥ 0.75`
+  cut-off and a `(n_above + n_trivial)/k` formula the code no longer uses).
+* Imprecision: the unused `rating_target` / `threshold_type` arguments are
+  documented as unused, and the notes now say that Fig 4's *second* two-level
+  condition (the plain language description suggesting "may" rather than
+  "likely") is not auto-assessed.
 
 # pmatools 0.4.0
 

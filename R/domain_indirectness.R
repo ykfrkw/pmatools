@@ -20,9 +20,9 @@
 #    all or almost all evidence comes from short follow-up, they lack the data
 #    to test whether effects differ across these variables."
 #
-# A worst-case fold (used up to v0.5.0) rated the whole body of evidence down
+# A worst-case fold (used up to v0.4.0) rated the whole body of evidence down
 # when a single study out of eighteen was indirect, which is the opposite of
-# "all or almost all". Since v0.5.1 the aggregation is:
+# "all or almost all". Since v0.5 the aggregation is:
 #
 #   w_serious = inverse-variance weight share of studies rated "serious"
 #   w_any     = weight share of studies rated "some_concerns" or "serious"

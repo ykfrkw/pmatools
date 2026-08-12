@@ -504,7 +504,7 @@ These paths are **unchanged from v0.1.0**.
 
 **Path C — Auto (no flowchart params supplied):**
 
-The algorithm proxies each step from data. **This section was rewritten in v0.5.1 to match `R/domain_inconsistency.R`;** the previous text described a `≥ 0.75` cut-off and a `pct_one_side = (n_above + n_trivial)/k` formula that the code has not used since v0.5.1.
+The algorithm proxies each step from data. **This section was rewritten in v0.5.0 to match `R/domain_inconsistency.R`;** the previous text described a `≥ 0.75` cut-off and a `pct_one_side = (n_above + n_trivial)/k` formula that the code has not used since v0.5.0.
 
 ```
 Step 1 surrogate:
@@ -514,7 +514,7 @@ Step 1 surrogate:
   the statistic make such rules problematic". Its actual Step 1 is visual
   ("Core GRADE relies on the visual inspection of forest plots"), so this is
   an automation surrogate; every auto note says so.
-  (v0.5.1: raised from 25%, which had no source.)
+  (v0.5.0: raised from 25%, which had no source.)
 
 Step 2 surrogate (3-zone tally, identical shape with and without a threshold):
 
@@ -587,11 +587,11 @@ AUTO Step 2 ({{threshold_label}}): zone counts (k = {{k}}): above_threshold = {{
 
 In `assess_imprecision()`, when no explicit `ois_*` is provided:
 
-- **Binary (v0.5.1): `ois_p1 = ois_p0 * (1 - ois_rrr)`, default `ois_rrr = 0.20`.** The MID is *not* used. Core GRADE 2 (p6): "For binary outcomes, these involve specifying the acceptable error rates: α (typically 0.05) and β (typically 0.20), the control group event rate (chosen from the context), and **a modest relative risk reduction, typically 20% or 25%**." `ois_p0` still comes from the ARD baseline risk when `threshold_scale = "ard"`, otherwise from the pooled control-arm rate.
+- **Binary (v0.5.0): `ois_p1 = ois_p0 * (1 - ois_rrr)`, default `ois_rrr = 0.20`.** The MID is *not* used. Core GRADE 2 (p6): "For binary outcomes, these involve specifying the acceptable error rates: α (typically 0.05) and β (typically 0.20), the control group event rate (chosen from the context), and **a modest relative risk reduction, typically 20% or 25%**." `ois_p0` still comes from the ARD baseline risk when `threshold_scale = "ard"`, otherwise from the pooled control-arm rate.
 - Continuous (MD): `ois_delta = threshold_internal` (raw outcome units) — the same paragraph writes the continuous case out separately and *does* send it to the MID ("by specifying the smallest difference between intervention and control that one would want to avoid missing (ie, the MID)").
 - Continuous (SMD): `ois_delta = threshold_internal × pooled_SD` *(see §5.4 for pooled_SD computation)*.
 
-**Comparison unit (v0.5.1): participants, not events.** Core GRADE 2 Fig 4 caption: "N=number of participants; OIS=optimal information size"; body: "If the total sample size of all the studies included in a meta-analysis exceeds the OIS, one does not rate down". The auto-computed binary OIS is therefore a target **N** compared against `sum(n.e) + sum(n.c)`; the implied event count is reported in the notes for information. Supplying `ois_events` explicitly still selects an event-based comparison (backward compatible).
+**Comparison unit (v0.5.0): participants, not events.** Core GRADE 2 Fig 4 caption: "N=number of participants; OIS=optimal information size"; body: "If the total sample size of all the studies included in a meta-analysis exceeds the OIS, one does not rate down". The auto-computed binary OIS is therefore a target **N** compared against `sum(n.e) + sum(n.c)`; the implied event count is reported in the notes for information. Supplying `ois_events` explicitly still selects an event-based comparison (backward compatible).
 
 If both `threshold` and `ois_*` supplied, `ois_*` wins (`ois_p1` also wins over `ois_rrr`). Notes string indicates source.
 
@@ -1171,7 +1171,7 @@ if (!is.null(inconsistency_ci_diff)) {
 
 # ---- Path C: auto-detect ----
 
-# Step 1 surrogate: I² > 30%   (INCONSISTENCY_I2_CUT; v0.5.1, was 25%)
+# Step 1 surrogate: I² > 30%   (INCONSISTENCY_I2_CUT; v0.5.0, was 25%)
 ci_diff_yes <- (i2_pct > 30)
 
 if (!ci_diff_yes) {
@@ -1239,7 +1239,7 @@ CI bounds use the same multiplication. Document in `?chinn_smd_to_or` that the c
 
 When the Shiny app pre-fills the Threshold input, use these **placeholder defaults** based on `meta_obj$sm`. The user can always override — and, except for SMD, should.
 
-**Every default now carries a `source` field** naming where the number comes from, and **for binary ratio measures the absolute candidate leads** (v0.5.1). Rationale, in the source's own words:
+**Every default now carries a `source` field** naming where the number comes from, and **for binary ratio measures the absolute candidate leads** (v0.5.0). Rationale, in the source's own words:
 
 - **No ratio-scale MID exists anywhere in Core GRADE 1, 6 or 7.** Every binary MID discussed there is on the absolute scale (per 1000 or percent) — Core GRADE 7 lists MIDs "associated with mortality of 1%, stroke of 2%, myocardial infarction of 3%, and serious gastrointestinal bleeding of 5%"; Core GRADE 2 discusses "an MID of 5 deaths per [1000]". A ratio-scale default is therefore a pmatools extrapolation.
 - **The MID belongs to the outcome, not to the effect measure.** Those same Core GRADE 7 numbers "reflect the gradient of importance across these outcomes"; one default shared by every outcome erases that gradient.
@@ -1481,7 +1481,7 @@ Does the CI cross the chosen threshold?
 **Intentional behavior changes (documented in CHANGELOG):**
 
 1. **RoB `small_values = NULL` path (§5.1):** v0.1.0 always rated down conservatively when dominated; v0.2.0 only rates down when relative inflation exceeds `rob_inflation_threshold`. Set `rob_inflation_threshold = 0` to restore v0.1.0 behavior.
-2. **Inconsistency auto Step 1 (§5.2 Path C):** v0.1.0 used `I² > 25% OR Q p < 0.10`; v0.2.0 dropped the Q-test; **v0.5.1 raised the cut-off to `I² > 30%`**, the only figure Core GRADE 3 puts on paper ("one will seldom see serious inconsistency with I2 values <30%"). Q-test is supplementary in notes only. Analyses with 25% < I² ≤ 30% that previously reached Step 2 now stop at Step 1 and are not rated down.
+2. **Inconsistency auto Step 1 (§5.2 Path C):** v0.1.0 used `I² > 25% OR Q p < 0.10`; v0.2.0 dropped the Q-test; **v0.5.0 raised the cut-off to `I² > 30%`**, the only figure Core GRADE 3 puts on paper ("one will seldom see serious inconsistency with I2 values <30%"). Q-test is supplementary in notes only. Analyses with 25% < I² ≤ 30% that previously reached Step 2 now stop at Step 1 and are not rated down.
 
 ---
 

@@ -124,8 +124,7 @@ figure offers two candidate values — "\code{>65\%} weight or
 \code{>=55\%} weight = possibly dominating" — and pmatools defaults to
 the conservative one, \code{0.55}, with a \code{>=} comparison so that
 exactly 55 percent counts as dominated. Pass \code{0.65} for the stricter
-reading. (Default changed from \code{0.60} in v0.5.1: \code{0.60} matched
-neither candidate.)
+reading.
 The share is computed from the inverse-variance study weights; when those
 are unavailable the count share is used instead and the domain note says
 so. When neither is computable, dominance is assumed (conservative).
@@ -188,7 +187,7 @@ always supply every argument are not mistaken for manual overrides of an
 \code{indirectness_rationale}. \code{"no"} (no downgrade) never requires
 a rationale, so default calls are unaffected.}
 
-\item{indirectness_dominant_threshold}{(v0.5.1) Weight share at or above
+\item{indirectness_dominant_threshold}{(v0.5) Weight share at or above
 which per-study indirectness dominates the body of evidence. Only used
 when \code{indirectness} is a per-study vector or a column name (the
 \code{indirectness_subdomains} table keeps its worst-case fold). Studies
@@ -203,7 +202,7 @@ all evidence comes from ..."); \code{0.55} is a pmatools convention
 aligned with \code{rob_dominant_threshold}, and every aggregated domain
 note says so. Shares come from the inverse-variance study weights; when
 those are unavailable the count share is used and the note says so.
-\strong{Behaviour change (v0.5.1)}: per-study vectors were previously
+\strong{Behaviour change (v0.5)}: per-study vectors were previously
 folded worst-case, so a single indirect study out of many rated the whole
 body of evidence down.}
 
@@ -425,7 +424,7 @@ Used with \code{ois_p1} to auto-compute target events.}
 \item{ois_p1}{For binary outcomes: experimental arm event rate for OIS
 calculation. When supplied it takes precedence over \code{ois_rrr}.}
 
-\item{ois_rrr}{(v0.5.1) For binary outcomes: the "modest relative risk
+\item{ois_rrr}{(v0.5) For binary outcomes: the "modest relative risk
 reduction" the OIS is powered to detect, used to derive \code{ois_p1}
 from \code{ois_p0} as \eqn{p_1 = p_0 (1 - ois\_rrr)}. Default \code{0.20}.
 Core GRADE 2 specifies exactly this input for binary outcomes: "For binary
@@ -436,7 +435,7 @@ outcomes, these involve specifying the acceptable error rates: alpha
 names. Ignored when \code{ois_p1}, \code{ois_events} or \code{ois_n} is
 supplied, and ignored for continuous outcomes, where the same paragraph
 directs users to the MID instead (\code{ois_delta}).
-\strong{Behaviour change (v0.5.1)}: \code{ois_p1} was previously derived
+\strong{Behaviour change (v0.5)}: \code{ois_p1} was previously derived
 from the MID for binary outcomes too.}
 
 \item{ois_delta}{For continuous outcomes: minimally important difference for OIS

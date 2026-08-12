@@ -78,7 +78,7 @@ test_that("continuous: large effect, CI clear of the threshold, N < 30% of OIS -
   g <- suppressWarnings(grade_meta(m, outcome_type = "absolute", ois_n = 1000, threshold_type = "null"))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_equal(row$judgment, "serious")
-  # Display fixed (v0.5.1): the note used to read "<= 30%" while the decision
+  # Display fixed (v0.5): the note used to read "<= 30%" while the decision
   # used a strict "<". Fig 4's node is "N<30% of OIS".
   expect_match(row$notes, "< 30%", fixed = TRUE)
 })
@@ -201,7 +201,7 @@ test_that("the MID threshold reaches -2 on the same data (both routes agree)", {
 # --------------------------------------------------------------------------
 # Combined behaviour
 # --------------------------------------------------------------------------
-# Rewritten (v0.5.1): the binary OIS no longer derives ois_p1 from the
+# Rewritten (v0.5): the binary OIS no longer derives ois_p1 from the
 # Threshold at all (the odds-vs-RR conversion this test used to exercise is
 # gone). Core GRADE 2 p6: "For binary outcomes, these involve specifying ...
 # the control group event rate (chosen from the context), and a modest relative

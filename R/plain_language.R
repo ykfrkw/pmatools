@@ -11,7 +11,7 @@
 # Core GRADE 6 introduces Box 1 as a superset of the earlier Core GRADE 2
 # Table 1: Box 1 "summarises this guidance as well as additional guidance
 # related to the null and MID thresholds that are the focus of Core GRADE"
-# (CG6, p 2-3). pmatools followed CG2 Table 1 up to v0.5.0; from v0.5.1 the
+# (CG6, p 2-3). pmatools followed CG2 Table 1 up to v0.4.0; from v0.5.0 the
 # statements come from CG6 Box 1.
 #
 # The practical difference is direction. CG2 Table 1 is written entirely in

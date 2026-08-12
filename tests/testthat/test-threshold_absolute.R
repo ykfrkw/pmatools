@@ -125,7 +125,7 @@ test_that("grade_meta converts ARD threshold and OIS uses p1 = p0 + ARD", {
 
   d <- g$domain_assessments
   impre_notes <- d$notes[d$domain == "Imprecision"]
-  # Updated (v0.5.1): ois_p0 is still anchored to the ARD baseline risk
+  # Updated (v0.5): ois_p0 is still anchored to the ARD baseline risk
   # (0.18), but ois_p1 now comes from the modest RRR Core GRADE 2 prescribes
   # for binary outcomes (0.18 * (1 - 0.20) = 0.144), not from the threshold.
   expect_match(impre_notes, "ois_p0 from threshold baseline risk = 0.1800",
@@ -184,7 +184,7 @@ test_that("explicit ois_p0/ois_p1 take precedence over ARD derivation", {
 # suggest_threshold(): absolute suggestion
 # --------------------------------------------------------------------------
 
-# Updated (v0.5.1): for binary outcomes the ABSOLUTE suggestion is now the
+# Updated (v0.5): for binary outcomes the ABSOLUTE suggestion is now the
 # first candidate and the ratio value moved to $threshold_ratio. Reason: the
 # Core GRADE series contains no ratio-scale MID, and every binary MID it
 # discusses is absolute (per 1000 / percent).

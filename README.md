@@ -369,7 +369,7 @@ suggest_threshold(ma)              # binary outcome
 #> $threshold_ratio     list(1.20, "ratio", "package_convention")
 ```
 
-**Why the absolute candidate leads (v0.5.1).** Core GRADE 1, 6 and 7 contain
+**Why the absolute candidate leads (v0.5).** Core GRADE 1, 6 and 7 contain
 **no ratio-scale MID at all**; every binary MID they discuss is absolute. Core
 GRADE 7's worked list is "MIDs associated with mortality of 1%, stroke of 2%,
 myocardial infarction of 3%, and serious gastrointestinal bleeding of 5%". A
@@ -514,7 +514,7 @@ AUTO Step 1: Is there important heterogeneity?
 
 | Value | Where it comes from |
 |---|---|
-| **I² > 30%** (Step 1) | The only number Core GRADE 3 puts on paper: "one will seldom see serious inconsistency with I² values <30%". *(v0.5.1: was 25%, which had no source.)* |
+| **I² > 30%** (Step 1) | The only number Core GRADE 3 puts on paper: "one will seldom see serious inconsistency with I² values <30%". *(v0.5: was 25% through v0.4.0, which had no source.)* |
 | **80%** one-zone share | CINeMA (Nikolakopoulou 2020). Core GRADE 3 Fig 2 says only "Majority are on one side of threshold" and never quantifies it. |
 | **20%** each-side share | A pmatools convention. Core GRADE 3's phrase is "substantial proportion", with no number attached. |
 
@@ -552,16 +552,16 @@ conclusions". The faithful move is to split the analysis and rate each subgroup
 in its own right (see `grade_meta_multi()`), not to keep reporting one pooled
 number.
 
-**The chosen threshold is shared with Imprecision (v0.5.1).** Core GRADE 3
+**The chosen threshold is shared with Imprecision (v0.5).** Core GRADE 3
 Fig 2 node 2 reads "Evaluate point estimates of studies **in relation to
 chosen threshold**", and its Fig 4 example shows the verdict reversing with
 that choice. The zone classification therefore uses the same threshold the
 rating target resolved for Imprecision: ±MID for an important-effect or
 little-to-no-difference target, the null for a non-null-effect target. Before
-v0.5.1 this domain received the raw MID even when Imprecision was rating
+v0.5 this domain received the raw MID even when Imprecision was rating
 against the null.
 
-**No automated two-level downgrade (v0.5.1).** Core GRADE 3: "A final issue is
+**No automated two-level downgrade (v0.5).** Core GRADE 3: "A final issue is
 consideration of rating down twice for inconsistency. Although this is a
 theoretical possibility, we have found compelling reason to rate down twice for
 inconsistency sufficiently unusual that it need not concern users of Core
@@ -675,7 +675,7 @@ will follow change in the surrogate". A distant surrogate (calcium/phosphate
 metabolism for fractures) warrants −2; a closer one (bone density for
 fractures) warrants −1.
 
-**Per-study input is aggregated by weight share, not worst case (v0.5.1).**
+**Per-study input is aggregated by weight share, not worst case (v0.5).**
 Indirectness is a judgment about the *body* of evidence, and Core GRADE 5
 frames it that way: "if Core GRADE users are interested in effects in elderly
 people but **all or almost all** evidence comes from younger people ... they
@@ -854,7 +854,7 @@ No  -> effect moderate       -> do not rate down                   (0)
                        N <  OIS         -> rate down one level    (−1)
 ```
 
-**The two-level branch applies on the null-threshold path too (v0.5.1).**
+**The two-level branch applies on the null-threshold path too (v0.5).**
 Core GRADE 2: "The two considerations also apply to imprecision judgments when
 Core GRADE users choose the null as the threshold of interest. For example,
 consider a situation in which users rate their certainty in a benefit
@@ -866,7 +866,7 @@ available, the ±MID span is evaluated even when the −1/−0 decision is made
 against the null. Without a MID the two-level check is undecidable and the
 judgment stops at −1.
 
-**OIS is compared in participants (v0.5.1).** Fig 4 caption: "N=number of
+**OIS is compared in participants (v0.5).** Fig 4 caption: "N=number of
 participants; OIS=optimal information size". The auto-computed binary OIS is a
 target sample size compared against `sum(n.e) + sum(n.c)`, not a target event
 count; the implied event count is still reported in the notes. Supplying
@@ -932,15 +932,15 @@ Q4 (k < 10): Documentation of unpublished studies
   pubias_unpublished = "no" / NULL  → judgment = "no" (NULL: assumed "no" with warning)
 ```
 
-**Registry rule-out is evaluated after Q1 (v0.5.1).** Core GRADE 4 Fig 5 has
+**Registry rule-out is evaluated after Q1 (v0.5).** Core GRADE 4 Fig 5 has
 exactly four decision nodes and no structural rule-out; its only registry node
 is Q4. Evaluating `pubias_registry_complete` first, as pmatools did up to
-v0.5.0, let a body of small industry-sponsored trials escape the Q1 downgrade.
+v0.4.0, let a body of small industry-sponsored trials escape the Q1 downgrade.
 The domain note now states that the rule-out is the user's assertion rather
 than a figure node.
 
 **No two-level publication-bias downgrade, and no p-value in the source
-(v0.5.1).** The `p < 0.01 → serious (-2)` tier is gone. Fig 5's asymmetry node
+(v0.5).** The `p < 0.01 → serious (-2)` tier is gone. Fig 5's asymmetry node
 asks qualitatively whether the evidence "strongly suggests publication bias"
 and names no threshold; the surviving `p < 0.05` cut-off is a pmatools
 operational convention and is labelled as such in the domain notes.
@@ -1746,7 +1746,7 @@ pmatools/
 │   └── templates/                        # analysis.R templates (single + multi)
 ├── data-raw/
 │   └── cbti_depression.R    # script to generate data/*.rda
-├── tests/testthat/          # 23 test files (936 tests as of v0.5.0)
+├── tests/testthat/          # 24 test files
 └── outputs/                 # generated output (gitignored)
 ```
 
