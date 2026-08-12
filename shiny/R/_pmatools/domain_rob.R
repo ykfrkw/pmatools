@@ -133,7 +133,9 @@
 #
 #   A 1-row tibble (make_domain_row()) carrying two attributes:
 #     attr(row, "analysis_set") : "all" | "low_only"
-#     attr(row, "high_idx")     : logical vector of high-RoB studies, or NULL
+#     attr(row, "high_idx")     : logical vector of high-RoB studies, aligned
+#                                 to meta_obj$studlab (NOT to k, so that
+#                                 update.meta(subset = ) can use it), or NULL
 #
 # --------------------------------------------------------------------------
 # Inputs:
@@ -212,7 +214,9 @@
 #' @param threshold_internal Clinical decision threshold on the analysis
 #'   scale (defines the trivial zone).
 #' @return A 1-row tibble with attributes `"analysis_set"` (`"all"` or
-#'   `"low_only"`) and `"high_idx"` (logical vector or `NULL`).
+#'   `"low_only"`) and `"high_idx"` (a logical vector aligned to
+#'   `meta_obj$studlab`, so it can be passed straight to
+#'   `update.meta(subset = )`, or `NULL`).
 #' @noRd
 assess_rob <- function(rob, meta_obj,
                        rob_some_concerns       = "low",
@@ -275,29 +279,129 @@ assess_rob <- function(rob, meta_obj,
     rob <- as.character(data[[col]])
   }
 
-  # Vector: normalise + length check
-  rob <- .normalize_rob_levels(rob)
-  if (length(rob) != k) {
+  # Vector: normalise + length check.
+  #
+  # Two lengths are accepted because the risk-of-bias pipeline straddles two
+  # spaces (see .rob_studlab_index()): k, the estimable studies {meta} pools
+  # and the only space .flowchart_rob() can index, and length(studlab), the
+  # original data rows that `rob_overrides` keys on and that
+  # update.meta(subset = ) indexes. They coincide unless {meta} dropped a
+  # study (missing results, double-zero events under method = "Inverse").
+  rob     <- .normalize_rob_levels(rob)
+  n_slab  <- length(meta_obj$studlab %||% character(0))
+  idx     <- .rob_studlab_index(meta_obj, k)
+
+  # rob_full: studlab-space, NA where {meta} could not pool the study (a
+  # k-length input carries no judgment for those rows). NULL when the two
+  # spaces cannot be mapped onto each other, in which case every collaborator
+  # falls back to its pre-existing abort/skip path rather than guessing.
+  rob_full <- NULL
+  if (length(rob) == k) {
+    rob_k <- rob
+    if (!is.null(idx)) {
+      rob_full      <- rep(NA_character_, n_slab)
+      rob_full[idx] <- rob
+    }
+  } else if (n_slab > 0L && length(rob) == n_slab) {
+    if (is.null(idx)) {
+      rlang::abort(paste0(
+        "rob has one entry per study label (", n_slab, ") but the meta object ",
+        "pools only k = ", k, " studies, and the estimable rows could not be ",
+        "identified from meta_obj$TE. Supply a vector of length k (", k,
+        ") instead."
+      ))
+    }
+    rob_full <- rob
+    rob_k    <- rob[idx]
+  } else {
     rlang::abort(paste0(
       "rob must be a scalar GRADE level, a column name in meta_obj$data, ",
-      "or a vector of length k (", k, "). Got length ", length(rob), "."
+      "or a vector of length k (", k, ") or length(meta_obj$studlab) (",
+      n_slab, "). Got length ", length(rob), "."
     ))
   }
 
   validate_grade_level(rob, "rob")
 
   # Study-level overrides (keyed on studlab) are applied on the normalised
-  # vector, before the binary low/high fold, and every one is recorded.
-  ovr <- .apply_rob_overrides(rob, meta_obj, rob_overrides,
+  # vector, before the binary low/high fold, and every one is recorded. They
+  # are applied in studlab space whenever it is resolvable, so that an
+  # override can also name a study {meta} could not pool.
+  ovr <- .apply_rob_overrides(rob_full %||% rob_k, meta_obj, rob_overrides,
                               rob_override_rationale)
+  if (is.null(rob_full)) {
+    rob_k <- ovr$rob
+  } else {
+    rob_full <- ovr$rob
+    rob_k    <- rob_full[idx]
+  }
 
-  .flowchart_rob(ovr$rob, meta_obj,
-                 dominant_threshold  = rob_dominant_threshold,
-                 inflation_threshold = rob_inflation_threshold,
-                 small_values        = small_values,
-                 threshold_internal  = threshold_internal,
-                 some_concerns_as    = rob_some_concerns,
-                 override_notes      = ovr$notes)
+  row <- .flowchart_rob(rob_k, meta_obj,
+                        dominant_threshold  = rob_dominant_threshold,
+                        inflation_threshold = rob_inflation_threshold,
+                        small_values        = small_values,
+                        threshold_internal  = threshold_internal,
+                        some_concerns_as    = rob_some_concerns,
+                        override_notes      = ovr$notes)
+
+  # .flowchart_rob() works in k-space, but the only consumer of "high_idx"
+  # (grade_meta() -> .refit_low_rob() -> update.meta(subset = )) indexes the
+  # original data rows. Expand before handing it over; a study {meta} could
+  # not pool counts as high only when the caller judged it so itself (NA, from
+  # a k-length input, stays FALSE).
+  if (!is.null(rob_full) && n_slab != k) {
+    high_k <- attr(row, "high_idx")
+    if (!is.null(high_k) && length(high_k) == length(rob_k)) {
+      high_full      <- rob_full %in% .rob_high_levels(rob_some_concerns)
+      high_full[idx] <- high_k
+      attr(row, "high_idx") <- high_full
+    }
+  }
+  row
+}
+
+# --------------------------------------------------------------------------
+# k-space <-> studlab-space alignment
+#
+# {meta} keeps $studlab / $TE / $seTE / $w.random at the length of the
+# ORIGINAL data rows but counts only the estimable ones in $k (a study with
+# missing results, or a double-zero study under method = "Inverse", is
+# dropped from the pool but not from the data). The Core GRADE 4 Fig 2 maths
+# in .flowchart_rob() is written in k-space; `rob_overrides` keys and
+# update.meta(subset = ) live in studlab space. This is the single place that
+# maps the n estimable studies onto their studlab positions.
+#
+# It never guesses: the two candidate rules are the ones the alignment blocks
+# in pick_weights() and .flowchart_rob() already use (!is.na(TE), then
+# is.finite(TE)), and unless one of them reproduces exactly n rows the answer
+# is NULL and the caller keeps its existing abort/skip behaviour.
+# --------------------------------------------------------------------------
+.rob_studlab_index <- function(meta_obj, n) {
+  studlab <- meta_obj$studlab
+  if (is.null(studlab)) return(NULL)
+  if (length(n) != 1L || !is.numeric(n) || !is.finite(n)) return(NULL)
+  n      <- as.integer(n)
+  n_slab <- length(studlab)
+  if (n_slab == n) return(seq_len(n_slab))
+
+  te <- meta_obj$TE
+  if (is.null(te) || length(te) != n_slab) return(NULL)
+  hit <- which(!is.na(te))
+  if (length(hit) == n) return(hit)
+  hit <- which(is.finite(te))
+  if (length(hit) == n) return(hit)
+  NULL
+}
+
+# Binary low/high fold of the normalised levels. Shared by .flowchart_rob()
+# (which classifies the pooled studies) and assess_rob() (which classifies the
+# studies {meta} dropped, so that "high_idx" is complete in studlab space).
+.rob_high_levels <- function(some_concerns_as = "low") {
+  high_levels <- c("serious", "very_serious")
+  if (identical(some_concerns_as, "high")) {
+    high_levels <- c(high_levels, "some_concerns", "some")
+  }
+  high_levels
 }
 
 # --------------------------------------------------------------------------
@@ -367,8 +471,18 @@ assess_rob <- function(rob, meta_obj,
     rob_override_rationale <- unlist(rob_override_rationale)
   }
 
-  studlab <- meta_obj$studlab
-  if (is.null(studlab) || length(studlab) != length(rob)) {
+  # The keys are studlab labels, so the vector has to be matched against the
+  # study labels it actually describes. A k-length vector is shorter than
+  # studlab whenever {meta} dropped a non-estimable study, so align it onto
+  # the estimable studlab positions first; only a genuinely unresolvable case
+  # (no studlab, or no alignment that reproduces the vector's length) aborts.
+  studlab        <- meta_obj$studlab
+  studlab_of_rob <- studlab
+  if (!is.null(studlab) && length(studlab) != length(rob)) {
+    idx <- .rob_studlab_index(meta_obj, length(rob))
+    studlab_of_rob <- if (is.null(idx)) NULL else studlab[idx]
+  }
+  if (is.null(studlab_of_rob) || length(studlab_of_rob) != length(rob)) {
     rlang::abort(paste0(
       "rob_overrides requires meta_obj$studlab to be available and the same ",
       "length as the per-study risk-of-bias vector (got ",
@@ -376,7 +490,7 @@ assess_rob <- function(rob, meta_obj,
       " risk-of-bias judgments)."
     ))
   }
-  studlab <- as.character(studlab)
+  studlab <- as.character(studlab_of_rob)
 
   keys    <- names(rob_overrides)
   unknown <- setdiff(keys, studlab)
@@ -415,8 +529,11 @@ assess_rob <- function(rob, meta_obj,
 
     hit <- which(studlab == key)
     for (i in hit) {
+      # NA is only possible for a study {meta} could not pool, reached with a
+      # k-length input: there is no assessed level to report as the "from".
+      from <- if (is.na(rob[i])) "not estimable" else rob[i]
       notes <- c(notes, sprintf("Study-level override: %s %s -> %s (%s)",
-                                key, rob[i], to, trimws(rat)))
+                                key, from, to, trimws(rat)))
       rob[i] <- to
     }
   }
@@ -437,10 +554,7 @@ assess_rob <- function(rob, meta_obj,
   # Binary low/high classification. "serious" is always high (legacy
   # "very_serious" is still recognized after .normalize_rob_levels);
   # "some_concerns" goes to whichever side rob_some_concerns selects.
-  high_levels <- c("serious", "very_serious")
-  if (identical(some_concerns_as, "high")) {
-    high_levels <- c(high_levels, "some_concerns", "some")
-  }
+  high_levels <- .rob_high_levels(some_concerns_as)
   high_idx <- rob_vec %in% high_levels
   n_high   <- sum(high_idx)
   n_total  <- length(rob_vec)
@@ -1139,6 +1253,12 @@ rob_strata <- function(x, arg = "rob") {
     ), warn = FALSE))
   }
 
+  # update.meta()'s `subset =` indexes the ORIGINAL data rows, so `high_idx`
+  # must be studlab-aligned; assess_rob() expands it out of k-space before
+  # attaching it. The length check is kept as the guard for the case where
+  # that expansion was not possible (k-space vector, alignment unresolvable):
+  # skipping with a warning is the only safe answer, because subsetting with a
+  # short logical vector would recycle it and silently keep the wrong studies.
   n_studies <- length(meta_obj$studlab %||% meta_obj$TE)
   if (length(high_idx) != n_studies) {
     return(skip(paste0(
