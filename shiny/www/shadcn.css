@@ -146,6 +146,65 @@ h5 { font-size: 0.95rem; margin-top: 0.75rem; margin-bottom: 0.4rem; }
   font-size: 0.9rem;
 }
 
+/* Risk-of-bias analysis set (Core GRADE 4 Fig 2).
+   A state notice, not an error: muted surface, neutral text, and the same
+   amber accent the .pma-banner uses so the two read as one family. */
+.pma-analysis-set {
+  position: sticky;
+  /* Clears the .pma-sticky-cert bar above it. If that bar is ever removed,
+     drop this to 0.5rem; nothing else here depends on it. */
+  top: 3.2rem;
+  z-index: 99;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+  border-left: 3px solid var(--grade-low-fg);
+  border-radius: var(--radius);
+  padding: 0.45rem 0.85rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  color: hsl(var(--foreground));
+}
+.pma-analysis-set-label {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.pma-analysis-set-compare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.5rem;
+  margin: 0.6rem 0 0.4rem;
+}
+.pma-analysis-set-estimate {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.pma-analysis-set-estimate-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.85;
+}
+.pma-analysis-set-estimate-value {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+.pma-analysis-set-dropped { margin-top: 0.35rem; }
+.pma-analysis-set-studies { color: hsl(var(--foreground)); }
+.pma-analysis-set-details {
+  margin-top: 0.35rem;
+  max-height: 8rem;
+  overflow-y: auto;
+}
+
 /* How-this-is-judged block */
 .pma-how p { margin: 0.25rem 0 0.75rem 0; line-height: 1.5; font-size: 0.9rem; }
 
