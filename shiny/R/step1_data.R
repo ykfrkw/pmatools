@@ -267,6 +267,25 @@ step1_server <- function(input, output, session, state) {
     )
   }, ignoreInit = TRUE)
 
+  # Saved outcomes survive a data reload on purpose (never silently
+  # discarded), but a reload is exactly when a Summary of Findings table can
+  # start mixing datasets. Say so once per load; Step 3 / Step 4 then flag
+  # the individual rows that came from other data.
+  shiny::observeEvent(ingested(), {
+    res <- ingested()
+    if (is.null(res) ||
+        (!is.data.frame(res) && is.list(res) && !is.null(res$error))) return()
+    n <- length(pma_outcomes_list(state$outcomes))
+    if (n == 0) return()
+    shiny::showNotification(
+      sprintf(paste0(
+        "%d saved outcome(s) are kept. Any that were saved from a different ",
+        "dataset are marked \"different dataset\" in the saved-outcome list ",
+        "(Step 3) and warned about above the combined Summary of Findings ",
+        "table (Step 4). Nothing was removed."), n),
+      type = "warning", duration = 12)
+  }, ignoreInit = TRUE)
+
   loaded_current <- shiny::reactive({
     !is.null(loaded_signature()) &&
       identical(loaded_signature(), current_signature())

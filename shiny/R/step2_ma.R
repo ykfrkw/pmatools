@@ -136,8 +136,8 @@ step2_ui <- function(state = NULL) {
                     style = "grid-column: span 4;",
                     shiny::textInput("forest_title", "Title", value = "", width = "100%")),
 
-                  shiny::textInput("label_e",      "Exp. label",      value = "",  width = "100%"),
-                  shiny::textInput("label_c",      "Ctrl label",      value = "",  width = "100%"),
+                  shiny::textInput("label_e",      "Intervention label", value = "",  width = "100%"),
+                  shiny::textInput("label_c",      "Control label",      value = "",  width = "100%"),
                   shiny::textInput("favors_left",  "Favors (left)",   placeholder = "e.g., Favors Control", width = "100%"),
                   shiny::textInput("favors_right", "Favors (right)",  placeholder = "e.g., Favors CBT-I",   width = "100%"),
 
@@ -147,7 +147,7 @@ step2_ui <- function(state = NULL) {
                   shiny::numericInput("addrows_below_overall", "addrows.below.overall", value = 1, min = 0, step = 1, width = "100%"),
 
                   htmltools::div(style = "grid-column: span 2;",
-                    shiny::checkboxInput("show_n", "Show N columns (Exp / Ctrl)", FALSE)),
+                    shiny::checkboxInput("show_n", "Show N columns (Intervention / Control)", FALSE)),
                   htmltools::div(style = "grid-column: span 2;",
                     shiny::checkboxInput("show_events", "Show event columns (binary)", FALSE))
                 )

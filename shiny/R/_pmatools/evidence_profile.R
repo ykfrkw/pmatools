@@ -1,13 +1,13 @@
-# evidence_profile.R - GRADE Evidence Profile flextable
+# evidence_profile.R - Evidence Profile flextable (Core GRADE series)
 #
-# Single-row, single-outcome layout matching the canonical GRADE / BMJ
-# Evidence Profile presentation:
+# Single-row, single-outcome layout matching the BMJ 2025 Core GRADE
+# series Evidence Profile presentation:
 #
 #   Outcome | No of studies (N) | Design | Risk of bias | Inconsistency |
 #                       | Indirectness | Imprecision |
 #                       | Other considerations | Quality of evidence
 
-#' GRADE Evidence Profile flextable for a single outcome
+#' Evidence Profile flextable (Core GRADE series) for a single outcome
 #'
 #' @param grade A `pmatools` object from \code{\link{grade_meta}}.
 #' @param palette Colour palette for the certainty cell.
@@ -179,13 +179,22 @@ evidence_profile <- function(grade,
     }
   }
 
+  thr_note <- grade$threshold_note %||% NULL
+  if (!is.null(thr_note) && !is.na(thr_note) && nzchar(thr_note)) {
+    ft <- flextable::add_footer_lines(
+      ft,
+      values = paste0("Threshold: ", thr_note, ".")
+    )
+  }
+
   ft <- flextable::add_footer_lines(
     ft,
     values = paste0(
-      "GRADE Evidence Profile. Certainty levels: ",
+      "Evidence Profile (Core GRADE series). Certainty levels: ",
       paste(CERTAINTY_SYMBOLS_UNICODE, names(CERTAINTY_SYMBOLS_UNICODE),
             sep = " ", collapse = "  "),
-      ". BMJ 2025 Core GRADE series (Guyatt et al.)."
+      ". Based on the BMJ 2025 Core GRADE series (Guyatt et al.); ",
+      "not an official GRADE Working Group assessment."
     )
   )
 

@@ -27,6 +27,33 @@ step3_ui <- function() {
       htmltools::div(...)
     )
   }
+  # Rationale textarea shown only while the paired override select has a
+  # non-empty value. A written rationale is mandatory for manual overrides
+  # (pmatools v0.4.0 breaking change; Core GRADE transparency principle).
+  .override_rationale <- function(select_id, rationale_id) {
+    shiny::conditionalPanel(
+      sprintf("(input['%s'] || '') != ''", select_id),
+      shiny::textAreaInput(
+        rationale_id,
+        "Rationale (required for override)",
+        rows = 2, width = "100%",
+        placeholder = "State why the automated assessment was replaced."
+      )
+    )
+  }
+  # Explicit per-domain confirmation checkbox (output gate W4-A). Checking
+  # it marks the domain as reviewed even if no substantive input was given.
+  .confirm_checkbox <- function(id,
+                                label = paste0(
+                                  "I have reviewed this domain ",
+                                  "(it may remain unassessed / at its default)")) {
+    htmltools::div(
+      style = paste(
+        "margin-top: 1rem; padding: 0.5rem 0.75rem;",
+        "border: 1px dashed hsl(var(--border)); border-radius: 6px;"),
+      shiny::checkboxInput(id, label, value = FALSE, width = "100%")
+    )
+  }
   .grade_nav <- function(back_id, back_label, next_id, next_label = "Next") {
     htmltools::div(
       style = paste(
@@ -53,8 +80,8 @@ step3_ui <- function() {
           "padding: 0.75rem 0.25rem 0.25rem;"),
         htmltools::div(style = "grid-column: span 4;",
           shiny::textInput(paste0(prefix, "_title"), "Title", value = "", width = "100%")),
-        shiny::textInput(paste0(prefix, "_label_e"),  "Exp. label",     value = "", width = "100%"),
-        shiny::textInput(paste0(prefix, "_label_c"),  "Ctrl label",     value = "", width = "100%"),
+        shiny::textInput(paste0(prefix, "_label_e"),  "Intervention label", value = "", width = "100%"),
+        shiny::textInput(paste0(prefix, "_label_c"),  "Control label",      value = "", width = "100%"),
         shiny::textInput(paste0(prefix, "_favors_left"),  "Favors (left)",  placeholder = "e.g., Favors Control", width = "100%"),
         shiny::textInput(paste0(prefix, "_favors_right"), "Favors (right)", placeholder = "e.g., Favors CBT-I",   width = "100%"),
         shiny::numericInput(paste0(prefix, "_xlim_lo"), "x-min", value = NA, width = "100%"),
@@ -64,7 +91,7 @@ step3_ui <- function() {
         shiny::numericInput(paste0(prefix, "_addrows_below"), "addrows.below.overall",
                             value = 1, min = 0, step = 1, width = "100%"),
         htmltools::div(style = "grid-column: span 2;",
-          shiny::checkboxInput(paste0(prefix, "_show_n"), "Show N columns (Exp / Ctrl)", FALSE)),
+          shiny::checkboxInput(paste0(prefix, "_show_n"), "Show N columns (Intervention / Control)", FALSE)),
         htmltools::div(style = "grid-column: span 2;",
           shiny::checkboxInput(paste0(prefix, "_show_events"), "Show event columns (binary)", FALSE))
       )
@@ -86,9 +113,25 @@ step3_ui <- function() {
     ),
 
     pma_card(
-      title = "GRADE assessment",
+      title = "Certainty assessment (Core GRADE series)",
       shiny::tabsetPanel(
         id = "grade_tabs",
+
+        # --- Decision threshold (cross-cutting; set once, used by RoB /
+        #     Inconsistency / Imprecision) ---
+        shiny::tabPanel("Decision threshold",
+          htmltools::h4("Decision threshold",
+                        style = "margin: 0 0 0.5rem; font-size: 1.1rem;"),
+          htmltools::p(class = "pma-card-subtitle",
+            EDU_COPY$threshold_tab$intro),
+          shiny::uiOutput("threshold_panel"),
+          .confirm_checkbox("threshold_confirm",
+            paste0("I have reviewed and confirm this decision threshold ",
+                   "(required before export; the default value is fine ",
+                   "if you agree with it)")),
+          .grade_nav("grade_back_thresh", "Back: Meta-analysis",
+                     "grade_next_thresh", "Next: Risk of Bias")
+        ),
 
         # --- Risk of Bias ---
         shiny::tabPanel("Risk of Bias",
@@ -142,7 +185,8 @@ step3_ui <- function() {
               proxy.height = "320px")),
           .forest_display_panel("rob"),
           .inputs_details(open = FALSE, title = "Inputs for this domain",
-            shiny::sliderInput("rob_inf_threshold", "Inflation threshold",
+            shiny::sliderInput("rob_inf_threshold",
+              "Sensitivity-analysis change threshold (RoB-specific)",
               min = 0.05, max = 0.5, value = 0.10, step = 0.05),
             shiny::radioButtons("small_values", "Outcome direction",
               choices = c("(no override)" = "",
@@ -154,9 +198,11 @@ step3_ui <- function() {
             shiny::selectInput("rob_override", NULL,
               choices = c("(no override)" = "", "No" = "no",
                           "Some concerns" = "some_concerns",
-                          "Serious" = "serious"))
+                          "Serious" = "serious")),
+            .override_rationale("rob_override", "rob_override_rationale")
           ),
-          .grade_nav("grade_back_rob", "Back: Meta-analysis",
+          .confirm_checkbox("rob_confirm_na"),
+          .grade_nav("grade_back_rob", "Back: Decision threshold",
                      "grade_next_rob", "Next: Inconsistency")
         ),
 
@@ -203,8 +249,10 @@ step3_ui <- function() {
             shiny::selectInput("incon_override", NULL,
               choices = c("(no override)" = "", "No" = "no",
                           "Some concerns" = "some_concerns",
-                          "Serious" = "serious"))
+                          "Serious" = "serious")),
+            .override_rationale("incon_override", "incon_override_rationale")
           ),
+          .confirm_checkbox("incon_confirm_na"),
           .grade_nav("grade_back_incon", "Back: Risk of Bias",
                      "grade_next_incon", "Next: Indirectness")
         ),
@@ -216,11 +264,25 @@ step3_ui <- function() {
           pma_how_collapse(EDU_COPY$domains$indirectness$how),
           pma_reference(EDU_COPY$domains$indirectness$ref_text,
                         EDU_COPY$domains$indirectness$doi),
+          # No preselected value (W4-A): the user must actively choose a
+          # rating. grade_meta() receives "no" while unselected, but the
+          # domain does not count as confirmed until a choice is made.
           shiny::radioButtons("indirectness", "Overall indirectness rating",
             choices = c("No" = "no",
                         "Some concerns" = "some_concerns",
                         "Serious" = "serious"),
-            selected = "no", inline = TRUE),
+            selected = character(0), inline = TRUE),
+          shiny::conditionalPanel(
+            "input.indirectness == 'some_concerns' || input.indirectness == 'serious'",
+            shiny::textAreaInput(
+              "indir_rationale",
+              "Rationale (required for any rating other than 'No')",
+              rows = 2, width = "100%",
+              placeholder = paste0(
+                "State which aspect (population / intervention / comparator ",
+                "/ outcome) raises concern and why.")
+            )
+          ),
           htmltools::tags$details(
             class = "pma-edit-details",
             htmltools::tags$summary(
@@ -277,6 +339,7 @@ step3_ui <- function() {
           ),
           shiny::uiOutput("indir_forest_image_block"),
           .forest_display_panel("indir"),
+          .confirm_checkbox("indir_confirm_na"),
           .grade_nav("grade_back_indir", "Back: Inconsistency",
                      "grade_next_indir", "Next: Imprecision")
         ),
@@ -313,8 +376,10 @@ step3_ui <- function() {
             shiny::selectInput("impre_override", NULL,
               choices = c("(no override)" = "", "No" = "no",
                           "Some concerns" = "some_concerns",
-                          "Serious" = "serious"))
+                          "Serious" = "serious")),
+            .override_rationale("impre_override", "impre_override_rationale")
           ),
+          .confirm_checkbox("impre_confirm_na"),
           .grade_nav("grade_back_impre", "Back: Indirectness",
                      "grade_next_impre", "Next: Publication bias")
         ),
@@ -440,14 +505,17 @@ step3_ui <- function() {
             shiny::selectInput("pubias_override", NULL,
               choices = c("(no override)" = "", "No" = "no",
                           "Some concerns" = "some_concerns",
-                          "Serious" = "serious"))
+                          "Serious" = "serious")),
+            .override_rationale("pubias_override", "pubias_override_rationale")
           ),
+          .confirm_checkbox("pubias_confirm_na"),
           .grade_nav("grade_back_pubias", "Back: Imprecision",
                      "grade_next_pubias", "Next: Final certainty")
         ),
 
-        # --- Final certainty (6th tab) ---
+        # --- Final certainty (7th tab) ---
         shiny::tabPanel("Final certainty",
+          shiny::uiOutput("cert_incomplete_banner"),
           htmltools::h5("GRADE Evidence Profile"),
           htmltools::div(
             style = "margin-top: 0.5rem; margin-bottom: 1rem;",
@@ -520,6 +588,19 @@ step3_ui <- function() {
               )
             )
           ),
+          htmltools::hr(),
+
+          # ----- Save this outcome for the multi-outcome SoF table -----
+          # Sits at the end of the Final certainty tab: this is the point in
+          # the wizard where the rating for one outcome is complete, and the
+          # natural place to bank it before going back to Step 2 for the
+          # next outcome.
+          htmltools::h5("Saved outcomes for the Summary of Findings table"),
+          htmltools::p(class = "pma-card-subtitle",
+                       EDU_COPY$multi_outcome$save_intro),
+          shiny::uiOutput("save_outcome_panel"),
+          shiny::uiOutput("saved_outcomes_list"),
+
           .grade_nav("grade_back_final", "Back: Publication bias",
                      "grade_next_final", "Next: Export")
         )
@@ -531,6 +612,7 @@ step3_ui <- function() {
 step3_server <- function(input, output, session, state) {
 
   grade_tab_sequence <- c(
+    "Decision threshold",
     "Risk of Bias",
     "Inconsistency",
     "Indirectness",
@@ -580,6 +662,9 @@ step3_server <- function(input, output, session, state) {
     invisible(TRUE)
   }
 
+  shiny::observeEvent(input$grade_back_thresh, {
+    retreat_grade_tab("Decision threshold")
+  }, ignoreInit = TRUE)
   shiny::observeEvent(input$grade_back_rob, {
     retreat_grade_tab("Risk of Bias")
   }, ignoreInit = TRUE)
@@ -597,6 +682,9 @@ step3_server <- function(input, output, session, state) {
   }, ignoreInit = TRUE)
   shiny::observeEvent(input$grade_back_final, {
     retreat_grade_tab("Final certainty")
+  }, ignoreInit = TRUE)
+  shiny::observeEvent(input$grade_next_thresh, {
+    advance_grade_tab("Decision threshold")
   }, ignoreInit = TRUE)
   shiny::observeEvent(input$grade_next_rob, {
     advance_grade_tab("Risk of Bias")
@@ -616,16 +704,22 @@ step3_server <- function(input, output, session, state) {
   shiny::observeEvent(input$grade_next_final, {
     advance_grade_tab("Final certainty")
   }, ignoreInit = TRUE)
-  # ----- Threshold state (independent of UI render so Final certainty
-  # doesn't flip as the user clicks tabs) ---------------------------------
-  threshold_state <- shiny::reactiveVal(NA_real_)
+  # ----- Threshold state (single source of truth: Decision threshold tab;
+  # independent of UI render so Final certainty doesn't flip as the user
+  # clicks tabs) -----------------------------------------------------------
+  # threshold_state          : relative (ratio) or te-scale value
+  # threshold_mode_state     : "absolute" / "relative" (binary ratio SMs only)
+  # threshold_abs_state      : absolute threshold, events per 1,000
+  # threshold_baseline_state : baseline (control-group) risk, per 1,000
+  threshold_state          <- shiny::reactiveVal(NA_real_)
+  threshold_mode_state     <- shiny::reactiveVal("absolute")
+  threshold_abs_state      <- shiny::reactiveVal(NA_real_)
+  threshold_baseline_state <- shiny::reactiveVal(NA_real_)
 
-  # Initialise threshold_state from suggest_threshold() as soon as state$ma is
-  # available. This used to live inside .render_threshold_block, but that
-  # ran via renderUI which Shiny suspends while the containing tab is
-  # hidden -- so grade_obj() saw threshold = NA on first render and the
-  # Final certainty silently changed when the user clicked Inconsistency
-  # / Imprecision for the first time.
+  # Initialise defaults from suggest_threshold() / pooled CER as soon as
+  # state$ma is available. These observers live outside renderUI on purpose:
+  # renderUI is suspended while the tab is hidden, so grade_obj() would
+  # otherwise see NA thresholds until the user first opened the tab.
   shiny::observe({
     obj <- state$ma
     if (is.null(obj)) return()
@@ -635,81 +729,252 @@ step3_server <- function(input, output, session, state) {
       threshold_state(round(s$threshold_user, 4))
     }
   })
-
-  .render_threshold_block <- function(input_id) {
+  shiny::observe({
     obj <- state$ma
-    if (is.null(obj)) return(htmltools::p("Run analysis first."))
-    sm  <- obj$sm %||% "OR"
-    val <- threshold_state()
-    if (is.na(val)) {
-      s <- tryCatch(suggest_threshold(obj), error = function(e) NULL)
-      val <- if (!is.null(s) && !is.null(s$threshold_user)) round(s$threshold_user, 4) else NA_real_
+    if (is.null(obj)) return()
+    if (is.na(threshold_abs_state())) {
+      # 0.05 = 50 per 1,000 (vendored suggest_threshold ARD default)
+      threshold_abs_state(50)
     }
-    hlp <- EDU_COPY$threshold_help[[sm]]   %||% ""
-    lab <- EDU_COPY$threshold_labels[[sm]] %||% "Threshold for clinical importance"
-    lab_html <- htmltools::HTML(paste0('<span style="white-space:nowrap">', lab, '</span>'))
+    if (is.na(threshold_baseline_state())) {
+      ec <- obj$event.c; nc <- obj$n.c
+      if (!is.null(ec) && !is.null(nc) && sum(nc, na.rm = TRUE) > 0) {
+        cer <- sum(ec, na.rm = TRUE) / sum(nc, na.rm = TRUE)
+        if (is.finite(cer) && cer > 0 && cer < 1) {
+          threshold_baseline_state(round(1000 * cer, 1))
+        }
+      }
+    }
+  })
 
-    htmltools::tagList(
-      htmltools::p(
-        class = "pma-card-subtitle",
-        paste0(
-          "Threshold = the smallest effect that would be clinically meaningful. ",
-          "Used by both Inconsistency (decision threshold) and Imprecision ",
-          "(target effect for OIS). Editing here syncs with the other domain."
-        )
-      ),
-      shiny::numericInput(input_id, lab_html, value = val, min = 0, step = 0.01),
-      htmltools::p(class = "pma-card-subtitle", hlp),
-      htmltools::p(
-        class = "pma-card-subtitle",
-        style = "font-style: italic;",
-        paste0(
-          "Note: do not equate this threshold with a Minimally Important ",
-          "Change (MIC). MIC is a within-individual change over time, while ",
-          "a meta-analysis pools between-group differences across studies. ",
-          "These are distinct quantities and should not be substituted for ",
-          "each other when judging clinical importance."
-        )
+  # Mirror Decision-threshold-tab inputs into the reactiveVals.
+  shiny::observeEvent(input$threshold_mode, {
+    if (nzchar(input$threshold_mode %||% "")) {
+      threshold_mode_state(input$threshold_mode)
+    }
+  }, ignoreInit = TRUE)
+  shiny::observeEvent(input$threshold_abs, {
+    v <- input$threshold_abs
+    if (!is.null(v) && length(v) == 1 && !is.na(v)) threshold_abs_state(v)
+  }, ignoreInit = TRUE)
+  shiny::observeEvent(input$threshold_baseline_input, {
+    v <- input$threshold_baseline_input
+    if (!is.null(v) && length(v) == 1 && !is.na(v)) threshold_baseline_state(v)
+  }, ignoreInit = TRUE)
+  shiny::observeEvent(input$threshold_ratio, {
+    v <- input$threshold_ratio
+    if (!is.null(v) && length(v) == 1 && !is.na(v)) threshold_state(v)
+  }, ignoreInit = TRUE)
+  shiny::observeEvent(input$threshold_cont, {
+    v <- input$threshold_cont
+    if (!is.null(v) && length(v) == 1 && !is.na(v)) threshold_state(v)
+  }, ignoreInit = TRUE)
+
+  # Equivalent ratio for an absolute (per 1,000) threshold at a given
+  # baseline risk (mirrors vendored .ard_threshold_to_ratio maths).
+  .ard_equiv_ratio <- function(sm, abs1000, base1000) {
+    if (!is.finite(abs1000) || !is.finite(base1000)) return(NULL)
+    p0 <- base1000 / 1000
+    p1 <- p0 + abs1000 / 1000
+    if (p0 <= 0 || p0 >= 1 || p1 >= 1 || abs1000 <= 0) return(NULL)
+    if (identical(sm, "OR")) (p1 / (1 - p1)) / (p0 / (1 - p0)) else p1 / p0
+  }
+
+  .mic_note <- function() {
+    htmltools::p(
+      class = "pma-card-subtitle",
+      style = "font-style: italic;",
+      paste0(
+        "Note: do not equate this threshold with a Minimally Important ",
+        "Change (MIC). MIC is a within-individual change over time, while ",
+        "a meta-analysis pools between-group differences across studies. ",
+        "These are distinct quantities and should not be substituted for ",
+        "each other when judging clinical importance."
       )
     )
   }
 
-  output$threshold_block_rob   <- shiny::renderUI(.render_threshold_block("threshold_rob"))
-  output$threshold_block_inco  <- shiny::renderUI(.render_threshold_block("threshold_inco"))
-  output$threshold_block_impre <- shiny::renderUI(.render_threshold_block("threshold_impre"))
+  # ----- Decision threshold tab: centralized input panel -----------------
+  output$threshold_panel <- shiny::renderUI({
+    obj <- state$ma
+    ot  <- input$outcome_type
+    if (is.null(obj)) {
+      return(htmltools::p("Run the analysis in Step 2 first."))
+    }
+    sm <- obj$sm %||% "OR"
+
+    if (identical(ot, "binary") && sm %in% c("OR", "RR")) {
+      htmltools::tagList(
+        shiny::radioButtons("threshold_mode", "Threshold scale",
+          choices = c(
+            "Absolute (per 1,000 patients) - recommended" = "absolute",
+            "Relative (ratio)"                            = "relative"),
+          selected = shiny::isolate(threshold_mode_state())),
+        shiny::conditionalPanel(
+          "input.threshold_mode == 'absolute'",
+          htmltools::p(class = "pma-card-subtitle",
+            paste0(
+              "Core GRADE recommends expressing the threshold on the ",
+              "absolute scale: the smallest difference in events per 1,000 ",
+              "patients that would matter for a decision. It is converted ",
+              "to the ", sm, " scale at the baseline risk below.")),
+          shiny::numericInput("threshold_abs",
+            "Threshold (events per 1,000 patients)",
+            value = shiny::isolate(threshold_abs_state()),
+            min = 0, step = 5),
+          shiny::numericInput("threshold_baseline_input",
+            "Baseline (control-group) risk (per 1,000 patients)",
+            value = shiny::isolate(threshold_baseline_state()),
+            min = 0, max = 1000, step = 5),
+          htmltools::p(class = "pma-card-subtitle",
+            "Baseline risk is prefilled from the pooled control-group ",
+            "event rate of your data; replace it with a better estimate ",
+            "for your target population if you have one."),
+          shiny::uiOutput("threshold_equiv")
+        ),
+        shiny::conditionalPanel(
+          "input.threshold_mode == 'relative'",
+          shiny::numericInput("threshold_ratio",
+            htmltools::HTML(paste0(
+              '<span style="white-space:nowrap">',
+              EDU_COPY$threshold_labels[[sm]] %||%
+                "Threshold for clinical importance",
+              '</span>')),
+            value = shiny::isolate({
+              v <- threshold_state()
+              if (is.na(v)) NA else v
+            }),
+            min = 0, step = 0.01),
+          htmltools::p(class = "pma-card-subtitle",
+                       EDU_COPY$threshold_help[[sm]] %||% "")
+        ),
+        .mic_note()
+      )
+    } else {
+      htmltools::tagList(
+        shiny::numericInput("threshold_cont",
+          htmltools::HTML(paste0(
+            '<span style="white-space:nowrap">',
+            EDU_COPY$threshold_labels[[sm]] %||%
+              "Threshold for clinical importance",
+            '</span>')),
+          value = shiny::isolate({
+            v <- threshold_state()
+            if (is.na(v)) NA else v
+          }),
+          min = 0, step = 0.01),
+        htmltools::p(class = "pma-card-subtitle",
+                     EDU_COPY$threshold_help[[sm]] %||% ""),
+        .mic_note()
+      )
+    }
+  })
+  shiny::outputOptions(output, "threshold_panel", suspendWhenHidden = FALSE)
+
+  # Live equivalent-ratio display for the absolute mode.
+  output$threshold_equiv <- shiny::renderUI({
+    obj <- state$ma
+    if (is.null(obj)) return(NULL)
+    sm <- obj$sm %||% "OR"
+    ta <- input$threshold_abs           %||% threshold_abs_state()
+    tb <- input$threshold_baseline_input %||% threshold_baseline_state()
+    eq <- .ard_equiv_ratio(sm, ta, tb)
+    if (is.null(eq)) {
+      return(htmltools::p(
+        class = "pma-card-subtitle", style = "font-style: italic;",
+        "Enter a positive threshold and a baseline risk between 0 and ",
+        "1,000 (threshold + baseline must stay below 1,000) to see the ",
+        "equivalent relative effect."))
+    }
+    p0 <- tb / 1000; p1 <- p0 + ta / 1000
+    or_eq <- (p1 / (1 - p1)) / (p0 / (1 - p0))
+    rr_eq <- p1 / p0
+    htmltools::div(
+      style = paste0(
+        "padding: 0.5rem 0.75rem; background: #f5f5f5; ",
+        "border-left: 4px solid #0f172a; margin: 0.5rem 0; ",
+        "font-size: 0.85rem;"),
+      htmltools::strong(sprintf("Equivalent %s = %.2f", sm, eq)),
+      htmltools::span(sprintf(
+        " (at baseline %g per 1,000: RR %.2f, OR %.2f)", tb, rr_eq, or_eq))
+    )
+  })
+  shiny::outputOptions(output, "threshold_equiv", suspendWhenHidden = FALSE)
+
+  # Human-readable summary of the active threshold (for read-only blocks).
+  threshold_summary_text <- shiny::reactive({
+    obj <- state$ma
+    if (is.null(obj)) return("No threshold set - run the analysis first.")
+    sm <- obj$sm %||% "OR"
+    if (identical(input$outcome_type, "binary") && sm %in% c("OR", "RR") &&
+        identical(threshold_mode_state(), "absolute")) {
+      ta <- threshold_abs_state()
+      tb <- threshold_baseline_state()
+      if (!is.finite(ta) || ta <= 0) {
+        return("Absolute threshold not set yet.")
+      }
+      eq <- .ard_equiv_ratio(sm, ta, tb)
+      if (is.null(eq)) {
+        return(sprintf(
+          "Absolute threshold: %g per 1,000 (baseline risk missing/invalid)",
+          ta))
+      }
+      return(sprintf(
+        "Absolute threshold: %g per 1,000 at baseline %g per 1,000 (equivalent %s %.2f)",
+        ta, tb, sm, eq))
+    }
+    th <- threshold_state()
+    if (!is.finite(th)) return("Threshold not set yet.")
+    sprintf("Threshold: %s = %g", sm, th)
+  })
+
+  # Read-only threshold display inside RoB / Inconsistency / Imprecision.
+  .render_threshold_readonly <- function() {
+    htmltools::div(
+      style = paste0(
+        "padding: 0.5rem 0.75rem; background: #f9f9f9; ",
+        "border: 1px solid #e5e5e5; border-radius: 6px; margin: 0.5rem 0;"),
+      htmltools::p(style = "margin: 0; font-size: 0.9rem;",
+        htmltools::strong(threshold_summary_text())),
+      htmltools::p(
+        class = "pma-card-subtitle",
+        style = "margin: 0.25rem 0 0;",
+        "This decision threshold is shared by Risk of Bias, Inconsistency, ",
+        "and Imprecision. Change it in the 'Decision threshold' tab.")
+    )
+  }
+  output$threshold_block_rob   <- shiny::renderUI(.render_threshold_readonly())
+  output$threshold_block_inco  <- shiny::renderUI(.render_threshold_readonly())
+  output$threshold_block_impre <- shiny::renderUI(.render_threshold_readonly())
   shiny::outputOptions(output, "threshold_block_rob",   suspendWhenHidden = FALSE)
   shiny::outputOptions(output, "threshold_block_inco",  suspendWhenHidden = FALSE)
   shiny::outputOptions(output, "threshold_block_impre", suspendWhenHidden = FALSE)
 
-  shiny::observeEvent(input$threshold_rob, {
-    v <- input$threshold_rob
-    if (is.null(v) || length(v) == 0 || is.na(v)) return()
-    if (!isTRUE(all.equal(v, threshold_state()))) {
-      threshold_state(v)
-      shiny::updateNumericInput(session, "threshold_inco",  value = v)
-      shiny::updateNumericInput(session, "threshold_impre", value = v)
+  # grade_meta() threshold arguments derived from the active mode.
+  .threshold_grade_args <- function(obj) {
+    sm <- obj$sm %||% "OR"
+    if (identical(shiny::isolate(input$outcome_type), "binary") &&
+        sm %in% c("OR", "RR") &&
+        identical(threshold_mode_state(), "absolute")) {
+      ta <- threshold_abs_state()
+      tb <- threshold_baseline_state()
+      if (is.finite(ta) && ta > 0) {
+        base <- if (is.finite(tb) && tb > 0 && tb < 1000 &&
+                    (tb + ta) < 1000) tb / 1000 else NULL
+        return(list(threshold          = ta / 1000,
+                    threshold_scale    = "ard",
+                    threshold_baseline = base))
+      }
+      return(list(threshold = NULL, threshold_scale = "auto",
+                  threshold_baseline = NULL))
     }
-  }, ignoreInit = TRUE)
-
-  shiny::observeEvent(input$threshold_inco, {
-    v <- input$threshold_inco
-    if (is.null(v) || length(v) == 0 || is.na(v)) return()
-    if (!isTRUE(all.equal(v, threshold_state()))) {
-      threshold_state(v)
-      shiny::updateNumericInput(session, "threshold_rob",   value = v)
-      shiny::updateNumericInput(session, "threshold_impre", value = v)
-    }
-  }, ignoreInit = TRUE)
-
-  shiny::observeEvent(input$threshold_impre, {
-    v <- input$threshold_impre
-    if (is.null(v) || length(v) == 0 || is.na(v)) return()
-    if (!isTRUE(all.equal(v, threshold_state()))) {
-      threshold_state(v)
-      shiny::updateNumericInput(session, "threshold_rob",  value = v)
-      shiny::updateNumericInput(session, "threshold_inco", value = v)
-    }
-  }, ignoreInit = TRUE)
+    th <- threshold_state()
+    list(
+      threshold = if (is.numeric(th) && !is.na(th) && th > 0) th else NULL,
+      threshold_scale    = "auto",
+      threshold_baseline = NULL
+    )
+  }
 
   # ----- OIS default values -----
   output$ois_p0_ui <- shiny::renderUI({
@@ -740,8 +1005,12 @@ step3_server <- function(input, output, session, state) {
   .na_null <- function(x) {
     if (is.null(x)) return(NULL)
     if (length(x) == 0) return(NULL)
-    if (is.numeric(x) && all(is.na(x))) return(NULL)
-    if (is.character(x) && (!nzchar(x) || all(is.na(x)))) return(NULL)
+    # An empty numericInput arrives as logical NA, not NA_real_, so test for
+    # NA before looking at the type: is.numeric(NA) is FALSE and a type-first
+    # check let empty OIS fields count as user input (W4-A gate) and reach
+    # grade_meta() as NA instead of NULL.
+    if (all(is.na(x))) return(NULL)
+    if (is.character(x) && !any(nzchar(x))) return(NULL)
     x
   }
 
@@ -786,18 +1055,57 @@ step3_server <- function(input, output, session, state) {
     obj$k %||% 0L
   }
 
+  # Non-empty scalar select value or NULL.
+  .sel_val <- function(id) {
+    v <- input[[id]]
+    if (is.null(v) || length(v) == 0 || !nzchar(v)) NULL else v
+  }
+  # Trimmed non-empty rationale text or NULL.
+  .rat_val <- function(id) {
+    v <- input[[id]]
+    if (is.null(v) || length(v) == 0) return(NULL)
+    v <- trimws(as.character(v)[1])
+    if (nzchar(v)) v else NULL
+  }
+  # Resolve an override select + its mandatory rationale. Returns
+  # list(value=, rationale=); value is NULL (override ignored, with a
+  # notification) while the rationale is missing, so grade_meta() can
+  # never see a rationale-less override (v0.4.0 would abort).
+  .override_or_ignore <- function(sel_id, rat_id, domain_label) {
+    sel <- .sel_val(sel_id)
+    if (is.null(sel)) return(list(value = NULL, rationale = NULL))
+    rat <- .rat_val(rat_id)
+    if (is.null(rat)) {
+      shiny::showNotification(
+        sprintf(paste0("%s: override ignored - a written rationale is ",
+                       "required for manual overrides."), domain_label),
+        id = paste0(sel_id, "_rationale_missing"),
+        type = "warning", duration = 6)
+      return(list(value = NULL, rationale = NULL))
+    }
+    list(value = sel, rationale = rat)
+  }
+
   grade_obj <- shiny::reactive({
     obj <- state$ma
     if (is.null(obj)) return(NULL)
 
+    # --- Risk of bias: per-study vector, or scalar override + rationale ---
     rob_arg <- .study_covariate(.study_labels_for_grade(obj), "rob", default = "*")
-
-    rob_override <- if (nzchar(input$rob_override %||% "")) input$rob_override else NULL
-    if (!is.null(rob_override)) rob_arg <- rob_override
+    rob_rationale <- NULL
+    rob_ov <- .override_or_ignore("rob_override", "rob_override_rationale",
+                                  "Risk of Bias")
+    if (!is.null(rob_ov$value)) {
+      rob_arg       <- rob_ov$value
+      rob_rationale <- rob_ov$rationale
+    }
 
     sv <- if (nzchar(input$small_values %||% "")) input$small_values else NULL
 
-    incon_override <- if (nzchar(input$incon_override %||% "")) input$incon_override else NULL
+    # --- Inconsistency: scalar override + rationale, or manual flowchart ---
+    incon_ov <- .override_or_ignore("incon_override",
+                                    "incon_override_rationale",
+                                    "Inconsistency")
     ci_diff <- if (nzchar(input$ci_diff %||% "")) input$ci_diff else NULL
     threshold_side <- if (!is.null(input$threshold_side) &&
                           length(input$threshold_side) > 0 &&
@@ -806,30 +1114,75 @@ step3_server <- function(input, output, session, state) {
                          length(input$subgroup_explained) > 0 &&
                          nzchar(input$subgroup_explained)) input$subgroup_explained else NULL
 
-    impre_override <- if (nzchar(input$impre_override %||% "")) input$impre_override else NULL
+    # --- Indirectness: active selection; non-"no" needs a rationale.
+    # While unselected (or rationale missing) grade_meta() receives the
+    # safe default "no" - the confirmation gate (not an error) is what
+    # tells the user the domain is still unassessed.
+    indir_arg       <- "no"
+    indir_rationale <- NULL
+    indir_sel <- input$indirectness
+    if (!is.null(indir_sel) && length(indir_sel) == 1 && nzchar(indir_sel) &&
+        !identical(indir_sel, "no")) {
+      r <- .rat_val("indir_rationale")
+      if (is.null(r)) {
+        shiny::showNotification(
+          paste0("Indirectness: rating ignored - a written rationale is ",
+                 "required for any rating other than 'No'."),
+          id = "indir_rationale_missing", type = "warning", duration = 6)
+      } else {
+        indir_arg       <- indir_sel
+        indir_rationale <- r
+      }
+    }
 
+    # --- Imprecision: scalar override + rationale (vendored v0.4.0 API) ---
+    impre_ov <- .override_or_ignore("impre_override",
+                                    "impre_override_rationale",
+                                    "Imprecision")
+
+    # --- Publication bias ---
     pubias_si <- if (nzchar(input$pubias_small_industry %||% "")) input$pubias_small_industry else NULL
-    pubias_fa <- if (nzchar(input$pubias_funnel_asymmetry %||% "")) input$pubias_funnel_asymmetry else NULL
     pubias_un <- if (nzchar(input$pubias_unpublished %||% "")) input$pubias_unpublished else NULL
     pubias_rc <- if (nzchar(input$pubias_registry_complete %||% "")) input$pubias_registry_complete else NULL
-    pubias_ov <- if (nzchar(input$pubias_override %||% "")) input$pubias_override else NULL
+    # Visual override of Egger's test: v0.4.0 requires pubias_rationale
+    # whenever pubias_funnel_asymmetry is supplied.
+    pubias_fa       <- NULL
+    pubias_rationale <- NULL
+    fa_ov <- .override_or_ignore("pubias_funnel_asymmetry",
+                                 "pubias_fa_rationale",
+                                 "Publication bias (visual override of Egger)")
+    if (!is.null(fa_ov$value)) {
+      pubias_fa        <- fa_ov$value
+      pubias_rationale <- fa_ov$rationale
+    }
+    # Final scalar override (app-level; grade_meta has no scalar
+    # publication-bias override parameter).
+    pubias_ov_res <- .override_or_ignore("pubias_override",
+                                         "pubias_override_rationale",
+                                         "Publication bias")
+    pubias_ov <- pubias_ov_res$value
 
-    th <- threshold_state()
-    th_arg <- if (is.numeric(th) && !is.na(th) && th > 0) th else NULL
+    th_args <- .threshold_grade_args(obj)
 
     args <- list(
       meta_obj                 = obj,
       study_design             = "RCT",
       rob                      = rob_arg,
+      rob_rationale            = rob_rationale,
       rob_inflation_threshold  = input$rob_inf_threshold %||% 0.10,
       small_values             = sv,
-      indirectness             = input$indirectness %||% "no",
-      inconsistency            = incon_override,
+      indirectness             = indir_arg,
+      indirectness_rationale   = indir_rationale,
+      inconsistency            = incon_ov$value,
+      inconsistency_rationale  = incon_ov$rationale,
       inconsistency_ci_diff            = ci_diff,
       inconsistency_threshold_side     = threshold_side,
       inconsistency_subgroup_explained = subgroup_expl,
-      threshold       = th_arg,
-      threshold_scale = "auto",
+      imprecision              = impre_ov$value,
+      imprecision_rationale    = impre_ov$rationale,
+      threshold          = th_args$threshold,
+      threshold_scale    = th_args$threshold_scale,
+      threshold_baseline = th_args$threshold_baseline,
       outcome_type = if (identical(input$outcome_type, "binary")) "relative" else "absolute",
       ois_p0       = .na_null(input$ois_p0),
       ois_sd       = .na_null(input$ois_sd),
@@ -837,6 +1190,7 @@ step3_server <- function(input, output, session, state) {
       ois_n        = .na_null(input$ois_n_override),
       pubias_small_industry    = pubias_si,
       pubias_funnel_asymmetry  = pubias_fa,
+      pubias_rationale         = pubias_rationale,
       pubias_unpublished       = pubias_un,
       # Q1: only "yes" (denied) is forwarded to the package short-circuit;
       # "no" (suspected) is handled by a post-override below so it forces
@@ -856,14 +1210,6 @@ step3_server <- function(input, output, session, state) {
     )
 
     if (!is.null(g)) {
-      if (!is.null(impre_override)) {
-        idx <- which(g$domain_assessments$domain == "Imprecision")
-        if (length(idx)) {
-          g$domain_assessments$judgment[idx] <- impre_override
-          g$domain_assessments$auto[idx]     <- FALSE
-          g$domain_assessments$downgrade[idx] <- pmatools_GRADE_DOWNGRADE(impre_override)
-        }
-      }
       # Q1 = "no" (reporting bias suspected) forces rate-down 1 regardless
       # of Q2-Q5. Run BEFORE pubias_ov so the manual override below can still
       # win if the user explicitly sets it.
@@ -879,12 +1225,19 @@ step3_server <- function(input, output, session, state) {
             "of Q2-Q5. | ", g$domain_assessments$notes[idx])
         }
       }
+      # Final scalar publication-bias override (app-level; recorded in the
+      # notes in the same "Manual override (<judgment>): <rationale>"
+      # format the vendored make_domain_row() uses).
       if (!is.null(pubias_ov)) {
         idx <- which(g$domain_assessments$domain == "Publication bias")
         if (length(idx)) {
           g$domain_assessments$judgment[idx] <- pubias_ov
           g$domain_assessments$auto[idx]     <- FALSE
           g$domain_assessments$downgrade[idx] <- pmatools_GRADE_DOWNGRADE(pubias_ov)
+          g$domain_assessments$notes[idx] <- paste0(
+            sprintf("Manual override (%s): %s", pubias_ov,
+                    pubias_ov_res$rationale),
+            " | ", g$domain_assessments$notes[idx])
         }
       }
       # Additional user-specified downgrade from "Other considerations"
@@ -907,6 +1260,79 @@ step3_server <- function(input, output, session, state) {
     g <- grade_obj()
     if (!is.null(g)) state$grade <- g
   })
+
+  # ----- W4-A: per-domain confirmation state (output gate) ----------------
+  # A domain counts as confirmed when it has substantive user input, or
+  # when its explicit "I have reviewed this domain" checkbox is ticked.
+  # Progression through tabs stays free; only outputs are gated.
+  .valid_override <- function(sel_id, rat_id) {
+    sel <- input[[sel_id]]
+    rat <- input[[rat_id]]
+    !is.null(sel) && length(sel) == 1 && nzchar(sel) &&
+      !is.null(rat) && nzchar(trimws(rat))
+  }
+  .answered <- function(id) {
+    v <- input[[id]]
+    !is.null(v) && length(v) > 0 && nzchar(v[1])
+  }
+
+  domain_confirmed <- shiny::reactive({
+    rt <- state$rob_table
+    rob_data <- !is.null(rt) && "rob" %in% names(rt) &&
+      any(!is.na(rt$rob) & nzchar(trimws(as.character(rt$rob))))
+
+    indir_sel <- input$indirectness
+    indir_active <- !is.null(indir_sel) && length(indir_sel) == 1 &&
+      nzchar(indir_sel) &&
+      (identical(indir_sel, "no") ||
+         nzchar(trimws(input$indir_rationale %||% "")))
+
+    c(
+      threshold = isTRUE(input$threshold_confirm),
+      rob = rob_data ||
+        .valid_override("rob_override", "rob_override_rationale") ||
+        isTRUE(input$rob_confirm_na),
+      inconsistency = .answered("ci_diff") ||
+        .valid_override("incon_override", "incon_override_rationale") ||
+        isTRUE(input$incon_confirm_na),
+      indirectness = indir_active || isTRUE(input$indir_confirm_na),
+      imprecision = !is.null(.na_null(input$ois_events_override)) ||
+        !is.null(.na_null(input$ois_n_override)) ||
+        .valid_override("impre_override", "impre_override_rationale") ||
+        isTRUE(input$impre_confirm_na),
+      pubias = .answered("pubias_registry_complete") ||
+        .answered("pubias_small_industry") ||
+        .answered("pubias_unpublished") ||
+        .valid_override("pubias_funnel_asymmetry", "pubias_fa_rationale") ||
+        .valid_override("pubias_override", "pubias_override_rationale") ||
+        isTRUE(input$pubias_confirm_na)
+    )
+  })
+
+  # Mirror into state so Step 4 (export gate) can read it.
+  shiny::observe({
+    state$domain_confirmed <- domain_confirmed()
+  })
+
+  # Banner on the Final certainty tab while domains remain unconfirmed.
+  output$cert_incomplete_banner <- shiny::renderUI({
+    unconf <- pma_unconfirmed_domains(domain_confirmed())
+    if (!length(unconf)) return(NULL)
+    htmltools::div(
+      style = paste0(
+        "padding: 0.75rem 1rem; margin-bottom: 1rem; ",
+        "background: #fef3c7; border-left: 4px solid #b45309; ",
+        "border-radius: 4px; font-size: 0.9rem;"),
+      htmltools::strong("Assessment incomplete. "),
+      sprintf(paste0(
+        "The certainty shown below is provisional until every domain has ",
+        "been reviewed. Unconfirmed: %s. "), paste(unconf, collapse = ", ")),
+      "Provide inputs in each tab, or tick 'I have reviewed this domain' ",
+      "to confirm it as-is. Export (Step 4) stays locked until then."
+    )
+  })
+  shiny::outputOptions(output, "cert_incomplete_banner",
+                       suspendWhenHidden = FALSE)
 
   pmatools_GRADE_DOWNGRADE <- function(j) {
     # 3-level system (v0.3+): -1 = some_concerns, -2 = serious. Legacy
@@ -946,12 +1372,23 @@ step3_server <- function(input, output, session, state) {
   output$sticky_cert_badge <- shiny::renderUI({
     g <- grade_obj()
     if (is.null(g)) return(htmltools::span("--"))
-    pma_certainty_badge(g$certainty)
+    unconf <- pma_unconfirmed_domains(domain_confirmed())
+    htmltools::tagList(
+      pma_certainty_badge(g$certainty),
+      if (length(unconf)) {
+        htmltools::span(
+          style = paste0("color: #b45309; font-weight: 600; ",
+                         "font-size: 0.8rem; margin-left: 0.4rem;"),
+          title = paste0("Unconfirmed: ", paste(unconf, collapse = ", ")),
+          "(incomplete)")
+      }
+    )
   })
 
   output$sticky_cert_summary <- shiny::renderUI({
     g <- grade_obj()
     if (is.null(g)) return(htmltools::span(""))
+    unconf <- pma_unconfirmed_domains(domain_confirmed())
     d <- g$domain_assessments
     total_dg <- sum(d$downgrade)
     parts <- vapply(seq_len(nrow(d)), function(i) {
@@ -967,7 +1404,12 @@ step3_server <- function(input, output, session, state) {
     }, character(1))
     htmltools::span(
       sprintf("(start High; total %+d) ", total_dg),
-      paste(parts, collapse = " | ")
+      paste(parts, collapse = " | "),
+      if (length(unconf)) {
+        htmltools::span(
+          style = "color: #b45309;",
+          paste0(" -- unconfirmed: ", paste(unconf, collapse = ", ")))
+      }
     )
   })
 
@@ -1131,6 +1573,16 @@ step3_server <- function(input, output, session, state) {
           choices = c("(use Egger)" = "",
                       "Funnel symmetric"  = "no",
                       "Funnel asymmetric" = "yes")),
+        shiny::conditionalPanel(
+          "(input.pubias_funnel_asymmetry || '') != ''",
+          shiny::textAreaInput(
+            "pubias_fa_rationale",
+            "Rationale (required for the visual override)",
+            rows = 2, width = "100%",
+            placeholder = paste0(
+              "State why your visual judgment replaces the automated ",
+              "Egger's test."))
+        ),
 
         # Reference materials: trim-and-fill funnel + summary text
         htmltools::hr(),
@@ -1515,21 +1967,173 @@ step3_server <- function(input, output, session, state) {
              error = function(e) htmltools::p(paste("SoF render error:", conditionMessage(e))))
   })
 
-  # ----- Outcome name default: track outcome_type unless the user has
-  # manually typed something custom. Uses observe (not observeEvent) so it
-  # fires both when outcome_type changes AND when outcome_name first appears
-  # (i.e., when Step 3 UI is rendered).
+  # ----- Outcome name default: follow the Step 2 outcome selection when the
+  # dataset is long-format with an `outcome` column, otherwise fall back to
+  # the effect-measure-flavoured default. Uses observe (not observeEvent) so
+  # it fires both when outcome_type / selected_outcome change AND when
+  # outcome_name first appears (i.e., when Step 3 UI is rendered).
+  #
+  # `.auto_name` remembers the last value this observer wrote, so a name the
+  # USER typed is never overwritten, while a name we auto-filled from a
+  # previous Step 2 outcome still tracks a later Step 2 switch. A plain
+  # environment (not reactiveVal) keeps the observer from re-triggering
+  # itself.
+  .auto_name <- new.env(parent = emptyenv())
+  .auto_name$last <- NULL
+
   shiny::observe({
     cur <- input$outcome_name
     if (is.null(cur)) return()
-    ot  <- input$outcome_type %||% "binary"
-    expected <- if (identical(ot, "binary"))
-                  "Depression response" else "Depression severity"
-    if (cur %in% c("", "Outcome", "Depression response", "Depression severity") &&
-        !identical(cur, expected)) {
+    expected <- pma_default_outcome_label(input$selected_outcome,
+                                          input$outcome_type %||% "binary")
+    auto_filled <- pma_auto_outcome_labels(.auto_name$last)
+    if (cur %in% auto_filled && !identical(cur, expected)) {
+      .auto_name$last <- expected
       shiny::updateTextInput(session, "outcome_name", value = expected)
     }
   })
+
+  # ----- Saving the current outcome into state$outcomes -------------------
+  # Key for the saved outcome: whatever is in the "Outcome label" field,
+  # which itself defaults to the Step 2 outcome selection (observer above).
+  # The label is what grade_table() prints in the Outcome column, so keeping
+  # the two identical avoids a second, divergent name field.
+  .save_key <- shiny::reactive({
+    nm <- trimws(input$outcome_name %||% "")
+    if (nzchar(nm)) nm else "Outcome"
+  })
+
+  .save_blocked_reasons <- shiny::reactive({
+    reasons <- character()
+    if (is.null(state$ma)) {
+      reasons <- c(reasons, "run the meta-analysis in Step 2")
+    }
+    if (is.null(grade_obj())) {
+      reasons <- c(reasons, "produce a certainty rating")
+    }
+    unconf <- pma_unconfirmed_domains(domain_confirmed())
+    if (length(unconf)) {
+      reasons <- c(reasons, paste0("review and confirm: ",
+                                   paste(unconf, collapse = ", ")))
+    }
+    reasons
+  })
+
+  output$save_outcome_panel <- shiny::renderUI({
+    reasons <- .save_blocked_reasons()
+    if (length(reasons)) {
+      # Same locked-note treatment as the Step 4 download gate: an
+      # unconfirmed assessment must not be banked into the SoF table.
+      return(htmltools::div(
+        class = "pma-card-subtitle",
+        style = paste(
+          "border: 1px dashed hsl(var(--border)); border-radius: 6px;",
+          "padding: 0.75rem; margin-top: 0.5rem;"),
+        htmltools::p(style = "margin: 0;",
+          htmltools::strong("Saving locked - certainty assessment incomplete.")),
+        htmltools::p(style = "margin: 0.25rem 0 0;",
+          paste0("To save this outcome, ", paste(reasons, collapse = "; "), "."))
+      ))
+    }
+    key <- .save_key()
+    htmltools::div(
+      style = "margin-top: 0.5rem;",
+      shiny::actionButton(
+        "save_outcome",
+        sprintf("Save this outcome's assessment as \"%s\"", key),
+        class = "btn btn-primary", style = "width: 100%;"),
+      htmltools::p(
+        class = "pma-card-subtitle",
+        style = "margin-top: 0.4rem;",
+        "Saved under the 'Outcome label' set above - edit it there to change ",
+        "the row label in the Summary of Findings table.")
+    )
+  })
+  shiny::outputOptions(output, "save_outcome_panel", suspendWhenHidden = FALSE)
+
+  # Signature of the dataset currently loaded in Step 1. Used both to stamp
+  # newly saved outcomes and to flag already-saved ones that came from a
+  # different dataset (see pma_dataset_signature()).
+  .current_signature <- shiny::reactive(pma_dataset_signature(state$data))
+
+  .store_outcome <- function(key, g) {
+    outs <- pma_outcomes_list(state$outcomes)
+    attr(g, "pma_saved_at") <- Sys.time()
+    # Provenance stamp: which dataset this rating was made on.
+    attr(g, PMA_DATASET_SIGNATURE_ATTR) <- pma_dataset_signature(state$data)
+    outs[[key]] <- g
+    state$outcomes <- outs
+    shiny::showNotification(
+      sprintf("Saved \"%s\" (%s certainty). %d outcome(s) ready for the combined Summary of Findings table.",
+              key, g$certainty %||% "-", length(outs)),
+      type = "message", duration = 5)
+  }
+
+  shiny::observeEvent(input$save_outcome, {
+    if (length(.save_blocked_reasons())) {
+      shiny::showNotification(
+        "Cannot save: review and confirm every certainty domain first.",
+        type = "error", duration = 6)
+      return()
+    }
+    g <- grade_obj()
+    if (is.null(g)) return()
+    key <- .save_key()
+    # grade_table() labels rows by list name, so the pmatools object's own
+    # outcome_name is aligned with the key for any downstream single-outcome
+    # use of the saved object.
+    g$outcome_name <- key
+    if (key %in% names(pma_outcomes_list(state$outcomes))) {
+      shiny::showModal(shiny::modalDialog(
+        title = "Outcome already saved",
+        htmltools::p(sprintf(
+          "\"%s\" is already in the saved list. Replace it with the current assessment?",
+          key)),
+        footer = htmltools::tagList(
+          shiny::modalButton("Cancel"),
+          shiny::actionButton("save_outcome_overwrite", "Replace",
+                              class = "btn btn-primary")
+        ),
+        easyClose = TRUE
+      ))
+      return()
+    }
+    .store_outcome(key, g)
+  })
+
+  shiny::observeEvent(input$save_outcome_overwrite, {
+    shiny::removeModal()
+    if (length(.save_blocked_reasons())) return()
+    g <- grade_obj()
+    if (is.null(g)) return()
+    key <- .save_key()
+    g$outcome_name <- key
+    .store_outcome(key, g)
+  })
+
+  output$saved_outcomes_list <- shiny::renderUI({
+    outs <- pma_outcomes_list(state$outcomes)
+    sig  <- .current_signature()
+    n_stale <- sum(pma_outcomes_stale(outs, sig))
+    htmltools::tagList(
+      pma_stale_warning_banner(n_stale),
+      pma_saved_outcomes_ui(outs,
+                            delete_input_id = "outcome_delete",
+                            empty_text = EDU_COPY$multi_outcome$list_empty,
+                            signature = sig)
+    )
+  })
+  shiny::outputOptions(output, "saved_outcomes_list", suspendWhenHidden = FALSE)
+
+  shiny::observeEvent(input$outcome_delete, {
+    key  <- as.character(input$outcome_delete)[1]
+    outs <- pma_outcomes_list(state$outcomes)
+    if (!key %in% names(outs)) return()
+    outs[[key]] <- NULL
+    state$outcomes <- outs
+    shiny::showNotification(sprintf("Removed \"%s\" from the saved outcomes.", key),
+                            type = "message", duration = 4)
+  }, ignoreInit = TRUE)
 
   # ----- Per-study RoB / Indirectness editors (synced with Step 1) -----
   .step3_bulk_set <- function(col, value) {

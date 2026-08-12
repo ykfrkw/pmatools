@@ -122,6 +122,7 @@ run_rare_ma <- function(data,
 #'   exp(-threshold) and exp(threshold).
 #' @param favors_left,favors_right Optional labels shown on the left and right
 #'   of the x-axis.
+#' @param ... Additional arguments passed to \code{\link[meta]{forest}}.
 #'
 #' @return Invisibly \code{NULL}. Draws on the active graphics device.
 #' @export
@@ -212,12 +213,22 @@ plot_rare_sensitivity_forest <- function(x,
       threshold_lines > 0) {
     args$xline <- c(exp(-threshold_lines), exp(threshold_lines))
   }
+  # meta::forest() is grid-based, so an mtext() note either errors on a
+  # fresh device or overprints the plot at stale base coordinates. Pass the
+  # note as text.addline1 so meta reserves a row for it below the plot, and
+  # push it below the x-axis band / favors labels (see .auto_addrow_below).
+  if (peto_note && is.null(args$text.addline1)) {
+    args$text.addline1 <- .rare_peto_note_text()
+  }
+  if (!is.null(args$text.addline1) && is.null(args$addrows.below.overall)) {
+    args$addrows.below.overall <- .auto_addrow_below(
+      has_favors = .nzchar1(favors_left) || .nzchar1(favors_right),
+      has_xlab   = FALSE
+    )
+  }
 
   tryCatch(
-    {
-      do.call(meta::forest, args)
-      if (peto_note) .rare_draw_peto_note()
-    },
+    do.call(meta::forest, args),
     error = function(e) {
       args$leftcols <- NULL
       args$leftlabs <- NULL
@@ -230,7 +241,6 @@ plot_rare_sensitivity_forest <- function(x,
         graphics::plot.new()
         graphics::title(main = title %||% "Rare-event sensitivity analysis")
       })
-      if (peto_note) .rare_draw_peto_note()
     }
   )
   invisible(NULL)
@@ -613,15 +623,8 @@ plot_rare_sensitivity_forest <- function(x,
   list(estimate = NA_real_, ci_low = NA_real_, ci_high = NA_real_, model = NA_character_)
 }
 
-.rare_draw_peto_note <- function() {
-  graphics::mtext(
-    "Note: Peto may be inappropriate unless events are <1%, groups are balanced, and effects are small.",
-    side = 1,
-    line = 3,
-    adj = 0,
-    cex = 0.62,
-    col = "gray35"
-  )
+.rare_peto_note_text <- function() {
+  "Note: Peto may be inappropriate unless events are <1%, groups are balanced, and effects are small."
 }
 
 .rare_log_ticks <- function(xlim) {
