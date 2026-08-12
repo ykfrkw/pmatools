@@ -143,3 +143,17 @@ are dispatched as if \code{ma} had been passed as \code{x}. Update such calls to
 pass the meta object positionally (or as \verb{x =}).
 }
 
+\section{Version stamp for vendored sources}{
+
+The bundle records the pmatools version in \code{results.txt} and in the header
+of the generated \code{analysis.R}. That version normally comes from the
+installed package. A host application that \emph{vendors} the pmatools sources
+(i.e. \code{source()}s the \verb{R/*.R} files instead of installing the package) has
+no installed DESCRIPTION to read, so it should set
+\code{options(pmatools.version_stamp = "0.5.0")} to the version of the sources
+it vendored; the bundle then reports \verb{0.5.0 (vendored)}. The option must be
+a single non-empty string; anything else, or leaving it unset, makes the
+bundle report \verb{(vendored; version unknown)}. The option is ignored whenever
+pmatools is genuinely installed.
+}
+

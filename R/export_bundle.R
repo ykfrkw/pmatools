@@ -83,6 +83,18 @@
 #' are dispatched as if `ma` had been passed as `x`. Update such calls to
 #' pass the meta object positionally (or as `x =`).
 #'
+#' @section Version stamp for vendored sources:
+#' The bundle records the pmatools version in `results.txt` and in the header
+#' of the generated `analysis.R`. That version normally comes from the
+#' installed package. A host application that *vendors* the pmatools sources
+#' (i.e. `source()`s the `R/*.R` files instead of installing the package) has
+#' no installed DESCRIPTION to read, so it should set
+#' `options(pmatools.version_stamp = "0.5.0")` to the version of the sources
+#' it vendored; the bundle then reports `0.5.0 (vendored)`. The option must be
+#' a single non-empty string; anything else, or leaving it unset, makes the
+#' bundle report `(vendored; version unknown)`. The option is ignored whenever
+#' pmatools is genuinely installed.
+#'
 #' @return Character. Absolute path to the created ZIP file.
 #'
 #' @export
@@ -526,7 +538,7 @@ export_bundle.meta <- function(x,
   writeLines("================================================================", con)
   writeLines("[ Software versions ]", con)
   writeLines("================================================================", con)
-  writeLines(sprintf("pmatools : %s", .safe_ver("pmatools", "0.3.4 (vendored)")), con)
+  writeLines(sprintf("pmatools : %s", .pmatools_version()), con)
   writeLines(sprintf("meta     : %s", .safe_ver("meta")), con)
   writeLines(sprintf("R        : %s", paste(R.version$major, R.version$minor, sep = ".")), con)
 
@@ -560,10 +572,7 @@ export_bundle.meta <- function(x,
 
   values <- list(
     timestamp        = format(Sys.time()),
-    pmatools_version = tryCatch(
-      as.character(utils::packageVersion("pmatools")),
-      error = function(e) "0.3.4 (vendored)"
-    ),
+    pmatools_version = .pmatools_version(),
     outcome_type     = outcome_type_ma,
     sm               = sm,
     method_arg       = .arg_lit(ma_args$method,     fallback = if (outcome_type_ma == "binary")
