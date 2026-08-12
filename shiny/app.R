@@ -23,6 +23,21 @@ for (f in list.files("R/_pmatools", pattern = "\\.R$", full.names = TRUE)) {
   source(f, local = TRUE)
 }
 
+# Tell pmatools which version it is. Because the sources above are sourced
+# and not installed, utils::packageVersion("pmatools") always errors here;
+# R/_pmatools/VERSION (written by update_vendor.R) is the only record of what
+# was vendored. A missing, unreadable or blank file leaves the option unset,
+# and callers fall back to "(vendored; version unknown)".
+local({
+  vfile <- "R/_pmatools/VERSION"
+  if (!file.exists(vfile)) return(invisible(NULL))
+  ver <- tryCatch(trimws(readLines(vfile, n = 1L, warn = FALSE)[1L]),
+                  error = function(e) NA_character_)
+  if (length(ver) == 1L && !is.na(ver) && nzchar(ver)) {
+    options(pmatools.version_stamp = ver)
+  }
+})
+
 # Source local Shiny modules
 local_files <- c(
   "R/educational_copy.R",
