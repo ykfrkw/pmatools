@@ -602,6 +602,28 @@ test_that("the multi-outcome bundle exports the style it was asked for", {
                fixed = TRUE)
 })
 
+test_that("sof_notes reach summary_of_findings.docx and the multi-outcome script", {
+  set   <- make_set()
+  notes <- c("Rare events in Serious adverse events.",
+             "Not an official GRADE Working Group assessment.")
+  out_dir <- tempfile(); dir.create(out_dir)
+  zip_path <- suppressWarnings(
+    export_bundle(set, output_dir = out_dir, bundle_name = "notes_multi",
+                  include = c("sof", "script"), sof_notes = notes))
+  ex <- tempfile(); dir.create(ex); zip::unzip(zip_path, exdir = ex)
+
+  s <- officer::docx_summary(
+    officer::read_docx(file.path(ex, "summary_of_findings.docx")))
+  txt <- paste(s$text[!is.na(s$text)], collapse = "\n")
+  for (nt in notes) expect_match(txt, nt, fixed = TRUE)
+
+  script <- paste(readLines(file.path(ex, "analysis.R"), warn = FALSE),
+                  collapse = "\n")
+  expect_match(script, "sof <- sof_add_notes(sof, c(", fixed = TRUE)
+  for (nt in notes) expect_match(script, nt, fixed = TRUE)
+  expect_false(is.null(tryCatch(parse(text = script), error = function(e) NULL)))
+})
+
 test_that("a hand-built set exports without a script rather than a wrong one", {
   set <- make_set()
   set$grade_args <- NULL

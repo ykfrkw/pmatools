@@ -40,6 +40,12 @@
 #' @param unit (v0.5.1) Optional unit for the Difference column of the
 #'   `"bmj"` layout with continuous outcomes, e.g. \code{"days"}. Defaults to
 #'   `grade$unit` on the same terms as `follow_up`.
+#' @param sof_notes (v0.5.1) Optional character vector of extra footnote lines
+#'   for the bundled `sof_table.docx`, appended by
+#'   \code{\link{sof_add_notes}} after the table's own footnotes and rendered
+#'   into `analysis.R`. For annotations pmatools cannot derive — a host
+#'   application's rare-event alert or scope caveat, a registration number.
+#'   Applies to `sof_table.docx` only, not to the certainty appendix.
 #' @param per Denominator for SoF rate columns. Default 1000.
 #' @param prediction Show 95 percent prediction interval in SoF Effect column.
 #' @param convert_smd_to_or Logical. Passed to \code{\link{sof_table}} for
@@ -170,6 +176,7 @@ export_bundle.meta <- function(x,
                           prediction   = FALSE,
                           follow_up    = NULL,
                           unit         = NULL,
+                          sof_notes    = NULL,
                           convert_smd_to_or = FALSE,
                           baseline_risk     = NULL,
                           threshold_label   = NULL,
@@ -200,6 +207,7 @@ export_bundle.meta <- function(x,
   # line the multi-outcome table would have shown.
   follow_up <- .display_arg(follow_up %||% grade$follow_up)
   unit      <- .display_arg(unit      %||% grade$unit)
+  sof_notes <- .usable_notes(sof_notes)
   if (!dir.exists(output_dir)) {
     dir.create(output_dir, recursive = TRUE)
   }
@@ -230,7 +238,8 @@ export_bundle.meta <- function(x,
                             convert_smd_to_or, baseline_risk, threshold_label,
                             script_path,
                             rare = rare,
-                            style = style, follow_up = follow_up, unit = unit)
+                            style = style, follow_up = follow_up, unit = unit,
+                            sof_notes = sof_notes)
     files_in_zip <- c(files_in_zip, script_path)
   }
 
@@ -400,6 +409,7 @@ export_bundle.meta <- function(x,
                         baseline_risk     = baseline_risk,
                         threshold_label   = threshold_label,
                         chinn_invert      = isTRUE(chinn_invert))
+    sof_ft <- sof_add_notes(sof_ft, sof_notes)
     sof_path <- file.path(work_dir, "sof_table.docx")
     .save_landscape_docx(sof_ft, sof_path)
     files_in_zip <- c(files_in_zip, sof_path)
@@ -592,7 +602,8 @@ export_bundle.meta <- function(x,
                                     out_path,
                                     rare = NULL,
                                     style = "bmj",
-                                    follow_up = NULL, unit = NULL) {
+                                    follow_up = NULL, unit = NULL,
+                                    sof_notes = NULL) {
 
   tpl_path <- system.file("templates", "analysis_script.R.tpl",
                           package = "pmatools")
@@ -757,6 +768,7 @@ export_bundle.meta <- function(x,
     sof_style        = style,
     sof_prediction   = if (isTRUE(prediction)) "TRUE" else "FALSE",
     display_args     = .display_args_str(follow_up, unit),
+    sof_notes_block  = .sof_notes_block(sof_notes, "sof"),
     convert_args     = .convert_args_str(convert_smd_to_or, baseline_risk, threshold_label),
     rare_block       = .rare_script_block(rare)
   )
@@ -1055,6 +1067,20 @@ ARG_LIT_ORIGINS <- c("null", "column", "scalar", "vector")
                   paste(deparse(un, width.cutoff = 500L), collapse = ""))
   }
   out
+}
+
+# Render the caller's extra footnotes as a sof_add_notes() call on `obj` for
+# the bundled analysis.R. Returns "" when there is nothing to append, so the
+# script of a bundle without notes is byte-for-byte what it was before.
+.sof_notes_block <- function(notes, obj) {
+  notes <- .usable_notes(notes)
+  if (length(notes) == 0L) return("")
+  lits <- vapply(notes,
+                 function(n) paste(deparse(n, width.cutoff = 500L),
+                                   collapse = ""),
+                 character(1), USE.NAMES = FALSE)
+  paste0("\n", obj, " <- sof_add_notes(", obj, ", c(\n  ",
+         paste(lits, collapse = ",\n  "), "\n))\n")
 }
 
 .convert_args_str <- function(convert_smd_to_or, baseline_risk, threshold_label) {

@@ -11,6 +11,7 @@
   include = c("data", "script", "results", "forest", "forest_full", "forest_rob",
     "funnel", "sof", "evidence_profile", "indirectness", "readme"),
   style = c("bmj", "gradepro"),
+  sof_notes = NULL,
   per = 1000,
   prediction = FALSE,
   rob = NULL,
@@ -39,6 +40,11 @@
 Same default as the single-outcome \code{\link{export_bundle.meta}}.
 Per-outcome \code{follow_up} / \code{unit} need no argument here: \code{grade_table()}
 reads them off the rated objects, as does the generated script.}
+
+\item{sof_notes}{(v0.5.1) Optional character vector of extra footnote lines
+for \code{summary_of_findings.docx}, appended by \code{\link{sof_add_notes}}
+after the table's own footnotes and rendered into \code{analysis.R}. See
+\code{\link{export_bundle.meta}}.}
 
 \item{per}{Denominator for SoF rate columns. Default 1000.}
 

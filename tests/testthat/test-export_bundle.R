@@ -374,6 +374,62 @@ test_that("an apostrophe in follow_up still yields a parseable analysis.R", {
   expect_match(txt, "patient's last visit", fixed = TRUE)
 })
 
+# ---- caller footnotes (sof_notes=) ------------------------------------------
+# Without these the bundler could not carry an annotation it cannot derive
+# itself (a host application's rare-event alert, a scope caveat), which is what
+# forced such callers to write sof_table.docx outside export_bundle().
+
+test_that("sof_add_notes appends footer lines and drops unusable ones", {
+  g  <- grade_for_style()
+  ft <- sof_table(g, style = "bmj")
+  n0 <- nrow(ft$footer$dataset)
+
+  ft2 <- sof_add_notes(ft, c("First note.", "Second note."))
+  expect_equal(nrow(ft2$footer$dataset), n0 + 2L)
+
+  # Nothing usable -> the table is returned untouched rather than gaining a
+  # blank footer line.
+  for (empty in list(NULL, character(0), NA_character_, "", c(NA, ""))) {
+    expect_equal(nrow(sof_add_notes(ft, empty)$footer$dataset), n0)
+  }
+  expect_error(sof_add_notes("not a flextable", "x"), regexp = "must be a flextable")
+})
+
+test_that("sof_notes reach the exported docx and the bundled script", {
+  g <- grade_for_style()
+  notes <- c("Event rates below 1%: analyse risk differences directly.",
+             "Not an official GRADE Working Group assessment.")
+  dir <- bundle_with_style(g, "notes_bundle", style = "bmj", sof_notes = notes)
+
+  txt <- docx_text(file.path(dir, "sof_table.docx"))
+  for (nt in notes) expect_match(txt, nt, fixed = TRUE)
+
+  script <- paste(readLines(file.path(dir, "analysis.R"), warn = FALSE),
+                  collapse = "\n")
+  expect_match(script, "sof <- sof_add_notes(sof, c(", fixed = TRUE)
+  for (nt in notes) expect_match(script, nt, fixed = TRUE)
+  expect_false(is.null(tryCatch(parse(text = script), error = function(e) NULL)))
+})
+
+test_that("a bundle without notes renders no sof_add_notes call", {
+  g   <- grade_for_style()
+  dir <- bundle_with_style(g, "notes_absent", style = "bmj")
+  expect_no_match(paste(readLines(file.path(dir, "analysis.R"), warn = FALSE),
+                        collapse = "\n"),
+                  "sof_add_notes", fixed = TRUE)
+})
+
+test_that("a note containing quotes still yields a parseable analysis.R", {
+  g   <- grade_for_style()
+  dir <- bundle_with_style(g, "notes_quotes", style = "bmj",
+                           sof_notes = "The panel's \"important\" threshold.")
+  script <- paste(readLines(file.path(dir, "analysis.R"), warn = FALSE),
+                  collapse = "\n")
+  expect_false(is.null(tryCatch(parse(text = script), error = function(e) NULL)))
+  expect_match(docx_text(file.path(dir, "sof_table.docx")),
+               'The panel\'s "important" threshold.', fixed = TRUE)
+})
+
 test_that("export_bundle rejects an unknown style instead of silently exporting one", {
   g <- grade_for_style()
   out_dir <- tempfile(); dir.create(out_dir)
