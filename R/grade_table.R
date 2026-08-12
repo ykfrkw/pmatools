@@ -107,6 +107,24 @@ grade_table <- function(outcomes,
     if (is.na(rob_marker[[nm]])) nm else paste0(nm, " [", rob_marker[[nm]], "]")
   }
 
+  # Domain-fact footnotes share the analysis-set register rather than starting
+  # a second one, so a reader never sees two different [1]s in one footer.
+  # They are numbered here, once, and consumed by whichever style renders.
+  fact_counter <- length(rob_notes)
+  fact_notes   <- character(0)
+  fact_markers <- list()
+  for (nm in nms) {
+    mk <- integer(0)
+    for (dm in .rated_down_fact_domains(outcomes[[nm]])) {
+      note <- .domain_fact_note(outcomes[[nm]], dm, outcome_name = nm)
+      if (is.null(note)) next
+      fact_counter <- fact_counter + 1L
+      fact_notes   <- c(fact_notes, sprintf("[%d] %s", fact_counter, note))
+      mk[[dm]]     <- fact_counter
+    }
+    if (length(mk) > 0L) fact_markers[[nm]] <- mk
+  }
+
   if (identical(style, "bmj")) {
     # Per-outcome follow-up / unit ride on the rated objects themselves when
     # grade_meta_multi() was given them, so a multi-outcome caller does not
@@ -120,7 +138,8 @@ grade_table <- function(outcomes,
       follow_up = follow_up, unit = unit,
       label_intervention = label_intervention,
       label_control      = label_control,
-      disp = disp, rob_notes = rob_notes
+      disp = disp, rob_notes = rob_notes,
+      fact_notes = fact_notes, fact_markers = fact_markers
     )
     # Mixed effect measures (the norm once binary and continuous outcomes share
     # a table) leave the BMJ header generic. Each cell still spells its own
@@ -168,7 +187,8 @@ grade_table <- function(outcomes,
 
   add_outcome <- function(nm) {
     row_idx <<- row_idx + 1L
-    r <- .build_row(disp(nm), outcomes[[nm]], show_domains, per, prediction)
+    r <- .build_row(disp(nm), outcomes[[nm]], show_domains, per, prediction,
+                    markers = fact_markers[[nm]])
     names(r) <- hdrs
     all_rows[[length(all_rows) + 1L]] <<- r
     outcome_map[[as.character(row_idx)]] <<- nm
@@ -258,6 +278,11 @@ grade_table <- function(outcomes,
       ft, values = sprintf("[%d] %s", i, rob_notes[i]))
   }
 
+  # Domain-fact footnotes continue the same [n] register (already numbered).
+  for (line in fact_notes) {
+    ft <- flextable::add_footer_lines(ft, values = line)
+  }
+
   # Publication bias not formally assessed -> per-outcome qualitative-judgment
   # footnote (see domain_pubias.R)
   for (nm in nms) {
@@ -296,14 +321,17 @@ grade_table <- function(outcomes,
   stats::setNames(unlist(vals[keep], use.names = FALSE), names(outcomes)[keep])
 }
 
-.build_row <- function(nm, g, show_domains, per = 1000, prediction = FALSE) {
+.build_row <- function(nm, g, show_domains, per = 1000, prediction = FALSE,
+                       markers = NULL) {
   meta_obj <- g$meta
   k        <- meta_obj$k
   n_total  <- .total_n(meta_obj)
   cer_str  <- .format_cer(g$baseline_risk, per)
   ier_str  <- .format_ier(meta_obj, g$baseline_risk, per)
   eff      <- .format_effect(meta_obj, g$outcome_type, prediction = prediction)
-  cert_str <- paste0(g$certainty, "\n", CERTAINTY_SYMBOLS[[g$certainty]])
+  # Domain-fact markers sit after the certainty symbol; unchanged when NULL.
+  cert_str <- paste0(g$certainty, "\n", CERTAINTY_SYMBOLS[[g$certainty]],
+                     .fact_marker_suffix(markers))
 
   row <- data.frame(
     col1 = nm,

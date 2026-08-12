@@ -82,14 +82,32 @@ evidence_profile <- function(grade,
     paste0(" [", length(fn), "]")
   }
 
+  # What a domain footnote says. For a rated-down domain that recorded the
+  # numbers behind its judgment, the structured facts say it better than the
+  # first sentence of the notes, which is where the flowchart step happens to
+  # start; the domain name is left off because the Evidence Profile's marker
+  # already sits in that domain's own column. Domains with no facts (and the
+  # ones that did not rate down) keep the first-sentence behaviour.
+  dom_reason <- function(name, judgment, notes) {
+    if (!as.character(judgment) %in% c("no", "")) {
+      body <- .domain_fact_body((grade$domain_facts %||% list())[[name]])
+      if (!is.null(body)) return(body)
+    }
+    .first_sentence(notes)
+  }
+
   rob_str  <- paste0(fmt_judgment(rob$judgment),
-                     add_fn(rob$judgment, .first_sentence(rob$notes)))
+                     add_fn(rob$judgment,
+                            dom_reason("Risk of bias", rob$judgment, rob$notes)))
   inco_str <- paste0(fmt_judgment(inco$judgment),
-                     add_fn(inco$judgment, .first_sentence(inco$notes)))
+                     add_fn(inco$judgment,
+                            dom_reason("Inconsistency", inco$judgment, inco$notes)))
   indi_str <- paste0(fmt_judgment(indi$judgment),
-                     add_fn(indi$judgment, .first_sentence(indi$notes)))
+                     add_fn(indi$judgment,
+                            dom_reason("Indirectness", indi$judgment, indi$notes)))
   impr_str <- paste0(fmt_judgment(impr$judgment),
-                     add_fn(impr$judgment, .first_sentence(impr$notes)))
+                     add_fn(impr$judgment,
+                            dom_reason("Imprecision", impr$judgment, impr$notes)))
 
   other_parts <- character(0)
   pubias_qual_note <- .pubias_qualitative_note(grade)

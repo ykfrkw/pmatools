@@ -124,6 +124,24 @@ INCONSISTENCY_I2_CUT <- 30
   "separate ratings rather than reported as a single pooled estimate."
 )
 
+# Structured companions to stat_note. Emitted on every path that has the
+# statistics (all of them), including those that do not rate down: the
+# renderers decide what to show. A statistic {meta} did not produce is simply
+# absent rather than reported as a placeholder, which is what stat_note's
+# 0 / 0 / 1 substitutions would otherwise imply.
+.inconsistency_stat_facts <- function(i2_pct, tau2, pval_q) {
+  f_i2 <- if (!is.null(i2_pct) && length(i2_pct) == 1L && is.finite(i2_pct)) {
+    .fact("i2", "I-squared", sprintf("%.1f%%", i2_pct), i2_pct)
+  } else NULL
+  f_tau2 <- if (!is.null(tau2) && length(tau2) == 1L && is.finite(tau2)) {
+    .fact("tau2", "Tau-squared", sprintf("%.4f", tau2), tau2)
+  } else NULL
+  f_q <- if (!is.null(pval_q) && length(pval_q) == 1L && is.finite(pval_q)) {
+    .fact("q_pvalue", "Cochran Q p value", sprintf("%.3f", pval_q), pval_q)
+  } else NULL
+  list(f_i2, f_tau2, f_q)
+}
+
 assess_inconsistency <- function(meta_obj,
                                  inconsistency                    = NULL,
                                  inconsistency_ci_diff            = NULL,
@@ -147,6 +165,8 @@ assess_inconsistency <- function(meta_obj,
     if (is.null(pval_q) || is.na(pval_q)) 1 else pval_q
   )
 
+  stat_facts <- .inconsistency_stat_facts(i2_pct, tau2, pval_q)
+
   # ----- Path A: scalar override -----
   # v0.4.0 (breaking): the scalar override replaces the flowchart / automated
   # assessment, so inconsistency_rationale is mandatory.
@@ -162,7 +182,8 @@ assess_inconsistency <- function(meta_obj,
         "Overall judgment provided by user (scalar; flowchart not applied). ",
         stat_note
       ),
-      rationale = rationale
+      rationale = rationale,
+      facts     = .facts(stat_facts)
     ))
   }
 
@@ -182,7 +203,8 @@ assess_inconsistency <- function(meta_obj,
         notes    = paste0(
           "FLOWCHART Step 1: No important differences in point estimates / ",
           "adequate CI overlap -> do not rate down. | ", stat_note
-        )
+        ),
+        facts    = .facts(stat_facts)
       ))
     }
 
@@ -210,7 +232,8 @@ assess_inconsistency <- function(meta_obj,
           "estimates are on one side of clinical Threshold -> do not rate down ",
           "(per BMJ Core GRADE 3 flowchart). | ",
           stat_note
-        )
+        ),
+        facts    = .facts(stat_facts)
       ))
     }
 
@@ -236,7 +259,8 @@ assess_inconsistency <- function(meta_obj,
           "-> do not rate down; present subgroup results separately. ",
           .INCONSISTENCY_SUBGROUP_CAVEAT, " | ",
           stat_note
-        )
+        ),
+        facts    = .facts(stat_facts)
       ))
     }
 
@@ -248,18 +272,21 @@ assess_inconsistency <- function(meta_obj,
         "FLOWCHART Step 3: Opposite-sided estimates not explained by subgroup ",
         "-> rate down one level. ", .INCONSISTENCY_SUBGROUP_CAVEAT, " ",
         .INCONSISTENCY_CAP_NOTE, " | ", stat_note
-      )
+      ),
+      facts    = .facts(stat_facts)
     ))
   }
 
   # ----- Path C: auto-detect -----
-  .auto_inconsistency(meta_obj, i2_pct, stat_note, threshold_chosen)
+  .auto_inconsistency(meta_obj, i2_pct, stat_note, threshold_chosen,
+                      stat_facts = stat_facts)
 }
 
 # --------------------------------------------------------------------------
 # Auto-detect path
 # --------------------------------------------------------------------------
-.auto_inconsistency <- function(meta_obj, i2_pct, stat_note, threshold_chosen = NULL) {
+.auto_inconsistency <- function(meta_obj, i2_pct, stat_note,
+                                threshold_chosen = NULL, stat_facts = NULL) {
 
   # Step 1 surrogate: I^2 > 30% (see INCONSISTENCY_I2_CUT / file header)
   cut <- INCONSISTENCY_I2_CUT
@@ -276,7 +303,9 @@ assess_inconsistency <- function(meta_obj,
                        "-> do not rate down. "), cut),
         .INCONSISTENCY_I2_CAVEAT, " | ",
         stat_note
-      )
+      ),
+      # Step 2 never ran, so there are no zone facts to record.
+      facts    = .facts(stat_facts)
     ))
   }
 
@@ -292,7 +321,8 @@ assess_inconsistency <- function(meta_obj,
                        "(study-level TEs unavailable); judgment = ",
                        "'some_concerns' (conservative). "), cut),
         .INCONSISTENCY_I2_CAVEAT, " | ", stat_note
-      )
+      ),
+      facts    = .facts(stat_facts)
     ))
   }
 
@@ -381,6 +411,24 @@ assess_inconsistency <- function(meta_obj,
     cut, .INCONSISTENCY_I2_CAVEAT
   )
 
+  # Structured companions to side_note. The threshold named here is the CHOSEN
+  # one (Core GRADE 3 Fig 2 node 2), the same one Imprecision rates against.
+  f_zone_counts <- .fact(
+    "zone_counts", "Study estimates relative to the chosen threshold",
+    if (M > 0) {
+      sprintf("%d above, %d within, %d below (threshold +/-%.3g, k = %d)",
+              n_above, n_trivial, n_below, M, n_total)
+    } else {
+      sprintf("%d above, %d below (threshold: the null, k = %d)",
+              n_above, n_below, n_total)
+    },
+    n_total
+  )
+  f_zone_decision <- .fact(
+    "zone_decision", "Zone shares", decision_note, pct_max_zone
+  )
+  zone_facts <- list(f_zone_counts, f_zone_decision)
+
   if (judgment_auto == "no") {
     return(make_domain_row(
       domain   = "Inconsistency",
@@ -390,7 +438,8 @@ assess_inconsistency <- function(meta_obj,
         step1_note,
         side_note,
         " | ", stat_note
-      )
+      ),
+      facts    = .facts(c(stat_facts, zone_facts))
     ))
   }
 
@@ -406,7 +455,8 @@ assess_inconsistency <- function(meta_obj,
         .INCONSISTENCY_SUBGROUP_CAVEAT, " ",
         .INCONSISTENCY_CAP_NOTE, " | ",
         stat_note
-      )
+      ),
+      facts    = .facts(c(stat_facts, zone_facts))
     ))
   }
 
@@ -418,6 +468,7 @@ assess_inconsistency <- function(meta_obj,
     notes    = paste0(
       step1_note,
       side_note, " | ", stat_note
-    )
+    ),
+    facts    = .facts(c(stat_facts, zone_facts))
   )
 }
