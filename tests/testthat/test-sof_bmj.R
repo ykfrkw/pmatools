@@ -592,3 +592,160 @@ test_that("the certainty cell shows certainty and reason on separate lines", {
     expect_identical(cell, g$certainty)
   }
 })
+
+# --- Core GRADE 6: arm-level columns for a continuous outcome ---------------
+#
+# Core GRADE 6 calls it the preferred presentation to give the outcome in the
+# comparison group, in the intervention group AND the difference. A metacont
+# object has no baseline risk, so the two arm columns used to fall back to "-"
+# and only the Difference column carried anything.
+
+make_continuous_smd <- function() {
+  m <- meta::metacont(
+    n.e = c(50, 60, 70), mean.e = c(20, 22, 21), sd.e = c(10, 11, 12),
+    n.c = c(50, 60, 70), mean.c = c(8, 9, 8),    sd.c = c(10, 11, 12),
+    studlab = c("A", "B", "C"), sm = "SMD"
+  )
+  quiet_grade(m, study_design = "RCT", rob = "no",
+              rob_rationale = "Consensus RoB2: all domains low risk",
+              indirectness = "no", outcome_name = "Sleep duration",
+              outcome_type = "absolute", threshold_type = "null")
+}
+
+# Leading number of an arm cell ("8.33 days" / "21.00 days\n(18.72 to 23.27)").
+.arm_num <- function(cell) as.numeric(sub("^(-?[0-9.]+).*$", "\\1", cell))
+
+test_that("a metacont MD outcome fills both arm columns from the control arms", {
+  g  <- make_continuous()
+  ft <- sof_table(g, style = "bmj", unit = "days")
+
+  cer <- .body_col(ft, 4)
+  ier <- .body_col(ft, 5)
+  expect_false(cer == "-")
+  expect_false(ier == "-")
+  expect_match(cer, "^[0-9.]+ days$")
+  expect_match(ier, "^[0-9.]+ days\n\\([0-9.]+ to [0-9.]+\\)$")
+
+  # Control column = inverse-variance weighted mean of the control arms,
+  # weights n/SD^2 (mean.c = 8, 9, 8; n.c = 50, 60, 70; sd.c = 10, 11, 12).
+  w <- c(50, 60, 70) / c(10, 11, 12)^2
+  expect_equal(.arm_num(cer), sum(w * c(8, 9, 8)) / sum(w), tolerance = 1e-3)
+
+  # Intervention column = control column + pooled mean difference.
+  expect_equal(.arm_num(ier), .arm_num(cer) + g$meta$TE.random,
+               tolerance = 1e-2)
+
+  # The footnote says where the two came from.
+  expect_match(.footer_text(ft), "inverse-variance weighted mean of the control arms",
+               fixed = TRUE)
+})
+
+test_that("a metacont SMD outcome is re-expressed on the outcome's own scale", {
+  g  <- make_continuous_smd()
+  ft <- sof_table(g, style = "bmj", unit = "days")
+
+  cer <- .body_col(ft, 4)
+  ier <- .body_col(ft, 5)
+  expect_match(cer, "^[0-9.]+ days$")
+  expect_match(ier, "^[0-9.]+ days\n\\([0-9.]+ to [0-9.]+\\)$")
+
+  # An SMD cannot be added to a mean as it stands: it is multiplied by the
+  # pooled within-arm SD of the control arms first.
+  n_c    <- c(50, 60, 70); sd_c <- c(10, 11, 12)
+  sd_ref <- sqrt(sum((n_c - 1) * sd_c^2) / sum(n_c - 1))
+  expect_equal(.control_reference_sd(g$meta), sd_ref, tolerance = 1e-9)
+  expect_equal(.arm_num(ier), .arm_num(cer) + g$meta$TE.random * sd_ref,
+               tolerance = 1e-2)
+
+  # The Difference column stays in SD units and must not borrow the outcome's
+  # unit, or the reader would subtract the arm columns and find it disagrees.
+  d <- .body_col(ft, 6)
+  expect_match(d, "^[0-9.]+ more standard deviations \\(")
+  expect_no_match(d, "days", fixed = TRUE)
+  expect_gt(abs((.arm_num(ier) - .arm_num(cer)) - .arm_num(d)), 1)
+
+  expect_match(.footer_text(ft), "re-expressed in the outcome's own units",
+               fixed = TRUE)
+  expect_match(.footer_text(ft), sprintf("SD = %.2f", sd_ref), fixed = TRUE)
+})
+
+test_that("the gradepro layout fills the same columns and relabels them", {
+  g  <- make_continuous()
+  ft <- sof_table(g, unit = "days")
+
+  # "Risk with control (per 1,000)" would misdescribe a mean.
+  hdrs <- names(ft$body$dataset)
+  expect_identical(hdrs[3:4], c("With control", "With intervention"))
+  expect_match(.body_col(ft, 3), "^[0-9.]+ days$")
+  expect_match(.body_col(ft, 4), "^[0-9.]+ days\n\\([0-9.]+; [0-9.]+\\)$")
+  expect_equal(.arm_num(.body_col(ft, 4)),
+               .arm_num(.body_col(ft, 3)) + g$meta$TE.random, tolerance = 1e-2)
+
+  # The rate sentence goes with the rates.
+  expect_no_match(.footer_text(ft), "computed from baseline risk", fixed = TRUE)
+
+  # A binary outcome keeps the GRADEpro vocabulary untouched.
+  hb <- names(sof_table(make_binary())$body$dataset)
+  expect_identical(hb[3:4], c("Risk with control\n(per 1,000)",
+                             "Risk with intervention\n(per 1,000)"))
+})
+
+test_that("grade_table carries the continuous arm columns in both styles", {
+  g <- make_continuous()
+
+  bmj <- grade_table(list("Sleep duration" = g), style = "bmj", unit = "days")
+  expect_match(.body_col(bmj, 4), "^[0-9.]+ days$")
+  expect_match(.body_col(bmj, 5), "^[0-9.]+ days\n\\(")
+  # The note is written once, however many rows it covers.
+  expect_equal(
+    sum(grepl("inverse-variance weighted mean",
+              as.character(bmj$footer$dataset[[1]]), fixed = TRUE)),
+    1L)
+
+  gp <- grade_table(list("Sleep duration" = g), unit = "days")
+  expect_identical(names(gp$body$dataset)[3:4],
+                   c("With control", "With intervention"))
+  expect_match(.body_col(gp, 3), "^[0-9.]+ days$")
+})
+
+test_that("without a unit the arm cells are bare numbers", {
+  ft <- sof_table(make_continuous(), style = "bmj")
+  expect_match(.body_col(ft, 4), "^[0-9.]+$")
+  expect_match(.body_col(ft, 5), "^[0-9.]+\n\\([0-9.]+ to [0-9.]+\\)$")
+})
+
+test_that("the Chinn responder rates still win over the derived arm means", {
+  g  <- make_continuous()
+  ft <- sof_table(g, style = "bmj", convert_smd_to_or = TRUE,
+                  baseline_risk = 0.3, unit = "days")
+
+  # Chinn supplies a different quantity (a proportion above a threshold), and
+  # it keeps its own cells and its own footnote.
+  expect_identical(.body_col(ft, 4), "300 per 1000 *")
+  expect_match(.body_col(ft, 5), "per 1000\n\\([0-9]+ to [0-9]+\\) \\*$")
+  expect_no_match(.footer_text(ft), "inverse-variance weighted mean",
+                  fixed = TRUE)
+  expect_match(.footer_text(ft), "Chinn's formula", fixed = TRUE)
+})
+
+test_that("an object with no arm-level data still falls back to '-'", {
+  g <- make_no_refit()          # metagen: no mean.c / sd.c / n.c
+  ft <- sof_table(g, style = "bmj")
+  expect_identical(.body_col(ft, 4), "-")
+  expect_identical(.body_col(ft, 5), "-")
+  expect_null(.pooled_control_mean(g$meta))
+})
+
+test_that("unusable control SDs fall back to sample-size weighting", {
+  m <- meta::metacont(
+    n.e = c(50, 60), mean.e = c(20, 22), sd.e = c(10, 11),
+    n.c = c(50, 60), mean.c = c(8, 9),   sd.c = c(10, 11),
+    studlab = c("A", "B"), sm = "MD"
+  )
+  m$sd.c <- c(NA_real_, NA_real_)
+  got <- .pooled_control_mean(m)
+  expect_identical(got$weighting, "sample-size")
+  expect_equal(got$mean, (50 * 8 + 60 * 9) / 110, tolerance = 1e-9)
+  expect_match(.cont_arm_note("sample-size"), "sample-size weighted mean",
+               fixed = TRUE)
+})

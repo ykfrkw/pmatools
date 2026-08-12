@@ -596,7 +596,11 @@ test_that("the multi-outcome bundle exports the style it was asked for", {
   expect_match(script_text(bmj), 'grade_table(set, style = "bmj"', fixed = TRUE)
 
   gp <- bundle("gradepro", "style_multi_gp")
-  expect_match(sof_text(gp), "Risk with control", fixed = TRUE)
+  # This set mixes binary and continuous outcomes, so the arm headers are the
+  # measure-neutral "With control" / "With intervention" rather than "Risk with
+  # control (per 1,000)"; the layout is identified by its own columns instead.
+  expect_match(sof_text(gp), "No. of participants", fixed = TRUE)
+  expect_no_match(sof_text(gp), "Absolute effects", fixed = TRUE)
   expect_no_match(sof_text(gp), "Outcome and follow-up", fixed = TRUE)
   expect_match(script_text(gp), 'grade_table(set, style = "gradepro"',
                fixed = TRUE)

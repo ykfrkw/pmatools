@@ -49,9 +49,10 @@ outcome name in the \code{"bmj"} style, e.g.
 \code{"Follow-up: longest, range 7.7-60 months"}. \code{NULL} (default)
 omits the line. Ignored by the \code{"gradepro"} style.}
 
-\item{unit}{(v0.5) Optional unit for the Difference column of the
-\code{"bmj"} style with continuous outcomes, e.g. \code{"days"}.
-Ignored for relative effect measures and by the \code{"gradepro"} style.}
+\item{unit}{(v0.5) Optional unit for the continuous-outcome cells, e.g.
+\code{"days"}: the Difference column of the \code{"bmj"} style, and the
+two arm columns of either style when they hold arm-level means. Ignored
+for relative effect measures.}
 
 \item{convert_smd_to_or}{(v0.2) Logical. If \code{TRUE} and the meta
 object uses \code{sm = "SMD"} or \code{"MD"}, the "Risk with control" /
@@ -86,6 +87,29 @@ A \code{flextable} object suitable for printing, Word export, etc.
 \description{
 Generate a Summary of Findings (SoF) table as a flextable
 }
+\section{Arm columns for a continuous outcome}{
+
+Core GRADE 6 asks for the outcome in the comparison group, in the
+intervention group and the difference between them. A \code{metacont}
+object has no baseline risk to build event rates from, so the two arm
+columns are filled from the arm-level summaries it carries: the control
+column is the inverse-variance weighted mean of the control arms (weights
+\eqn{n / SD^2}, falling back to \eqn{n} when the SDs are unusable), and the
+intervention column is that value plus the pooled difference, its interval
+coming from the pooled difference alone. The control mean is pooled with
+fixed weights whatever model produced the effect estimate, because
+heterogeneity in arm-level means is a different quantity from heterogeneity
+in the contrast and pmatools does not fit a second meta-analysis to estimate
+it. With \code{sm = "SMD"} the pooled difference is in standard deviation
+units and is re-expressed on the outcome's own scale by multiplying it by
+the pooled within-arm SD of the control arms (Cochrane Handbook 15.5.3.2)
+before it is added, which assumes the control arms share one scale; the
+Difference column stays in standard deviation units. Both derivations are
+stated in a table footnote. The headers become "With control" / "With
+intervention" in this case, since the rate wording and the \code{per}
+denominator would misdescribe a mean.
+}
+
 \section{Plain language summaries -- one adverb per certainty level}{
 
 The \code{"bmj"} style adds a plain language summary column built from the
