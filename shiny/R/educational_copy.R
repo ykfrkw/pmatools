@@ -436,9 +436,10 @@ EDU_COPY <- list(
       "A Summary of Findings table normally reports every patient-important ",
       "outcome of the review, one row per outcome. This app rates one ",
       "outcome at a time. When you are satisfied with the certainty rating ",
-      "shown above, save it here: then go back to Step 2, select the next ",
-      "outcome, work through Step 3 again, and save that one too. Step 4 ",
-      "assembles every saved outcome into a single Summary of Findings table."
+      "shown above, save it here, then press '+ Add next outcome': the app ",
+      "returns to Step 2 with this outcome's answers cleared, ready for the ",
+      "next one. Step 4 assembles every saved outcome into a single Summary ",
+      "of Findings table."
     ),
     save_locked = paste0(
       "Saving is locked until every certainty domain has been reviewed and ",
@@ -451,9 +452,10 @@ EDU_COPY <- list(
     ),
     step4_intro = paste0(
       "One row per saved outcome, using the certainty rating that was in ",
-      "place when you saved it. Mark the outcomes that your protocol ",
-      "prespecified as primary to group them under a 'Primary outcomes' ",
-      "heading; leave the field empty for an ungrouped table. The ",
+      "place when you saved it. Row order is a statement about priority, so ",
+      "set it yourself with the arrows in the list below the table; mark the ",
+      "outcomes your protocol prespecified as primary to group them under a ",
+      "'Primary outcomes' heading, or mark none for an ungrouped table. The ",
       "single-outcome Evidence Profile and Summary of Findings for the ",
       "outcome currently open in Step 3 are exported as well."
     ),

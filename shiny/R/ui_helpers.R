@@ -192,6 +192,214 @@ pma_outcomes_stale <- function(outcomes, signature = NULL) {
   out
 }
 
+# ----- Outcome provenance guard -------------------------------------------
+# pma_dataset_signature() above answers "was this rated on other DATA?". It
+# cannot answer "was this rated on another OUTCOME?", because every outcome of
+# a review lives in one dataset, so switching between them leaves that
+# signature untouched. The Step 3 confirmations depend on the second question,
+# and it gets its own signature here.
+#
+# What counts as a different outcome
+# ----------------------------------
+# NOT the outcome name. A reviewer who corrects a typo in "Depresion
+# response", or relabels a row for the Summary of Findings table, has not
+# changed a single judgment, and voiding a finished assessment over a rename
+# would punish good bookkeeping. What the Step 3 answers are ABOUT is the body
+# of evidence handed to run_ma(), so the identity is built from that - which
+# studies, and the arm-level numbers of each - together with the Step 2
+# direction answer, because the direction decides which side of the threshold
+# counts as benefit and so flips Risk of Bias, Inconsistency and Imprecision
+# without changing a number.
+#
+# Deliberate consequences:
+#   * remapping the events (or mean / SD) column - a different outcome
+#     measured on the same studies - changes the arm-level numbers, so the
+#     identity changes and Step 3 is voided;
+#   * flipping the direction voids Step 3, for the reason above;
+#   * loading different data voids Step 3 (and the dataset guard fires too);
+#   * renaming the outcome, editing its follow-up or unit, or re-running with
+#     a different pooling method, tau-squared estimator or summary measure
+#     leaves the identity alone. Those change the estimate, not the question:
+#     the five domains are recomputed from the new fit anyway, and a change of
+#     scale already re-seeds the threshold on its own (threshold_seed_key in
+#     step3_grade.R).
+#
+# Returns NA_character_ when there is no analysis, which callers read as
+# "unknown" and never treat as a change.
+pma_analysis_signature <- function(ma, small_values = NULL) {
+  if (is.null(ma) || !inherits(ma, "meta")) return(NA_character_)
+  studlab <- as.character(ma$studlab %||% character(0))
+  if (length(studlab) == 0L) return(NA_character_)
+  # Sorted, so re-running after a row re-sort is not mistaken for a new
+  # outcome; the arm-level vectors follow the same order.
+  ord <- order(studlab)
+  .field <- function(nm) {
+    v <- ma[[nm]]
+    if (is.null(v) || length(v) != length(studlab)) return(paste0(nm, "="))
+    paste0(nm, "=", paste(format(v[ord], scientific = FALSE, trim = TRUE),
+                          collapse = ","))
+  }
+  paste(
+    paste0("studies=", paste(studlab[ord], collapse = "|")),
+    .field("event.e"), .field("n.e"), .field("event.c"), .field("n.c"),
+    .field("mean.e"), .field("sd.e"), .field("mean.c"), .field("sd.c"),
+    paste0("direction=",
+           if (is.null(small_values) || length(small_values) != 1L) ""
+           else as.character(small_values)),
+    sep = "\r"
+  )
+}
+
+# ----- Inputs that belong to ONE outcome ----------------------------------
+# THE single registry of Step 2 / Step 3 input ids whose answers describe the
+# outcome currently being rated, rather than the studies, the dataset or how a
+# plot is drawn. Two things read it, and nothing else in the app enumerates
+# these ids:
+#
+#   1. the freshness guard in step3_server(). Shiny keeps the last value of an
+#      input whose widget has been torn down, so between "the outcome changed"
+#      and "Step 3 was rendered again" every one of these still reports the
+#      PREVIOUS outcome's answer. The guard records which outcome each id was
+#      last touched for, and domain_confirmed() ignores the ones that are out
+#      of date;
+#   2. pma_clear_outcome_confirmations(), which unticks the confirmation boxes
+#      on screen the moment the outcome changes.
+#
+# ADDING A NEW DOMAIN INPUT? Put its id in the group below that names its tab.
+# An id that is missing here is an id whose stale answer can still count
+# towards the export gate.
+#
+# What is deliberately NOT here: the column mapping and model settings (they
+# usually carry over to the next outcome unchanged), the per-study risk-of-bias
+# and indirectness tables (properties of the studies, not of the outcome), and
+# every forest / funnel display field (presentation, re-derived per plot).
+PMA_OUTCOME_INPUT_IDS <- list(
+  # Step 2 - outcome identity
+  identity = c("outcome_name", "small_values", "outcome_follow_up",
+               "outcome_unit"),
+  # Step 3 - Configuration tab (threshold, control-group risk, responder
+  # conversion). Only some of these exist at a time: the binary and continuous
+  # branches of output$threshold_panel build different widgets.
+  configuration = c("threshold_mode", "threshold_abs", "threshold_ratio",
+                    "threshold_cont", "threshold_baseline_input",
+                    "threshold_baseline_rationale", "convert_smd_to_or",
+                    "baseline_risk_chinn", "responder_p0_rationale",
+                    "responder_p0_confirm", "threshold_label",
+                    "threshold_confirm"),
+  # Step 3 - Risk of Bias. rob_some_concerns / rob_inf_threshold are review-
+  # wide conventions with defaults, not per-outcome answers, so they stay.
+  rob = c("rob_override", "rob_override_rationale", "rob_confirm_na"),
+  # Step 3 - Inconsistency
+  inconsistency = c("ci_diff", "threshold_side", "subgroup_explained",
+                    "incon_override", "incon_override_rationale",
+                    "incon_confirm_na"),
+  # Step 3 - Indirectness (the four Core GRADE 5 PICO questions, plus the
+  # optional override of their worst-case fold)
+  indirectness = c("indir_population", "indir_intervention", "indir_comparator",
+                   "indir_outcome", "indirectness", "indir_rationale",
+                   "indir_confirm_na"),
+  # Step 3 - Imprecision
+  imprecision = c("ois_rrr", "ois_sd", "ois_events_override",
+                  "ois_n_override", "impre_override",
+                  "impre_override_rationale", "impre_confirm_na"),
+  # Step 3 - Publication bias
+  pubias = c("pubias_registry_complete", "pubias_small_industry",
+             "pubias_unpublished", "pubias_funnel_asymmetry",
+             "pubias_fa_rationale", "pubias_override",
+             "pubias_override_rationale", "pubias_confirm_na"),
+  # Step 3 - Final certainty ("Other considerations")
+  final = c("other_text", "other_downgrade")
+)
+
+pma_outcome_input_ids <- function() {
+  unname(unlist(PMA_OUTCOME_INPUT_IDS, use.names = FALSE))
+}
+
+# The subset whose cleared value is unambiguous: a confirmation is either
+# given or it is not, so these can be pushed to the client without restating
+# any widget's declared default. Everything else in the registry clears itself
+# when app.R rebuilds the step body from step3_ui() - a freshly built widget
+# pushes its own default back to the server, so no default is written twice.
+PMA_OUTCOME_CONFIRM_IDS <- c("threshold_confirm", "responder_p0_confirm",
+                             "rob_confirm_na", "incon_confirm_na",
+                             "indir_confirm_na", "impre_confirm_na",
+                             "pubias_confirm_na")
+
+pma_clear_outcome_confirmations <- function(session) {
+  for (id in PMA_OUTCOME_CONFIRM_IDS) {
+    shiny::updateCheckboxInput(session, id, value = FALSE)
+  }
+  invisible(NULL)
+}
+
+# ----- grade_meta() argument specs for the exported analysis.R ------------
+# export_bundle() renders analysis.R from `grade_args`: a named list of
+# {value, origin, col} specs, one per grade_meta() argument. An argument it is
+# not given falls back to a template default, which is usually the literal
+# NULL - so an argument the app supplied but did not declare here disappears
+# from the "reproducible" script, and the script reproduces a different rating
+# from the one it ships with.
+#
+# `origin` must be one of "null" / "column" / "scalar" / "vector"; anything
+# else aborts (pmatools 0.5.0 breaking change - it used to render NULL in
+# silence, which is exactly the failure this list exists to prevent).
+PMA_GRADE_ARGS_ATTR <- "pma_grade_args"
+
+pma_arg_spec <- function(value) {
+  if (is.null(value) || length(value) == 0L) {
+    return(list(value = NULL, origin = "null"))
+  }
+  # indirectness_subdomains is a data frame; export_bundle() literalises it
+  # from the frame itself (.indirectness_subdomains_lit) and never consults
+  # the origin, so any valid origin will do.
+  if (is.data.frame(value) || is.list(value)) {
+    return(list(value = value, origin = "scalar"))
+  }
+  if (length(value) == 1L) {
+    # NA is "not supplied", not the string "NA": rendering shQuote(NA) would
+    # put 'NA' into the script and change the call.
+    if (is.na(value)) return(list(value = NULL, origin = "null"))
+    return(list(value = value, origin = "scalar"))
+  }
+  list(value = value, origin = "vector")
+}
+
+# grade_meta() arguments the app supplies that the bundled analysis.R would
+# otherwise drop. Excluded on purpose because export_bundle() already recovers
+# them from the rated object: study_design, outcome_type, outcome_name, and
+# (whenever a subdomain table exists) indirectness / indirectness_rationale.
+#
+# Not covered by the template at all: threshold_baseline. The app converts an
+# absolute threshold to the analysis scale at that baseline, and
+# analysis_script.R.tpl has no slot for the argument, so the regenerated call
+# omits it. Nothing can be done from here without editing R/_pmatools/.
+PMA_GRADE_ARGS_EXPORTED <- c(
+  "rob", "rob_rationale", "rob_some_concerns", "rob_inflation_threshold",
+  "small_values",
+  "indirectness", "indirectness_rationale", "indirectness_subdomains",
+  "inconsistency", "inconsistency_rationale", "inconsistency_ci_diff",
+  "inconsistency_threshold_side", "inconsistency_subgroup_explained",
+  "imprecision", "imprecision_rationale",
+  "threshold", "threshold_scale",
+  "ois_p0", "ois_rrr", "ois_sd", "ois_events", "ois_n",
+  "pubias_small_industry", "pubias_funnel_asymmetry", "pubias_rationale",
+  "pubias_unpublished", "pubias_registry_complete"
+)
+
+# Every name above is always emitted, with a "null" spec when the app passed
+# nothing. That is not cosmetic: export_bundle() looks the specs up with
+# `grade_args$<name>`, and `$` partial-matches on lists - with `inconsistency`
+# absent, `grade_args$inconsistency` would silently return the
+# `inconsistency_ci_diff` spec and write that answer into the wrong argument.
+# A complete list makes every lookup an exact match.
+pma_grade_arg_specs <- function(args) {
+  out <- list()
+  for (nm in PMA_GRADE_ARGS_EXPORTED) {
+    out[[nm]] <- pma_arg_spec(if (nm %in% names(args)) args[[nm]] else NULL)
+  }
+  out
+}
+
 # Alert colours follow the existing warning treatment in Step 3
 # (output$cert_incomplete_banner): amber #fef3c7 / #b45309, reserved for
 # genuine alerts.
@@ -268,22 +476,59 @@ pma_outcome_summary_df <- function(outcomes, signature = NULL) {
   )
 }
 
-# Saved-outcome list with a per-row Remove button. The buttons write the
-# outcome name to `delete_input_id` via Shiny.setInputValue rather than
-# creating one observer per row, so rows can come and go freely.
+# Saved-outcome list with per-row Move up / Move down, Primary and Remove
+# controls. Every button writes the outcome name to a single input id via
+# Shiny.setInputValue rather than creating one observer per row, so rows can
+# come and go freely. The move and primary payloads carry a nonce because two
+# consecutive clicks on the same row would otherwise send an identical value
+# and the observer would not fire the second time.
 pma_saved_outcomes_ui <- function(outcomes, delete_input_id = "outcome_delete",
-                                  empty_text = NULL, signature = NULL) {
+                                  empty_text = NULL, signature = NULL,
+                                  move_input_id = "outcome_move",
+                                  primary_input_id = "outcome_primary",
+                                  primary = character(0)) {
   df <- pma_outcome_summary_df(outcomes, signature = signature)
   if (nrow(df) == 0) {
     if (is.null(empty_text)) return(NULL)
     return(htmltools::p(class = "pma-card-subtitle", empty_text))
   }
+  primary <- as.character(primary %||% character(0))
+  .name_lit <- function(x) jsonlite::toJSON(x, auto_unbox = TRUE)
+  .row_button <- function(input_id, name, extra = NULL, label, title,
+                          disabled = FALSE) {
+    payload <- c(list(name = name), extra, list(nonce = 0))
+    js <- sprintf(
+      "Shiny.setInputValue('%s', Object.assign(%s, {nonce: Math.random()}), {priority: 'event'})",
+      input_id, jsonlite::toJSON(payload, auto_unbox = TRUE))
+    htmltools::tags$button(
+      type  = "button",
+      class = "btn btn-secondary",
+      title = title,
+      disabled = if (isTRUE(disabled)) NA else NULL,
+      style = paste("padding: 0.2rem 0.5rem; font-size: 0.8rem;",
+                    if (isTRUE(disabled)) "opacity: 0.4;" else ""),
+      onclick = if (isTRUE(disabled)) NULL else js,
+      label)
+  }
   rows <- lapply(seq_len(nrow(df)), function(i) {
+    is_primary <- df$name[i] %in% primary
     htmltools::div(
       style = paste(
         "display: flex; align-items: center; gap: 0.75rem;",
         "padding: 0.5rem 0.25rem;",
         "border-top: 1px solid hsl(var(--border));"),
+      # Row order is a statement about priority in a Summary of Findings
+      # table, so it is under the reviewer's control rather than fixed to the
+      # order the outcomes happened to be saved in.
+      htmltools::div(
+        style = "display: flex; flex-direction: column; gap: 0.15rem;",
+        .row_button(move_input_id, df$name[i], list(dir = "up"),
+                    label = htmltools::HTML("&#9650;"),
+                    title = "Move up", disabled = i == 1L),
+        .row_button(move_input_id, df$name[i], list(dir = "down"),
+                    label = htmltools::HTML("&#9660;"),
+                    title = "Move down", disabled = i == nrow(df))
+      ),
       htmltools::div(
         style = "flex: 1 1 auto; min-width: 0;",
         htmltools::div(style = "font-weight: 600;", df$name[i]),
@@ -300,16 +545,43 @@ pma_saved_outcomes_ui <- function(outcomes, delete_input_id = "outcome_delete",
       htmltools::div(pma_certainty_badge(df$certainty[i])),
       htmltools::tags$button(
         type  = "button",
+        class = if (is_primary) "btn btn-primary" else "btn btn-secondary",
+        title = paste0("Outcomes marked primary are grouped under a ",
+                       "\"Primary outcomes\" heading in the table."),
+        style = "padding: 0.2rem 0.6rem; font-size: 0.8rem;",
+        onclick = sprintf(
+          "Shiny.setInputValue('%s', {name: %s, nonce: Math.random()}, {priority: 'event'})",
+          primary_input_id, .name_lit(df$name[i])),
+        if (is_primary) "Primary" else "Mark primary"),
+      htmltools::tags$button(
+        type  = "button",
         class = "btn btn-secondary",
         style = "padding: 0.2rem 0.6rem; font-size: 0.8rem;",
         onclick = sprintf(
           "Shiny.setInputValue('%s', %s, {priority: 'event'})",
-          delete_input_id,
-          jsonlite::toJSON(df$name[i], auto_unbox = TRUE)),
+          delete_input_id, .name_lit(df$name[i])),
         "Remove")
     )
   })
   htmltools::div(style = "margin-top: 0.5rem;", rows)
+}
+
+# "+ Add next outcome". Shown at the bottom of Step 4's combined Summary of
+# Findings card and beside the Save button on Step 3's Final certainty tab, so
+# the reviewer can start the next outcome straight from either place. Both
+# copies write to the same input id via Shiny.setInputValue (rather than being
+# two actionButtons sharing an id), because only one step body is ever mounted
+# at a time and this keeps that assumption out of the code.
+pma_add_next_outcome_button <- function(input_id = "add_next_outcome",
+                                        style = NULL) {
+  htmltools::tags$button(
+    type  = "button",
+    class = "btn btn-secondary",
+    style = paste("margin-top: 0.5rem;", style),
+    onclick = sprintf(
+      "Shiny.setInputValue('%s', Math.random(), {priority: 'event'})",
+      input_id),
+    "+ Add next outcome")
 }
 
 # GRADE certainty badge
