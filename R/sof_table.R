@@ -391,6 +391,12 @@ sof_add_notes <- function(x, notes) {
   }
 }
 
+# Package-wide *display* helper: total participants for the N column. Lenient
+# by design -- when the arm totals are missing it falls back to meta_obj$n, so
+# a single-arm meta (metaprop / metamean) still prints its real N instead of
+# "NR". domain_imprecision.R deliberately does NOT use this one: its
+# .total_n_strict() refuses the meta_obj$n fallback, because the "800 (400 per
+# group)" rule of thumb presupposes a genuine two-arm total.
 .total_n <- function(meta_obj) {
   n_e <- if (!is.null(meta_obj$n.e)) sum(meta_obj$n.e, na.rm = TRUE) else NA
   n_c <- if (!is.null(meta_obj$n.c)) sum(meta_obj$n.c, na.rm = TRUE) else NA

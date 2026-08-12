@@ -44,6 +44,22 @@
 
 ## Bug fixes
 
+* Two internal helpers were both named `.total_n()`, one in
+  `R/domain_imprecision.R` and one in `R/sof_table.R`. Because R collates
+  `R/*.R` alphabetically, the `sof_table.R` definition silently won
+  package-wide and the imprecision one never ran. The two differ on single-arm
+  meta-analyses: the display version falls back to `meta_obj$n` (the total a
+  `metaprop()` or `metamean()` records), whereas the imprecision version
+  deliberately returns `NA` there. `assess_imprecision()` was therefore
+  applying Core GRADE 2 Fig 4's "total N >= 800 (400 per group)" rule of thumb
+  to single-arm meta-analyses, where no per-group total exists at all. The
+  imprecision helper is now called `.total_n_strict()`, so each call site gets
+  the semantics it needs. In the affected cases the certainty *judgment* is
+  unchanged — those analyses now fall through to the "OIS could not be
+  computed -> do not rate down" branch, which is also `"no"` — but the
+  imprecision **note text** changes, since it no longer reports a rule of thumb
+  that was never applicable. The Summary of Findings and evidence profile
+  N columns are untouched and still show the real N for single-arm analyses.
 * `export_bundle()` read its `grade_args` and `ma_args` specifications with
   `$`, which partial-matches: a bundle carrying only an
   `inconsistency_ci_diff` spec had that spec answer for `inconsistency` as

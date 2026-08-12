@@ -326,7 +326,7 @@ assess_imprecision <- function(meta_obj,
                                                  else compute_pooled_sd(meta_obj))
   ci_ratio     <- .ci_ratio(lower, upper, sm)
   ci_ratio_cut <- .ci_ratio_cut(sm)
-  n_total      <- .total_n(meta_obj)
+  n_total      <- .total_n_strict(meta_obj)
 
   fig4 <- .classify_imprecision(
     crosses_threshold       = crosses_threshold,
@@ -677,7 +677,15 @@ assess_imprecision <- function(meta_obj,
 }
 
 # 総サンプルサイズ（連続アウトカムの "N >= OIS (or 800)" 判定に使う）
-.total_n <- function(meta_obj) {
+#
+# 意図的に strict にしてある。800 の rule of thumb は「400 patients per group」なので、
+# 二群の実測合計が揃っているときにしか適用できない。片群しかない meta
+# （metaprop / metamean など、n.e / n.c を持たず meta_obj$n だけを持つ
+# オブジェクト）では NA を返し、meta_obj$n へのフォールバックはしない。
+# 同じファイルの .compute_ois_pct() も n.e / n.c が揃わなければ OIS を
+# 計算しないので、そちらと足並みを揃えている。
+# 表示用の寛容版（N 列に出す総参加者数）は sof_table.R の .total_n() のほう。
+.total_n_strict <- function(meta_obj) {
   n_e <- if (!is.null(meta_obj$n.e)) sum(meta_obj$n.e, na.rm = TRUE) else NA_real_
   n_c <- if (!is.null(meta_obj$n.c)) sum(meta_obj$n.c, na.rm = TRUE) else NA_real_
   if (is.na(n_e) || is.na(n_c)) return(NA_real_)
