@@ -786,9 +786,14 @@ pma_wizard_nav <- function(current_step, max_step = 4,
       shiny::actionButton(back_id, back_label, class = "btn btn-secondary")
     } else htmltools::div(),
     if (current_step < max_step) {
+      # TRUE, not the string "disabled": shiny >= 1.9 gives actionButton() a
+      # real `disabled` formal it tests with isTRUE(), so a string silently
+      # produced an enabled button. NULL (not FALSE) when enabled, so the
+      # attribute is dropped rather than rendered as disabled="FALSE" should
+      # the argument ever land in `...` on an older shiny.
       shiny::actionButton(next_id, next_label,
                           class = "btn btn-primary",
-                          disabled = if (next_disabled) "disabled" else NULL)
+                          disabled = if (isTRUE(next_disabled)) TRUE else NULL)
     } else htmltools::div()
   )
 }

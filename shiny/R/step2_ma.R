@@ -244,7 +244,10 @@ step2_ui <- function(state = NULL) {
       )
     ),
 
-    pma_wizard_nav(current_step = 2)
+    # Own output, not part of this body: see output$step2_nav in
+    # step2_server(). A rebuild of the body here would throw away every
+    # unsaved widget value (forest title, labels, ...).
+    shiny::uiOutput("step2_nav")
   )
 }
 
@@ -1245,6 +1248,25 @@ step2_server <- function(input, output, session, state) {
       "pma_required_fields",
       list(all = as.list(PMA_STEP2_REQUIRED), unset = as.list(unset))
     )
+  })
+
+  # Same three conditions state$step2_commit enforces below, in the same
+  # order, read off the same inputs: both required fields, then an analysis.
+  # Keeping the two in lockstep is what stops the button and the toast from
+  # disagreeing. (input$, not state$: the mirrored copies are only refreshed
+  # when an analysis runs, so they lag what the user has just typed.)
+  step2_can_advance <- shiny::reactive({
+    sv <- input$small_values
+    nzchar(trimws(input$outcome_name %||% "")) &&
+      !is.null(sv) && length(sv) == 1L && nzchar(sv) &&
+      !is.null(state$ma)
+  })
+
+  # Wizard nav as its own output: re-rendering it when the preconditions flip
+  # leaves the rest of the step body, and every value typed into it, alone.
+  output$step2_nav <- shiny::renderUI({
+    pma_wizard_nav(current_step = 2,
+                   next_disabled = !isTRUE(step2_can_advance()))
   })
 
   # Advance hook for step dispatcher

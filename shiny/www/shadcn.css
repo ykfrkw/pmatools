@@ -223,6 +223,24 @@ h5 { font-size: 0.95rem; margin-top: 0.75rem; margin-bottom: 0.4rem; }
   filter: brightness(1.1);
   color: hsl(var(--primary-foreground)) !important;
 }
+/* Disabled primary action (the wizard's Next while the step is incomplete).
+   Scoped to .btn-primary on purpose: Back and the small .btn-secondary
+   buttons are never disabled and must not be faded. The :hover/:focus rule
+   above uses !important, so the disabled colours have to as well. */
+.btn-primary:disabled,
+.btn-primary[disabled],
+.btn-primary:disabled:hover,
+.btn-primary[disabled]:hover,
+.btn-primary:disabled:focus,
+.btn-primary[disabled]:focus {
+  background: hsl(var(--primary)) !important;
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground)) !important;
+  opacity: 0.4;
+  filter: none;
+  cursor: not-allowed;
+  box-shadow: none;
+}
 .btn-secondary {
   background: hsl(var(--secondary));
   border-color: hsl(var(--border));

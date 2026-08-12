@@ -132,7 +132,12 @@ step1_ui <- function() {
 
     shiny::uiOutput("data_preview_card"),
 
-    pma_wizard_nav(current_step = 1)
+    # The Next button carries its own precondition (data loaded), so the nav
+    # has to re-render whenever that precondition flips. It is an output of
+    # its own rather than part of this body: app.R rebuilds the whole step
+    # body with renderUI, and a rebuild mid-step would discard the user's
+    # unsaved input. See output$step1_nav in step1_server().
+    shiny::uiOutput("step1_nav")
   )
 }
 
@@ -484,10 +489,25 @@ step1_server <- function(input, output, session, state) {
 
   # ----- Advance hook -----
 
+  # Exactly the condition state$step1_commit enforces below, so the button
+  # state and the commit toast can never disagree.
   state$step1_can_advance <- shiny::reactive({
+    # ingested() is an eventReactive(ignoreInit = TRUE): reading it before
+    # the first Load data click raises the silent cancel condition, which
+    # would leave output$step1_nav below rendering an empty div instead of a
+    # disabled button. Nothing can be loaded at that point anyway.
+    if (!isTRUE((input$load_data %||% 0) > 0)) return(FALSE)
     res <- ingested()
     isTRUE(loaded_current()) &&
       !is.null(res) && !(is.list(res) && !is.null(res$error))
+  })
+
+  # Wizard nav. Rendered as its own output so that flipping Next between
+  # disabled and enabled re-renders these two buttons only, leaving the rest
+  # of the step body (and anything typed into it) untouched.
+  output$step1_nav <- shiny::renderUI({
+    pma_wizard_nav(current_step = 1,
+                   next_disabled = !isTRUE(state$step1_can_advance()))
   })
 
   state$step1_commit <- function() {
