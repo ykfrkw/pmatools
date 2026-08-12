@@ -1,3 +1,185 @@
+# pmatools 0.5.1 (development version)
+
+## New features
+
+* The Risk of bias, Inconsistency and Imprecision assessors now record the
+  numbers behind their judgment in a structured form, reachable with the new
+  exported `domain_facts(x, domain = NULL)` and stored on the rated object as
+  `$domain_facts`: a tibble per domain with a stable machine `key`, a human
+  `label`, a pre-formatted `value` and the raw `numeric` when the fact is
+  scalar-numeric. Risk of bias records the high-risk study count and weight
+  share, the pooled estimate with and without those studies, and which Core
+  GRADE 4 Fig 2 branch was taken; Inconsistency records I-squared, tau-squared,
+  the Cochran Q p value and the zone tally against the chosen threshold;
+  Imprecision records the confidence interval, whether it crosses the null and
+  where it sits relative to the threshold, the optimal information size, and
+  the Core GRADE 2 Fig 4 path with a flag for whether the OIS approach was
+  applied. This replaces regex-parsing `domain_assessments$notes` — a host
+  application that wanted the Fig 4 path had to strip it back out of a sentence
+  — with values it can read and compute with. `notes` is unchanged, down to the
+  byte: the facts are a machine-readable companion to the prose, not a
+  replacement for it, and the prose remains the authoritative record of why a
+  domain was rated the way it was. Indirectness and Publication bias keep
+  prose-only notes; the container is domain-agnostic, so they can adopt it
+  later without a change to the accessor or the renderers.
+* `sof_table()`, `grade_table()` (both `"gradepro"` and `"bmj"` layouts) and
+  `evidence_profile()` render those facts as numbered footnotes for the domains
+  that pulled the rating down, with the marker on the certainty cell — after
+  the symbol in the GRADEpro layouts, and beside the domain name inside the BMJ
+  "Due to serious risk of bias [1] ..." sentence. A reader can now see *why* a
+  rating fell without opening the notes. In `grade_table()` the domain-fact
+  footnotes continue the same `[n]` register as the per-outcome analysis-set
+  notes and name the outcome they belong to, so one footer never shows two
+  different `[1]`s; the analysis-set and publication-bias sentences keep their
+  existing numbering and wording.
+
+* New exported `not_reported_outcome()` and `add_not_reported()`: a Summary of
+  Findings table can now carry an outcome the review prespecified that **no
+  included study reported**. Core GRADE 6 asks the table to cover every
+  patient-important outcome the review addressed, including the ones the
+  evidence base is silent on, but every row of `grade_table()` was derived from
+  `x$meta`, so such an outcome could not be expressed at all. Its row names the
+  outcome (and its follow-up), reads "Not reported" in the participants,
+  effect, arm-level and Difference cells, and "Not rated" in the certainty
+  cell — not blank, because a blank cell cannot be told apart from a forgotten
+  one, which is the whole argument for showing the row. A supplied `reason`
+  becomes a numbered footnote on the row, sharing the pool with the
+  risk-of-bias analysis-set notes. Both table layouts are supported, as are
+  `grade_report()` and `export_bundle()` on the set; `reorder_outcomes()` and
+  `set_primary()` treat the outcome like any other. The row is deliberately
+  *not* an `evidence_profile()` row — all five domain columns are judgments
+  about a body of evidence, and there is none — so `evidence_profile()` and
+  `sof_table()` refuse it with a message saying where it belongs instead.
+
+* `export_bundle()` takes a `style` argument on both methods, so a caller can
+  export the Summary of Findings layout it renders on screen. Previously
+  `export_bundle.meta()` had no such argument and always wrote the GRADEpro
+  layout; a host application that showed the BMJ Core GRADE table could only
+  match it by withholding `"grade_table"` from `include` and writing
+  `sof_table.docx` itself. `style` is forwarded to `sof_table()` for
+  `sof_table.docx` and to `grade_report()` for the certainty appendix, so a
+  bundle no longer mixes two layouts, and it is rendered into the generated
+  `analysis.R` — the script now regenerates the table the bundle actually
+  ships. The same fix applies to `grade_table()` in the multi-outcome script.
+* `export_bundle.meta()` also takes `follow_up` and `unit`, the two
+  presentation arguments of the BMJ layout ("Outcome and follow-up" is its
+  first column). Both fall back to `grade$follow_up` / `grade$unit`, which is
+  where `grade_meta_multi()` records them, so an outcome rated as part of a set
+  keeps its follow-up line when exported on its own; both are rendered into
+  `analysis.R`. The `pmatools_set` method needs no such argument:
+  `grade_table()` reads them off the rated objects, and so does the generated
+  script.
+
+* New exported `sof_add_notes(x, notes)`: appends caller footnote lines to a
+  `sof_table()` / `grade_table()` flextable, styled like the footnotes those
+  functions write themselves. Both `export_bundle()` methods take the matching
+  `sof_notes` argument — appended to `sof_table.docx` and to
+  `summary_of_findings.docx` respectively, and rendered into `analysis.R` as a
+  `sof_add_notes()` call, so the script still reproduces the table that was
+  exported. This is the last thing that forced a host application to write the
+  SoF .docx outside `export_bundle()`: an annotation pmatools cannot derive (a
+  rare-event alert, a scope caveat, a registration number) can now be handed to
+  the bundler. `sof_notes` does not reach the certainty appendix.
+
+## Behaviour changes
+
+* The default `style` of the single-outcome bundle changed from GRADEpro to
+  `"bmj"`, matching `export_bundle.pmatools_set()`, which has defaulted to the
+  BMJ layout since v0.5.0. One rule now holds for both: a bundle ships the
+  Core GRADE layout unless asked otherwise. `sof_table()` and `grade_table()`
+  are unchanged and still default to `"gradepro"`, so only the exported
+  `sof_table.docx` (and the appendix's embedded table) moves. Pass
+  `style = "gradepro"` to `export_bundle()` to keep the old layout.
+
+## Bug fixes
+
+* Two internal helpers were both named `.total_n()`, one in
+  `R/domain_imprecision.R` and one in `R/sof_table.R`. Because R collates
+  `R/*.R` alphabetically, the `sof_table.R` definition silently won
+  package-wide and the imprecision one never ran. The two differ on single-arm
+  meta-analyses: the display version falls back to `meta_obj$n` (the total a
+  `metaprop()` or `metamean()` records), whereas the imprecision version
+  deliberately returns `NA` there. `assess_imprecision()` was therefore
+  applying Core GRADE 2 Fig 4's "total N >= 800 (400 per group)" rule of thumb
+  to single-arm meta-analyses, where no per-group total exists at all. The
+  imprecision helper is now called `.total_n_strict()`, so each call site gets
+  the semantics it needs. In the affected cases the certainty *judgment* is
+  unchanged — those analyses now fall through to the "OIS could not be
+  computed -> do not rate down" branch, which is also `"no"` — but the
+  imprecision **note text** changes, since it no longer reports a rule of thumb
+  that was never applicable. The Summary of Findings and evidence profile
+  N columns are untouched and still show the real N for single-arm analyses.
+* `export_bundle()` read its `grade_args` and `ma_args` specifications with
+  `$`, which partial-matches: a bundle carrying only an
+  `inconsistency_ci_diff` spec had that spec answer for `inconsistency` as
+  well, so the generated `analysis.R` issued a manual Inconsistency override
+  the reviewer never made — and re-running the "reproducible" script could
+  return a different certainty than the bundle it came in. Every one of the
+  ~40 affected lookups (`rob`/`rob_rationale`, `imprecision`/
+  `imprecision_rationale`, `threshold`/`threshold_scale`,
+  `rating_target`/`rating_target_rationale`, `run_ma()`'s `method`/
+  `method.tau`, and the rest) now uses exact `[[` indexing. `grade_args`
+  names are additionally checked against `grade_meta()`'s formals at render
+  time: an unknown name — a typo such as `inconsistancy`, or an argument
+  belonging to another function — now aborts with the closest legal name
+  rather than being silently dropped from the script.
+* The single-outcome `analysis.R` template had no `threshold_baseline` slot,
+  so a rating made with an absolute (ARD) threshold anchored to a
+  reviewer-supplied baseline generated a script that re-derived the baseline
+  from the pooled control-arm risk instead. On a meta-analysis whose pooled
+  control risk is 0.33 and whose reviewer-set baseline was 0.12, the
+  regenerated rating used a threshold on the internal scale of 0.22 where the
+  bundle's was 0.41. The generated call now passes the resolved
+  `threshold_baseline` the rating was actually made with. The multi-outcome
+  template was never affected: it literalises `common`/`per_outcome`
+  wholesale.
+* Baseline (control-arm) risk: `event.c` and `n.c` were filtered with different
+  predicates, so a study reporting a denominator but no event count — one that
+  contributed a continuous outcome only, say — was dropped from the numerator
+  while its controls stayed in the denominator. Two consequences, both silent.
+  The crude pooled proportion was diluted by controls that could never
+  contribute an event; and the two vectors reached `meta::metaprop()` at
+  different lengths, so `baseline_risk = "metaprop"` errored, warned, and
+  returned that same crude proportion in place of the random-effects estimate
+  it advertises. On the bundled `cbti_depression` dataset the pooled baseline
+  risk was reported as 173.8 per 1,000 where the metaprop estimate is 155.6 and
+  the crude proportion is 175.5 — a gap wide enough to move the absolute-risk
+  column of a Summary of Findings table. Both vectors now use one complete-case
+  filter (`!is.na(event.c) & !is.na(n.c) & n.c > 0`), and a meta object with no
+  complete control arm returns `NULL` rather than `NaN`. Analyses that left
+  `baseline_risk` at its default and had at least one such study will see the
+  absolute risks move.
+* `suggest_threshold()` returned `NULL` for a risk-difference meta-analysis:
+  its `switch` handled the internal scale name `"ARD"` but not `"RD"`, which is
+  what `meta::metabin(sm = "RD")` actually reports (`"ARD"` is not a {meta}
+  effect measure, so that branch was unreachable). `"RD"` now yields the
+  absolute 0.05 suggestion, and `threshold_to_te_scale(threshold_scale =
+  "auto")` resolves it to the `"ard"` scale instead of aborting. Note that
+  `run_ma()` does not emit `sm = "RD"`; this affects meta objects built
+  directly with {meta}, which the risk-difference paths in the SoF and
+  Imprecision code already support.
+* Risk of bias: the whole flowchart works in "estimable study" space (length
+  `meta_obj$k`), but the refit on the low risk of bias subset and the
+  study-level `rob_overrides` work in study-label space (length
+  `meta_obj$studlab`). The two differ whenever {meta} drops a study from the
+  pool — a trial with missing results, or a double-zero trial under
+  `method = "Inverse"` — and both collaborators then refused to run: the
+  Core GRADE 4 Fig 2 "use low risk of bias studies only" leaf came back with
+  `rob_refit = FALSE` and a "does not align with the meta object" warning, and
+  `rob_overrides` aborted with a study-label count that could never match. The
+  two spaces are now mapped onto each other explicitly, so the refit happens
+  and the overrides apply. `attr(<rob domain row>, "high_idx")` is
+  consequently study-label aligned, which is also what `update.meta(subset = )`
+  needs; when the alignment genuinely cannot be established (no study labels,
+  or no rule that reproduces `k` rows) nothing is guessed and the previous
+  skip-with-a-warning behaviour stands.
+* `assess_rob()` now accepts a per-study `rob` vector of length `k` **or** of
+  length `length(meta_obj$studlab)`; the second form lets a reviewer keep one
+  row per study in the data even when {meta} could not pool them all, and it is
+  what a `rob` column name in `meta_obj$data` yields. The length-mismatch error
+  names both accepted lengths. A study {meta} could not pool never counts as
+  high risk of bias unless the reviewer rated (or overrode) it as such.
+
 # pmatools 0.5.0
 
 0.5.0 rebuilds all five certainty domains on the BMJ 2025 Core GRADE flowcharts

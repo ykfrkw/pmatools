@@ -11,6 +11,7 @@
   include = c("data", "script", "results", "forest", "forest_full", "forest_rob",
     "funnel", "sof", "evidence_profile", "indirectness", "readme"),
   style = c("bmj", "gradepro"),
+  sof_notes = NULL,
   per = 1000,
   prediction = FALSE,
   rob = NULL,
@@ -34,7 +35,16 @@
 \code{"sof"}, \code{"evidence_profile"}, \code{"indirectness"}, \code{"readme"}.}
 
 \item{style}{Summary-of-findings layout, \code{"bmj"} (default) or
-\code{"gradepro"}.}
+\code{"gradepro"}. Passed to \code{\link{grade_table}} for
+\code{summary_of_findings.docx} and rendered into the bundled \code{analysis.R}.
+Same default as the single-outcome \code{\link{export_bundle.meta}}.
+Per-outcome \code{follow_up} / \code{unit} need no argument here: \code{grade_table()}
+reads them off the rated objects, as does the generated script.}
+
+\item{sof_notes}{(v0.5.1) Optional character vector of extra footnote lines
+for \code{summary_of_findings.docx}, appended by \code{\link{sof_add_notes}}
+after the table's own footnotes and rendered into \code{analysis.R}. See
+\code{\link{export_bundle.meta}}.}
 
 \item{per}{Denominator for SoF rate columns. Default 1000.}
 
@@ -60,6 +70,18 @@ Character. Absolute path to the created ZIP file.
 The \code{\link{export_bundle}} method for a \code{pmatools_set}: the
 summary artifacts at the top level of the ZIP and one numbered
 \verb{outcomes/NN_name/} directory per outcome, in the set's order.
+}
+\details{
+An outcome added with \code{\link{add_not_reported}} keeps its numbered
+\verb{outcomes/NN_name/} directory so the numbering stays aligned with the set's
+order, but the directory holds only a \code{results.txt} saying that no included
+study reported the outcome: there is no analysis to plot, profile or
+tabulate. That file, like every other per-outcome artifact, is written only
+when \code{include} contains \code{"results"} (it does by default); an \code{include}
+without it leaves the outcome no files at all, and an empty directory never
+reaches the ZIP. It still occupies a row of \code{summary_of_findings.docx} / \code{.csv}
+(certainty \code{"Not rated"}), a paragraph of \code{evidence_profile.docx}, and an
+\code{add_not_reported()} call in the generated \code{analysis.R}.
 }
 \seealso{
 \code{\link{export_bundle}} for the single-outcome layout.

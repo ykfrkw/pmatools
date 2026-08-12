@@ -258,6 +258,188 @@ test_that(".render_analysis_script refuses to write an unparseable script", {
   expect_false(file.exists(out_path))
 })
 
+# ---- Summary of Findings layout (style=) ------------------------------------
+# Regression: export_bundle() had no `style` argument, so a caller rendering the
+# BMJ layout on screen could only export the GRADEpro one, and the bundled
+# analysis.R hardcoded a styleless sof_table() call that reproduced GRADEpro
+# whatever the bundle held.
+
+grade_for_style <- function(...) {
+  suppressWarnings(grade_meta(make_meta_for_bundle(), study_design = "RCT",
+                              rob = "no",
+                              rob_rationale = "Consensus RoB2: all domains low risk",
+                              indirectness = "no",
+                              outcome_name = "Test", threshold_type = "null",
+                              ...))
+}
+
+# Text of every paragraph and table cell of a .docx, in document order.
+docx_text <- function(path) {
+  s <- officer::docx_summary(officer::read_docx(path))
+  paste(s$text[!is.na(s$text)], collapse = "\n")
+}
+
+# Unzip a bundle and return the extraction directory.
+unbundle <- function(zip_path) {
+  d <- tempfile(); dir.create(d)
+  zip::unzip(zip_path, exdir = d)
+  d
+}
+
+bundle_with_style <- function(g, name, ...) {
+  ma <- g$meta
+  out_dir <- tempfile(); dir.create(out_dir)
+  unbundle(export_bundle(ma, g, output_dir = out_dir, bundle_name = name,
+                         include = c("script", "grade_table"), ...))
+}
+
+test_that("export_bundle writes the SoF layout it was asked for", {
+  g <- grade_for_style()
+
+  bmj <- docx_text(file.path(bundle_with_style(g, "style_bmj", style = "bmj"),
+                             "sof_table.docx"))
+  expect_match(bmj, "Outcome and follow-up", fixed = TRUE)
+  expect_match(bmj, "Difference", fixed = TRUE)
+  expect_no_match(bmj, "Risk with control", fixed = TRUE)
+
+  gp <- docx_text(file.path(bundle_with_style(g, "style_gp", style = "gradepro"),
+                            "sof_table.docx"))
+  expect_match(gp, "Risk with control", fixed = TRUE)
+  expect_no_match(gp, "Outcome and follow-up", fixed = TRUE)
+})
+
+test_that("export_bundle defaults to the BMJ layout, as the set method does", {
+  g   <- grade_for_style()
+  dir <- bundle_with_style(g, "style_default")
+  expect_match(docx_text(file.path(dir, "sof_table.docx")),
+               "Outcome and follow-up", fixed = TRUE)
+  expect_match(paste(readLines(file.path(dir, "analysis.R"), warn = FALSE),
+                     collapse = "\n"),
+               'style = "bmj"', fixed = TRUE)
+})
+
+test_that("the bundled analysis.R carries the style that produced the bundle", {
+  g <- grade_for_style()
+  for (st in c("bmj", "gradepro")) {
+    txt <- paste(readLines(file.path(
+      bundle_with_style(g, paste0("style_script_", st), style = st),
+      "analysis.R"), warn = FALSE), collapse = "\n")
+    # Both the SoF table and the appendix report must be regenerated in the
+    # exported layout, or re-running the script yields a different bundle.
+    expect_match(txt, paste0('sof_table(g, style = "', st, '"'), fixed = TRUE)
+    expect_match(txt, paste0('style       = "', st, '"'), fixed = TRUE)
+    expect_false(is.null(tryCatch(parse(text = txt), error = function(e) NULL)))
+  }
+})
+
+test_that("follow_up and unit reach the BMJ table and the bundled script", {
+  g   <- grade_for_style()
+  dir <- bundle_with_style(g, "style_followup", style = "bmj",
+                           follow_up = "Follow-up: 12 months",
+                           unit      = "days")
+
+  expect_match(docx_text(file.path(dir, "sof_table.docx")),
+               "Follow-up: 12 months", fixed = TRUE)
+  txt <- paste(readLines(file.path(dir, "analysis.R"), warn = FALSE),
+               collapse = "\n")
+  expect_match(txt, 'follow_up = "Follow-up: 12 months"', fixed = TRUE)
+  expect_match(txt, 'unit = "days"', fixed = TRUE)
+  expect_false(is.null(tryCatch(parse(text = txt), error = function(e) NULL)))
+})
+
+test_that("follow_up and unit fall back to the rated object", {
+  # grade_meta() takes neither, but grade_meta_multi() stores both on the object
+  # it rates, so a set member exported on its own keeps its follow-up line.
+  g <- grade_for_style()
+  g$follow_up <- "Follow-up: longest reported"
+  g$unit      <- "points"
+
+  dir <- bundle_with_style(g, "style_followup_obj", style = "bmj")
+  expect_match(docx_text(file.path(dir, "sof_table.docx")),
+               "Follow-up: longest reported", fixed = TRUE)
+  expect_match(paste(readLines(file.path(dir, "analysis.R"), warn = FALSE),
+                     collapse = "\n"),
+               'follow_up = "Follow-up: longest reported"', fixed = TRUE)
+})
+
+test_that("an apostrophe in follow_up still yields a parseable analysis.R", {
+  # shQuote()'s single-quoted literal would leave this unparseable and the
+  # bundle would abort in .check_script_parses().
+  g   <- grade_for_style()
+  dir <- bundle_with_style(g, "style_apostrophe", style = "bmj",
+                           follow_up = "Follow-up: patient's last visit")
+  txt <- paste(readLines(file.path(dir, "analysis.R"), warn = FALSE),
+               collapse = "\n")
+  expect_false(is.null(tryCatch(parse(text = txt), error = function(e) NULL)))
+  expect_match(txt, "patient's last visit", fixed = TRUE)
+})
+
+# ---- caller footnotes (sof_notes=) ------------------------------------------
+# Without these the bundler could not carry an annotation it cannot derive
+# itself (a host application's rare-event alert, a scope caveat), which is what
+# forced such callers to write sof_table.docx outside export_bundle().
+
+test_that("sof_add_notes appends footer lines and drops unusable ones", {
+  g  <- grade_for_style()
+  ft <- sof_table(g, style = "bmj")
+  n0 <- nrow(ft$footer$dataset)
+
+  ft2 <- sof_add_notes(ft, c("First note.", "Second note."))
+  expect_equal(nrow(ft2$footer$dataset), n0 + 2L)
+
+  # Nothing usable -> the table is returned untouched rather than gaining a
+  # blank footer line.
+  for (empty in list(NULL, character(0), NA_character_, "", c(NA, ""))) {
+    expect_equal(nrow(sof_add_notes(ft, empty)$footer$dataset), n0)
+  }
+  expect_error(sof_add_notes("not a flextable", "x"), regexp = "must be a flextable")
+})
+
+test_that("sof_notes reach the exported docx and the bundled script", {
+  g <- grade_for_style()
+  notes <- c("Event rates below 1%: analyse risk differences directly.",
+             "Not an official GRADE Working Group assessment.")
+  dir <- bundle_with_style(g, "notes_bundle", style = "bmj", sof_notes = notes)
+
+  txt <- docx_text(file.path(dir, "sof_table.docx"))
+  for (nt in notes) expect_match(txt, nt, fixed = TRUE)
+
+  script <- paste(readLines(file.path(dir, "analysis.R"), warn = FALSE),
+                  collapse = "\n")
+  expect_match(script, "sof <- sof_add_notes(sof, c(", fixed = TRUE)
+  for (nt in notes) expect_match(script, nt, fixed = TRUE)
+  expect_false(is.null(tryCatch(parse(text = script), error = function(e) NULL)))
+})
+
+test_that("a bundle without notes renders no sof_add_notes call", {
+  g   <- grade_for_style()
+  dir <- bundle_with_style(g, "notes_absent", style = "bmj")
+  expect_no_match(paste(readLines(file.path(dir, "analysis.R"), warn = FALSE),
+                        collapse = "\n"),
+                  "sof_add_notes", fixed = TRUE)
+})
+
+test_that("a note containing quotes still yields a parseable analysis.R", {
+  g   <- grade_for_style()
+  dir <- bundle_with_style(g, "notes_quotes", style = "bmj",
+                           sof_notes = "The panel's \"important\" threshold.")
+  script <- paste(readLines(file.path(dir, "analysis.R"), warn = FALSE),
+                  collapse = "\n")
+  expect_false(is.null(tryCatch(parse(text = script), error = function(e) NULL)))
+  expect_match(docx_text(file.path(dir, "sof_table.docx")),
+               'The panel\'s "important" threshold.', fixed = TRUE)
+})
+
+test_that("export_bundle rejects an unknown style instead of silently exporting one", {
+  g <- grade_for_style()
+  out_dir <- tempfile(); dir.create(out_dir)
+  expect_error(
+    export_bundle(g$meta, g, output_dir = out_dir, bundle_name = "bad_style",
+                  include = c("script"), style = "grade_pro"),
+    regexp = "should be one of"
+  )
+})
+
 test_that("export_bundle includes rare-event artifacts when supplied", {
   d <- ingest_data(system.file("extdata", "rare_events_mock.csv", package = "pmatools"),
                    format = "long")
@@ -456,4 +638,200 @@ test_that("results.txt keeps the unqualified heading with no refit", {
 
   expect_true(any(grepl("^\\[ Meta-analysis summary \\]$", txt)))
   expect_length(grep("[ Meta-analysis summary", txt, fixed = TRUE), 1L)
+})
+
+# ---- grade_args names are matched exactly ----------------------------------
+#
+# `$` on a list partial-matches. Before these tests, a bundle carrying only an
+# `inconsistency_ci_diff` spec rendered that spec's value into the script's
+# `inconsistency =` slot as well, so the "reproducible" analysis.R issued a
+# manual Inconsistency override the reviewer never made.
+
+render_script_txt <- function(ma, g, grade_args = list(), ma_args = list()) {
+  out_path <- tempfile(fileext = ".R")
+  .render_analysis_script(ma, g, ma_args = ma_args, grade_args = grade_args,
+                          per = 1000, prediction = FALSE,
+                          convert_smd_to_or = FALSE, baseline_risk = NULL,
+                          threshold_label = NULL, out_path = out_path)
+  paste(readLines(out_path, warn = FALSE), collapse = "\n")
+}
+
+# The single line the generated grade_meta() call devotes to `arg`, e.g.
+#   "  inconsistency           = NULL,"
+arg_line <- function(txt, arg) {
+  lines <- strsplit(txt, "\n", fixed = TRUE)[[1]]
+  hit <- grep(paste0("^\\s*", arg, "\\s*="), lines)
+  if (length(hit) == 0L) return(NA_character_)
+  paste(trimws(lines[hit]), collapse = " ~~ ")
+}
+
+grade_args_fixture <- function() {
+  ma <- make_meta_for_bundle()
+  g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                   rob_rationale = "Consensus RoB2: all low",
+                                   indirectness = "no",
+                                   outcome_name = "Test",
+                                   threshold_type = "null"))
+  list(ma = ma, g = g)
+}
+
+test_that("an inconsistency_ci_diff spec does not leak into inconsistency", {
+  f <- grade_args_fixture()
+  txt <- render_script_txt(
+    f$ma, f$g,
+    grade_args = list(inconsistency_ci_diff = list(origin = "scalar",
+                                                   value = 0.4))
+  )
+
+  expect_match(txt, "inconsistency_ci_diff            = 0.4", fixed = TRUE)
+  # ... and the scalar Inconsistency override stays at grade_meta()'s default.
+  expect_equal(arg_line(txt, "inconsistency"), "inconsistency           = NULL,")
+})
+
+test_that("supplying a long grade_args name never answers for its prefix", {
+  f <- grade_args_fixture()
+  legal <- .grade_arg_names()
+
+  # Every (short, long) pair in the registry where `$` would partial-match.
+  pairs <- do.call(rbind, lapply(legal, function(short) {
+    longs <- setdiff(legal[startsWith(legal, short)], short)
+    if (length(longs) == 0L) return(NULL)
+    data.frame(short = short, long = longs, stringsAsFactors = FALSE)
+  }))
+  expect_true(nrow(pairs) > 10L)   # registry sanity: the hazard is widespread
+
+  # The baseline render is the documented fallback for every argument: NULL for
+  # most, but object-derived for `indirectness` and `threshold`. Comparing
+  # against it therefore asserts the right thing for those two as well.
+  base_txt <- render_script_txt(f$ma, f$g)
+
+  for (i in seq_len(nrow(pairs))) {
+    short <- pairs$short[i]
+    long  <- pairs$long[i]
+    base_line <- arg_line(base_txt, short)
+    # A registry name the template does not render (nothing to leak into).
+    if (is.na(base_line)) next
+
+    spec <- list(list(origin = "scalar", value = 0.4321))
+    names(spec) <- long
+    txt <- render_script_txt(f$ma, f$g, grade_args = spec)
+
+    expect_equal(arg_line(txt, short), base_line,
+                 info = paste0("grade_args$", long, " leaked into ", short))
+  }
+})
+
+test_that("an unknown grade_args name aborts instead of being dropped", {
+  f <- grade_args_fixture()
+  expect_error(
+    render_script_txt(f$ma, f$g,
+                      grade_args = list(inconsistancy = list(origin = "scalar",
+                                                             value = "yes"))),
+    regexp = "inconsistancy"
+  )
+  expect_error(
+    render_script_txt(f$ma, f$g,
+                      grade_args = list(inconsistancy = list(origin = "scalar",
+                                                             value = "yes"))),
+    regexp = "Unknown grade_args name"
+  )
+  # The abort points at the argument that was meant.
+  expect_error(
+    render_script_txt(f$ma, f$g,
+                      grade_args = list(inconsistancy = list(origin = "scalar",
+                                                             value = "yes"))),
+    regexp = "inconsistency"
+  )
+  # Unnamed specs cannot be matched either.
+  expect_error(
+    render_script_txt(f$ma, f$g,
+                      grade_args = list(list(origin = "scalar", value = "yes"))),
+    regexp = "must be named"
+  )
+  out_dir <- tempfile(); dir.create(out_dir)
+  expect_error(
+    export_bundle(f$ma, f$g, output_dir = out_dir,
+                  bundle_name = "bad_name", include = c("script"),
+                  grade_args = list(inconsistancy = list(origin = "scalar",
+                                                         value = "yes"))),
+    regexp = "Unknown grade_args name"
+  )
+})
+
+# ---- threshold_baseline round-trip -----------------------------------------
+
+test_that("the script pins the reviewer's threshold_baseline, not a re-derived one", {
+  # Pooled control-arm risk here is 60/180 = 0.333; the reviewer anchors the
+  # absolute threshold to 0.12 instead, so re-deriving it on re-run would
+  # rescale the threshold and can change the rating.
+  ma <- make_meta_for_bundle()
+  g <- suppressWarnings(grade_meta(
+    ma, study_design = "RCT", rob = "no",
+    rob_rationale = "Consensus RoB2: all low",
+    indirectness = "no", outcome_name = "Test",
+    threshold_type = "mid", threshold = 0.05,
+    threshold_scale = "ard", threshold_baseline = 0.12
+  ))
+  expect_equal(g$threshold_baseline, 0.12)
+
+  txt <- render_script_txt(ma, g)
+
+  # The rendered text actually carries the reviewer's value ...
+  expect_match(txt, "threshold_baseline      = 0.12", fixed = TRUE)
+
+  # ... and re-issuing the generated grade_meta() call reproduces the rating.
+  script_path <- tempfile(fileext = ".R")
+  writeLines(txt, script_path)
+  exprs <- parse(file = script_path)
+  is_grade_call <- vapply(exprs, function(e) {
+    is.call(e) && identical(e[[1]], as.name("<-")) &&
+      is.call(e[[3]]) && identical(e[[3]][[1]], as.name("grade_meta"))
+  }, logical(1))
+  expect_equal(sum(is_grade_call), 1L)
+
+  env <- new.env(parent = environment())
+  env$ma <- ma
+  suppressWarnings(eval(exprs[is_grade_call][[1]], envir = env))
+  g2 <- env$g
+
+  expect_equal(g2$threshold_baseline, g$threshold_baseline)
+  expect_equal(g2$threshold_internal, g$threshold_internal)
+  expect_equal(g2$certainty, g$certainty)
+  expect_equal(g2$domain_assessments$judgment, g$domain_assessments$judgment)
+})
+
+test_that("threshold_baseline stays NULL when the rating never resolved one", {
+  f <- grade_args_fixture()   # threshold_type = "null", no ARD threshold
+  expect_null(f$g$threshold_baseline)
+  expect_equal(arg_line(render_script_txt(f$ma, f$g), "threshold_baseline"),
+               "threshold_baseline      = NULL,")
+})
+
+test_that("the multi-outcome script carries threshold_baseline through", {
+  raw <- rbind(
+    data.frame(studlab = c("A", "B", "C"), outcome = "Mortality",
+               treat = "experimental", n = c(50, 60, 70), event = c(10, 15, 20),
+               mean = NA_real_, sd = NA_real_, stringsAsFactors = FALSE),
+    data.frame(studlab = c("A", "B", "C"), outcome = "Mortality",
+               treat = "control", n = c(50, 60, 70), event = c(15, 20, 25),
+               mean = NA_real_, sd = NA_real_, stringsAsFactors = FALSE)
+  )
+  d  <- suppressMessages(ingest_data(raw, format = "long"))
+  ml <- suppressWarnings(run_ma_multi(d, sm = list("Mortality" = "OR")))
+  set <- suppressWarnings(grade_meta_multi(
+    ml,
+    common = list(study_design = "RCT", rob = "no",
+                  rob_rationale = "Consensus RoB2: all low",
+                  indirectness = "no",
+                  threshold_type = "mid", threshold = 0.05,
+                  threshold_scale = "ard", threshold_baseline = 0.12)
+  ))
+
+  out_path <- tempfile(fileext = ".R")
+  .render_analysis_script_multi(set, per = 1000, prediction = FALSE,
+                                style = "bmj", out_path = out_path)
+  txt <- paste(readLines(out_path, warn = FALSE), collapse = "\n")
+
+  expect_match(txt, "threshold_baseline", fixed = TRUE)
+  expect_match(txt, "threshold_baseline = 0.12", fixed = TRUE)
 })

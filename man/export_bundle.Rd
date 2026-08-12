@@ -20,8 +20,12 @@ export_bundle(x, ...)
   bundle_name = "pmatools_results",
   include = c("data", "script", "results", "forest", "forest_rob", "funnel",
     "funnel_trimfill", "pubias_missing_forest", "grade_table"),
+  style = c("bmj", "gradepro"),
   per = 1000,
   prediction = FALSE,
+  follow_up = NULL,
+  unit = NULL,
+  sof_notes = NULL,
   convert_smd_to_or = FALSE,
   baseline_risk = NULL,
   threshold_label = NULL,
@@ -54,9 +58,34 @@ entry point), a \code{pmatools} object, or a \code{pmatools_set}.}
 
 \item{include}{Which artifacts to include. See Details.}
 
+\item{style}{(v0.5.1) Summary-of-findings layout, \code{"bmj"} (default) or
+\code{"gradepro"}. Passed to \code{\link{sof_table}} for \code{sof_table.docx} and
+to \code{\link{grade_report}} for the certainty appendix, and rendered
+into the bundled \code{analysis.R} so re-running the script reproduces the
+layout that was exported. Same default as
+\code{\link{export_bundle.pmatools_set}}; note that \code{sof_table()} itself
+still defaults to \code{"gradepro"}.}
+
 \item{per}{Denominator for SoF rate columns. Default 1000.}
 
 \item{prediction}{Show 95 percent prediction interval in SoF Effect column.}
+
+\item{follow_up}{(v0.5.1) Optional free-text time frame shown under the
+outcome name in the \code{"bmj"} layout, e.g.
+\code{"Follow-up: longest, range 7.7-60 months"}. Defaults to
+\code{grade$follow_up} when the rated object carries one (objects rated by
+\code{\link{grade_meta_multi}} do). Ignored by the \code{"gradepro"} layout.}
+
+\item{unit}{(v0.5.1) Optional unit for the Difference column of the
+\code{"bmj"} layout with continuous outcomes, e.g. \code{"days"}. Defaults to
+\code{grade$unit} on the same terms as \code{follow_up}.}
+
+\item{sof_notes}{(v0.5.1) Optional character vector of extra footnote lines
+for the bundled \code{sof_table.docx}, appended by
+\code{\link{sof_add_notes}} after the table's own footnotes and rendered
+into \code{analysis.R}. For annotations pmatools cannot derive — a host
+application's rare-event alert or scope caveat, a registration number.
+Applies to \code{sof_table.docx} only, not to the certainty appendix.}
 
 \item{convert_smd_to_or}{Logical. Passed to \code{\link{sof_table}} for
 continuous-outcome dichotomisation.}
@@ -88,7 +117,11 @@ NULL, the function attempts to reconstruct from \code{ma$data}.}
 specifications with \code{value}/\code{origin}/\code{col} slots, used to render
 \code{analysis.R} faithfully. \code{origin} must be one of \code{"null"}, \code{"column"},
 \code{"scalar"}, or \code{"vector"}; any other value aborts rather than rendering
-the argument as \code{NULL}. See SPEC.md.}
+the argument as \code{NULL}. Names are matched \strong{exactly} against
+\code{grade_meta()}'s arguments (no partial matching, so an
+\code{inconsistency_ci_diff} spec can never answer for \code{inconsistency}); a
+name that is not a \code{grade_meta()} argument aborts rather than being
+silently dropped from the generated script. See SPEC.md.}
 
 \item{ma_args}{Optional named list of \code{run_ma()} argument specifications.}
 

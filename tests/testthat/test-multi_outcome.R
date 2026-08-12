@@ -567,6 +567,67 @@ test_that("the bundled multi-outcome analysis.R parses and reproduces the set", 
   expect_equal(set2$outcomes[["Depression severity"]]$meta$sm, "SMD")
 })
 
+test_that("the multi-outcome bundle exports the style it was asked for", {
+  set <- make_set()
+
+  bundle <- function(style, name) {
+    out_dir <- tempfile(); dir.create(out_dir)
+    zip_path <- suppressWarnings(
+      export_bundle(set, output_dir = out_dir, bundle_name = name,
+                    style = style, include = c("sof", "script")))
+    ex <- tempfile(); dir.create(ex)
+    zip::unzip(zip_path, exdir = ex)
+    ex
+  }
+  sof_text <- function(dir) {
+    s <- officer::docx_summary(
+      officer::read_docx(file.path(dir, "summary_of_findings.docx")))
+    paste(s$text[!is.na(s$text)], collapse = "\n")
+  }
+  script_text <- function(dir) {
+    paste(readLines(file.path(dir, "analysis.R"), warn = FALSE), collapse = "\n")
+  }
+
+  bmj <- bundle("bmj", "style_multi_bmj")
+  expect_match(sof_text(bmj), "Outcome and follow-up", fixed = TRUE)
+  # follow_up rides on the rated objects, so both the table and the script that
+  # regenerates it pick it up without an argument of their own.
+  expect_match(sof_text(bmj), "24 months", fixed = TRUE)
+  expect_match(script_text(bmj), 'grade_table(set, style = "bmj"', fixed = TRUE)
+
+  gp <- bundle("gradepro", "style_multi_gp")
+  # This set mixes binary and continuous outcomes, so the arm headers are the
+  # measure-neutral "With control" / "With intervention" rather than "Risk with
+  # control (per 1,000)"; the layout is identified by its own columns instead.
+  expect_match(sof_text(gp), "No. of participants", fixed = TRUE)
+  expect_no_match(sof_text(gp), "Absolute effects", fixed = TRUE)
+  expect_no_match(sof_text(gp), "Outcome and follow-up", fixed = TRUE)
+  expect_match(script_text(gp), 'grade_table(set, style = "gradepro"',
+               fixed = TRUE)
+})
+
+test_that("sof_notes reach summary_of_findings.docx and the multi-outcome script", {
+  set   <- make_set()
+  notes <- c("Rare events in Serious adverse events.",
+             "Not an official GRADE Working Group assessment.")
+  out_dir <- tempfile(); dir.create(out_dir)
+  zip_path <- suppressWarnings(
+    export_bundle(set, output_dir = out_dir, bundle_name = "notes_multi",
+                  include = c("sof", "script"), sof_notes = notes))
+  ex <- tempfile(); dir.create(ex); zip::unzip(zip_path, exdir = ex)
+
+  s <- officer::docx_summary(
+    officer::read_docx(file.path(ex, "summary_of_findings.docx")))
+  txt <- paste(s$text[!is.na(s$text)], collapse = "\n")
+  for (nt in notes) expect_match(txt, nt, fixed = TRUE)
+
+  script <- paste(readLines(file.path(ex, "analysis.R"), warn = FALSE),
+                  collapse = "\n")
+  expect_match(script, "sof <- sof_add_notes(sof, c(", fixed = TRUE)
+  for (nt in notes) expect_match(script, nt, fixed = TRUE)
+  expect_false(is.null(tryCatch(parse(text = script), error = function(e) NULL)))
+})
+
 test_that("a hand-built set exports without a script rather than a wrong one", {
   set <- make_set()
   set$grade_args <- NULL

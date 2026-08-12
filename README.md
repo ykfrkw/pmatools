@@ -1286,9 +1286,20 @@ footnote saying so; `grade_table()` numbers the marker per row, so a table
 mixing analysis sets says which rows were restricted.
 
 `grade_report()` accepts the same `style` argument (`"gradepro"` by default).
-`export_bundle()` on a `pmatools_set` is the one place where **`"bmj"` is the
-default**; the single-outcome bundle has no `style` argument and always writes
-the GRADEpro layout.
+**Both `export_bundle()` methods take `style` and default to `"bmj"`** (v0.5.1;
+before that the single-outcome bundle had no such argument and always wrote the
+GRADEpro layout). The bundle forwards it to `sof_table()` / `grade_table()` and
+to the certainty appendix, and renders it into the generated `analysis.R`, so
+re-running the script reproduces the layout that was exported. The BMJ layout's
+`follow_up` and `unit` are arguments of the single-outcome bundle too, each
+defaulting to the field of the same name on the rated object; on a
+`pmatools_set` they are read off the rated objects and need no argument.
+
+Both methods also take `sof_notes`, a character vector of extra footnote lines
+appended to the exported table by `sof_add_notes()` and rendered into
+`analysis.R`. Use it for annotations pmatools cannot derive — a rare-event
+alert, a scope caveat, a registration number — instead of writing the .docx
+outside the bundler.
 
 ---
 
@@ -1702,6 +1713,7 @@ and in [SPEC.md §4](SPEC.md).
 | `set_primary()` | Set (or clear) the primary outcomes of a `pmatools_set` |
 | `sof_table()` | Single-outcome Summary of Findings flextable (GRADEpro or BMJ style) |
 | `grade_table()` | Multi-outcome Summary of Findings flextable, with primary/secondary grouping |
+| `sof_add_notes()` | Append caller footnote lines to a SoF flextable, styled like its own footnotes |
 | `evidence_profile()` | Single-outcome Evidence Profile flextable with per-domain footnotes |
 | `indirectness_table()` | Per-PICO subdomain judgment table as a flextable (pmatools layout implementing Core GRADE 5's reasoning; not a Core GRADE 5 publication table) |
 | `grade_report()` | Full certainty appendix in docx / html / pdf / md |

@@ -142,8 +142,18 @@ validate_grade_level <- function(x, arg = "argument") {
   if (is.null(ec) || is.null(nc) || length(nc) == 0 || sum(nc, na.rm = TRUE) == 0) {
     return(NULL)
   }
-  ec <- ec[!is.na(ec) & !is.na(nc)]
-  nc <- nc[!is.na(nc)]
+  if (length(ec) != length(nc)) return(NULL)
+
+  # Both vectors must be filtered on the same studies. A study that reports a
+  # denominator but no event count (eg it contributed a continuous outcome
+  # only) otherwise drops out of `ec` while staying in `nc`, which inflates the
+  # crude denominator and hands metaprop() two vectors of different lengths --
+  # the latter error was swallowed below and returned the crude proportion
+  # under the guise of a random-effects pooled estimate.
+  keep <- !is.na(ec) & !is.na(nc) & nc > 0
+  if (!any(keep)) return(NULL)
+  ec <- ec[keep]
+  nc <- nc[keep]
 
   if (method == "simple") {
     return(sum(ec) / sum(nc))
@@ -174,7 +184,7 @@ validate_grade_level <- function(x, arg = "argument") {
 # (evidence_profile footnotes via .first_sentence(), grade_report notes
 # columns) surface the rationale automatically.
 make_domain_row <- function(domain, judgment, auto, notes = NA_character_,
-                            rationale = NULL) {
+                            rationale = NULL, facts = NULL) {
   judgment <- .normalize_grade_level(judgment)
   if (!is.null(rationale)) {
     override_note <- sprintf("Manual override (%s): %s", judgment,
@@ -185,13 +195,67 @@ make_domain_row <- function(domain, judgment, auto, notes = NA_character_,
       paste(override_note, notes, sep = " | ")
     }
   }
-  tibble::tibble(
+  row <- tibble::tibble(
     domain    = domain,
     judgment  = judgment,
     downgrade = GRADE_DOWNGRADE[[judgment]],
     auto      = auto,
     notes     = notes
   )
+  # Structured facts travel as an attribute, exactly like the analysis-set
+  # recommendation assess_rob() carries (.rob_row()): the domain tibble must
+  # stay one row per domain with atomic columns, so a list-column is not an
+  # option. grade_meta() lifts the attribute off the row before
+  # dplyr::bind_rows() drops it.
+  if (!is.null(facts)) attr(row, "facts") <- facts
+  row
+}
+
+# --------------------------------------------------------------------------
+# Structured facts behind a domain judgment
+#
+# `notes` stays the authoritative prose (it is printed by print.pmatools(),
+# grade_report() and export_bundle(), and parsed by hand downstream), so these
+# record the SAME numbers in a machine-readable shape ALONGSIDE it, never
+# instead of it. Callers that want "how many high risk of bias studies?" or
+# "what was I2?" should read the facts rather than regex the sentences.
+#
+# Only Risk of bias, Inconsistency and Imprecision emit facts today;
+# Indirectness and Publication bias keep prose-only notes. The container is
+# domain-agnostic so they can adopt it without a change here or in the
+# renderers.
+# --------------------------------------------------------------------------
+
+# One structured fact behind a domain judgment.
+#   key     : stable snake_case machine key, e.g. "high_rob_studies"
+#   label   : sentence-case label used when the fact is rendered as a footnote
+#   value   : single pre-formatted string, ready to print
+#   numeric : the raw number when the fact is scalar-numeric, else NA_real_
+.fact <- function(key, label, value, numeric = NA_real_) {
+  tibble::tibble(
+    key     = as.character(key),
+    label   = as.character(label),
+    value   = as.character(value),
+    numeric = as.numeric(numeric)
+  )
+}
+
+# Bind .fact() results into one tibble. NULL entries are dropped (so a caller
+# can build a fact conditionally with an `if` that yields NULL), a single list
+# argument is accepted, and an empty result is NULL rather than a 0-row tibble
+# so that "this domain recorded nothing" is one test everywhere.
+.facts <- function(...) {
+  parts <- list(...)
+  if (length(parts) == 1L && is.list(parts[[1]]) &&
+      !is.data.frame(parts[[1]])) {
+    parts <- parts[[1]]
+  }
+  parts <- parts[!vapply(parts, is.null, logical(1))]
+  parts <- parts[vapply(parts, is.data.frame, logical(1))]
+  if (length(parts) == 0L) return(NULL)
+  out <- dplyr::bind_rows(parts)
+  if (nrow(out) == 0L) return(NULL)
+  out
 }
 
 # GRADE transparency gate for manual overrides (v0.4.0, breaking change).
@@ -373,6 +437,9 @@ suggest_threshold <- function(meta_obj) {
     "HR"  = binary_ratio(1.20),
     "RoM" = list(threshold_user = 1.10, threshold_scale = "ratio",
                  source = "package_convention"),
+    # "RD" is what metabin() emits for a risk difference; "ARD" is the internal
+    # scale name, accepted here so a hand-built list is not silently rejected.
+    "RD"  = ard_suggest,
     "ARD" = ard_suggest,
     "SMD" = list(threshold_user = 0.20, threshold_scale = "te_scale",
                  source = "core_grade_6"),
@@ -518,6 +585,7 @@ threshold_to_te_scale <- function(threshold, threshold_scale = "auto", sm = NULL
       "RR"  = "ratio",
       "HR"  = "ratio",
       "RoM" = "ratio",
+      "RD"  = "ard",
       "ARD" = "ard",
       "SMD" = "te_scale",
       "MD"  = "te_scale",

@@ -430,6 +430,8 @@ set_primary <- function(set, primary) {
 # number reported for that outcome, so it is never left implicit, and it can
 # differ from outcome to outcome within one set.
 .analysis_set_label <- function(g) {
+  # No studies, so no analysis set - and no "all studies" claim to make.
+  if (.is_not_reported(g)) return("not reported")
   if (isTRUE(g$rob_refit)) {
     return(sprintf("low RoB only (%d of %d)", g$meta$k %||% NA_integer_,
                    g$meta_full$k %||% NA_integer_))
@@ -450,20 +452,27 @@ print.pmatools_set <- function(x, ...) {
     cat(sprintf(" Data     : %d rows of long-format data\n", nrow(x$data)))
   }
 
-  mixed <- length(unique(vapply(x$outcomes, function(g) .analysis_set_label(g),
+  # Rated outcomes only: "not reported" is not an analysis set, so it must not
+  # make a homogeneous set look as if its analysis sets differ.
+  mixed <- length(unique(vapply(.rated_outcomes(x$outcomes),
+                                function(g) .analysis_set_label(g),
                                 character(1)))) > 1L
   cat("\n  #  Outcome / certainty / rating target / analysis set\n")
   for (i in seq_along(x$order)) {
     nm <- x$order[i]
     g  <- x$outcomes[[nm]]
-    tgt <- if (is.null(g$rating_target)) "-" else {
+    # A not-reported outcome has no certainty, no rating target and no
+    # analysis set; the columns are kept so the rows still line up.
+    nr  <- .is_not_reported(g)
+    tgt <- if (nr || is.null(g$rating_target)) "-" else {
       lbl <- unname(RATING_TARGET_LABELS[g$rating_target])
       if (is.na(lbl)) g$rating_target else lbl
     }
     cat(sprintf(" %2d  %s%s\n", i, nm,
                 if (nm %in% x$primary) "  [primary]" else ""))
     cat(sprintf("     %-10s | %-24s | %s\n",
-                g$certainty, tgt, .analysis_set_label(g)))
+                if (nr) "<not reported>" else g$certainty, tgt,
+                if (nr) "-" else .analysis_set_label(g)))
   }
   if (mixed) {
     cat(paste0("\n Note: the analysis set differs between outcomes; pooled ",
@@ -479,6 +488,17 @@ summary.pmatools_set <- function(object, ...) {
   print(object, ...)
   for (nm in object$order) {
     g <- object$outcomes[[nm]]
+    if (.is_not_reported(g)) {
+      # No domain table to print: there is no body of evidence to rate.
+      cat(sprintf("[%s] %s\n", nm, .not_reported_label(g)))
+      if (!is.null(g$follow_up)) {
+        cat(sprintf("   follow-up: %s\n", g$follow_up))
+      }
+      if (!is.null(g$reason)) cat(sprintf("   reason   : %s\n", g$reason))
+      cat("   No included study reported this outcome; no certainty rating.\n")
+      cat("\n")
+      next
+    }
     cat(sprintf("[%s] %s (starting: %s, design: %s)\n",
                 nm, g$certainty, g$starting_quality, g$study_design))
     d <- g$domain_assessments

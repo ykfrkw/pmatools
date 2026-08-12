@@ -326,7 +326,7 @@ assess_imprecision <- function(meta_obj,
                                                  else compute_pooled_sd(meta_obj))
   ci_ratio     <- .ci_ratio(lower, upper, sm)
   ci_ratio_cut <- .ci_ratio_cut(sm)
-  n_total      <- .total_n(meta_obj)
+  n_total      <- .total_n_strict(meta_obj)
 
   fig4 <- .classify_imprecision(
     crosses_threshold       = crosses_threshold,
@@ -437,11 +437,49 @@ assess_imprecision <- function(meta_obj,
     two_level_manual
   )
 
+  # Structured companions to the sentence above. The Fig 4 path and the two
+  # yes/no facts exist so a caller can branch on the path WITHOUT re-parsing
+  # the prose (which is what "sub('^.*Fig 4 path: ', '', notes)" downstream
+  # amounts to); the prose stays authoritative and unchanged.
+  facts <- .facts(
+    .fact("confidence_interval", "95% confidence interval", ci_str),
+    .fact("crosses_null", "Crosses the null", if (crosses_null) "yes" else "no"),
+    if (has_mid_zone) {
+      .fact("threshold_position", "Position relative to the threshold",
+            sub("^; ", "", thresh_str))
+    } else NULL,
+    .fact(
+      "ois", "Optimal information size",
+      {
+        detail <- if (is.na(ois_pct)) {
+          "not specified"
+        } else {
+          sprintf("observed %d / target %d %s = %.0f%%",
+                  ois_info$observed, ois_info$target, ois_info$unit,
+                  100 * ois_pct)
+        }
+        # Fig 4 only consults the OIS on one branch; everywhere else the
+        # figures are informational, and ois_str says so in the notes.
+        if (isTRUE(fig4$ois_used)) {
+          detail
+        } else {
+          paste0("not applied on this Fig 4 path; ", detail)
+        }
+      },
+      ois_pct
+    ),
+    .fact("fig4_path", "Core GRADE 2 Fig 4 path",
+          sub("^Fig 4 path: ", "", fig4$path)),
+    .fact("ois_used", "OIS approach applied",
+          if (isTRUE(fig4$ois_used)) "yes" else "no")
+  )
+
   make_domain_row(
     domain   = "Imprecision",
     judgment = judgment,
     auto     = TRUE,
-    notes    = notes
+    notes    = notes,
+    facts    = facts
   )
 }
 
@@ -677,7 +715,15 @@ assess_imprecision <- function(meta_obj,
 }
 
 # 総サンプルサイズ（連続アウトカムの "N >= OIS (or 800)" 判定に使う）
-.total_n <- function(meta_obj) {
+#
+# 意図的に strict にしてある。800 の rule of thumb は「400 patients per group」なので、
+# 二群の実測合計が揃っているときにしか適用できない。片群しかない meta
+# （metaprop / metamean など、n.e / n.c を持たず meta_obj$n だけを持つ
+# オブジェクト）では NA を返し、meta_obj$n へのフォールバックはしない。
+# 同じファイルの .compute_ois_pct() も n.e / n.c が揃わなければ OIS を
+# 計算しないので、そちらと足並みを揃えている。
+# 表示用の寛容版（N 列に出す総参加者数）は sof_table.R の .total_n() のほう。
+.total_n_strict <- function(meta_obj) {
   n_e <- if (!is.null(meta_obj$n.e)) sum(meta_obj$n.e, na.rm = TRUE) else NA_real_
   n_c <- if (!is.null(meta_obj$n.c)) sum(meta_obj$n.c, na.rm = TRUE) else NA_real_
   if (is.na(n_e) || is.na(n_c)) return(NA_real_)

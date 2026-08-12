@@ -369,6 +369,141 @@ test_that("a refit that would leave k < 2 is skipped with a warning", {
   expect_equal(g$meta$k, g$meta_full$k)
 })
 
+# ---- B-3b: k-space vs studlab-space alignment ------------------------------
+#
+# {meta} keeps $studlab / $TE at the length of the original data rows but
+# counts only the estimable ones in $k. The flowchart works in k-space; the
+# refit's `subset =` and `rob_overrides` work in studlab space. The gap study
+# sits in the MIDDLE of these fixtures on purpose: an off-by-one alignment
+# would silently exclude the wrong study rather than error.
+make_low_only_gap <- function() {
+  # make_low_only() with a non-estimable study inserted at position 2.
+  mk(te = c(1.2, NA, 0.02, 0.02, 0.02),
+     w  = c(400, NA, 400 / 3, 400 / 3, 400 / 3),
+     studlab = c("High-1", "Gap-1", "Low-1", "Low-2", "Low-3"))
+}
+
+test_that("k == length(studlab): high_idx is unchanged", {
+  g <- quiet_grade(make_low_only(), rob = c("serious", "no", "no", "no"),
+                   small_values = "undesirable",
+                   threshold = 1.05, threshold_scale = "ratio")
+  d_rob <- assess_rob(c("serious", "no", "no", "no"), make_low_only(),
+                      small_values = "undesirable",
+                      threshold_internal = log(1.05))
+  expect_equal(attr(d_rob, "high_idx"), c(TRUE, FALSE, FALSE, FALSE))
+  expect_equal(g$rob_analysis_set, "low_only")
+  expect_true(g$rob_refit)
+  expect_equal(g$meta$studlab, c("Low-1", "Low-2", "Low-3"))
+})
+
+test_that("k < length(studlab): a k-length rob still refits, on the right studies", {
+  m <- make_low_only_gap()
+  expect_equal(m$k, 4L)
+  expect_equal(length(m$studlab), 5L)
+
+  d_rob <- assess_rob(c("serious", "no", "no", "no"), m,
+                      small_values = "undesirable",
+                      threshold_internal = log(1.05))
+  # Studlab-aligned, and the non-estimable study is not "high": a k-length
+  # vector carries no judgment for it.
+  expect_equal(attr(d_rob, "high_idx"),
+               c(TRUE, FALSE, FALSE, FALSE, FALSE))
+
+  g <- quiet_grade(m, rob = c("serious", "no", "no", "no"),
+                   small_values = "undesirable",
+                   threshold = 1.05, threshold_scale = "ratio")
+  expect_equal(g$rob_analysis_set, "low_only")
+  expect_true(g$rob_refit)
+  # Only High-1 is dropped; Gap-1 is retained but contributes nothing, so the
+  # pool is the three low-RoB studies.
+  expect_equal(g$meta$studlab, c("Gap-1", "Low-1", "Low-2", "Low-3"))
+  expect_equal(g$meta$k, 3L)
+  expect_equal(g$meta_full$k, 4L)
+  expect_match(rob_row(g)$notes, "(3 of 4 studies)", fixed = TRUE)
+})
+
+test_that("k < length(studlab): a studlab-length rob gives the same flowchart", {
+  m <- make_low_only_gap()
+  d_k    <- assess_rob(c("serious", "no", "no", "no"), m,
+                       small_values = "undesirable",
+                       threshold_internal = log(1.05))
+  d_slab <- assess_rob(c("serious", "serious", "no", "no", "no"), m,
+                       small_values = "undesirable",
+                       threshold_internal = log(1.05))
+  # The extra study is trimmed before the k-space maths, so the judgment and
+  # every note (weight share, count share, level table) are identical.
+  expect_equal(d_slab$judgment, d_k$judgment)
+  expect_equal(d_slab$notes, d_k$notes)
+  expect_match(d_slab$notes, "High-RoB studies: 1/4", fixed = TRUE)
+  expect_equal(attr(d_slab, "analysis_set"), attr(d_k, "analysis_set"))
+
+  # ... but the non-estimable study's own High rating does exclude it from
+  # the refit subset.
+  expect_equal(attr(d_slab, "high_idx"),
+               c(TRUE, TRUE, FALSE, FALSE, FALSE))
+  g <- quiet_grade(m, rob = c("serious", "serious", "no", "no", "no"),
+                   small_values = "undesirable",
+                   threshold = 1.05, threshold_scale = "ratio")
+  expect_true(g$rob_refit)
+  expect_equal(g$meta$studlab, c("Low-1", "Low-2", "Low-3"))
+})
+
+test_that("rob must be length k or length(studlab)", {
+  m <- make_low_only_gap()
+  expect_error(
+    assess_rob(c("serious", "no", "no"), m, threshold_internal = log(1.05)),
+    regexp = "length k \\(4\\) or length\\(meta_obj\\$studlab\\) \\(5\\)"
+  )
+})
+
+test_that("rob_overrides key on studlab when k < length(studlab)", {
+  m <- make_low_only_gap()
+  d <- assess_rob(c("serious", "no", "no", "no"), m,
+                  rob_overrides          = c("Low-3" = "high"),
+                  rob_override_rationale = c("Low-3" = "Unblinded outcome assessment"),
+                  small_values = "undesirable",
+                  threshold_internal = log(1.05))
+  expect_match(d$notes,
+    "Study-level override: Low-3 no -> serious (Unblinded outcome assessment)",
+    fixed = TRUE)
+  expect_equal(attr(d, "high_idx"), c(TRUE, FALSE, FALSE, FALSE, TRUE))
+
+  # A study {meta} could not pool can be overridden too: it has no assessed
+  # level in a k-length vector, but it is still a row of the data.
+  d_gap <- assess_rob(c("serious", "no", "no", "no"), m,
+                      rob_overrides          = c("Gap-1" = "high"),
+                      rob_override_rationale = c("Gap-1" = "Results never reported"),
+                      small_values = "undesirable",
+                      threshold_internal = log(1.05))
+  expect_match(d_gap$notes,
+    "Study-level override: Gap-1 not estimable -> serious (Results never reported)",
+    fixed = TRUE)
+  expect_equal(attr(d_gap, "high_idx"), c(TRUE, TRUE, FALSE, FALSE, FALSE))
+})
+
+test_that("a metabin that drops a double-zero study refits end to end", {
+  # method = "Inverse" drops the double-zero study (Gap-1) from the pool, so
+  # k = 4 while studlab has 5 entries -- the shape that used to make the refit
+  # abort with "does not align with the meta object".
+  m <- metabin(event.e = c(60, 0, 51, 51, 51), n.e = rep(c(100, 50, 100), c(1, 1, 3)),
+               event.c = c(30, 0, 50, 50, 50), n.c = rep(c(100, 50, 100), c(1, 1, 3)),
+               studlab = c("High-1", "Gap-1", "Low-1", "Low-2", "Low-3"),
+               sm = "RR", method = "Inverse")
+  expect_equal(m$k, 4L)
+  expect_equal(length(m$studlab), 5L)
+
+  g <- quiet_grade(m, rob = c("serious", "no", "no", "no"),
+                   small_values = "undesirable",
+                   threshold = 1.05, threshold_scale = "ratio")
+  expect_equal(g$rob_analysis_set, "low_only")
+  expect_true(g$rob_refit)
+  expect_equal(g$meta$k, 3L)
+  expect_equal(g$meta_full$k, 4L)
+  expect_lt(g$meta$k, g$meta_full$k)
+  expect_false(isTRUE(all.equal(g$meta$TE.random, g$meta_full$TE.random)))
+  expect_equal(g$meta$studlab, c("Gap-1", "Low-1", "Low-2", "Low-3"))
+})
+
 # ---- B-3: the refit is never silent ---------------------------------------
 
 test_that("sof_table footer states the low-RoB restriction", {

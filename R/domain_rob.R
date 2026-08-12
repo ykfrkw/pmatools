@@ -133,7 +133,9 @@
 #
 #   A 1-row tibble (make_domain_row()) carrying two attributes:
 #     attr(row, "analysis_set") : "all" | "low_only"
-#     attr(row, "high_idx")     : logical vector of high-RoB studies, or NULL
+#     attr(row, "high_idx")     : logical vector of high-RoB studies, aligned
+#                                 to meta_obj$studlab (NOT to k, so that
+#                                 update.meta(subset = ) can use it), or NULL
 #
 # --------------------------------------------------------------------------
 # Inputs:
@@ -212,7 +214,9 @@
 #' @param threshold_internal Clinical decision threshold on the analysis
 #'   scale (defines the trivial zone).
 #' @return A 1-row tibble with attributes `"analysis_set"` (`"all"` or
-#'   `"low_only"`) and `"high_idx"` (logical vector or `NULL`).
+#'   `"low_only"`) and `"high_idx"` (a logical vector aligned to
+#'   `meta_obj$studlab`, so it can be passed straight to
+#'   `update.meta(subset = )`, or `NULL`).
 #' @noRd
 assess_rob <- function(rob, meta_obj,
                        rob_some_concerns       = "low",
@@ -275,29 +279,129 @@ assess_rob <- function(rob, meta_obj,
     rob <- as.character(data[[col]])
   }
 
-  # Vector: normalise + length check
-  rob <- .normalize_rob_levels(rob)
-  if (length(rob) != k) {
+  # Vector: normalise + length check.
+  #
+  # Two lengths are accepted because the risk-of-bias pipeline straddles two
+  # spaces (see .rob_studlab_index()): k, the estimable studies {meta} pools
+  # and the only space .flowchart_rob() can index, and length(studlab), the
+  # original data rows that `rob_overrides` keys on and that
+  # update.meta(subset = ) indexes. They coincide unless {meta} dropped a
+  # study (missing results, double-zero events under method = "Inverse").
+  rob     <- .normalize_rob_levels(rob)
+  n_slab  <- length(meta_obj$studlab %||% character(0))
+  idx     <- .rob_studlab_index(meta_obj, k)
+
+  # rob_full: studlab-space, NA where {meta} could not pool the study (a
+  # k-length input carries no judgment for those rows). NULL when the two
+  # spaces cannot be mapped onto each other, in which case every collaborator
+  # falls back to its pre-existing abort/skip path rather than guessing.
+  rob_full <- NULL
+  if (length(rob) == k) {
+    rob_k <- rob
+    if (!is.null(idx)) {
+      rob_full      <- rep(NA_character_, n_slab)
+      rob_full[idx] <- rob
+    }
+  } else if (n_slab > 0L && length(rob) == n_slab) {
+    if (is.null(idx)) {
+      rlang::abort(paste0(
+        "rob has one entry per study label (", n_slab, ") but the meta object ",
+        "pools only k = ", k, " studies, and the estimable rows could not be ",
+        "identified from meta_obj$TE. Supply a vector of length k (", k,
+        ") instead."
+      ))
+    }
+    rob_full <- rob
+    rob_k    <- rob[idx]
+  } else {
     rlang::abort(paste0(
       "rob must be a scalar GRADE level, a column name in meta_obj$data, ",
-      "or a vector of length k (", k, "). Got length ", length(rob), "."
+      "or a vector of length k (", k, ") or length(meta_obj$studlab) (",
+      n_slab, "). Got length ", length(rob), "."
     ))
   }
 
   validate_grade_level(rob, "rob")
 
   # Study-level overrides (keyed on studlab) are applied on the normalised
-  # vector, before the binary low/high fold, and every one is recorded.
-  ovr <- .apply_rob_overrides(rob, meta_obj, rob_overrides,
+  # vector, before the binary low/high fold, and every one is recorded. They
+  # are applied in studlab space whenever it is resolvable, so that an
+  # override can also name a study {meta} could not pool.
+  ovr <- .apply_rob_overrides(rob_full %||% rob_k, meta_obj, rob_overrides,
                               rob_override_rationale)
+  if (is.null(rob_full)) {
+    rob_k <- ovr$rob
+  } else {
+    rob_full <- ovr$rob
+    rob_k    <- rob_full[idx]
+  }
 
-  .flowchart_rob(ovr$rob, meta_obj,
-                 dominant_threshold  = rob_dominant_threshold,
-                 inflation_threshold = rob_inflation_threshold,
-                 small_values        = small_values,
-                 threshold_internal  = threshold_internal,
-                 some_concerns_as    = rob_some_concerns,
-                 override_notes      = ovr$notes)
+  row <- .flowchart_rob(rob_k, meta_obj,
+                        dominant_threshold  = rob_dominant_threshold,
+                        inflation_threshold = rob_inflation_threshold,
+                        small_values        = small_values,
+                        threshold_internal  = threshold_internal,
+                        some_concerns_as    = rob_some_concerns,
+                        override_notes      = ovr$notes)
+
+  # .flowchart_rob() works in k-space, but the only consumer of "high_idx"
+  # (grade_meta() -> .refit_low_rob() -> update.meta(subset = )) indexes the
+  # original data rows. Expand before handing it over; a study {meta} could
+  # not pool counts as high only when the caller judged it so itself (NA, from
+  # a k-length input, stays FALSE).
+  if (!is.null(rob_full) && n_slab != k) {
+    high_k <- attr(row, "high_idx")
+    if (!is.null(high_k) && length(high_k) == length(rob_k)) {
+      high_full      <- rob_full %in% .rob_high_levels(rob_some_concerns)
+      high_full[idx] <- high_k
+      attr(row, "high_idx") <- high_full
+    }
+  }
+  row
+}
+
+# --------------------------------------------------------------------------
+# k-space <-> studlab-space alignment
+#
+# {meta} keeps $studlab / $TE / $seTE / $w.random at the length of the
+# ORIGINAL data rows but counts only the estimable ones in $k (a study with
+# missing results, or a double-zero study under method = "Inverse", is
+# dropped from the pool but not from the data). The Core GRADE 4 Fig 2 maths
+# in .flowchart_rob() is written in k-space; `rob_overrides` keys and
+# update.meta(subset = ) live in studlab space. This is the single place that
+# maps the n estimable studies onto their studlab positions.
+#
+# It never guesses: the two candidate rules are the ones the alignment blocks
+# in pick_weights() and .flowchart_rob() already use (!is.na(TE), then
+# is.finite(TE)), and unless one of them reproduces exactly n rows the answer
+# is NULL and the caller keeps its existing abort/skip behaviour.
+# --------------------------------------------------------------------------
+.rob_studlab_index <- function(meta_obj, n) {
+  studlab <- meta_obj$studlab
+  if (is.null(studlab)) return(NULL)
+  if (length(n) != 1L || !is.numeric(n) || !is.finite(n)) return(NULL)
+  n      <- as.integer(n)
+  n_slab <- length(studlab)
+  if (n_slab == n) return(seq_len(n_slab))
+
+  te <- meta_obj$TE
+  if (is.null(te) || length(te) != n_slab) return(NULL)
+  hit <- which(!is.na(te))
+  if (length(hit) == n) return(hit)
+  hit <- which(is.finite(te))
+  if (length(hit) == n) return(hit)
+  NULL
+}
+
+# Binary low/high fold of the normalised levels. Shared by .flowchart_rob()
+# (which classifies the pooled studies) and assess_rob() (which classifies the
+# studies {meta} dropped, so that "high_idx" is complete in studlab space).
+.rob_high_levels <- function(some_concerns_as = "low") {
+  high_levels <- c("serious", "very_serious")
+  if (identical(some_concerns_as, "high")) {
+    high_levels <- c(high_levels, "some_concerns", "some")
+  }
+  high_levels
 }
 
 # --------------------------------------------------------------------------
@@ -367,8 +471,18 @@ assess_rob <- function(rob, meta_obj,
     rob_override_rationale <- unlist(rob_override_rationale)
   }
 
-  studlab <- meta_obj$studlab
-  if (is.null(studlab) || length(studlab) != length(rob)) {
+  # The keys are studlab labels, so the vector has to be matched against the
+  # study labels it actually describes. A k-length vector is shorter than
+  # studlab whenever {meta} dropped a non-estimable study, so align it onto
+  # the estimable studlab positions first; only a genuinely unresolvable case
+  # (no studlab, or no alignment that reproduces the vector's length) aborts.
+  studlab        <- meta_obj$studlab
+  studlab_of_rob <- studlab
+  if (!is.null(studlab) && length(studlab) != length(rob)) {
+    idx <- .rob_studlab_index(meta_obj, length(rob))
+    studlab_of_rob <- if (is.null(idx)) NULL else studlab[idx]
+  }
+  if (is.null(studlab_of_rob) || length(studlab_of_rob) != length(rob)) {
     rlang::abort(paste0(
       "rob_overrides requires meta_obj$studlab to be available and the same ",
       "length as the per-study risk-of-bias vector (got ",
@@ -376,7 +490,7 @@ assess_rob <- function(rob, meta_obj,
       " risk-of-bias judgments)."
     ))
   }
-  studlab <- as.character(studlab)
+  studlab <- as.character(studlab_of_rob)
 
   keys    <- names(rob_overrides)
   unknown <- setdiff(keys, studlab)
@@ -415,13 +529,25 @@ assess_rob <- function(rob, meta_obj,
 
     hit <- which(studlab == key)
     for (i in hit) {
+      # NA is only possible for a study {meta} could not pool, reached with a
+      # k-length input: there is no assessed level to report as the "from".
+      from <- if (is.na(rob[i])) "not estimable" else rob[i]
       notes <- c(notes, sprintf("Study-level override: %s %s -> %s (%s)",
-                                key, rob[i], to, trimws(rat)))
+                                key, from, to, trimws(rat)))
       rob[i] <- to
     }
   }
 
   list(rob = rob, notes = notes)
+}
+
+# Print a display-scale estimate without adding or removing precision:
+# .assess_bias_direction()'s .disp() has already rounded it (3 decimals, after
+# back-transforming a ratio measure), so a second sprintf() format here would
+# either pad zeros onto "0.74" or truncate a genuinely 3-decimal value.
+.rob_fact_num <- function(x) {
+  if (is.null(x) || length(x) != 1L || !is.finite(x)) return("NA")
+  format(x, scientific = FALSE, trim = TRUE)
 }
 
 # --------------------------------------------------------------------------
@@ -437,10 +563,7 @@ assess_rob <- function(rob, meta_obj,
   # Binary low/high classification. "serious" is always high (legacy
   # "very_serious" is still recognized after .normalize_rob_levels);
   # "some_concerns" goes to whichever side rob_some_concerns selects.
-  high_levels <- c("serious", "very_serious")
-  if (identical(some_concerns_as, "high")) {
-    high_levels <- c(high_levels, "some_concerns", "some")
-  }
+  high_levels <- .rob_high_levels(some_concerns_as)
   high_idx <- rob_vec %in% high_levels
   n_high   <- sum(high_idx)
   n_total  <- length(rob_vec)
@@ -499,6 +622,20 @@ assess_rob <- function(rob, meta_obj,
     some_concerns_as, some_concerns_as
   )
 
+  # Structured companion to weight_note. Recorded on every path, including the
+  # ones that do not rate down: the renderers decide what to show, the
+  # assessors only decide what is true.
+  f_high <- .fact(
+    "high_rob_studies", "High risk of bias studies",
+    if (is.finite(w_high_pct)) {
+      sprintf("%d of %d (%.0f%% by count, %.0f%% by weight)",
+              n_high, n_total, count_pct, w_high_pct)
+    } else {
+      sprintf("%d of %d (%.0f%% by count)", n_high, n_total, count_pct)
+    },
+    n_high
+  )
+
   tbl_note <- paste(
     paste0(names(table(rob_vec)), ": n=", as.integer(table(rob_vec))),
     collapse = "; "
@@ -516,7 +653,8 @@ assess_rob <- function(rob, meta_obj,
       notes    = paste0(
         "No high-RoB studies. ", weight_note, "; ", fold_note,
         ". -> Do not rate down. | ", tbl_note
-      )
+      ),
+      facts    = .facts(f_high)
     ), analysis_set = "all", high_idx = high_idx))
   }
 
@@ -552,6 +690,26 @@ assess_rob <- function(rob, meta_obj,
     sprintf(paste0("Neither the weight share nor the count share of high-RoB ",
                    "studies could be computed; dominance assumed (conservative) ",
                    "at threshold %.0f%%"), 100 * dominant_threshold)
+  )
+
+  # Structured companion to dom_note. The basis switch is mirrored so the fact
+  # never claims a weight share that was in fact a count-share fallback.
+  f_weight <- .fact(
+    "high_rob_weight_share", "Weight carried by high risk of bias studies",
+    switch(dom_basis,
+      "weight" = sprintf("%.0f%% (dominance threshold %.0f%%; dominated: %s)",
+                         100 * dom_share, 100 * dominant_threshold,
+                         if (dominated) "yes" else "no"),
+      "count"  = sprintf(paste0("not computable; judged on the count share ",
+                                "%.0f%% instead (dominance threshold %.0f%%; ",
+                                "dominated: %s)"),
+                         100 * dom_share, 100 * dominant_threshold,
+                         if (dominated) "yes" else "no"),
+      sprintf(paste0("not computable, and neither was the count share; ",
+                     "dominance assumed (dominance threshold %.0f%%; ",
+                     "dominated: yes)"), 100 * dominant_threshold)
+    ),
+    dom_share
   )
 
   # Direction-and-magnitude check (always run when at least one high-RoB
@@ -611,8 +769,42 @@ assess_rob <- function(rob, meta_obj,
     warn_direction_assumption = dominated
   )
 
+  # Structured companion to diff_note: the two pooled estimates, the zone each
+  # falls in, and the relative change between them. Omitted on the bail() paths
+  # of .assess_bias_direction(), where no comparator estimate exists.
+  f_shift <- if (!is.null(dir$te_low_disp)) {
+    change_str <- if (is.finite(dir$inflation_ratio)) {
+      sprintf("relative change %.0f%% (threshold %.0f%%)",
+              100 * dir$inflation_ratio, 100 * dir$inflation_threshold)
+    } else {
+      sprintf(paste0("relative change undefined (comparator estimate ~ 0; ",
+                     "threshold %.0f%%)"), 100 * dir$inflation_threshold)
+    }
+    .fact(
+      "estimate_shift", "Pooled estimate excluding high risk of bias studies",
+      sprintf(paste0("%s %s (all studies, zone %s) vs %s %s (excluding high ",
+                     "risk of bias, zone %s); %s"),
+              dir$sm_label, .rob_fact_num(dir$te_all_disp), dir$zone_all,
+              dir$sm_label, .rob_fact_num(dir$te_low_disp), dir$zone_low,
+              change_str),
+      dir$inflation_ratio
+    )
+  } else NULL
+
   # ---- Node 2a: dominated -> "check direction of bias" (the 5-rule check).
   if (dominated) {
+    f_branch <- .fact(
+      "fig2_branch", "Core GRADE 4 Fig 2",
+      if (!is.na(dir$rule)) {
+        sprintf("dominated by high risk of bias studies; direction-of-bias rule %d (%s)",
+                dir$rule,
+                if (identical(dir$judgment, "no")) "do not rate down" else "rate down")
+      } else {
+        paste0("dominated by high risk of bias studies; direction of bias not ",
+               "assessable (rate down)")
+      },
+      as.numeric(dir$rule)
+    )
     return(.rob_row(make_domain_row(
       domain   = "Risk of bias",
       judgment = dir$judgment,
@@ -621,7 +813,8 @@ assess_rob <- function(rob, meta_obj,
         weight_note, "; ", fold_note, ". ", dom_note, ". ",
         dir$note, " | ",
         tbl_note
-      )
+      ),
+      facts    = .facts(f_high, f_weight, f_shift, f_branch)
     ), analysis_set = "all", high_idx = high_idx))
   }
 
@@ -662,6 +855,23 @@ assess_rob <- function(rob, meta_obj,
     )
   }
 
+  # The rule number is recorded whenever the 5-rule check produced one, even
+  # though on this branch it did not decide anything: Core GRADE 4's
+  # non-dominated node asks only about magnitude.
+  f_branch <- .fact(
+    "fig2_branch", "Core GRADE 4 Fig 2",
+    if (!assessable) {
+      paste0("not dominated; high-vs-low risk of bias comparison not ",
+             "assessable -> use all studies")
+    } else if (substantial) {
+      paste0("not dominated; substantially different magnitudes of effect ",
+             "-> use low risk of bias studies only")
+    } else {
+      "not dominated; similar magnitudes of effect -> use all studies"
+    },
+    as.numeric(dir$rule)
+  )
+
   .rob_row(make_domain_row(
     domain   = "Risk of bias",
     judgment = "no",
@@ -671,7 +881,8 @@ assess_rob <- function(rob, meta_obj,
       branch_note, " ",
       dir$diff_note %||% dir$note, " | ",
       tbl_note
-    )
+    ),
+    facts    = .facts(f_high, f_weight, f_shift, f_branch)
   ), analysis_set = if (substantial) "low_only" else "all",
      high_idx = high_idx)
 }
@@ -952,6 +1163,15 @@ assess_rob <- function(rob, meta_obj,
     inflates        = inflates,
     direction_ok    = direction_ok,
     inflation_ratio = inflation_ratio,
+    # Display-scale copies of the two estimates (back-transformed for ratio
+    # measures) plus the measure label and the threshold they were judged
+    # against. diff_note interpolates the same numbers into prose; the caller
+    # needs them as values to record the structured `estimate_shift` fact
+    # without re-deriving (and possibly re-rounding) them.
+    te_all_disp         = .disp(te_all),
+    te_low_disp         = .disp(te_low),
+    sm_label            = sm_label,
+    inflation_threshold = inflation_threshold,
     # diff_note carries the numbers only (zones, inflation, gate, threshold);
     # `note` adds the rule verdict. The non-dominated branch of the flowchart
     # uses diff_note so it can state its own (non-downgrading) verdict.
@@ -1139,6 +1359,12 @@ rob_strata <- function(x, arg = "rob") {
     ), warn = FALSE))
   }
 
+  # update.meta()'s `subset =` indexes the ORIGINAL data rows, so `high_idx`
+  # must be studlab-aligned; assess_rob() expands it out of k-space before
+  # attaching it. The length check is kept as the guard for the case where
+  # that expansion was not possible (k-space vector, alignment unresolvable):
+  # skipping with a warning is the only safe answer, because subsetting with a
+  # short logical vector would recycle it and silently keep the wrong studies.
   n_studies <- length(meta_obj$studlab %||% meta_obj$TE)
   if (length(high_idx) != n_studies) {
     return(skip(paste0(
