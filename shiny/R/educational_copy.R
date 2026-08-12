@@ -24,7 +24,7 @@ EDU_COPY <- list(
         "a comprehensive search, dual independent ",
         "screening and data extraction, and risk-of-bias assessment - all ",
         "completed BEFORE the analysis.</strong> ",
-        "This app handles the pooling and GRADE certainty steps; make sure ",
+        "This app handles the pooling and Core GRADE certainty steps; make sure ",
         "the upstream review work is in place first."
       ))
     ),
@@ -44,7 +44,7 @@ EDU_COPY <- list(
       title = "Step 3: Certainty assessment (Core GRADE series)",
       what  = paste0(
         "This step rates the certainty of evidence: your confidence that ",
-        "the estimate above reflects the true effect. GRADE starts at ",
+        "the estimate above reflects the true effect. Core GRADE starts at ",
         "High for randomized trials (or Low for observational studies) ",
         "and rates DOWN for concerns in five domains: Risk of Bias, ",
         "Inconsistency, Indirectness, Imprecision, and Publication Bias. ",
@@ -104,7 +104,7 @@ EDU_COPY <- list(
       doi      = "10.1136/bmj-2024-081905",
       ref_text = "BMJ Core GRADE 3 (Guyatt et al., 2025)",
       how      = paste0(
-        "GRADE rates down for inconsistency when there are IMPORTANT ",
+        "Core GRADE rates down for inconsistency when there are IMPORTANT ",
         "differences in effect across studies AND those differences ",
         "cannot be explained. The BMJ Core GRADE 3 flowchart asks three ",
         "questions in sequence. Step 1: are there important differences ",
@@ -129,7 +129,7 @@ EDU_COPY <- list(
       how      = paste0(
         "Indirectness CANNOT be automated - it requires expert judgment ",
         "about whether the trial evidence applies to the question of ",
-        "interest. GRADE asks you to consider four things. Population: ",
+        "interest. Core GRADE asks you to consider four things. Population: ",
         "do trial participants resemble the target patients? ",
         "Intervention: is the intervention deliverable as studied? ",
         "Comparator: is it representative of usual care? Outcome: is it ",
@@ -187,7 +187,7 @@ EDU_COPY <- list(
         "0.01 <= p < 0.05 -> rate down 1 (some concerns); p >= 0.05 -> no ",
         "rate down. The reviewer can override Egger with a visual judgment. ",
         "A trim-and-fill funnel plot and numerical summary are shown as ",
-        "reference materials but do not drive the GRADE judgment. ",
+        "reference materials but do not drive the Core GRADE judgment. ",
         "Q4 (k < 10): Egger is unreliable, so the algorithm asks whether ",
         "unpublished studies are documented in registries or regulatory ",
         "databases. Yes -> rate down 1."

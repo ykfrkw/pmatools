@@ -91,7 +91,7 @@ ui <- bslib::page_fluid(
                   style = "margin: 0; font-size: 1.5rem; display: inline-block;"),
     htmltools::span(
       style = "color: hsl(var(--muted-foreground)); font-size: 0.95rem; margin-left: 0.75rem;",
-      "pairwise meta-analysis with GRADE"
+      "pairwise meta-analysis with Core GRADE"
     )
   ),
 

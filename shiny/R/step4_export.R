@@ -39,7 +39,7 @@ step4_ui <- function() {
           "Funnel plot (PDF + PNG)"                                    = "funnel",
           "Trim-and-fill funnel (PDF + PNG, k>=10)"                    = "funnel_trimfill",
           "Publication bias missing-results forest (PDF + PNG, k>=10)" = "pubias_missing_forest",
-          "GRADE Evidence Profile + SoF table (docx)"                  = "grade_table",
+          "Core GRADE Evidence Profile + SoF table (docx)"             = "grade_table",
           "Combined SoF table across saved outcomes (docx)"            = "sof_combined"
         ),
         selected = c("data","script","results","forest","forest_rob",
@@ -55,8 +55,8 @@ step4_ui <- function() {
       title = "How to cite",
       htmltools::p(paste0(
         "Pairwise meta-analysis was performed using the {meta} R package ",
-        "(Balduzzi et al. 2019). Certainty of evidence was rated using the GRADE ",
-        "approach following the BMJ 2025 Core GRADE series (Guyatt et al. ",
+        "(Balduzzi et al. 2019). Certainty of evidence was rated following ",
+        "the BMJ 2025 Core GRADE series (Guyatt et al. ",
         "2025), implemented in pmatools (Furukawa Y, ",
         "https://yukifurukawa.jp/pmatools/).")),
       htmltools::tags$ul(
