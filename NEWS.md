@@ -191,12 +191,38 @@ rating without any change to the input data. Read the breaking changes first.
   Core GRADE 2 Table 1's fixed "benefit" wording would have summarised an RR of
   2.42 for serious adverse events as "Treatment likely has an important
   benefit". Very low certainty uses the Core GRADE 6 Table 1 sentence, "We are
-  very uncertain about the effect of X on Y". Box 1 leaves several cells
-  without a worked example; those statements are composed by applying its
-  qualifier list to the frame of the verbatim example in the same column, and
-  every frame records whether it is quoted or composed. Objects created before
-  the Core GRADE 2 entry gate (no `$rating_target`) simply omit the column, as
-  do rows with no usable pooled estimate to take a direction from.
+  very uncertain about the effect of X on Y". Box 1's qualifier list offers two
+  adverbs per certainty level ("probably (likely)", "may (possibly)"); pmatools
+  emits the **first word of each pair**, so a cell reads "Treatment probably
+  results in an important increase in serious adverse events" and "Treatment
+  may reduce mortality" rather than carrying the parenthesised alternative into
+  the table. No summary of findings table in Core GRADE 6 prints both words
+  either — Table 1 has "may decrease mortality", Table 3 has "possibly
+  increases", and Box 1's own MID example has "probably has little to no
+  important effect" — so the parenthesis reads as an editorial "either word
+  will do". The single-adverb rendering is a pmatools choice, not a quotation,
+  and is recorded as such: the verbatim Box 1 transcription is kept in the
+  source of `R/plain_language.R`, and every frame is tagged with its provenance
+  (quoted, composed, or quoted-minus-the-parenthesis). Box 1 leaves several
+  cells without a worked example; those statements are composed by applying its
+  qualifier list to the frame of the verbatim example in the same column.
+  Objects created before the Core GRADE 2 entry gate (no `$rating_target`)
+  simply omit the column, as do rows with no usable pooled estimate to take a
+  direction from.
+* Three helpers that were previously internal are now part of the public API,
+  so a front end can depend on pmatools instead of reaching into it:
+  `combine_arms()` merges the arms of a multi-arm trial into one row per study
+  unit (Cochrane Handbook 6.5.2.10) — the step `ingest_data()` already applies,
+  exported for callers assembling their own long data frame; `format_effect()`
+  renders a pooled estimate as the exact string the SoF and evidence-profile
+  tables print, back-transforming ratio measures and picking the same model the
+  tables do; and `rob_strata()` normalises risk-of-bias labels onto the
+  `"low"` / `"some"` / `"high"` / `"unknown"` strata, which is how a caller that
+  edits or imports RoB judgments of its own can share pmatools' label
+  vocabulary rather than keeping a second copy of it. `rob_strata()` warns and
+  returns `"unknown"` for an unrecognised label instead of aborting, since it
+  feeds plots. The internal `.combine_arms()` / `.format_effect()` /
+  `.rob_plot_strata()` names still work as thin aliases.
 * The Core GRADE 4 analysis-set note now travels with every output. In
   `grade_table()` the refitted outcome's row carries a numbered footnote
   marker, so a table mixing analysis sets says which rows were restricted; the

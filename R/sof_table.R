@@ -42,6 +42,21 @@
 #'   before applying Chinn's formula so that a negative-is-better SMD (e.g.,
 #'   symptom severity reduction) yields OR > 1 in the dichotomised rate
 #'   columns. Only relevant when \code{convert_smd_to_or = TRUE}.
+#' @section Plain language summaries -- one adverb per certainty level:
+#' The \code{"bmj"} style adds a plain language summary column built from the
+#' Core GRADE 6 Box 1 statements. Box 1's qualifier list gives two adverbs per
+#' certainty level ("Moderate certainty: probably (likely) reduces, increases,
+#' or has little to no effect"; "Low certainty: may (possibly) reduce, ..."),
+#' but no summary of findings table in Core GRADE 6 prints both: Table 1 uses
+#' "may decrease mortality", Table 3 uses "possibly increases", and the Box 1
+#' MID example uses "probably has little to no important effect". pmatools
+#' therefore emits the \strong{first} word of each pair -- \code{"probably"}
+#' for Moderate and \code{"may"} for Low -- giving cells such as "Treatment
+#' probably results in an important increase in serious adverse events" and
+#' "Treatment may reduce mortality". This single-adverb rendering is a pmatools
+#' choice, not a quotation of the qualifier list; High and Very low certainty
+#' carry no qualifier and are unchanged.
+#'
 #' @param label_intervention,label_control Arm labels used in the
 #'   "Risk with ..." column headers (GRADEpro vocabulary), e.g.
 #'   \code{label_intervention = "CBT-I"}, \code{label_control = "placebo"}.
@@ -355,7 +370,53 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
   out
 }
 
-.format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
+#' Format a pooled effect estimate as a display string
+#'
+#' Renders the pooled estimate of a \code{meta} object the way pmatools prints
+#' it in a Summary of Findings table: the effect measure, the point estimate and
+#' its 95 percent confidence interval, back-transformed out of the log scale for
+#' ratio measures. This is the exact string \code{\link{sof_table}},
+#' \code{\link{grade_table}} and \code{\link{grade_report}} put in their Effect
+#' column.
+#'
+#' Exported so that a caller building its own view of the same analysis -- an
+#' interactive results panel, a custom table, a plot annotation -- can show the
+#' effect in the same wording and to the same precision as the pmatools tables,
+#' instead of re-deriving it and drifting out of step (choosing the wrong model
+#' when only one of random/common was fitted, or forgetting to exponentiate).
+#'
+#' Which model is read follows the object: the random-effects pool when
+#' \code{meta_obj$random} is \code{TRUE}, otherwise the common-effect pool, with
+#' a fallback to the other model when the preferred one was not fitted.
+#'
+#' @param meta_obj A \code{meta} object, e.g. from \code{\link{run_ma}} or
+#'   \code{\link[meta]{metabin}} / \code{\link[meta]{metacont}}.
+#' @param outcome_type \code{"relative"} for ratio measures (RR, OR, HR, IRR),
+#'   whose estimate and CI are exponentiated before printing, or
+#'   \code{"absolute"} for measures already on their natural scale (MD, SMD,
+#'   RD). Matches the \code{outcome_type} argument of \code{\link{grade_meta}}.
+#' @param prediction Logical. When \code{TRUE} and the meta object carries a
+#'   prediction interval, a second line \code{"PrI (lo; hi)"} is appended,
+#'   separated by a newline. Default \code{FALSE}.
+#'
+#' @return A single string such as \code{"RR 0.55 (0.38; 0.79)"}, or
+#'   \code{"NR"} when the object has no usable pooled estimate. With
+#'   \code{prediction = TRUE} the string may contain an embedded newline.
+#'
+#' @seealso \code{\link{sof_table}}, \code{\link{grade_table}}.
+#'
+#' @examples
+#' m <- meta::metabin(
+#'   event.e = c(10, 12, 8), n.e = c(50, 60, 40),
+#'   event.c = c(20, 22, 18), n.c = c(50, 60, 40),
+#'   studlab = c("Trial 1", "Trial 2", "Trial 3"),
+#'   sm = "RR", random = TRUE, prediction = TRUE
+#' )
+#' format_effect(m, outcome_type = "relative")
+#' cat(format_effect(m, outcome_type = "relative", prediction = TRUE), "\n")
+#'
+#' @export
+format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
   sm  <- meta_obj$sm
   pooled <- .pooled_estimate(meta_obj)
   est <- pooled$est
@@ -387,6 +448,12 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
   }
 
   s
+}
+
+# Internal alias kept so existing call sites (sof_table.R, grade_table.R,
+# grade_report.R) do not move.
+.format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
+  format_effect(meta_obj, outcome_type, prediction = prediction)
 }
 
 # Denominator label for the "per N" phrasing. GRADEpro keeps the thousands

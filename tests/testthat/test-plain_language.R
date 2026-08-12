@@ -160,27 +160,38 @@ test_that("a MID-threshold analysis inside the MID reads as little to no effect"
                    "Treatment has little to no important effect on mortality")
 })
 
-# --- 4. Box 1, verbatim -----------------------------------------------------
+# --- 4. Box 1, verbatim apart from the single-adverb rule -------------------
 
-# Box 1's worked examples all use "knee arthroscopy" and "function". The only
-# transformation pmatools applies is sentence case on the first character,
-# which is how CG6 Table 1 prints the cells.
+# Box 1's worked examples all use "knee arthroscopy" and "function". pmatools
+# applies exactly two transformations: sentence case on the first character
+# (which is how CG6 Table 1 prints the cells), and the single-adverb rule.
+#
+# SINGLE-ADVERB RULE (v0.5.0). Box 1's qualifier list prints two adverbs per
+# certainty level, "probably (likely)" and "may (possibly)", which read as a
+# double-barrelled statement in a table cell. No CG6 summary of findings table
+# prints both: Table 1 has "may decrease mortality", Table 3 has "possibly
+# increases", and the Box 1 MID example has "probably has little to no
+# important effect". pmatools emits the FIRST word of each pair, so the
+# expectations below carry "probably" and "may" rather than the parenthesised
+# forms. Where that makes a statement no longer a verbatim quotation, the
+# comment says so.
 
-test_that("the null-threshold statements match Box 1 verbatim", {
+test_that("the null-threshold statements match Box 1 (single adverb)", {
   pl <- function(cert) {
     .plain_language(cert, "null", "non_null_effect", direction = "increase",
                     outcome_label = "function",
                     intervention_label = "knee arthroscopy")
   }
-  # Box 1: "High certainty: knee arthroscopy increases function"
+  # Box 1, verbatim: "High certainty: knee arthroscopy increases function"
   expect_identical(pl("High"), "Knee arthroscopy increases function")
   # Box 1: "Moderate certainty: knee arthroscopy probably (likely) increases
-  #         function"
+  #         function" -- no longer verbatim: "(likely)" is dropped.
   expect_identical(pl("Moderate"),
-                   "Knee arthroscopy probably (likely) increases function")
+                   "Knee arthroscopy probably increases function")
   # Box 1: "Low certainty: knee arthroscopy may (possibly) increase function"
+  #         -- no longer verbatim: "(possibly)" is dropped.
   expect_identical(pl("Low"),
-                   "Knee arthroscopy may (possibly) increase function")
+                   "Knee arthroscopy may increase function")
   # Box 1: "Very low certainty: the effect of knee arthroscopy on function is
   #         very uncertain" -- rendered in the CG6 Table 1 sentence form.
   expect_identical(
@@ -188,7 +199,7 @@ test_that("the null-threshold statements match Box 1 verbatim", {
     "We are very uncertain about the effect of knee arthroscopy on function")
 })
 
-test_that("the MID-threshold statements match Box 1 verbatim", {
+test_that("the MID-threshold statements match Box 1 (single adverb)", {
   imp <- function(cert) {
     .plain_language(cert, "mid", "important_effect", direction = "increase",
                     outcome_label = "function",
@@ -203,34 +214,65 @@ test_that("the MID-threshold statements match Box 1 verbatim", {
   #         an important increase in function"
   expect_identical(imp("High"),
                    "Knee arthroscopy results in an important increase in function")
-  # Box 1: "Moderate certainty of little to no effect: knee arthroscopy
-  #         probably has little to no important effect on function"
+  # Box 1, verbatim: "Moderate certainty of little to no effect: knee
+  #         arthroscopy probably has little to no important effect on
+  #         function". Box 1 already writes this one with a single "probably",
+  #         which is the precedent the single-adverb rule follows, so this cell
+  #         is unchanged by it and stays verbatim.
   expect_identical(
     lit("Moderate"),
     "Knee arthroscopy probably has little to no important effect on function")
   # Box 1: "Low certainty of an important effect: knee arthroscopy may
   #         (possibly) result in an important increase in function"
+  #         -- no longer verbatim: "(possibly)" is dropped.
   expect_identical(
     imp("Low"),
-    "Knee arthroscopy may (possibly) result in an important increase in function")
+    "Knee arthroscopy may result in an important increase in function")
   # Box 1: "Very low certainty: the effect of knee arthroscopy on function is
   #         very uncertain"
   expect_identical(
     imp("Very Low"),
     "We are very uncertain about the effect of knee arthroscopy on function")
 
-  # Cells Box 1 gives no worked example for, assembled from its qualifier list.
+  # Cells Box 1 gives no worked example for, assembled from its qualifier list
+  # (with the single-adverb rule applied to that list).
   expect_identical(
     imp("Moderate"),
-    paste("Knee arthroscopy probably (likely) results in an important",
-          "increase in function"))
+    "Knee arthroscopy probably results in an important increase in function")
   expect_identical(
     lit("High"),
     "Knee arthroscopy has little to no important effect on function")
   expect_identical(
     lit("Low"),
-    paste("Knee arthroscopy may (possibly) have little to no important",
-          "effect on function"))
+    "Knee arthroscopy may have little to no important effect on function")
+})
+
+test_that("no statement ever carries both adverbs of a Box 1 qualifier pair", {
+  # The single-adverb rule, asserted across the whole frame table rather than
+  # cell by cell: a parenthesised alternative must never reach the output.
+  for (thr in c("null", "mid")) {
+    for (cert in c("High", "Moderate", "Low", "Very Low")) {
+      for (target in c("important_effect", "non_null_effect",
+                       "little_to_no_difference")) {
+        s <- .plain_language(cert, thr, target, direction = "increase",
+                             outcome_label = "function",
+                             intervention_label = "knee arthroscopy")
+        if (is.null(s)) next
+        expect_no_match(s, "(likely)", fixed = TRUE)
+        expect_no_match(s, "(possibly)", fixed = TRUE)
+        expect_no_match(s, "(", fixed = TRUE)
+      }
+    }
+  }
+  # Moderate is "probably", never "likely"; Low is "may", never "possibly".
+  expect_match(
+    .plain_language("Moderate", "null", "non_null_effect",
+                    direction = "increase", outcome_label = "function"),
+    "^Treatment probably increases")
+  expect_match(
+    .plain_language("Low", "null", "non_null_effect",
+                    direction = "increase", outcome_label = "function"),
+    "^Treatment may increase")
 })
 
 test_that("the reduction mirror follows Table 3's wording", {
@@ -246,11 +288,13 @@ test_that("the reduction mirror follows Table 3's wording", {
                     outcome_label = "pain",
                     intervention_label = "knee arthroscopy"),
     "Knee arthroscopy reduces pain")
+  # Single adverb: the qualifier list's "may (possibly) reduce" emits "may",
+  # matching CG6 Table 1's own cell ("may decrease mortality").
   expect_identical(
     .plain_language("Low", "null", "non_null_effect", direction = "decrease",
                     outcome_label = "pain",
                     intervention_label = "knee arthroscopy"),
-    "Knee arthroscopy may (possibly) reduce pain")
+    "Knee arthroscopy may reduce pain")
 })
 
 test_that("the null-threshold little-to-no wording follows the qualifier list", {
@@ -260,11 +304,12 @@ test_that("the null-threshold little-to-no wording follows the qualifier list", 
                     outcome_label = "function",
                     intervention_label = "knee arthroscopy"),
     "Knee arthroscopy has little to no effect on function")
+  # Single adverb: "may (possibly) ... have little to no effect" -> "may".
   expect_identical(
     .plain_language("Low", "null", "little_to_no_difference",
                     outcome_label = "function",
                     intervention_label = "knee arthroscopy"),
-    "Knee arthroscopy may (possibly) have little to no effect on function")
+    "Knee arthroscopy may have little to no effect on function")
 })
 
 # --- 5. Very low is direction neutral and names the outcome -----------------
@@ -359,7 +404,9 @@ test_that("sentence-cased labels are lowered mid-sentence, acronyms are not", {
     .plain_language("Moderate", "null", "non_null_effect",
                     direction = "increase", outcome_label = "HbA1c",
                     intervention_label = "CBT-I"),
-    "CBT-I probably (likely) increases HbA1c")
+    # Single adverb (v0.5.0): Moderate emits "probably", not
+    # "probably (likely)".
+    "CBT-I probably increases HbA1c")
 })
 
 test_that("the intervention label opens the sentence", {
@@ -373,7 +420,8 @@ test_that("the intervention label opens the sentence", {
     .plain_language("Low", "null", "non_null_effect", direction = "decrease",
                     outcome_label = "Mortality",
                     intervention_label = "CBT-I"),
-    "CBT-I may (possibly) reduce mortality")
+    # Single adverb (v0.5.0): Low emits "may", not "may (possibly)".
+    "CBT-I may reduce mortality")
 })
 
 test_that("an explicit outcome_label overrides the object's outcome_name", {

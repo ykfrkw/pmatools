@@ -1014,7 +1014,75 @@ assess_rob <- function(rob, meta_obj,
 # Unlike .normalize_rob_levels(), unrecognised labels warn instead of
 # aborting: a plot should still be drawn, but never silently.
 # --------------------------------------------------------------------------
-.rob_plot_strata <- function(x, arg = "rob") {
+
+#' Normalise risk-of-bias labels to the pmatools plotting strata
+#'
+#' Maps free-text risk-of-bias judgments onto the four strata pmatools groups
+#' studies by: \code{"low"}, \code{"some"}, \code{"high"} and \code{"unknown"}.
+#'
+#' @section Why this is exported:
+#' Risk of bias is the one input where pmatools accepts a wide vocabulary --
+#' single letters, plain words, the Cochrane RoB 2 sentences, and the package's
+#' own internal level names all mean something. That vocabulary is defined
+#' inside pmatools, so any caller that stores or edits RoB judgments of its own
+#' (a data-entry grid with a RoB dropdown, an import step reading someone
+#' else's extraction sheet) has to agree with pmatools about what a label means
+#' or the two will silently disagree about which studies are at high risk.
+#' \code{rob_strata()} is that agreement made callable: run the labels through
+#' it and you get back exactly the strata \code{\link{grade_meta}} and
+#' \code{\link{plot_forest_rob}} will use, with no second copy of the alias
+#' table to keep in sync.
+#'
+#' Accepted labels, case-insensitively and after trimming whitespace:
+#' \itemize{
+#'   \item \strong{low}: \code{"no"}, \code{"low"}, \code{"L"},
+#'     \code{"No concerns"}
+#'   \item \strong{some}: \code{"some_concerns"}, \code{"some"},
+#'     \code{"S"}, \code{"M"}, \code{"*"}, \code{"moderate"},
+#'     \code{"unclear"} (RoB 1 wording), \code{"Some concerns"}
+#'   \item \strong{high}: \code{"serious"}, \code{"very_serious"},
+#'     \code{"high"}, \code{"very high"}, \code{"H"}, \code{"C"},
+#'     \code{"Serious concerns"}, \code{"Critical concerns"}
+#'   \item \strong{unknown}: \code{NA}, \code{""}, \code{"?"},
+#'     \code{"unknown"}, \code{"na"}
+#' }
+#'
+#' Anything else also becomes \code{"unknown"}, but with a warning naming the
+#' offending labels. It deliberately does \strong{not} abort: this function
+#' feeds plots, and a plot with an "unknown" stratum is more useful than no
+#' plot at all. Callers that need a hard failure on bad input should check the
+#' result for \code{"unknown"} themselves.
+#'
+#' @param x A character vector (or anything coercible) of risk-of-bias labels,
+#'   one per study.
+#' @param arg Label used to prefix the warning message, so a caller can say
+#'   which of its own arguments the bad labels came from. Defaults to
+#'   \code{"rob"}.
+#'
+#' @return A character vector the same length as \code{x}, each element one of
+#'   \code{"low"}, \code{"some"}, \code{"high"}, \code{"unknown"}.
+#'
+#' @seealso \code{\link{plot_forest_rob}}, which strata its subgroups this way;
+#'   \code{\link{grade_meta}}, whose \code{rob} argument accepts the same
+#'   vocabulary.
+#'
+#' @examples
+#' # Single letters, RoB 2 sentences and internal names all map cleanly.
+#' rob_strata(c("L", "S", "H"))
+#' rob_strata(c("No concerns", "Some concerns", "Critical concerns"))
+#' rob_strata(c("no", "some_concerns", "serious"))
+#'
+#' # Missing and explicitly unknown judgments become "unknown" quietly.
+#' rob_strata(c("low", NA, "", "?"))
+#'
+#' # Anything unrecognised becomes "unknown" with a warning, never an error.
+#' suppressWarnings(rob_strata(c("low", "not sure yet")))
+#'
+#' # The `arg` prefix names the caller's own argument in that warning.
+#' suppressWarnings(rob_strata("not sure yet", arg = "my_app: rob column"))
+#'
+#' @export
+rob_strata <- function(x, arg = "rob") {
   v <- trimws(as.character(x))
   blank <- is.na(v) | !nzchar(v) | tolower(v) %in% c("na", "?", "unknown")
 
@@ -1039,6 +1107,10 @@ assess_rob <- function(rob, meta_obj,
   out[!blank] <- strata
   out
 }
+
+# Internal alias kept so existing call sites (plot_forest_rob.R,
+# plot_forest_indirectness.R) do not move.
+.rob_plot_strata <- function(x, arg = "rob") rob_strata(x, arg = arg)
 
 # --------------------------------------------------------------------------
 # Automatic refit on the low-RoB subset
