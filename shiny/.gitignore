@@ -1,0 +1,21 @@
+# RStudio
+.Rproj.user/
+.Rhistory
+.RData
+
+# macOS
+.DS_Store
+
+# Reference PDFs (cite by DOI instead; see deploy.R)
+Core GRADE papers/
+
+# Security standard
+.env
+.env.*
+*.pem
+*.key
+credentials*
+secrets*
+
+# Claude Code session artifacts
+.claude/

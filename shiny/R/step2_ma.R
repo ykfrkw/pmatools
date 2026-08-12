@@ -1,0 +1,1308 @@
+# step2_ma.R - Step 2: Meta-analysis configuration + plots
+
+step2_ui <- function(state = NULL) {
+  s <- EDU_COPY$steps$step2
+
+  # Rare-event datasets trigger an expensive multi-method suite (run_rare_ma)
+  # on every rerun, so the auto-rerun toggle defaults to OFF for them (the
+  # one-time updateCheckboxInput in step2_server handles the live transition;
+  # this default keeps the choice sticky when the step body is re-rendered).
+  # isolate(): this UI is built inside app.R's step_body renderUI, which must
+  # not take a reactive dependency on the diagnostics.
+  auto_rerun_default <- TRUE
+  if (!is.null(state)) {
+    diag <- shiny::isolate(state$rare_diagnostics)
+    if (!is.null(diag) && isTRUE(diag$rare_flow)) auto_rerun_default <- FALSE
+  }
+
+  # Outcome identity (name + direction) is required before the analysis runs.
+  # app.R's step_body renderUI rebuilds this whole UI on every step change, so
+  # a freshly created widget pushes its DOM default back to the server: hard
+  # -coding value = "" / selected = character(0) would wipe the user's answers
+  # on every 2 -> 3 -> 2 round trip. Seeding from the mirrored state (same
+  # trick as auto_rerun_default above) keeps the two fields sticky.
+  outcome_name_default  <- ""
+  small_values_default  <- character(0)
+  # Follow-up and unit are optional presentation fields for the Core GRADE 6
+  # Summary of Findings table (see ui_helpers.R). They are seeded from state
+  # for the same reason the two required fields are.
+  follow_up_default     <- ""
+  unit_default          <- ""
+  if (!is.null(state)) {
+    nm <- shiny::isolate(state$outcome_name)
+    if (!is.null(nm) && length(nm) == 1 && !is.na(nm)) outcome_name_default <- nm
+    sv <- shiny::isolate(state$small_values)
+    if (!is.null(sv) && length(sv) == 1 && nzchar(sv)) small_values_default <- sv
+    fu <- shiny::isolate(state$outcome_follow_up)
+    if (!is.null(fu) && length(fu) == 1 && !is.na(fu)) follow_up_default <- fu
+    un <- shiny::isolate(state$outcome_unit)
+    if (!is.null(un) && length(un) == 1 && !is.na(un)) unit_default <- un
+  }
+
+  htmltools::tagList(
+    # Registers the `pma_required_fields` custom message handler used by the
+    # required-field highlighting below. It lives here rather than in app.R's
+    # <head> because app.R is out of scope for this change; loading it as part
+    # of the Step 2 body also means it re-executes on every rebuild of that
+    # body, which is exactly what repaints the marks (see required-fields.js).
+    htmltools::tags$script(src = "required-fields.js"),
+
+    pma_step_header(s$title, s$what, s$why),
+
+    htmltools::div(
+      class = "row",
+      style = "display: flex; gap: 1.5rem; flex-wrap: wrap;",
+
+      # Sidebar
+      htmltools::div(
+        style = "flex: 0 0 320px;",
+        pma_card(
+          title = "Model configuration",
+          htmltools::h6("Outcome"),
+          shiny::textInput("outcome_name", "Outcome name (required)",
+                           value = outcome_name_default, width = "100%",
+                           placeholder = "e.g., Depression response"),
+          # No preselected direction: the user must actively choose. The
+          # values "desirable" / "undesirable" are the vocabulary the vendored
+          # pmatools validates, so only the labels are re-worded here.
+          shiny::radioButtons("small_values",
+            "Direction (required): is a SMALLER value of this outcome favorable?",
+            choices = c(
+              "Favorable - smaller is better (e.g., mortality, symptom score)" = "desirable",
+              "Unfavorable - smaller is worse (e.g., response, remission)"     = "undesirable"),
+            selected = small_values_default, inline = FALSE),
+          htmltools::p(class = "pma-card-subtitle",
+            paste0("Both are required. They name the outcome in the Summary of ",
+                   "Findings table, prefill every forest-plot title and axis label, ",
+                   "and set the bias direction used by the Risk-of-Bias check in Step 3.")),
+          # Follow-up belongs to the outcome's identity, not to the display
+          # settings: Core GRADE 6's first column is "Outcome and follow-up",
+          # and a review that pools two outcomes measured over different time
+          # frames needs one value per outcome. It is therefore collected here,
+          # beside the name and direction, and saved with the outcome.
+          shiny::textInput("outcome_follow_up",
+                           "Follow-up / time frame (optional)",
+                           value = follow_up_default, width = "100%",
+                           placeholder = "e.g., longest, range 8-52 weeks"),
+          htmltools::p(class = "pma-card-subtitle",
+            paste0("Printed under the outcome name in the \"Outcome and ",
+                   "follow-up\" column of the Summary of Findings table. ",
+                   "Saved with the outcome, so several outcomes can carry ",
+                   "different follow-up times in one table.")),
+          shiny::conditionalPanel(
+            "input.outcome_type == 'continuous'",
+            shiny::textInput("outcome_unit",
+                             "Unit of the scale (optional, continuous only)",
+                             value = unit_default, width = "100%",
+                             placeholder = "e.g., points on the PHQ-9, days"),
+            htmltools::p(class = "pma-card-subtitle",
+              paste0("Labels the Difference column of the Summary of Findings ",
+                     "table for a mean difference. A standardized mean ",
+                     "difference is not on the original scale, so its ",
+                     "difference is always labelled in standard deviation ",
+                     "units; a ratio measure carries no unit."))
+          ),
+          htmltools::hr(),
+          htmltools::h6("Column mapping"),
+          shiny::selectInput("col_studlab", "Study label (studlab)",
+                             choices = NULL, selectize = FALSE),
+          shiny::selectInput("col_treat", "Arm / treatment (treat)",
+                             choices = NULL, selectize = FALSE),
+          shiny::uiOutput("arm_assignment_ui"),
+
+          shiny::radioButtons("outcome_type", "Outcome type",
+            choices = c("Binary" = "binary", "Continuous" = "continuous"),
+            selected = "binary", inline = TRUE),
+          shiny::uiOutput("outcome_filter_ui"),
+
+          shiny::selectInput("col_n", "Sample size (n)",
+                             choices = NULL, selectize = FALSE),
+          shiny::conditionalPanel(
+            "input.outcome_type == 'binary'",
+            shiny::selectInput("col_event", "Events",
+                               choices = NULL, selectize = FALSE)
+          ),
+          shiny::conditionalPanel(
+            "input.outcome_type == 'continuous'",
+            shiny::selectInput("col_mean", "Mean",
+                               choices = NULL, selectize = FALSE),
+            shiny::selectInput("col_sd",   "SD",
+                               choices = NULL, selectize = FALSE)
+          ),
+
+          # Regular-workflow controls. Each panel uses a single, flat
+          # conditionalPanel expression so that the JS evaluator can hide /
+          # show them reliably across step transitions (nested conditional
+          # panels were not consistently re-evaluated when input.outcome_type
+          # changed in step 2).
+          shiny::conditionalPanel(
+            "input.outcome_type == 'binary' && input.use_rare_workflow != true",
+            shiny::radioButtons("sm_bin", "Summary measure",
+              choices = c("OR", "RR"), selected = "OR", inline = TRUE)
+          ),
+          shiny::conditionalPanel(
+            "input.outcome_type == 'continuous' && input.use_rare_workflow != true",
+            shiny::uiOutput("sm_cont_ui")
+          ),
+          shiny::conditionalPanel(
+            "input.use_rare_workflow != true",
+            shiny::radioButtons("model", "Model",
+              choices = c("Random" = "random", "Common (Fixed)" = "common"),
+              selected = "random", inline = TRUE)
+          ),
+          shiny::conditionalPanel(
+            "input.outcome_type == 'binary' && input.use_rare_workflow != true",
+            shiny::selectInput("method", "Pooling method",
+              choices = c("Inverse", "MH", "Peto"),
+              selected = "Inverse")
+          ),
+          shiny::conditionalPanel(
+            "input.model == 'random' && input.use_rare_workflow != true",
+            shiny::selectInput("method_tau", "tau-squared estimator",
+              choices = c("REML", "DL"),
+              selected = "REML")
+          ),
+          shiny::conditionalPanel(
+            "input.outcome_type == 'binary' && input.use_rare_workflow != true",
+            shiny::numericInput("incr", "Continuity correction (zero events)",
+              value = 0.5, min = 0, step = 0.1)
+          ),
+
+          htmltools::hr(),
+          htmltools::h6("Subgroup analysis"),
+          shiny::selectInput("subgroup_col", "Subgroup column",
+                             choices = c("(none)" = ""),
+                             selected = "", selectize = FALSE),
+          shiny::uiOutput("subgroup_order_ui"),
+
+          htmltools::hr(),
+          shiny::checkboxInput("auto_rerun",
+            "Auto-rerun on change (500ms debounce)",
+            value = auto_rerun_default),
+          shiny::actionButton("run_ma", "Run analysis",
+            class = "btn btn-primary", style = "width: 100%;")
+        )
+      ),
+
+      # Right pane
+      htmltools::div(
+        style = "flex: 1; min-width: 480px;",
+        shiny::uiOutput("rare_events_panel"),
+        pma_card(
+          title = "Results",
+          shiny::tabsetPanel(
+            id = "ma_tabs",
+            shiny::tabPanel("Forest plot",
+              htmltools::div(class = "pma-forest-image",
+                shinycssloaders::withSpinner(
+                  shiny::imageOutput("forest_plot", height = "auto"),
+                  type = 4, color = "#0f172a", size = 0.6,
+                  proxy.height = "320px")),
+              shiny::uiOutput("rare_sensitivity_block"),
+              # Ids and layout are shared with the four Step 3 domain
+              # panels; see pma_forest_display_panel() in ui_helpers.R.
+              # NULL prefix = the unprefixed Step 2 ids.
+              pma_forest_display_panel(NULL)
+            ),
+            shiny::tabPanel("Funnel plot",
+              shinycssloaders::withSpinner(
+                shiny::imageOutput("funnel_plot", height = "auto"),
+                type = 4, color = "#0f172a", size = 0.6,
+                proxy.height = "320px"),
+              pma_funnel_display_panel("funnel_step2"),
+              htmltools::p(class = "pma-card-subtitle",
+                "Egger's test annotation appears when k >= 10.")
+            ),
+            shiny::tabPanel("Text results",
+              htmltools::div(
+                class = "pma-results-wrap",
+                shiny::actionButton("copy_results", "Copy",
+                  icon = shiny::icon("copy"),
+                  class = "btn btn-sm btn-secondary pma-copy-btn"),
+                shinycssloaders::withSpinner(
+                  shiny::verbatimTextOutput("ma_summary"),
+                  type = 4, color = "#0f172a", size = 0.5,
+                  proxy.height = "80px")
+              )
+            )
+          )
+        )
+      )
+    ),
+
+    # Own output, not part of this body: see output$step2_nav in
+    # step2_server(). A rebuild of the body here would throw away every
+    # unsaved widget value (forest title, labels, ...).
+    shiny::uiOutput("step2_nav")
+  )
+}
+
+step2_server <- function(input, output, session, state) {
+
+  .pick <- function(prefs, pool, fallback = "") {
+    for (p in prefs) if (p %in% pool) return(p)
+    pool_l <- tolower(pool)
+    for (p in prefs) {
+      idx <- match(tolower(p), pool_l)
+      if (!is.na(idx)) return(pool[[idx]])
+    }
+    fallback
+  }
+
+  .pick_current <- function(current, pool, default = "") {
+    if (!is.null(current) && length(current) == 1 &&
+        nzchar(current) && current %in% pool) {
+      return(current)
+    }
+    default
+  }
+
+  .mapping_choices <- function(cols) {
+    stats::setNames(c("", cols), c("(select)", cols))
+  }
+
+  # Arm assignment UI: shown once data is loaded
+  output$arm_assignment_ui <- shiny::renderUI({
+    if (is.null(state$data)) {
+      return(htmltools::p(class = "pma-card-subtitle",
+                          "Load data in Step 1 to assign arms."))
+    }
+    treat_col <- input$col_treat %||% "treat"
+    if (!nzchar(treat_col) || !treat_col %in% names(state$data)) {
+      return(htmltools::p(class = "pma-card-subtitle",
+                          "Select the treat column before assigning arms."))
+    }
+    arms <- sort(unique(as.character(state$data[[treat_col]])))
+    arms <- arms[!is.na(arms) & nzchar(arms)]
+    if (length(arms) < 2) {
+      return(htmltools::p(class = "pma-card-subtitle",
+                          paste0("Only one arm value found: ", paste(arms, collapse = ","))))
+    }
+    # Heuristic defaults: prefer "Control" (case-insensitive) for control,
+    # the other for experimental
+    ctrl_default <- {
+      ctrl_idx <- grepl("^control$|^placebo$|^waitlist$|^tau$", arms, ignore.case = TRUE)
+      if (any(ctrl_idx)) arms[which(ctrl_idx)[1]] else arms[1]
+    }
+    exp_default <- setdiff(arms, ctrl_default)[1]
+    cur_exp <- shiny::isolate(input$experimental_label)
+    cur_ctrl <- shiny::isolate(input$control_label)
+    exp_selected <- .pick_current(cur_exp, arms, exp_default)
+    ctrl_selected <- .pick_current(cur_ctrl, arms, ctrl_default)
+    if (identical(exp_selected, ctrl_selected)) {
+      exp_selected <- setdiff(arms, ctrl_selected)[1] %||% exp_selected
+    }
+    htmltools::tagList(
+      shiny::selectInput("experimental_label", "Intervention arm value",
+                         choices = arms, selected = exp_selected),
+      shiny::selectInput("control_label", "Control arm value",
+                         choices = arms, selected = ctrl_selected)
+    )
+  })
+
+  output$outcome_filter_ui <- shiny::renderUI({
+    d <- state$data
+    if (is.null(d) || !"outcome" %in% names(d)) return(NULL)
+    outcomes <- unique(as.character(d$outcome))
+    outcomes <- outcomes[!is.na(outcomes) & nzchar(outcomes)]
+    if (length(outcomes) <= 1) return(NULL)
+    shiny::selectInput("selected_outcome", "Outcome",
+                       choices = outcomes, selected = outcomes[1],
+                       selectize = FALSE)
+  })
+
+  # Summary measure for continuous outcomes. RoM (ratio of means) is only
+  # meaningful when every mean value is positive, so include it conditionally.
+  output$sm_cont_ui <- shiny::renderUI({
+    d <- state$data
+    has_positive_means <- FALSE
+    mean_col <- input$col_mean %||% "mean"
+    if (!is.null(d) && nzchar(mean_col) && mean_col %in% names(d)) {
+      m <- suppressWarnings(as.numeric(d[[mean_col]]))
+      if (length(m) > 0 && all(is.finite(m)) && all(m > 0)) {
+        has_positive_means <- TRUE
+      }
+    }
+    choices <- c("MD", "SMD")
+    if (has_positive_means) choices <- c(choices, "RoM")
+    current <- shiny::isolate(input$sm_cont) %||% "MD"
+    if (!current %in% choices) current <- "MD"
+    shiny::radioButtons("sm_cont", "Summary measure",
+                        choices = choices, selected = current, inline = TRUE)
+  })
+
+  # ----- Column mapping: populate choices from current data -----
+  # Static placeholders live in step2_ui(); these observers fill them so that
+  # user selections are NOT reset on every MA rerun (renderUI re-creates inputs
+  # from scratch and resets selections; updateSelectInput preserves them).
+
+  shiny::observe({
+    if (!identical(as.integer(state$step %||% 0L), 2L)) return()
+    d <- state$data
+    if (is.null(d)) return()
+    all_cols <- names(d)
+    numeric_cols <- names(d)[vapply(d, is.numeric, logical(1))]
+    factor_cols  <- names(d)[vapply(d, function(x) is.character(x) || is.factor(x),
+                                    logical(1))]
+    all_choices <- .mapping_choices(all_cols)
+    numeric_choices <- .mapping_choices(numeric_cols)
+    studlab_default <- .pick(c("studlab", "id", "study_name", "study_id",
+                               "trial_id", "trial", "study", "name", "label"),
+                             all_cols)
+    treat_default   <- .pick(c("treat", "t", "treatment", "arm",
+                               "intervention", "group", "condition"),
+                             all_cols)
+    n_default     <- .pick(c("n", "n_randomized", "n_total", "sample_size", "N"),
+                           numeric_cols)
+    event_default <- .pick(c("event", "events", "d_response", "d_r",
+                             "responders", "n_events"),
+                           numeric_cols)
+    mean_default  <- .pick(c("mean", "means", "d_ep_m", "severity_endpoint_mean"),
+                           numeric_cols)
+    sd_default    <- .pick(c("sd", "stdev", "stddev", "d_ep_sd",
+                             "severity_endpoint_sd"),
+                           numeric_cols)
+
+    # Populate column-mapping choices, preserve current selection if still valid
+    cur_studlab <- shiny::isolate(input$col_studlab)
+    cur_treat   <- shiny::isolate(input$col_treat)
+    cur_n       <- shiny::isolate(input$col_n)
+    cur_event   <- shiny::isolate(input$col_event)
+    cur_mean    <- shiny::isolate(input$col_mean)
+    cur_sd      <- shiny::isolate(input$col_sd)
+    cur_sub     <- shiny::isolate(input$subgroup_col)
+
+    studlab_selected <- .pick_current(cur_studlab, all_cols, studlab_default)
+    treat_selected   <- .pick_current(cur_treat, all_cols, treat_default)
+    factor_cols <- setdiff(factor_cols,
+                           c("studlab", "treat", "outcome",
+                             studlab_selected, treat_selected))
+
+    shiny::updateSelectInput(session, "col_studlab", choices = all_choices,
+                             selected = studlab_selected)
+    shiny::updateSelectInput(session, "col_treat", choices = all_choices,
+                             selected = treat_selected)
+    shiny::updateSelectInput(session, "col_n",     choices = numeric_choices,
+                             selected = .pick_current(cur_n, numeric_cols, n_default))
+    shiny::updateSelectInput(session, "col_event", choices = numeric_choices,
+                             selected = .pick_current(cur_event, numeric_cols, event_default))
+    shiny::updateSelectInput(session, "col_mean",  choices = numeric_choices,
+                             selected = .pick_current(cur_mean, numeric_cols, mean_default))
+    shiny::updateSelectInput(session, "col_sd",    choices = numeric_choices,
+                             selected = .pick_current(cur_sd, numeric_cols, sd_default))
+    shiny::updateSelectInput(session, "subgroup_col",
+                             choices  = c("(none)" = "", factor_cols),
+                             selected = if (!is.null(cur_sub)) cur_sub else "")
+  })
+
+  # When outcome_type changes, prefer outcome-appropriate defaults (only if
+  # the user hasn't picked something already valid for the new outcome).
+  shiny::observeEvent(input$outcome_type, {
+    d <- state$data
+    if (is.null(d)) return()
+    numeric_cols <- names(d)[vapply(d, is.numeric, logical(1))]
+    if (length(numeric_cols) == 0) return()
+
+    if (identical(input$outcome_type, "binary")) {
+      shiny::updateSelectInput(session, "col_n",
+        selected = .pick(c("n", "n_randomized", "n_total", "sample_size", "N"),
+                         numeric_cols))
+      shiny::updateSelectInput(session, "col_event",
+        selected = .pick(c("event", "events", "d_response", "d_r",
+                           "responders", "n_events"),
+                         numeric_cols))
+    } else {
+      shiny::updateSelectInput(session, "col_n",
+        selected = .pick(c("n", "d_ep_n", "n_randomized", "n_total",
+                           "sample_size", "N"),
+                         numeric_cols))
+      shiny::updateSelectInput(session, "col_mean",
+        selected = .pick(c("mean", "means", "d_ep_m",
+                           "severity_endpoint_mean"),
+                         numeric_cols))
+      shiny::updateSelectInput(session, "col_sd",
+        selected = .pick(c("sd", "stdev", "stddev", "d_ep_sd",
+                           "severity_endpoint_sd"),
+                         numeric_cols))
+    }
+  }, ignoreInit = FALSE)
+
+  # RoM (ratio of means) is only mathematically valid when all means are
+  # positive. Hide RoM from the sm_cont radio when the chosen mean column
+  # contains zero or negative values.
+  shiny::observe({
+    d   <- state$data
+    col <- input$col_mean
+    if (is.null(d) || is.null(col) || !nzchar(col) || !col %in% names(d)) return()
+    vals <- d[[col]]
+    if (!is.numeric(vals)) return()
+    has_non_positive <- any(vals <= 0, na.rm = TRUE)
+    choices  <- if (has_non_positive) c("MD", "SMD") else c("MD", "SMD", "RoM")
+    cur_sm   <- shiny::isolate(input$sm_cont) %||% "MD"
+    selected <- if (cur_sm %in% choices) cur_sm else "MD"
+    shiny::updateRadioButtons(session, "sm_cont",
+                              choices = choices, selected = selected,
+                              inline = TRUE)
+  })
+
+  output$subgroup_order_ui <- shiny::renderUI({
+    if (is.null(input$subgroup_col) || !nzchar(input$subgroup_col)) return(NULL)
+    d <- state$data
+    if (is.null(d) || !(input$subgroup_col %in% names(d))) return(NULL)
+    lv <- unique(as.character(d[[input$subgroup_col]]))
+    lv <- lv[!is.na(lv) & nzchar(lv)]
+    if (length(lv) < 2) {
+      return(htmltools::p(class = "pma-card-subtitle",
+                          "This column has fewer than 2 non-empty levels."))
+    }
+    shiny::selectizeInput(
+      "subgroup_order",
+      "Subgroup order (drag to reorder)",
+      choices  = lv,
+      selected = lv,
+      multiple = TRUE,
+      options  = list(plugins = list("drag_drop"))
+    )
+  })
+
+  # Bundle inputs that should drive a re-run when they change.
+  ma_inputs <- shiny::reactive({
+    list(
+      data         = state$data,
+      outcome_type = input$outcome_type,
+      sm           = if (identical(input$outcome_type, "binary")) input$sm_bin else input$sm_cont,
+      method       = if (identical(input$outcome_type, "binary")) input$method else NULL,
+      method.tau   = input$method_tau %||% "REML",
+      random       = identical(input$model, "random"),
+      common       = identical(input$model, "common"),
+      incr         = input$incr %||% 0.5,
+      experimental_label = input$experimental_label,
+      control_label      = input$control_label,
+      selected_outcome   = input$selected_outcome,
+      col_studlab    = input$col_studlab,
+      col_treat      = input$col_treat,
+      col_n          = input$col_n,
+      col_event      = input$col_event,
+      col_mean       = input$col_mean,
+      col_sd         = input$col_sd,
+      subgroup_col   = if (nzchar(input$subgroup_col %||% "")) input$subgroup_col else NULL,
+      subgroup_order = input$subgroup_order,
+      # Booleans, not the values themselves: the raw outcome name would make
+      # this bundle change on every keystroke (after the 500 ms debounce),
+      # re-running run_ma() - and for rare-event data the whole multi-method
+      # suite - while the user is still typing. A boolean only invalidates on
+      # the empty <-> non-empty transition, which is all the gate below needs.
+      outcome_name_set = nzchar(trimws(input$outcome_name %||% "")),
+      small_values_set = { sv <- input$small_values
+                           !is.null(sv) && length(sv) == 1L && nzchar(sv) }
+    )
+  }) |> shiny::debounce(500)
+
+  ma <- shiny::reactive({
+    args <- ma_inputs()
+    # isolate(): the one-time "auto-rerun OFF" default applied when rare
+    # events are detected (observer below) must not itself re-trigger this
+    # heavy reactive. Toggling the checkbox therefore no longer forces an
+    # immediate rerun; the next input change (or Run analysis click) does.
+    auto <- isTRUE(shiny::isolate(input$auto_rerun))
+    clicked <- (input$run_ma %||% 0L) > 0L
+    # When auto-rerun is off, require an explicit Run analysis click
+    if (!auto && !clicked) return(NULL)
+    if (is.null(args$data)) return(NULL)
+
+    # Apply column mapping (rename user-selected columns to canonical names)
+    d <- args$data
+    if ("outcome" %in% names(d)) {
+      outcomes <- unique(as.character(d$outcome))
+      outcomes <- outcomes[!is.na(outcomes) & nzchar(outcomes)]
+      if (length(outcomes) > 1) {
+        if (is.null(args$selected_outcome) ||
+            !args$selected_outcome %in% outcomes) {
+          return(NULL)
+        }
+        d <- d[as.character(d$outcome) == args$selected_outcome, , drop = FALSE]
+      }
+    }
+
+    missing_cols <- character()
+    if (is.null(args$col_studlab) || !nzchar(args$col_studlab) ||
+        !args$col_studlab %in% names(d)) {
+      missing_cols <- c(missing_cols, "studlab")
+    }
+    if (is.null(args$col_treat) || !nzchar(args$col_treat) ||
+        !args$col_treat %in% names(d)) {
+      missing_cols <- c(missing_cols, "treat")
+    }
+    missing_cols <- c(missing_cols, "n")
+    if (!is.null(args$col_n) && nzchar(args$col_n) &&
+        args$col_n %in% names(d)) {
+      missing_cols <- setdiff(missing_cols, "n")
+    }
+    if (identical(args$outcome_type, "binary")) {
+      if (is.null(args$col_event) || !nzchar(args$col_event) ||
+          !args$col_event %in% names(d)) {
+        missing_cols <- c(missing_cols, "event")
+      }
+    } else {
+      if (is.null(args$col_mean) || !nzchar(args$col_mean) ||
+          !args$col_mean %in% names(d)) {
+        missing_cols <- c(missing_cols, "mean")
+      }
+      if (is.null(args$col_sd) || !nzchar(args$col_sd) ||
+          !args$col_sd %in% names(d)) {
+        missing_cols <- c(missing_cols, "sd")
+      }
+    }
+    # Outcome identity is as mandatory as the column mapping, but it lives in
+    # its own list so the warning can name the fields rather than pretend they
+    # are columns.
+    missing_required <- character()
+    if (!isTRUE(args$outcome_name_set)) {
+      missing_required <- c(missing_required, "Outcome name")
+    }
+    if (!isTRUE(args$small_values_set)) {
+      missing_required <- c(missing_required, "Direction (smaller = favorable?)")
+    }
+
+    if (length(missing_cols) > 0 || length(missing_required) > 0) {
+      state$ma <- NULL
+      # The existing gate keeps the first page load quiet (auto_rerun defaults
+      # to TRUE and run_ma has not been clicked), so the user only gets told
+      # off once they actually ask for an analysis.
+      if (!auto || clicked) {
+        msgs <- character()
+        if (length(missing_cols) > 0) {
+          msgs <- c(msgs, paste("Select required column(s):",
+                                paste(unique(missing_cols), collapse = ", ")))
+        }
+        if (length(missing_required) > 0) {
+          msgs <- c(msgs, paste("Complete required field(s):",
+                                paste(missing_required, collapse = ", ")))
+        }
+        # `clicked` latches TRUE forever once Run analysis is pressed, so this
+        # branch can fire on every later input change. A fixed id makes each
+        # new toast replace the previous one instead of stacking them up.
+        shiny::showNotification(
+          paste(msgs, collapse = " "),
+          id = "step2_required_fields", type = "warning", duration = 8
+        )
+      }
+      return(NULL)
+    }
+
+    d$studlab <- d[[args$col_studlab]]
+    d$treat <- d[[args$col_treat]]
+    if (is.null(args$experimental_label) || is.null(args$control_label) ||
+        identical(args$experimental_label, args$control_label)) {
+      return(NULL)
+    }
+    # Guard: when the user just swapped data, input$experimental_label /
+    # input$control_label may still hold values from the previous dataset.
+    # Running run_ma() with arm labels that do not appear in d$treat
+    # produces a misleading "Study X does not have exactly one intervention
+    # and one control arm" error for every row. Wait silently for the
+    # arm_assignment_ui to re-render with valid defaults.
+    arms_in_data <- unique(as.character(d$treat))
+    arms_in_data <- arms_in_data[!is.na(arms_in_data) & nzchar(arms_in_data)]
+    if (!(args$experimental_label %in% arms_in_data) ||
+        !(args$control_label %in% arms_in_data)) {
+      return(NULL)
+    }
+
+    if (!is.null(args$col_n) && nzchar(args$col_n) && args$col_n != "n" &&
+        args$col_n %in% names(d)) {
+      d$n <- d[[args$col_n]]
+    }
+    if (identical(args$outcome_type, "binary")) {
+      if (!is.null(args$col_event) && nzchar(args$col_event) &&
+          args$col_event != "event" && args$col_event %in% names(d)) {
+        d$event <- d[[args$col_event]]
+      }
+    } else {
+      if (!is.null(args$col_mean) && nzchar(args$col_mean) &&
+          args$col_mean != "mean" && args$col_mean %in% names(d)) {
+        d$mean <- d[[args$col_mean]]
+      }
+      if (!is.null(args$col_sd) && nzchar(args$col_sd) &&
+          args$col_sd != "sd" && args$col_sd %in% names(d)) {
+        d$sd <- d[[args$col_sd]]
+      }
+    }
+
+    # Apply subgroup factor levels for user-specified order
+    if (!is.null(args$subgroup_col) && args$subgroup_col %in% names(d) &&
+        !is.null(args$subgroup_order) && length(args$subgroup_order) >= 2) {
+      d[[args$subgroup_col]] <- factor(as.character(d[[args$subgroup_col]]),
+                                       levels = args$subgroup_order)
+    }
+
+    # Cochrane Handbook 6.5.2.10: combine arms with the same study unit and
+    # treat value. ingest_data already does this on the canonical columns,
+    # but the user can pick different studlab / treat columns above, which
+    # may re-introduce duplicates (e.g. a multi-arm trial where two
+    # intervention sub-arms share the same canonical treat label).
+    # combine_arms() is pmatools public API as of 0.5.0 (the dot-prefixed
+    # .combine_arms() is only a back-compat alias) -- keep the public name.
+    n_before <- nrow(d)
+    d <- tryCatch(combine_arms(d), error = function(e) d)
+    if (nrow(d) < n_before) {
+      unit_label <- if ("outcome" %in% names(d)) {
+        "(studlab, outcome, treat)"
+      } else {
+        "(studlab, treat)"
+      }
+      shiny::showNotification(
+        sprintf(
+          "Combined %d duplicate %s row%s before meta-analysis (Cochrane Handbook 6.5.2.10).",
+          n_before - nrow(d),
+          unit_label,
+          if ((n_before - nrow(d)) > 1L) "s" else ""
+        ),
+        type = "message",
+        duration = 6
+      )
+    }
+
+    # Strip non-run_ma args
+    run_args <- list(
+      data         = d,
+      outcome_type = args$outcome_type,
+      sm           = args$sm,
+      method       = args$method,
+      method.tau   = args$method.tau,
+      random       = args$random,
+      common       = args$common,
+      incr         = args$incr,
+      experimental_label = args$experimental_label,
+      control_label      = args$control_label,
+      subgroup     = args$subgroup_col
+    )
+    run_args <- run_args[!vapply(run_args, is.null, logical(1))]
+
+    shiny::withProgress(
+      message = "Running meta-analysis...", value = 0.4,
+      tryCatch({
+        out <- do.call(run_ma, run_args)
+        attr(out, "pmatools_input_data") <- d
+        attr(out, "pmatools_run_args") <- run_args
+        out
+      },
+        error = function(e) {
+          msg <- conditionMessage(e)
+          hint <- if (grepl("does not have exactly one intervention", msg, fixed = TRUE)) {
+            paste0(
+              " Same (studlab, treat) rows are auto-combined per Cochrane ",
+              "Handbook 6.5.2.10. If a study still has more than one ",
+              "intervention or control arm, pick a single arm per study in the ",
+              "intervention/control selectors above, or remove the extra rows."
+            )
+          } else {
+            ""
+          }
+          shiny::showNotification(
+            paste0("Meta-analysis stopped: ", msg, hint),
+            type = "warning",
+            duration = 10
+          )
+          NULL
+        }
+      )
+    )
+  })
+
+  .rare_mode_on <- function() {
+    d <- state$rare_diagnostics
+    if (is.null(d) || !isTRUE(d$rare_flow)) return(FALSE)
+    if (is.null(input$use_rare_workflow)) {
+      isTRUE(state$rare_mode_requested %||% TRUE)
+    } else {
+      isTRUE(input$use_rare_workflow)
+    }
+  }
+
+  .rare_primary_choices <- function() {
+    c(
+      "Beta-binomial with correlated responses" = "BB_CR",
+      "Mantel-Haenszel exact, no continuity correction" = "MH_no_cc",
+      "GLMM (one-stage logistic random effects)" = "GLMM",
+      "Peto" = "Peto",
+      "Random-effects IV, treatment-arm correction (DL)" = "REIV_TACC",
+      "Random-effects IV, fixed 0.5 correction (DL)" = "REIV_CC",
+      "Mantel-Haenszel, fixed 0.5 correction" = "MH_CC"
+    )
+  }
+
+  .rare_events_control_ui <- function() {
+    choices <- .rare_primary_choices()
+    selected <- state$rare_primary_method %||%
+      shiny::isolate(input$rare_primary_method) %||% "BB_CR"
+    if (!selected %in% unname(choices)) selected <- "BB_CR"
+
+    htmltools::tagList(
+      htmltools::hr(),
+      htmltools::h6("Rare-events workflow"),
+      htmltools::div(
+        class = "pma-switch-row",
+        shiny::checkboxInput("use_rare_workflow",
+          "Use rare-events workflow",
+          value = isTRUE(state$rare_mode_requested %||% TRUE))
+      ),
+      shiny::conditionalPanel(
+        "input.use_rare_workflow == true",
+        htmltools::div(
+          class = "rare-primary-method",
+          shiny::selectInput("rare_primary_method", "Primary method",
+            choices = choices, selected = selected,
+            selectize = FALSE, width = "100%")
+        ),
+        htmltools::p(class = "pma-card-subtitle",
+          "Keep the default unless a method was prespecified in the protocol.")
+      )
+    )
+  }
+
+  # Recompute regular MA, rare diagnostics, and rare MA whenever ma() fires.
+  # observeEvent(ma()) so the handler only runs when the analysis result
+  # changes -- not when input$use_rare_workflow or input$rare_primary_method
+  # change (those are handled by the dedicated observers below). Without this
+  # split, writes to state$rare_primary_method/state$rare_mode_active here
+  # invalidate the rare_events_panel renderUI, which re-creates the
+  # checkbox/select inputs, which re-fires this observer -> infinite loop.
+  shiny::observeEvent(ma(), {
+    obj <- ma()
+    if (is.null(obj)) return()
+    state$rare_mode_requested <- if (is.null(input$use_rare_workflow)) {
+      state$rare_mode_requested %||% TRUE
+    } else {
+      isTRUE(input$use_rare_workflow)
+    }
+    state$regular_ma <- obj
+    state$rare <- NULL
+    state$rare_primary_method <- NULL
+    state$rare_mode_active <- FALSE
+
+    run_args <- attr(obj, "pmatools_run_args")
+    d <- attr(obj, "pmatools_input_data")
+    checked_rare <- FALSE
+    if (!is.null(run_args) && identical(run_args$outcome_type, "binary") &&
+        !is.null(d)) {
+      checked_rare <- TRUE
+      diag <- tryCatch(
+        rare_event_diagnostics(
+          d,
+          experimental_label = run_args$experimental_label,
+          control_label = run_args$control_label
+        ),
+        error = function(e) NULL
+      )
+      state$rare_diagnostics <- diag
+      if (!is.null(diag) && isTRUE(diag$rare_flow)) {
+        primary_method <- input$rare_primary_method %||% "BB_CR"
+        rare <- shiny::withProgress(
+          message = "Running rare-events method suite...",
+          detail = "Comparing sparse-data methods; this can take a while.",
+          value = 0.4,
+          tryCatch(
+            run_rare_ma(
+              d,
+              effect_scale = "OR",
+              primary_method = primary_method,
+              random = isTRUE(run_args$random),
+              common = isTRUE(run_args$common),
+              method.tau = run_args$method.tau %||% "REML",
+              experimental_label = run_args$experimental_label,
+              control_label = run_args$control_label
+            ),
+            error = function(e) {
+              shiny::showNotification(
+                paste("Rare-event analysis failed:", conditionMessage(e)),
+                type = "warning"
+              )
+              NULL
+            }
+          )
+        )
+        if (!is.null(rare) && inherits(rare$primary, "meta")) {
+          state$rare <- rare
+          state$rare_primary_method <- rare$primary_method
+          if (isTRUE(.rare_mode_on())) {
+            state$ma <- rare$primary
+            state$rare_mode_active <- TRUE
+            return()
+          }
+        }
+      }
+    }
+    if (!isTRUE(checked_rare)) state$rare_diagnostics <- NULL
+    state$ma <- obj
+  }, ignoreNULL = FALSE)
+
+  # User toggled the rare-workflow checkbox: swap state$ma between cached
+  # regular and rare results without re-running run_ma / rare_event_diagnostics.
+  shiny::observeEvent(input$use_rare_workflow, {
+    requested <- isTRUE(input$use_rare_workflow)
+    state$rare_mode_requested <- requested
+    diag_flow <- isTRUE(state$rare_diagnostics$rare_flow)
+    if (requested && diag_flow && !is.null(state$rare) &&
+        inherits(state$rare$primary, "meta")) {
+      state$ma <- state$rare$primary
+      state$rare_mode_active <- TRUE
+    } else if (!is.null(state$regular_ma)) {
+      state$ma <- state$regular_ma
+      state$rare_mode_active <- FALSE
+    }
+  }, ignoreInit = TRUE)
+
+  # User picked a different rare-event primary method: re-run run_rare_ma()
+  # with the new choice. Cached regular_ma + diagnostics drive the inputs, so
+  # the heavy ma() reactive does not have to fire again.
+  shiny::observeEvent(input$rare_primary_method, {
+    method_id <- input$rare_primary_method
+    if (is.null(method_id) || !nzchar(method_id)) return()
+    if (!isTRUE(state$rare_diagnostics$rare_flow)) return()
+    obj <- state$regular_ma
+    if (is.null(obj)) return()
+    run_args <- attr(obj, "pmatools_run_args")
+    d <- attr(obj, "pmatools_input_data")
+    if (is.null(run_args) || is.null(d) ||
+        !identical(run_args$outcome_type, "binary")) return()
+    rare <- shiny::withProgress(
+      message = "Recomputing rare-events method suite...",
+      detail = "Applying the new primary method.",
+      value = 0.4,
+      tryCatch(
+        run_rare_ma(
+          d,
+          effect_scale = "OR",
+          primary_method = method_id,
+          random = isTRUE(run_args$random),
+          common = isTRUE(run_args$common),
+          method.tau = run_args$method.tau %||% "REML",
+          experimental_label = run_args$experimental_label,
+          control_label = run_args$control_label
+        ),
+        error = function(e) {
+          shiny::showNotification(
+            paste("Rare-event recompute failed:", conditionMessage(e)),
+            type = "warning"
+          )
+          NULL
+        }
+      )
+    )
+    if (!is.null(rare) && inherits(rare$primary, "meta")) {
+      state$rare <- rare
+      state$rare_primary_method <- rare$primary_method
+      if (isTRUE(state$rare_mode_active)) {
+        state$ma <- rare$primary
+      }
+    }
+  }, ignoreInit = TRUE)
+
+  # Rare events detected: default the auto-rerun toggle OFF, once per
+  # detection episode. The multi-method rare-event suite is expensive, so
+  # silently re-running it on every input change is a poor default on the
+  # shared shinyapps.io tier; the user can re-enable the checkbox at any
+  # time. Loop safety follows the same conventions as the observers above:
+  # this observer only writes the checkbox input (never state$ma /
+  # state$rare / state$rare_diagnostics), the ma() reactive reads
+  # input$auto_rerun through isolate() so the update cannot re-trigger the
+  # heavy chain, and the local reactiveVal is read/written under isolate()
+  # so the observer depends only on state$rare_diagnostics.
+  auto_rerun_rare_defaulted <- shiny::reactiveVal(FALSE)
+  shiny::observe({
+    diag <- state$rare_diagnostics
+    if (is.null(diag) || !isTRUE(diag$rare_flow)) {
+      # Non-rare (or cleared) diagnostics: re-arm for the next rare dataset.
+      shiny::isolate(auto_rerun_rare_defaulted(FALSE))
+      return()
+    }
+    if (isTRUE(shiny::isolate(auto_rerun_rare_defaulted()))) return()
+    shiny::isolate(auto_rerun_rare_defaulted(TRUE))
+    if (isTRUE(shiny::isolate(input$auto_rerun))) {
+      shiny::updateCheckboxInput(session, "auto_rerun", value = FALSE)
+      shiny::showNotification(
+        paste0(
+          "Rare events detected: 'Auto-rerun on change' has been switched ",
+          "off because the rare-event method suite is computationally ",
+          "expensive. Click 'Run analysis' after changing settings, or ",
+          "re-enable auto-rerun if you prefer."
+        ),
+        type = "message", duration = 10
+      )
+    }
+  })
+
+  .pct <- function(x, digits = 2) {
+    if (is.null(x) || length(x) == 0 || !is.finite(x)) return("NA")
+    paste0(format(round(100 * x, digits), nsmall = digits), "%")
+  }
+
+  output$rare_events_panel <- shiny::renderUI({
+    d <- state$rare_diagnostics
+    if (is.null(d) || !isTRUE(d$rare_flow)) return(NULL)
+    pma_card(
+      id = "rare-events-detected-card",
+      title = "Rare events suspected",
+      htmltools::p(class = "pma-card-subtitle",
+        "Rare-events mode uses OR and compares sparse-data methods. ",
+        "The default primary method is beta-binomial with correlated responses; ",
+        "use a prespecified method if the protocol names one."
+      ),
+      htmltools::tags$ul(
+        style = "font-size: 0.82rem; margin-bottom: 0.4rem;",
+        htmltools::tags$li(sprintf("Overall event rate: %s", .pct(d$event_rate_overall))),
+        htmltools::tags$li(sprintf("Single-zero studies: %d", d$single_zero_k)),
+        htmltools::tags$li(sprintf("Double-zero studies: %d", d$double_zero_k)),
+        htmltools::tags$li(sprintf("Total events: %d", d$total_events))
+      ),
+      if (isTRUE(d$very_sparse_flag)) {
+        htmltools::p(class = "pma-card-subtitle",
+          style = "font-weight: 600; color: #92400e;",
+          "Very sparse warning: interpret pooled estimates with extra caution."
+        )
+      } else NULL,
+      htmltools::p(class = "pma-card-subtitle",
+        "Mode: ",
+        if (isTRUE(state$rare_mode_active)) "Rare-events workflow" else "Regular workflow"
+      ),
+      htmltools::p(class = "pma-reference",
+        style = "font-style: italic; color: hsl(var(--muted-foreground)); font-size: 0.85rem;",
+        "References: ",
+        htmltools::tags$a(
+          href = "https://pmc.ncbi.nlm.nih.gov/articles/PMC10270432/",
+          target = "_blank",
+          "Efthimiou 2018"
+        ),
+        "; ",
+        htmltools::tags$a(
+          href = "https://doi.org/10.1002/jrsm.1720",
+          target = "_blank",
+          "Tsujimoto et al. 2024"
+        ),
+        "."
+      ),
+      .rare_events_control_ui()
+    )
+  })
+
+  output$rare_sensitivity_block <- shiny::renderUI({
+    rare <- state$rare
+    if (is.null(rare) || !isTRUE(state$rare_mode_active)) return(NULL)
+    htmltools::tagList(
+      htmltools::hr(),
+      htmltools::h5("Rare-events sensitivity forest"),
+      htmltools::div(
+        class = "pma-forest-image",
+        shinycssloaders::withSpinner(
+          shiny::imageOutput("rare_sensitivity_forest", height = "auto"),
+          type = 4, color = "#0f172a", size = 0.6,
+          proxy.height = "320px")
+      ),
+      htmltools::tags$details(
+        style = "margin-top: 0.5rem;",
+        htmltools::tags$summary("Method table"),
+        htmltools::div(DT::DTOutput("rare_method_table"))
+      )
+    )
+  })
+
+  output$rare_sensitivity_forest <- shiny::renderImage({
+    rare <- state$rare
+    if (is.null(rare)) {
+      return(list(src = "", contentType = "image/png", width = "100%"))
+    }
+    xlim <- NULL
+    lo <- input$xlim_lo; hi <- input$xlim_hi
+    if (!is.null(lo) && !is.null(hi) &&
+        !is.na(lo) && !is.na(hi) && lo < hi) {
+      xlim <- c(lo, hi)
+    }
+    pma_render_trimmed(
+      width = 1400,
+      height = 900,
+      plot_fn = function() {
+        plot_rare_sensitivity_forest(
+          rare,
+          title = if (nzchar(input$forest_title %||% "")) {
+            paste(input$forest_title, "method sensitivity", sep = " - ")
+          } else {
+            "Rare-event method sensitivity"
+          },
+          xlim = xlim,
+          favors_left = if (nzchar(input$favors_left %||% "")) input$favors_left else NULL,
+          favors_right = if (nzchar(input$favors_right %||% "")) input$favors_right else NULL
+        )
+      }
+    )
+  }, deleteFile = TRUE)
+
+  output$rare_method_table <- DT::renderDT({
+    rare <- state$rare
+    if (is.null(rare)) return(DT::datatable(data.frame()))
+    tab <- as.data.frame(rare$method_table, stringsAsFactors = FALSE)
+    for (nm in c("estimate", "ci_low", "ci_high")) {
+      tab[[nm]] <- ifelse(is.na(tab[[nm]]), NA, round(tab[[nm]], 3))
+    }
+    DT::datatable(
+      tab,
+      rownames = FALSE,
+      options = list(paging = FALSE, searching = FALSE, info = FALSE,
+                     scrollX = TRUE, dom = "t")
+    )
+  })
+
+  output$forest_plot <- shiny::renderImage({
+    obj <- state$ma
+    if (is.null(obj)) {
+      return(list(src = "", contentType = "image/png",
+                  alt = "Run analysis first.", width = "100%"))
+    }
+
+    xlim <- NULL
+    lo <- input$xlim_lo; hi <- input$xlim_hi
+    if (!is.null(lo) && !is.null(hi) &&
+        !is.na(lo) && !is.na(hi) && lo < hi) {
+      xlim <- c(lo, hi)
+    }
+
+    pma_render_trimmed(
+      width  = 1400,
+      height = 200 + 80 * (obj$k %||% 0L) + 400,  # generous; trimmed afterwards
+      plot_fn = function() {
+        plot_forest(
+          obj,
+          title              = if (nzchar(input$forest_title %||% "")) input$forest_title else NULL,
+          label_e            = if (nzchar(input$label_e %||% ""))      input$label_e      else NULL,
+          label_c            = if (nzchar(input$label_c %||% ""))      input$label_c      else NULL,
+          xlim               = xlim,
+          # One checkbox drives both arguments; see the UI comment.
+          show_n             = isTRUE(input$show_arm_columns %||% TRUE),
+          show_events        = isTRUE(input$show_arm_columns %||% TRUE),
+          favors_left        = if (nzchar(input$favors_left %||% ""))  input$favors_left  else NULL,
+          favors_right       = if (nzchar(input$favors_right %||% "")) input$favors_right else NULL,
+          addrow_above       = pma_addrow_above(input$addrows_above_overall),
+          addrow_below       = pma_addrow_below(input$addrows_below_overall)
+        )
+      }
+    )
+  }, deleteFile = TRUE)
+
+  # Mirror Forest plot display options into state for export
+  shiny::observe({
+    pick_text <- function(id) {
+      v <- input[[id]]
+      if (is.null(v) || !nzchar(v)) NULL else v
+    }
+    lo <- input$xlim_lo; hi <- input$xlim_hi
+    xlim <- if (!is.null(lo) && !is.null(hi) && !is.na(lo) && !is.na(hi) && lo < hi) c(lo, hi) else NULL
+    state$display$forest_step2 <- list(
+      title        = pick_text("forest_title"),
+      label_e      = pick_text("label_e"),
+      label_c      = pick_text("label_c"),
+      favors_left  = pick_text("favors_left"),
+      favors_right = pick_text("favors_right"),
+      xlim         = xlim,
+      # The Step 2 body may not have been rendered yet, so an absent checkbox
+      # must fall back to the UI default (TRUE) rather than to isTRUE(NULL).
+      # Both keys are written from the single checkbox: R/step4_export.R reads
+      # show_n and show_events off this list and must keep working unchanged.
+      show_n       = isTRUE(input$show_arm_columns %||% TRUE),
+      show_events  = isTRUE(input$show_arm_columns %||% TRUE),
+      addrow_above = pma_addrow_above(input$addrows_above_overall),
+      addrow_below = pma_addrow_below(input$addrows_below_overall)
+    )
+  })
+
+  # Mirror the outcome identity and the arm labels into state so Step 3 and
+  # Step 4 can read them while the Step 2 widgets do not exist.
+  #
+  # NULL / empty is never written back. Leaving and re-entering Step 2 tears
+  # the widgets down and rebuilds them, and a freshly built widget pushes its
+  # own default to the server before step2_ui()'s seeding has any effect; a
+  # blank write at that moment would destroy exactly the values Step 3 needs.
+  # The cost is an asymmetry - clearing "Outcome name" in Step 2 leaves
+  # state$outcome_name at its previous value - which is harmless because the
+  # required-field checks read input$ directly, and step2_ui() reseeds from
+  # state only when a non-empty value is there.
+  shiny::observe({
+    nm <- input$outcome_name
+    if (!is.null(nm) && length(nm) == 1 && nzchar(trimws(nm))) {
+      state$outcome_name <- trimws(nm)
+    }
+    sv <- input$small_values
+    if (!is.null(sv) && length(sv) == 1 && nzchar(sv)) state$small_values <- sv
+    # Follow-up and unit are optional, so an empty value is a legitimate
+    # answer and IS written back - otherwise a follow-up could never be
+    # cleared. Safe here because step2_ui() seeds both widgets from state, so
+    # a rebuilt widget pushes back the value state already holds; only the
+    # NULL a torn-down widget reports is ignored.
+    fu <- input$outcome_follow_up
+    if (!is.null(fu) && length(fu) == 1 && !is.na(fu)) {
+      state$outcome_follow_up <- trimws(fu)
+    }
+    un <- input$outcome_unit
+    if (!is.null(un) && length(un) == 1 && !is.na(un)) {
+      state$outcome_unit <- trimws(un)
+    }
+    ae <- input$experimental_label
+    if (!is.null(ae) && length(ae) == 1 && nzchar(ae)) state$arm_e <- ae
+    ac <- input$control_label
+    if (!is.null(ac) && length(ac) == 1 && nzchar(ac)) state$arm_c <- ac
+  })
+
+  # Smart defaults for the Forest plot display panel: the outcome name becomes
+  # the title, the two arm selectors become the arm labels, and the outcome
+  # direction decides which side each "Favors ..." label goes on. Nothing the
+  # user typed is ever overwritten (see pma_autofill_text()).
+  .forest_label_defaults <- shiny::reactive({
+    iv  <- input$experimental_label %||% state$arm_e %||% ""
+    ct  <- input$control_label      %||% state$arm_c %||% ""
+    fav <- pma_favors_labels(state$small_values, iv, ct)
+    list(title = state$outcome_name %||% "", label_e = iv, label_c = ct,
+         favors_left = fav$left, favors_right = fav$right)
+  })
+  pma_autofill_forest_panel(input, session, prefix = NULL,
+                            values_fn = .forest_label_defaults)
+
+  output$funnel_plot <- shiny::renderImage({
+    obj <- state$ma
+    if (is.null(obj)) {
+      return(list(src = "", contentType = "image/png",
+                  alt = "Run analysis first.", width = "100%"))
+    }
+    da <- pma_funnel_display_args(input, "funnel_step2")
+    show_egger <- if (is.na(da$show_egger)) TRUE else da$show_egger
+    pma_render_trimmed(
+      width  = da$width,
+      height = da$height,
+      plot_fn = function() {
+        if (!is.null(da$xlim))
+          plot_funnel(obj, show_egger = show_egger, xlim = da$xlim)
+        else
+          plot_funnel(obj, show_egger = show_egger)
+      }
+    )
+  }, deleteFile = TRUE)
+
+  .results_text <- function(obj) {
+    body <- utils::capture.output(summary(obj))
+    safe_ver <- function(pkg, fallback = "(vendored)") {
+      tryCatch(as.character(utils::packageVersion(pkg)),
+               error = function(e) fallback)
+    }
+    footer <- c(
+      "",
+      "--- Software versions ---",
+      # pmatools is vendored, not installed: resolved via the shared helper
+      # in ui_helpers.R, which consults options(pmatools.version_stamp).
+      sprintf("pmatools : %s", pma_pmatools_version()),
+      sprintf("meta     : %s", safe_ver("meta")),
+      sprintf("R        : %s", paste(R.version$major, R.version$minor, sep = "."))
+    )
+    paste(c(body, footer), collapse = "\n")
+  }
+
+  output$ma_summary <- shiny::renderPrint({
+    obj <- state$ma
+    if (is.null(obj)) return(cat("No analysis run yet."))
+    cat(.results_text(obj))
+  })
+
+  shiny::observeEvent(input$copy_results, {
+    obj <- state$ma
+    if (is.null(obj)) {
+      shiny::showNotification("Run analysis first.", type = "warning")
+      return()
+    }
+    session$sendCustomMessage("copy_to_clipboard", .results_text(obj))
+  })
+
+  # ----- Required-field highlighting -------------------------------------
+  # Same "clicked" idea as ma() and state$step2_commit below: nothing is
+  # marked red until the user has actually asked for an analysis (Run
+  # analysis, or Next, which runs the commit hook). A first page load with
+  # both fields empty is a normal state, not an error.
+  required_touched <- shiny::reactiveVal(FALSE)
+  shiny::observeEvent(input$run_ma, {
+    required_touched(TRUE)
+  }, ignoreInit = TRUE)
+
+  # Called by app.R's begin_new_outcome(). Starting a new outcome empties the
+  # two required fields on purpose, so the marks are disarmed again rather
+  # than painting the fresh form red before the reviewer has typed anything.
+  state$step2_reset <- function() required_touched(FALSE)
+
+  # The ids managed here; `unset` is recomputed from input$ on every change,
+  # so the marks clear the moment a field is filled.
+  PMA_STEP2_REQUIRED <- c("outcome_name", "small_values")
+  shiny::observe({
+    unset <- character(0)
+    if (isTRUE(required_touched())) {
+      if (!nzchar(trimws(input$outcome_name %||% ""))) {
+        unset <- c(unset, "outcome_name")
+      }
+      sv <- input$small_values
+      if (is.null(sv) || length(sv) != 1L || !nzchar(sv)) {
+        unset <- c(unset, "small_values")
+      }
+    }
+    # as.list() so a single id (or none) still serialises as a JSON array.
+    session$sendCustomMessage(
+      "pma_required_fields",
+      list(all = as.list(PMA_STEP2_REQUIRED), unset = as.list(unset))
+    )
+  })
+
+  # Same three conditions state$step2_commit enforces below, in the same
+  # order, read off the same inputs: both required fields, then an analysis.
+  # Keeping the two in lockstep is what stops the button and the toast from
+  # disagreeing. (input$, not state$: the mirrored copies are only refreshed
+  # when an analysis runs, so they lag what the user has just typed.)
+  step2_can_advance <- shiny::reactive({
+    sv <- input$small_values
+    nzchar(trimws(input$outcome_name %||% "")) &&
+      !is.null(sv) && length(sv) == 1L && nzchar(sv) &&
+      !is.null(state$ma)
+  })
+
+  # Wizard nav as its own output: re-rendering it when the preconditions flip
+  # leaves the rest of the step body, and every value typed into it, alone.
+  output$step2_nav <- shiny::renderUI({
+    pma_wizard_nav(current_step = 2,
+                   next_disabled = !isTRUE(step2_can_advance()))
+  })
+
+  # Advance hook for step dispatcher
+  state$step2_commit <- function() {
+    # Pressing Next counts as asking for the analysis, so it arms the
+    # required-field marks too.
+    required_touched(TRUE)
+    # Outcome identity is checked before the analysis, because "run the
+    # analysis first" would be misleading advice when the reason no analysis
+    # exists is a blank required field.
+    missing_required <- character()
+    if (!nzchar(trimws(input$outcome_name %||% ""))) {
+      missing_required <- c(missing_required, "Outcome name")
+    }
+    sv <- input$small_values
+    if (is.null(sv) || length(sv) != 1L || !nzchar(sv)) {
+      missing_required <- c(missing_required, "Direction (smaller = favorable?)")
+    }
+    if (length(missing_required) > 0) {
+      shiny::showNotification(
+        paste("Complete required field(s):",
+              paste(missing_required, collapse = ", ")),
+        id = "step2_required_fields", type = "warning", duration = 8
+      )
+      return(FALSE)
+    }
+    if (is.null(state$ma)) {
+      shiny::showNotification(
+        "Please run the analysis first.", type = "warning"
+      )
+      return(FALSE)
+    }
+    TRUE
+  }
+}
