@@ -335,6 +335,67 @@ test_that(".rob_studlab_index maps k onto the estimable studlab positions", {
   expect_null(pmatools:::.rob_studlab_index(m_short, 3L))
 })
 
+test_that(".rob_alignment carries the mapping and both lengths", {
+  m  <- make_mock_gap()
+  al <- pmatools:::.rob_alignment(m, m$k)
+  expect_equal(al$idx, c(1L, 3L, 4L))
+  expect_equal(al$k, 3L)
+  expect_equal(al$n_slab, 4L)
+  expect_equal(al$studlab, m$studlab)
+
+  # Coincident spaces: the mapping is the identity and both lengths agree.
+  m_full  <- make_mock_gap(te = c(0.60, 0.30, 0.02, 0.02))
+  al_full <- pmatools:::.rob_alignment(m_full, m_full$k)
+  expect_equal(al_full$idx, 1:4)
+  expect_equal(al_full$k, al_full$n_slab)
+
+  # Unresolvable: $TE is already in k-space, so nothing maps 3 onto 4 rows.
+  m_bad     <- make_mock_gap()
+  m_bad$TE  <- c(0.60, 0.02, 0.02)
+  al_bad    <- pmatools:::.rob_alignment(m_bad, 3L)
+  expect_null(al_bad$idx)
+  expect_equal(al_bad$n_slab, 4L)
+})
+
+test_that(".rob_expand / .rob_contract move a vector between the two spaces", {
+  al      <- pmatools:::.rob_alignment(make_mock_gap(), 3L)
+  al_full <- pmatools:::.rob_alignment(
+    make_mock_gap(te = c(0.60, 0.30, 0.02, 0.02)), 4L)
+  rob_k   <- c("serious", "no", "no")
+
+  # k-space -> studlab space: NA padding on the row {meta} could not pool.
+  expect_equal(pmatools:::.rob_expand(rob_k, al),
+               c("serious", NA, "no", "no"))
+  # ... and back again (round trip is the identity on k-space vectors).
+  expect_equal(pmatools:::.rob_contract(pmatools:::.rob_expand(rob_k, al), al),
+               rob_k)
+  # studlab space -> k-space drops the unpooled row.
+  expect_equal(
+    pmatools:::.rob_contract(c("serious", "no", "no", "some_concerns"), al),
+    c("serious", "no", "some_concerns"))
+
+  # A ready-made studlab-space `fill` supplies the unpooled rows: that is how
+  # "high_idx" keeps a dropped study high only when the caller judged it so.
+  expect_equal(
+    pmatools:::.rob_expand(c(TRUE, FALSE, FALSE), al,
+                           fill = c(FALSE, TRUE, FALSE, FALSE)),
+    c(TRUE, TRUE, FALSE, FALSE))
+
+  # Coincident spaces: both directions are the identity.
+  expect_equal(pmatools:::.rob_expand(letters[1:4], al_full), letters[1:4])
+  expect_equal(pmatools:::.rob_contract(letters[1:4], al_full), letters[1:4])
+
+  # Unresolvable, or a vector that is in neither space: NULL, so the caller
+  # keeps its own abort/skip path instead of guessing.
+  m_bad    <- make_mock_gap()
+  m_bad$TE <- c(0.60, 0.02, 0.02)
+  al_bad   <- pmatools:::.rob_alignment(m_bad, 3L)
+  expect_null(pmatools:::.rob_expand(rob_k, al_bad))
+  expect_null(pmatools:::.rob_contract(c("no", "no", "no", "no"), al_bad))
+  expect_null(pmatools:::.rob_expand(c("no", "no"), al))
+  expect_null(pmatools:::.rob_contract(c("no", "no"), al))
+})
+
 test_that("an unresolvable alignment skips the refit instead of mis-subsetting", {
   # $TE is in k-space here, so no rule maps the 3 pooled studies onto the 4
   # study labels; high_idx stays in k-space and .refit_low_rob() must refuse.
