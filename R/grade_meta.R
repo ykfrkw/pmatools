@@ -444,6 +444,14 @@
 #' @return An S3 object of class \code{pmatools} containing:
 #'   \describe{
 #'     \item{domain_assessments}{A tibble with one row per GRADE domain.}
+#'     \item{domain_facts}{A named list of tibbles (\code{key}, \code{label},
+#'       \code{value}, \code{numeric}), one per domain that recorded the
+#'       numbers behind its judgment: currently \code{"Risk of bias"},
+#'       \code{"Inconsistency"} and \code{"Imprecision"}. A domain with
+#'       nothing recorded is absent, and the list is empty when no domain
+#'       recorded anything. The prose in \code{domain_assessments$notes}
+#'       remains authoritative; this is its machine-readable companion. Read
+#'       it with \code{\link{domain_facts}}.}
 #'     \item{certainty}{Final certainty label: "High", "Moderate", "Low", or "Very Low".}
 #'     \item{certainty_score}{Numeric score (1–4).}
 #'     \item{starting_quality}{Starting certainty label.}
@@ -595,6 +603,10 @@ grade_meta <- function(meta_obj,
                         rationale               = rob_rationale)
   rob_analysis_set <- attr(d_rob, "analysis_set") %||% "all"
   rob_high_idx     <- attr(d_rob, "high_idx")
+  # Read immediately, for the same reason as the two attributes above: neither
+  # .append_domain_note() nor dplyr::bind_rows() promises to carry attributes
+  # of the row through.
+  rob_facts        <- attr(d_rob, "facts")
 
   # The RoB domain note is written against the full analysis, so it keeps the
   # threshold note that was resolved above even if an ARD threshold is
@@ -675,6 +687,7 @@ grade_meta <- function(meta_obj,
     threshold_chosen                 = target_info$threshold_for_imprecision,
     rationale                        = inconsistency_rationale
   )
+  incon_facts <- attr(d_incon, "facts")
 
   # Imprecision: scalar override bypasses the automated assessment entirely
   # (v0.4.0). Requires imprecision_rationale (Core GRADE transparency).
@@ -718,6 +731,9 @@ grade_meta <- function(meta_obj,
       threshold_for_imprecision = target_info$threshold_for_imprecision
     )
   }
+  # The scalar-override branch above records no facts; the domain is then
+  # simply absent from `domain_facts`.
+  impre_facts <- attr(d_impre, "facts")
 
   # Record how the rating target was chosen in the Imprecision notes: the
   # target decides which threshold Fig 4 evaluates the CI against, so the two
@@ -744,6 +760,12 @@ grade_meta <- function(meta_obj,
   )
 
   domains <- dplyr::bind_rows(d_rob, d_indir, d_incon, d_impre, d_pubias)
+
+  # Named by GRADE domain; a domain that recorded nothing is simply absent.
+  domain_facts <- list()
+  if (!is.null(rob_facts))   domain_facts[["Risk of bias"]]  <- rob_facts
+  if (!is.null(incon_facts)) domain_facts[["Inconsistency"]] <- incon_facts
+  if (!is.null(impre_facts)) domain_facts[["Imprecision"]]   <- impre_facts
 
   # --- 確実性スコア計算 ---
   total_downgrade <- sum(domains$downgrade)
@@ -774,6 +796,11 @@ grade_meta <- function(meta_obj,
       # Kept at the top level (not as a list-column of domain_assessments,
       # which must stay one row per domain with atomic columns).
       indirectness_subdomains = indirectness_sub_tbl,
+      # Same reason: the structured facts behind the Risk of bias,
+      # Inconsistency and Imprecision judgments are one tibble per domain, so
+      # they cannot live in a tibble that must stay one row per domain with
+      # atomic columns. Read them with domain_facts().
+      domain_facts            = domain_facts,
       meta               = meta_obj,
       meta_full          = meta_full,
       rob_analysis_set   = rob_analysis_set,

@@ -126,7 +126,13 @@
 
 # "Due to serious risk of bias and imprecision" — the second line of the BMJ
 # certainty cell. Returns NULL when nothing pulled the rating down.
-.certainty_rate_down_reason <- function(x) {
+#
+# `markers` is a named integer vector keyed by domain name; when supplied, the
+# footnote marker for a domain is appended to that domain's name inside the
+# sentence ("Due to serious risk of bias [1] and inconsistency [2]"), which is
+# where a reader looks for it. A NULL or empty `markers` leaves the sentence
+# byte-identical to what it has always been.
+.certainty_rate_down_reason <- function(x, markers = NULL) {
   sd  <- x$study_design %||% ""
   obs <- (length(sd) == 1L && !is.na(sd) &&
             tolower(sd) %in% c("obs", "observational")) ||
@@ -142,6 +148,10 @@
       adj  <- vapply(dn$judgment, .fmt_severity, character(1),
                      USE.NAMES = FALSE)
       doms <- tolower(dn$domain)
+      if (!is.null(markers) && length(markers) > 0L) {
+        mk   <- markers[dn$domain]
+        doms <- ifelse(is.na(mk), doms, sprintf("%s [%d]", doms, mk))
+      }
       dom_parts <- if (length(unique(adj)) == 1L) {
         # Shared adjective is stated once ("serious risk of bias and
         # imprecision"), as in the BMJ tables.
@@ -226,8 +236,17 @@
                               unit = paste0("per ", per_str), digits = 0L))
   }
 
-  if (sm %in% c("MD", "SMD")) {
+  if (identical(sm, "MD")) {
     return(.difference_string(est, lo, hi, unit = unit, digits = 2L))
+  }
+
+  # An SMD is in standard deviation units, so it never takes the outcome's own
+  # unit -- and now that the two arm columns beside it can be re-expressed on
+  # the original scale, labelling it "days" would invite the reader to subtract
+  # one from the other and find the numbers do not agree.
+  if (identical(sm, "SMD")) {
+    return(.difference_string(est, lo, hi, unit = "standard deviations",
+                              digits = 2L))
   }
 
   "-"
@@ -240,10 +259,12 @@
 .bmj_row_values <- function(nm, g, per = 1000, prediction = FALSE,
                             follow_up = NULL, unit = NULL,
                             cer_str = NULL, ier_str = NULL,
-                            label_intervention = "intervention") {
+                            label_intervention = "intervention",
+                            markers = NULL) {
   if (.is_not_reported(g)) {
     return(.bmj_row_values_not_reported(nm, g, follow_up))
   }
+
 
   meta_obj <- g$meta
 
@@ -254,7 +275,7 @@
     nm
   }
 
-  reason    <- .certainty_rate_down_reason(g)
+  reason    <- .certainty_rate_down_reason(g, markers = markers)
   cert_cell <- if (is.null(reason)) g$certainty else {
     paste0(g$certainty, "\n", reason)
   }
@@ -269,21 +290,27 @@
 
   nf <- .bmj_number_format("bmj")
 
+  # Both arm columns of the "Absolute effects" block. A Chinn dichotomisation
+  # supplies its own pair; otherwise they come off the object -- the baseline
+  # risk for a binary outcome, the pooled control arms for a continuous one.
+  arm <- .sof_arm_cells(meta_obj, g$baseline_risk, per,
+                        big_mark = nf$big_mark, ci_sep = nf$ci_sep,
+                        unit = unit)
+  caller_cells <- !is.null(cer_str) || !is.null(ier_str)
+
   list(
     outcome   = outcome_cell,
     n         = .n_participants_studies_bmj(meta_obj$k, .total_n(meta_obj),
                                             g$study_design),
     effect    = .format_effect_bmj(meta_obj, g$outcome_type,
                                    prediction = prediction),
-    cer       = cer_str %||% .format_cer(g$baseline_risk, per,
-                                         big_mark = nf$big_mark),
-    ier       = ier_str %||% .format_ier(meta_obj, g$baseline_risk, per,
-                                         big_mark = nf$big_mark,
-                                         ci_sep   = nf$ci_sep),
+    cer       = cer_str %||% arm$cer,
+    ier       = ier_str %||% arm$ier,
     diff      = .format_difference(meta_obj, g$baseline_risk, per, unit,
                                    g$outcome_type),
     certainty = cert_cell,
-    plain     = .plain_language_for(g, intervention_label = pl_tx)
+    plain     = .plain_language_for(g, intervention_label = pl_tx),
+    arm_note  = if (caller_cells) NULL else arm$note
   )
 }
 
@@ -360,16 +387,20 @@
 }
 
 # Footer shared by the single- and multi-outcome BMJ tables.
+# `rate_arms` says whether any row's arm columns hold event rates derived from
+# a baseline risk. A table whose rows are all continuous outcomes drops that
+# sentence, since nothing in it was computed that way.
 .bmj_base_note <- function(label_intervention = "intervention",
-                           prediction = FALSE) {
+                           prediction = FALSE, rate_arms = TRUE) {
   paste0(
     "Certainty of the evidence rated with the BMJ 2025 Core GRADE series ",
     "(Guyatt et al.); not an official GRADE Working Group assessment. ",
     "CI = confidence interval.",
     if (prediction) " PrI = 95 percent prediction interval." else "",
-    " Absolute effects: the ", label_intervention, "-arm rate and the ",
-    "difference are computed from the control-arm (baseline) risk and the ",
-    "pooled relative effect."
+    if (rate_arms) paste0(
+      " Absolute effects: the ", label_intervention, "-arm rate and the ",
+      "difference are computed from the control-arm (baseline) risk and the ",
+      "pooled relative effect.") else ""
   )
 }
 
@@ -391,11 +422,26 @@
                            label_control      = "control") {
   meta_obj <- x$meta
 
+  # Numbered footnotes for the domains that pulled the rating down; the
+  # markers ride on the domain names inside the "Due to ..." sentence. The
+  # register starts at [1] -- the analysis-set and publication-bias sentences
+  # below stay unnumbered, as they always have been.
+  fact_domains <- .rated_down_fact_domains(x)
+  fact_notes   <- character(0)
+  fact_markers <- integer(0)
+  for (dm in fact_domains) {
+    note <- .domain_fact_note(x, dm)
+    if (is.null(note)) next
+    fact_notes <- c(fact_notes, note)
+    fact_markers[[dm]] <- length(fact_notes)
+  }
+
   vals <- .bmj_row_values(
     x$outcome_name, x, per = per, prediction = prediction,
     follow_up = follow_up, unit = unit,
     cer_str = cer_str, ier_str = ier_str,
-    label_intervention = label_intervention
+    label_intervention = label_intervention,
+    markers = fact_markers
   )
   # Chinn dichotomisation replaces the arm rates with derived ones; the risk
   # difference implied by them is not the pooled continuous difference, so the
@@ -424,7 +470,19 @@
   ft <- flextable::align(ft, j = 7, align = "center", part = "body")
 
   ft <- flextable::add_footer_lines(
-    ft, values = .bmj_base_note(label_intervention, prediction))
+    ft, values = .bmj_base_note(label_intervention, prediction,
+                                rate_arms = is.null(vals$arm_note)))
+
+  # How the two arm columns were derived when they hold arm-level means rather
+  # than event rates (see .cont_arm_note()).
+  if (!is.null(vals$arm_note)) {
+    ft <- flextable::add_footer_lines(ft, values = vals$arm_note)
+  }
+
+  for (i in seq_along(fact_notes)) {
+    ft <- flextable::add_footer_lines(
+      ft, values = sprintf("[%d] %s", i, fact_notes[i]))
+  }
 
   # Risk-of-bias analysis set (Core GRADE 4 Fig 2). A refit silently changes
   # every number in this table, so it must always be stated — in this style
@@ -487,13 +545,16 @@
 .grade_table_bmj <- function(outcomes, nms, prim_nms, sec_nms, primary,
                              pal, per, prediction, follow_up, unit,
                              label_intervention, label_control,
-                             disp, row_notes) {
+                             disp, row_notes,
+                             fact_notes = character(0),
+                             fact_markers = list()) {
   row_vals <- lapply(nms, function(nm) {
     .bmj_row_values(disp(nm), outcomes[[nm]], per = per,
                     prediction = prediction,
                     follow_up = .per_outcome_arg(follow_up, nm),
                     unit      = .per_outcome_arg(unit, nm),
-                    label_intervention = label_intervention)
+                    label_intervention = label_intervention,
+                    markers   = fact_markers[[nm]])
   })
   names(row_vals) <- nms
 
@@ -587,8 +648,23 @@
     ft <- flextable::align(ft, i = i, j = 7, align = "center", part = "body")
   }
 
+  # Continuous outcomes derive their arm columns differently; the note is
+  # written once however many rows it covers, and the rate sentence is kept
+  # only while some row still reports rates. Counted over the rated rows only:
+  # a not-reported row reports neither rates nor arm-level means, so letting it
+  # stand in for a rate-reporting row would keep a sentence describing columns
+  # that no row fills.
+  rated_vals <- row_vals[names(.rated_outcomes(outcomes[nms]))]
+  n_cont     <- sum(vapply(rated_vals, function(v) !is.null(v$arm_note),
+                           logical(1)))
+  arm_notes  <- unique(unlist(lapply(rated_vals, function(v) v$arm_note),
+                              use.names = FALSE))
   ft <- flextable::add_footer_lines(
-    ft, values = .bmj_base_note(label_intervention, prediction))
+    ft, values = .bmj_base_note(label_intervention, prediction,
+                                rate_arms = n_cont < length(rated_vals)))
+  for (nt in arm_notes) {
+    ft <- flextable::add_footer_lines(ft, values = nt)
+  }
 
   # What "Not reported" means, stated once for the table however many such rows
   # it has.
@@ -602,6 +678,12 @@
   for (i in seq_along(row_notes)) {
     ft <- flextable::add_footer_lines(
       ft, values = sprintf("[%d] %s", i, row_notes[i]))
+  }
+
+  # Domain-fact footnotes continue the same [n] register, already numbered by
+  # the caller so both table styles share one counter.
+  for (line in fact_notes) {
+    ft <- flextable::add_footer_lines(ft, values = line)
   }
 
   for (nm in nms) {

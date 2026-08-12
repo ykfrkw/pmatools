@@ -235,8 +235,20 @@ grade_report <- function(outcomes,
 .md_sof_table <- function(outcomes, primary, nms, prim_lbl, sec_lbl,
                            per = 1000, prediction = FALSE) {
   per_str <- format(per, big.mark = ",", scientific = FALSE)
-  hdr <- paste0("| Outcome | k | N | Control rate (per ", per_str,
-                ") | Intervention rate (per ", per_str, ") | Effect (95% CI) | Certainty |")
+
+  # A continuous outcome fills the two arm columns with arm-level means, not
+  # rates, so the header drops the rate wording as soon as one appears.
+  arms <- lapply(outcomes, function(g) {
+    .sof_arm_cells(g$meta, g$baseline_risk, per, unit = g$unit)
+  })
+  cont_any <- any(vapply(arms, function(a) isTRUE(a$continuous), logical(1)))
+  arm_hdr  <- if (cont_any) {
+    "| With control | With intervention "
+  } else {
+    paste0("| Control rate (per ", per_str,
+           ") | Intervention rate (per ", per_str, ") ")
+  }
+  hdr <- paste0("| Outcome | k | N ", arm_hdr, "| Effect (95% CI) | Certainty |")
   sep <- "|---|---|---|---|---|---|---|"
 
   # Group label rows are emitted the same way for every outcome, so the
@@ -267,8 +279,8 @@ grade_report <- function(outcomes,
 
     k  <- g$meta$k
     n  <- .total_n(g$meta)
-    cer  <- gsub("\n", " ", .format_cer(g$baseline_risk, per))
-    ier  <- gsub("\n", " ", .format_ier(g$meta, g$baseline_risk, per))
+    cer  <- gsub("\n", " ", arms[[i]]$cer)
+    ier  <- gsub("\n", " ", arms[[i]]$ier)
     eff  <- gsub("\n", " ", .format_effect(g$meta, g$outcome_type, prediction))
     cert <- paste0(g$certainty, " ", CERTAINTY_SYMBOLS[[g$certainty]])
 
@@ -280,7 +292,11 @@ grade_report <- function(outcomes,
       cer, ier, eff, cert))
   }
 
-  c(hdr, sep, rows)
+  # How the arm columns were derived for any continuous outcome, matching the
+  # footnote the flextable carries (see .cont_arm_note()).
+  notes <- unique(unlist(lapply(arms, function(a) a$note), use.names = FALSE))
+  c(hdr, sep, rows,
+    if (length(notes) > 0) c("", paste0("*", notes, "*")))
 }
 
 # --------------------------------------------------------------------------

@@ -53,8 +53,9 @@ Ignored by the \code{"bmj"} style, which has no domain columns.}
 style: a character vector named by outcome, or a single unnamed value
 applied to every outcome. \code{NULL} (default) omits the line.}
 
-\item{unit}{(v0.5) Unit for the Difference column of the \code{"bmj"} style
-with continuous outcomes; same named-vector convention as
+\item{unit}{(v0.5) Unit for the continuous-outcome cells -- the Difference
+column of the \code{"bmj"} style and the arm columns of either style (see
+\code{\link{sof_table}}); same named-vector convention as
 \code{follow_up}.}
 
 \item{label_intervention, label_control}{Arm labels used in the
