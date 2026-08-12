@@ -346,6 +346,58 @@ pma_clear_outcome_confirmations <- function(session) {
   invisible(NULL)
 }
 
+# ----- Putting an answer back after Step 3 is rebuilt ----------------------
+# app.R renders output$step_body from step3_ui() on every entry, so leaving
+# Step 3 and coming back destroys every widget on it and builds it again from
+# its declared defaults. Measured before this was added: entering an override
+# of the pooled control-group risk (210 per 1,000), justifying it in writing,
+# then visiting Step 4 and returning left the box reading 155.6 - the pooled
+# value - with the rationale, the risk-of-bias override rationale and the
+# free-text "other considerations" all blank. Nothing warned; the reviewer's
+# override was simply gone, and the rebuilt widgets reported their defaults to
+# the server as though those were the answers.
+#
+# These are the ids worth restoring. Two groups are deliberately excluded:
+#
+#   - `identity`, which is Step 2's own UI. It is not on screen when Step 3 is
+#     rebuilt, and Step 2 already keeps those answers in state$.
+#   - PMA_OUTCOME_CONFIRM_IDS. A confirmation says "I have looked at what is on
+#     screen"; re-arming it after a rebuild costs one tick and keeps the export
+#     gate conservative, which is the direction this app errs in everywhere
+#     else. Restoring the answers WITHOUT the confirmations is what makes that
+#     re-tick cheap - the reviewer re-confirms, they do not re-type.
+PMA_OUTCOME_RESTORE_GROUPS <- c("configuration", "rob", "inconsistency",
+                                "indirectness", "imprecision", "pubias",
+                                "final")
+
+pma_restorable_input_ids <- function() {
+  ids <- unlist(PMA_OUTCOME_INPUT_IDS[PMA_OUTCOME_RESTORE_GROUPS],
+                use.names = FALSE)
+  setdiff(unname(ids), PMA_OUTCOME_CONFIRM_IDS)
+}
+
+# Is a remembered answer worth pushing back into a freshly built widget?
+#
+# `stamp` is the outcome generation the answer was given in and `gen` the one
+# now open; they must match, for exactly the reason the freshness guard in
+# step3_server() exists - an answer left behind by the previous outcome must
+# never be reinstated as if it belonged to this one.
+#
+# Empty answers are skipped rather than pushed. Restoring "" over a widget that
+# was just built empty changes nothing, and skipping keeps the message small.
+# The one thing this gives up is re-clearing a field whose declared default is
+# non-empty; every such field in the registry is a numeric backed by a
+# reactiveVal, which is restored by its own render and not by this path.
+pma_restorable_value <- function(value, stamp, gen) {
+  if (!identical(stamp, gen)) return(FALSE)
+  if (is.null(value) || length(value) == 0L) return(FALSE)
+  if (length(value) == 1L && is.na(value)) return(FALSE)
+  if (is.character(value) && length(value) == 1L && !nzchar(trimws(value))) {
+    return(FALSE)
+  }
+  TRUE
+}
+
 # ----- grade_meta() argument specs for the exported analysis.R ------------
 # export_bundle() renders analysis.R from `grade_args`: a named list of
 # {value, origin, col} specs, one per grade_meta() argument. An argument it is

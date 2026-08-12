@@ -1071,15 +1071,60 @@ step3_server <- function(input, output, session, state) {
   # state$outcome_gen is read under isolate() on purpose. A reactive read would
   # make every one of these observers re-fire when the generation is bumped,
   # re-stamping the stale answers as current and defeating the guard.
+  #
+  # The same observers also remember the answer itself, so it can be put back
+  # when app.R rebuilds Step 3 from step3_ui(). A plain environment, not
+  # reactiveValues: only the restore observer below reads it, and it reads
+  # under isolate(), so making these writes reactive would buy nothing and
+  # would invalidate that observer on every keystroke.
   .answer_gen <- shiny::reactiveValues()
+  .answer_val <- new.env(parent = emptyenv())
   for (.outcome_input_id in pma_outcome_input_ids()) {
     local({
       id <- .outcome_input_id
       shiny::observeEvent(input[[id]], {
         .answer_gen[[id]] <- shiny::isolate(state$outcome_gen)
+        assign(id, input[[id]], envir = .answer_val)
       }, ignoreInit = FALSE, ignoreNULL = FALSE)
     })
   }
+  # Leaving Step 3 and coming back destroys every widget on it and builds it
+  # again from its declared defaults, discarding whatever the reviewer had
+  # entered - see the note at pma_restorable_input_ids(). Put the answers back.
+  #
+  # Keyed on state$step so it fires on the rebuild and on nothing else. The
+  # ordering works out: app.R creates output$step_body (app.R:176) before it
+  # calls step3_server() (app.R:189), so the rebuilt HTML is already in this
+  # flush's payload, and shiny.js dispatches "values" before "inputMessages" -
+  # the restored values land on the new widgets, not on the ones they replaced.
+  #
+  # sendInputMessage() rather than a typed update*Input(): the ids span
+  # numeric, text, textarea, select, radio and checkbox widgets, and every one
+  # of those bindings reads `value` off the message. The value being sent came
+  # from that same input, so it is already the right type.
+  # Counts entries into Step 3. output$threshold_panel depends on THIS and not
+  # on state$step directly: a bare state$step read also fires on the way OUT,
+  # and re-rendering the panel while Step 3 is being torn down rebuilt its
+  # widgets empty inside the still-present div, which reported those blanks to
+  # the server and overwrote the very answers this restore is meant to keep.
+  # Measured: the control-group rationale survived every rebuild except the one
+  # its own panel caused.
+  step3_entries <- shiny::reactiveVal(0L)
+  shiny::observeEvent(state$step, {
+    if (!identical(as.integer(state$step %||% 0L), 3L)) return()
+    step3_entries(shiny::isolate(step3_entries()) + 1L)
+  }, ignoreInit = FALSE)
+
+  shiny::observeEvent(state$step, {
+    if (!identical(as.integer(state$step %||% 0L), 3L)) return()
+    gen <- shiny::isolate(state$outcome_gen)
+    for (id in pma_restorable_input_ids()) {
+      if (!exists(id, envir = .answer_val, inherits = FALSE)) next
+      v <- get(id, envir = .answer_val, inherits = FALSE)
+      if (!pma_restorable_value(v, shiny::isolate(.answer_gen[[id]]), gen)) next
+      session$sendInputMessage(id, list(value = v))
+    }
+  }, ignoreInit = TRUE)
   # An answer counts only if it was given for the outcome now open. Failing
   # closed is the safe direction: a wrongly-stale answer locks the gate, it
   # never opens it.
@@ -1365,6 +1410,15 @@ step3_server <- function(input, output, session, state) {
     # rebuild the panel on every keystroke and destroy the widget being typed
     # into, which is why they are read under isolate() below.
     state$outcome_gen
+    # And on a rebuild of Step 3, for a different reason: this panel is a
+    # uiOutput nested inside step3_ui(), so when app.R rebuilds the step body
+    # the client re-inserts the last HTML this output sent - which was rendered
+    # before the reviewer touched anything, and so re-asserts the seeds it
+    # carried then. Re-rendering on entry seeds the boxes from the reactiveVals
+    # as they stand now. Entries only - see step3_entries() above for why the
+    # exit must not trigger this - and navigation never coincides with a
+    # keystroke, so this does not destroy a widget being typed into.
+    step3_entries()
     obj <- state$ma
     if (is.null(obj)) {
       return(htmltools::p("Run the analysis in Step 2 first."))
