@@ -1,3 +1,29 @@
+# pmatools 0.5.1 (development version)
+
+## Bug fixes
+
+* Risk of bias: the whole flowchart works in "estimable study" space (length
+  `meta_obj$k`), but the refit on the low risk of bias subset and the
+  study-level `rob_overrides` work in study-label space (length
+  `meta_obj$studlab`). The two differ whenever {meta} drops a study from the
+  pool — a trial with missing results, or a double-zero trial under
+  `method = "Inverse"` — and both collaborators then refused to run: the
+  Core GRADE 4 Fig 2 "use low risk of bias studies only" leaf came back with
+  `rob_refit = FALSE` and a "does not align with the meta object" warning, and
+  `rob_overrides` aborted with a study-label count that could never match. The
+  two spaces are now mapped onto each other explicitly, so the refit happens
+  and the overrides apply. `attr(<rob domain row>, "high_idx")` is
+  consequently study-label aligned, which is also what `update.meta(subset = )`
+  needs; when the alignment genuinely cannot be established (no study labels,
+  or no rule that reproduces `k` rows) nothing is guessed and the previous
+  skip-with-a-warning behaviour stands.
+* `assess_rob()` now accepts a per-study `rob` vector of length `k` **or** of
+  length `length(meta_obj$studlab)`; the second form lets a reviewer keep one
+  row per study in the data even when {meta} could not pool them all, and it is
+  what a `rob` column name in `meta_obj$data` yields. The length-mismatch error
+  names both accepted lengths. A study {meta} could not pool never counts as
+  high risk of bias unless the reviewer rated (or overrode) it as such.
+
 # pmatools 0.5.0
 
 0.5.0 rebuilds all five certainty domains on the BMJ 2025 Core GRADE flowcharts

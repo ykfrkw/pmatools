@@ -297,3 +297,72 @@ test_that("diff_note reports zone labels and relative inflation", {
   expect_false(grepl("\\|TE_all\\|", rob_row$notes))
   expect_false(grepl("CI overlap", rob_row$notes))
 })
+
+# --- k-space <-> studlab-space alignment --------------------------------------
+# .rob_studlab_index() is the single mapping between the studies {meta} pools
+# ($k) and the original data rows ($studlab). It never guesses: when no rule
+# reproduces exactly n rows it returns NULL and its callers keep their
+# pre-existing abort/skip behaviour.
+
+make_mock_gap <- function(te = c(0.60, NA, 0.02, 0.02),
+                          studlab = c("Large-A", "Gap-B", "Small-C", "Small-D")) {
+  m <- list(
+    k           = sum(!is.na(te)),
+    TE          = te,
+    seTE        = ifelse(is.na(te), NA_real_, c(0.10, NA, 0.45, 0.45)),
+    w.random    = ifelse(is.na(te), NA_real_, c(80, NA, 10, 10)),
+    random      = TRUE,
+    TE.random   = 0.50,
+    seTE.random = 0.10,
+    sm          = "RR",
+    studlab     = studlab
+  )
+  class(m) <- "meta"
+  m
+}
+
+test_that(".rob_studlab_index maps k onto the estimable studlab positions", {
+  m <- make_mock_gap()
+  expect_equal(pmatools:::.rob_studlab_index(m, 3L), c(1L, 3L, 4L))
+  # k == length(studlab): the identity.
+  expect_equal(pmatools:::.rob_studlab_index(m, 4L), 1:4)
+  # No rule reproduces n rows, or there is nothing to map onto.
+  expect_null(pmatools:::.rob_studlab_index(m, 2L))
+  m_nostud <- m; m_nostud$studlab <- NULL
+  expect_null(pmatools:::.rob_studlab_index(m_nostud, 3L))
+  # $TE that is not itself in studlab space cannot anchor the alignment.
+  m_short <- m; m_short$TE <- c(0.60, 0.02, 0.02)
+  expect_null(pmatools:::.rob_studlab_index(m_short, 3L))
+})
+
+test_that("an unresolvable alignment skips the refit instead of mis-subsetting", {
+  # $TE is in k-space here, so no rule maps the 3 pooled studies onto the 4
+  # study labels; high_idx stays in k-space and .refit_low_rob() must refuse.
+  m <- make_mock_gap()
+  m$TE       <- c(0.60, 0.02, 0.02)
+  m$seTE     <- c(0.10, 0.45, 0.45)
+  m$w.random <- c(80, 10, 10)
+  m$k        <- 3L
+  d <- assess_rob(c("serious", "no", "no"), m, small_values = "undesirable",
+                  threshold_internal = log(1.20))
+  expect_equal(length(attr(d, "high_idx")), 3L)
+  expect_warning(
+    res <- pmatools:::.refit_low_rob(m, attr(d, "high_idx")),
+    regexp = "does not align with the meta object"
+  )
+  expect_false(res$refit)
+  expect_identical(res$meta, m)
+})
+
+test_that("a studlab-length rob aborts when the alignment is unresolvable", {
+  m <- make_mock_gap()
+  m$TE       <- c(0.60, 0.02, 0.02)
+  m$seTE     <- c(0.10, 0.45, 0.45)
+  m$w.random <- c(80, 10, 10)
+  m$k        <- 3L
+  expect_error(
+    assess_rob(c("serious", "no", "no", "no"), m,
+               threshold_internal = log(1.20)),
+    regexp = "estimable rows could not be identified"
+  )
+})
