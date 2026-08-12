@@ -25,6 +25,21 @@
 #' @param output_dir Directory where the ZIP is created.
 #' @param bundle_name Bundle base name (no extension).
 #' @param include Which artifacts to include. See Details.
+#' @param style (v0.5.1) Summary-of-findings layout, `"bmj"` (default) or
+#'   `"gradepro"`. Passed to \code{\link{sof_table}} for `sof_table.docx` and
+#'   to \code{\link{grade_report}} for the certainty appendix, and rendered
+#'   into the bundled `analysis.R` so re-running the script reproduces the
+#'   layout that was exported. Same default as
+#'   \code{\link{export_bundle.pmatools_set}}; note that `sof_table()` itself
+#'   still defaults to `"gradepro"`.
+#' @param follow_up (v0.5.1) Optional free-text time frame shown under the
+#'   outcome name in the `"bmj"` layout, e.g.
+#'   \code{"Follow-up: longest, range 7.7-60 months"}. Defaults to
+#'   `grade$follow_up` when the rated object carries one (objects rated by
+#'   \code{\link{grade_meta_multi}} do). Ignored by the `"gradepro"` layout.
+#' @param unit (v0.5.1) Optional unit for the Difference column of the
+#'   `"bmj"` layout with continuous outcomes, e.g. \code{"days"}. Defaults to
+#'   `grade$unit` on the same terms as `follow_up`.
 #' @param per Denominator for SoF rate columns. Default 1000.
 #' @param prediction Show 95 percent prediction interval in SoF Effect column.
 #' @param convert_smd_to_or Logical. Passed to \code{\link{sof_table}} for
@@ -146,8 +161,11 @@ export_bundle.meta <- function(x,
                                            "funnel_trimfill",
                                            "pubias_missing_forest",
                                            "grade_table"),
+                          style        = c("bmj", "gradepro"),
                           per          = 1000,
                           prediction   = FALSE,
+                          follow_up    = NULL,
+                          unit         = NULL,
                           convert_smd_to_or = FALSE,
                           baseline_risk     = NULL,
                           threshold_label   = NULL,
@@ -171,6 +189,13 @@ export_bundle.meta <- function(x,
   if (!inherits(grade, "pmatools")) {
     rlang::abort("export_bundle: 'grade' must be a pmatools object.")
   }
+  style <- match.arg(style)
+  # follow_up / unit are presentation-only and grade_meta() does not take them,
+  # but grade_meta_multi() stores them on the object it rates. Fall back to what
+  # the object carries so a set member exported on its own keeps the follow-up
+  # line the multi-outcome table would have shown.
+  follow_up <- .display_arg(follow_up %||% grade$follow_up)
+  unit      <- .display_arg(unit      %||% grade$unit)
   if (!dir.exists(output_dir)) {
     dir.create(output_dir, recursive = TRUE)
   }
@@ -200,7 +225,8 @@ export_bundle.meta <- function(x,
                             per, prediction,
                             convert_smd_to_or, baseline_risk, threshold_label,
                             script_path,
-                            rare = rare)
+                            rare = rare,
+                            style = style, follow_up = follow_up, unit = unit)
     files_in_zip <- c(files_in_zip, script_path)
   }
 
@@ -362,7 +388,10 @@ export_bundle.meta <- function(x,
     files_in_zip <- c(files_in_zip, ep_path)
 
     # 6b. sof_table.docx — Summary of Findings
-    sof_ft <- sof_table(grade, per = per, prediction = prediction,
+    sof_ft <- sof_table(grade, style = style,
+                        per = per, prediction = prediction,
+                        follow_up         = follow_up,
+                        unit              = unit,
                         convert_smd_to_or = convert_smd_to_or,
                         baseline_risk     = baseline_risk,
                         threshold_label   = threshold_label,
@@ -378,6 +407,10 @@ export_bundle.meta <- function(x,
       out <- grade_report(
         outcomes    = stats::setNames(list(grade), grade$outcome_name),
         primary     = grade$outcome_name,
+        # One layout per bundle: the appendix embeds a SoF table of its own, so
+        # leaving it at grade_report()'s default would ship two layouts in the
+        # same ZIP.
+        style       = style,
         format      = "docx",
         output_dir  = work_dir,
         output_file = "grade_appendix"
@@ -553,7 +586,9 @@ export_bundle.meta <- function(x,
                                     per, prediction,
                                     convert_smd_to_or, baseline_risk, threshold_label,
                                     out_path,
-                                    rare = NULL) {
+                                    rare = NULL,
+                                    style = "bmj",
+                                    follow_up = NULL, unit = NULL) {
 
   tpl_path <- file.path(getOption("pmatools.vendored_root", "."),
                           "_pmatools_inst", "templates",
@@ -685,7 +720,9 @@ export_bundle.meta <- function(x,
     pubias_rationale_arg      = .arg_lit(grade_args$pubias_rationale,         fallback = "NULL"),
     outcome_name     = grade$outcome_name,
     per              = per,
+    sof_style        = style,
     sof_prediction   = if (isTRUE(prediction)) "TRUE" else "FALSE",
+    display_args     = .display_args_str(follow_up, unit),
     convert_args     = .convert_args_str(convert_smd_to_or, baseline_risk, threshold_label),
     rare_block       = .rare_script_block(rare)
   )
@@ -904,6 +941,36 @@ ARG_LIT_ORIGINS <- c("null", "column", "scalar", "vector")
   v <- if (is.list(spec)) spec$value else spec
   if (is.null(v) || identical(v, "")) return("")
   paste0(",\n  subgroup = ", shQuote(v))
+}
+
+# Normalise a presentation argument (follow_up / unit) to a single non-empty
+# string or NULL. Anything else - NA, a zero-length value, a vector picked up
+# from an object built by hand - would reach sof_table() as a cell of its own,
+# so it is dropped here instead.
+.display_arg <- function(v) {
+  if (is.null(v) || length(v) != 1L) return(NULL)
+  v <- as.character(v)
+  if (is.na(v) || !nzchar(v)) return(NULL)
+  v
+}
+
+# Render follow_up / unit as trailing sof_table() arguments for the bundled
+# analysis.R. Returns "" when neither is set, so the template line is unchanged.
+.display_args_str <- function(follow_up, unit) {
+  out <- ""
+  fu <- .display_arg(follow_up)
+  un <- .display_arg(unit)
+  # deparse(), not shQuote(): both are free text and an apostrophe ("patient's
+  # last visit") would leave shQuote()'s single-quoted literal unparseable.
+  if (!is.null(fu)) {
+    out <- paste0(out, ", follow_up = ",
+                  paste(deparse(fu, width.cutoff = 500L), collapse = ""))
+  }
+  if (!is.null(un)) {
+    out <- paste0(out, ", unit = ",
+                  paste(deparse(un, width.cutoff = 500L), collapse = ""))
+  }
+  out
 }
 
 .convert_args_str <- function(convert_smd_to_or, baseline_risk, threshold_label) {
