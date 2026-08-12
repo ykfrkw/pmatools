@@ -88,7 +88,11 @@ NULL, the function attempts to reconstruct from \code{ma$data}.}
 specifications with \code{value}/\code{origin}/\code{col} slots, used to render
 \code{analysis.R} faithfully. \code{origin} must be one of \code{"null"}, \code{"column"},
 \code{"scalar"}, or \code{"vector"}; any other value aborts rather than rendering
-the argument as \code{NULL}. See SPEC.md.}
+the argument as \code{NULL}. Names are matched \strong{exactly} against
+\code{grade_meta()}'s arguments (no partial matching, so an
+\code{inconsistency_ci_diff} spec can never answer for \code{inconsistency}); a
+name that is not a \code{grade_meta()} argument aborts rather than being
+silently dropped from the generated script. See SPEC.md.}
 
 \item{ma_args}{Optional named list of \code{run_ma()} argument specifications.}
 

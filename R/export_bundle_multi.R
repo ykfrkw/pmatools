@@ -452,7 +452,9 @@ export_bundle.pmatools_set <- function(x,
   tpl <- paste(readLines(tpl_path), collapse = "\n")
 
   ma_args <- set$ma_args %||% list()
-  dots    <- ma_args$dots %||% list()
+  # Exact lookups throughout: `$` partial-matches, so a caller-supplied name
+  # could otherwise answer for a different (shorter) argument.
+  dots    <- ma_args[["dots", exact = TRUE]] %||% list()
 
   # Common run_ma() arguments beyond outcomes/sm/outcome_type, one per line so
   # the generated call reads like a hand-written one.
@@ -475,9 +477,10 @@ export_bundle.pmatools_set <- function(x,
   values <- list(
     timestamp        = format(Sys.time()),
     pmatools_version = .pmatools_version(),
-    outcomes_arg     = .multi_arg_lit(ma_args$outcomes %||% names(set$outcomes)),
-    sm_arg           = .multi_arg_lit(ma_args$sm),
-    outcome_type_arg = .multi_arg_lit(ma_args$outcome_type),
+    outcomes_arg     = .multi_arg_lit(ma_args[["outcomes", exact = TRUE]] %||%
+                                        names(set$outcomes)),
+    sm_arg           = .multi_arg_lit(ma_args[["sm", exact = TRUE]]),
+    outcome_type_arg = .multi_arg_lit(ma_args[["outcome_type", exact = TRUE]]),
     ma_extra_args    = ma_extra,
     common_arg       = .multi_arg_lit(common_args, indent = 4L),
     per_outcome_arg  = .multi_arg_lit(po_args, indent = 4L),

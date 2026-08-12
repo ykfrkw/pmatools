@@ -50,7 +50,11 @@
 #'   specifications with `value`/`origin`/`col` slots, used to render
 #'   `analysis.R` faithfully. `origin` must be one of `"null"`, `"column"`,
 #'   `"scalar"`, or `"vector"`; any other value aborts rather than rendering
-#'   the argument as `NULL`. See SPEC.md.
+#'   the argument as `NULL`. Names are matched **exactly** against
+#'   `grade_meta()`'s arguments (no partial matching, so an
+#'   `inconsistency_ci_diff` spec can never answer for `inconsistency`); a
+#'   name that is not a `grade_meta()` argument aborts rather than being
+#'   silently dropped from the generated script. See SPEC.md.
 #' @param ma_args Optional named list of `run_ma()` argument specifications.
 #' @param forest_display Optional named list of arguments forwarded to
 #'   \code{\link{plot_forest}} when rendering the bundled forest plot.
@@ -567,6 +571,11 @@ export_bundle.meta <- function(x,
   ma_args    <- ma_args    %||% list()
   grade_args <- grade_args %||% list()
 
+  # Every grade_args lookup below is exact (`[[`, not `$`), so a name that is
+  # not a grade_meta() argument can never answer for one that is. Reject those
+  # names outright rather than dropping them.
+  .check_grade_arg_names(grade_args)
+
   outcome_type_ma <- if (!is.null(ma$event.e)) "binary" else "continuous"
   sm <- ma$sm %||% (if (outcome_type_ma == "binary") "OR" else "SMD")
 
@@ -575,7 +584,10 @@ export_bundle.meta <- function(x,
     pmatools_version = .pmatools_version(),
     outcome_type     = outcome_type_ma,
     sm               = sm,
-    method_arg       = .arg_lit(ma_args$method,     fallback = if (outcome_type_ma == "binary")
+    # Exact lookup: "method" is a prefix of "method.tau", so a `$` read here
+    # would hand the tau estimator's spec to run_ma()'s `method`.
+    method_arg       = .arg_lit(ma_args[["method", exact = TRUE]],
+                                                    fallback = if (outcome_type_ma == "binary")
                                                                 shQuote(ma$method %||% "Inverse")
                                                               else "NULL"),
     method_tau       = ma$method.tau %||% "REML",
@@ -584,25 +596,26 @@ export_bundle.meta <- function(x,
     hakn             = if (isTRUE(ma$hakn))       "TRUE" else "FALSE",
     prediction       = if (isTRUE(ma$prediction)) "TRUE" else "FALSE",
     incr             = ma$incr %||% 0.5,
-    arm_labels_arg   = .arm_labels_arg(ma_args$experimental_label,
-                                       ma_args$control_label),
-    subgroup_arg     = .subgroup_arg(ma_args$subgroup),
+    arm_labels_arg   = .arm_labels_arg(ma_args[["experimental_label", exact = TRUE]],
+                                       ma_args[["control_label", exact = TRUE]]),
+    subgroup_arg     = .subgroup_arg(ma_args[["subgroup", exact = TRUE]]),
     study_design     = grade$study_design,
-    rob_arg          = .arg_lit(grade_args$rob,                    fallback = "NULL"),
-    rob_rationale_arg = .arg_lit(grade_args$rob_rationale,         fallback = "NULL"),
-    rob_some_concerns = grade_args$rob_some_concerns$value          %||% "low",
-    rob_overrides_arg = .named_chr_lit(grade_args$rob_overrides),
-    rob_override_rationale_arg = .named_chr_lit(grade_args$rob_override_rationale),
-    rob_dom_threshold= grade_args$rob_dominant_threshold$value     %||% 0.55,
+    rob_arg          = .arg_lit(grade_args[["rob", exact = TRUE]],           fallback = "NULL"),
+    rob_rationale_arg = .arg_lit(grade_args[["rob_rationale", exact = TRUE]], fallback = "NULL"),
+    rob_some_concerns = grade_args[["rob_some_concerns", exact = TRUE]][["value"]] %||% "low",
+    rob_overrides_arg = .named_chr_lit(grade_args[["rob_overrides", exact = TRUE]]),
+    rob_override_rationale_arg =
+      .named_chr_lit(grade_args[["rob_override_rationale", exact = TRUE]]),
+    rob_dom_threshold= grade_args[["rob_dominant_threshold", exact = TRUE]][["value"]] %||% 0.55,
     # rob_refit: fall back to what the stored object actually did, so the
     # bundled script reproduces the analysis set that produced these numbers.
     rob_refit_arg    = .arg_lit(
-      grade_args$rob_refit,
+      grade_args[["rob_refit", exact = TRUE]],
       fallback = if (identical(grade$rob_analysis_set, "low_only") &&
                      !isTRUE(grade$rob_refit)) "FALSE" else "TRUE"
     ),
-    rob_inf_threshold= grade_args$rob_inflation_threshold$value    %||% 0.10,
-    small_values_arg = .arg_lit(grade_args$small_values,           fallback = "NULL"),
+    rob_inf_threshold= grade_args[["rob_inflation_threshold", exact = TRUE]][["value"]] %||% 0.10,
+    small_values_arg = .arg_lit(grade_args[["small_values", exact = TRUE]],  fallback = "NULL"),
     # Indirectness: with a Core GRADE 5 subdomain table the scalar argument and
     # its rationale are derived from the recorded judgment, so the bundled
     # script reproduces (or omits) the override exactly.
@@ -612,42 +625,59 @@ export_bundle.meta <- function(x,
       # Fall back to NULL, grade_meta()'s documented default, rather than to a
       # literal "no": a hardcoded scalar would read as a manual override if the
       # regenerated script were later given an indirectness_subdomains table.
-      .arg_lit(grade_args$indirectness, fallback = "NULL")
+      .arg_lit(grade_args[["indirectness", exact = TRUE]], fallback = "NULL")
     },
     indirectness_dom_threshold =
-      grade_args$indirectness_dominant_threshold$value %||% 0.55,
+      grade_args[["indirectness_dominant_threshold", exact = TRUE]][["value"]] %||% 0.55,
     indirectness_rationale_arg = if (!is.null(grade$indirectness_subdomains)) {
       .indirectness_rationale_lit(grade)
     } else {
-      .arg_lit(grade_args$indirectness_rationale, fallback = "NULL")
+      .arg_lit(grade_args[["indirectness_rationale", exact = TRUE]], fallback = "NULL")
     },
     indirectness_subdomains_arg = .indirectness_subdomains_lit(
-      grade_args$indirectness_subdomains %||% grade$indirectness_subdomains
+      grade_args[["indirectness_subdomains", exact = TRUE]] %||%
+        grade$indirectness_subdomains
     ),
-    inconsistency_arg= .arg_lit(grade_args$inconsistency,          fallback = "NULL"),
+    inconsistency_arg= .arg_lit(grade_args[["inconsistency", exact = TRUE]], fallback = "NULL"),
     inconsistency_rationale_arg =
-      .arg_lit(grade_args$inconsistency_rationale,          fallback = "NULL"),
+      .arg_lit(grade_args[["inconsistency_rationale", exact = TRUE]],          fallback = "NULL"),
     inconsistency_ci_diff_arg =
-      .arg_lit(grade_args$inconsistency_ci_diff,            fallback = "NULL"),
+      .arg_lit(grade_args[["inconsistency_ci_diff", exact = TRUE]],            fallback = "NULL"),
     inconsistency_side_arg =
-      .arg_lit(grade_args$inconsistency_threshold_side,     fallback = "NULL"),
+      .arg_lit(grade_args[["inconsistency_threshold_side", exact = TRUE]],     fallback = "NULL"),
     inconsistency_subgroup_arg =
-      .arg_lit(grade_args$inconsistency_subgroup_explained, fallback = "NULL"),
-    imprecision_arg  = .arg_lit(grade_args$imprecision,            fallback = "NULL"),
+      .arg_lit(grade_args[["inconsistency_subgroup_explained", exact = TRUE]], fallback = "NULL"),
+    imprecision_arg  = .arg_lit(grade_args[["imprecision", exact = TRUE]],     fallback = "NULL"),
     imprecision_rationale_arg =
-      .arg_lit(grade_args$imprecision_rationale,            fallback = "NULL"),
-    threshold_arg    = .arg_lit(grade_args$threshold,              fallback = if (!is.null(grade$threshold)) format(grade$threshold) else "NULL"),
-    threshold_scale  = grade_args$threshold_scale$value             %||% (grade$threshold_scale %||% "auto"),
-    threshold_type   = grade_args$threshold_type$value              %||% (grade$threshold_type %||% "mid"),
+      .arg_lit(grade_args[["imprecision_rationale", exact = TRUE]],            fallback = "NULL"),
+    threshold_arg    = .arg_lit(grade_args[["threshold", exact = TRUE]],       fallback = if (!is.null(grade$threshold)) format(grade$threshold) else "NULL"),
+    threshold_scale  = grade_args[["threshold_scale", exact = TRUE]][["value"]] %||% (grade$threshold_scale %||% "auto"),
+    # threshold_baseline: pin the baseline the rating was actually made with.
+    # An ARD threshold is anchored to a control-arm risk, and when the reviewer
+    # did not set one grade_meta() derives it with .compute_control_risk(); a
+    # re-run can land on a different number (a restricted analysis set, an
+    # updated dataset), which would silently re-scale the threshold and change
+    # the rating. Emitting the stored resolved baseline makes the script
+    # reproduce the rating that is in the bundle.
+    threshold_baseline_arg = .arg_lit(
+      grade_args[["threshold_baseline", exact = TRUE]],
+      fallback = if (!is.null(grade$threshold_baseline) &&
+                     is.numeric(grade$threshold_baseline)) {
+        paste(deparse(grade$threshold_baseline), collapse = "")
+      } else {
+        "NULL"
+      }
+    ),
+    threshold_type   = grade_args[["threshold_type", exact = TRUE]][["value"]] %||% (grade$threshold_type %||% "mid"),
     # require_threshold: the bundled script must reproduce the original call
     # even when it deliberately ran without a MID.
     require_threshold_arg = .arg_lit(
-      grade_args$require_threshold,
+      grade_args[["require_threshold", exact = TRUE]],
       fallback = if (identical(grade$threshold_type, "mid") &&
                      is.null(grade$threshold)) "FALSE" else "TRUE"
     ),
     rating_target_arg = .arg_lit(
-      grade_args$rating_target,
+      grade_args[["rating_target", exact = TRUE]],
       fallback = if (isFALSE(grade$rating_target_auto) &&
                      !is.null(grade$rating_target)) {
         shQuote(grade$rating_target)
@@ -656,20 +686,20 @@ export_bundle.meta <- function(x,
       }
     ),
     rating_target_rationale_arg =
-      .arg_lit(grade_args$rating_target_rationale,
+      .arg_lit(grade_args[["rating_target_rationale", exact = TRUE]],
                fallback = .rating_target_rationale_lit(grade)),
     ois_outcome_type = grade$outcome_type,
-    ois_events_arg   = .arg_lit(grade_args$ois_events,             fallback = "NULL"),
-    ois_n_arg        = .arg_lit(grade_args$ois_n,                  fallback = "NULL"),
-    ois_alpha_arg    = .arg_lit(grade_args$ois_alpha,              fallback = "0.05"),
-    ois_beta_arg     = .arg_lit(grade_args$ois_beta,               fallback = "0.2"),
-    ois_p0_arg       = .arg_lit(grade_args$ois_p0,                 fallback = "NULL"),
-    ois_p1_arg       = .arg_lit(grade_args$ois_p1,                 fallback = "NULL"),
-    ois_rrr_arg      = .arg_lit(grade_args$ois_rrr,                fallback = "0.2"),
-    ois_delta_arg    = .arg_lit(grade_args$ois_delta,              fallback = "NULL"),
-    ois_sd_arg       = .arg_lit(grade_args$ois_sd,                 fallback = "NULL"),
+    ois_events_arg   = .arg_lit(grade_args[["ois_events", exact = TRUE]], fallback = "NULL"),
+    ois_n_arg        = .arg_lit(grade_args[["ois_n", exact = TRUE]],      fallback = "NULL"),
+    ois_alpha_arg    = .arg_lit(grade_args[["ois_alpha", exact = TRUE]],  fallback = "0.05"),
+    ois_beta_arg     = .arg_lit(grade_args[["ois_beta", exact = TRUE]],   fallback = "0.2"),
+    ois_p0_arg       = .arg_lit(grade_args[["ois_p0", exact = TRUE]],     fallback = "NULL"),
+    ois_p1_arg       = .arg_lit(grade_args[["ois_p1", exact = TRUE]],     fallback = "NULL"),
+    ois_rrr_arg      = .arg_lit(grade_args[["ois_rrr", exact = TRUE]],    fallback = "0.2"),
+    ois_delta_arg    = .arg_lit(grade_args[["ois_delta", exact = TRUE]],  fallback = "NULL"),
+    ois_sd_arg       = .arg_lit(grade_args[["ois_sd", exact = TRUE]],     fallback = "NULL"),
     baseline_risk_arg = .arg_lit(
-      grade_args$baseline_risk,
+      grade_args[["baseline_risk", exact = TRUE]],
       fallback = if (!is.null(grade$baseline_risk) &&
                      is.numeric(grade$baseline_risk)) {
         deparse(grade$baseline_risk)
@@ -677,11 +707,16 @@ export_bundle.meta <- function(x,
         "NULL"
       }
     ),
-    pubias_small_industry_arg = .arg_lit(grade_args$pubias_small_industry,   fallback = "NULL"),
-    pubias_funnel_arg         = .arg_lit(grade_args$pubias_funnel_asymmetry, fallback = "NULL"),
-    pubias_unpub_arg          = .arg_lit(grade_args$pubias_unpublished,      fallback = "NULL"),
-    pubias_registry_arg       = .arg_lit(grade_args$pubias_registry_complete, fallback = "NULL"),
-    pubias_rationale_arg      = .arg_lit(grade_args$pubias_rationale,         fallback = "NULL"),
+    pubias_small_industry_arg =
+      .arg_lit(grade_args[["pubias_small_industry", exact = TRUE]],    fallback = "NULL"),
+    pubias_funnel_arg         =
+      .arg_lit(grade_args[["pubias_funnel_asymmetry", exact = TRUE]],  fallback = "NULL"),
+    pubias_unpub_arg          =
+      .arg_lit(grade_args[["pubias_unpublished", exact = TRUE]],       fallback = "NULL"),
+    pubias_registry_arg       =
+      .arg_lit(grade_args[["pubias_registry_complete", exact = TRUE]], fallback = "NULL"),
+    pubias_rationale_arg      =
+      .arg_lit(grade_args[["pubias_rationale", exact = TRUE]],         fallback = "NULL"),
     outcome_name     = grade$outcome_name,
     per              = per,
     sof_prediction   = if (isTRUE(prediction)) "TRUE" else "FALSE",
@@ -834,6 +869,56 @@ export_bundle.meta <- function(x,
          paste(sprintf("%s = %s", shQuote(nms), shQuote(as.character(v))),
                collapse = ", "),
          ")")
+}
+
+# The legal `grade_args` names: grade_meta()'s own formals, minus the meta
+# object. Derived at call time rather than stored as a constant, both so it can
+# never drift from the function and because export_bundle.R is collated before
+# grade_meta.R (a top-level formals() call would fail at build time).
+.grade_arg_names <- function() setdiff(names(formals(grade_meta)), "meta_obj")
+
+# grade_args names are matched exactly (see .render_analysis_script()), so a
+# name that is not a grade_meta() argument matches nothing and the argument
+# never reaches the bundled analysis.R. Reject it here instead: a silently
+# dropped argument is the one failure mode a "reproducible" script must not
+# have.
+.check_grade_arg_names <- function(grade_args) {
+  if (length(grade_args) == 0L) return(invisible(TRUE))
+  if (!is.list(grade_args)) {
+    rlang::abort(paste0(
+      "grade_args must be a named list of grade_meta() argument ",
+      "specifications, not ", class(grade_args)[1], "."
+    ))
+  }
+  nms <- names(grade_args)
+  if (is.null(nms) || any(is.na(nms)) || !all(nzchar(nms))) {
+    rlang::abort(paste0(
+      "Every element of grade_args must be named with the grade_meta() ",
+      "argument it specifies. Unnamed elements cannot be matched to an ",
+      "argument and would be silently dropped from the bundled analysis.R, ",
+      "so the \"reproducible\" script would reproduce a different rating."
+    ))
+  }
+  legal <- .grade_arg_names()
+  bad   <- setdiff(nms, legal)
+  if (length(bad) == 0L) return(invisible(TRUE))
+
+  described <- vapply(bad, function(b) {
+    d    <- utils::adist(b, legal, ignore.case = TRUE)[1, ]
+    near <- legal[d == min(d)]
+    paste0("'", b, "' (closest legal name",
+           if (length(near) > 1L) "s: " else ": ",
+           paste(near, collapse = ", "), ")")
+  }, character(1))
+
+  rlang::abort(paste0(
+    "Unknown grade_args name", if (length(bad) > 1L) "s" else "", ": ",
+    paste(described, collapse = "; "),
+    ". grade_args names are matched exactly against grade_meta()'s arguments. ",
+    "An unrecognised name matches no argument, so it would be silently ",
+    "dropped from the bundled analysis.R and the \"reproducible\" script ",
+    "would reproduce a different rating."
+  ))
 }
 
 # Origins understood by .arg_lit(). Anything else is a caller bug: silently

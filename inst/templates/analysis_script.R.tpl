@@ -52,6 +52,7 @@ g <- grade_meta(
   threshold_type          = "{{threshold_type}}",
   threshold               = {{threshold_arg}},
   threshold_scale         = "{{threshold_scale}}",
+  threshold_baseline      = {{threshold_baseline_arg}},
   require_threshold       = {{require_threshold_arg}},
   rating_target           = {{rating_target_arg}},
   rating_target_rationale = {{rating_target_rationale_arg}},

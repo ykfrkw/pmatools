@@ -359,3 +359,199 @@ test_that("legacy ma = call dispatches on a pmatools object too", {
 test_that("export_bundle errors when no object is passed at all", {
   expect_error(export_bundle(output_dir = tempdir()))
 })
+
+# ---- grade_args names are matched exactly ----------------------------------
+#
+# `$` on a list partial-matches. Before these tests, a bundle carrying only an
+# `inconsistency_ci_diff` spec rendered that spec's value into the script's
+# `inconsistency =` slot as well, so the "reproducible" analysis.R issued a
+# manual Inconsistency override the reviewer never made.
+
+render_script_txt <- function(ma, g, grade_args = list(), ma_args = list()) {
+  out_path <- tempfile(fileext = ".R")
+  .render_analysis_script(ma, g, ma_args = ma_args, grade_args = grade_args,
+                          per = 1000, prediction = FALSE,
+                          convert_smd_to_or = FALSE, baseline_risk = NULL,
+                          threshold_label = NULL, out_path = out_path)
+  paste(readLines(out_path, warn = FALSE), collapse = "\n")
+}
+
+# The single line the generated grade_meta() call devotes to `arg`, e.g.
+#   "  inconsistency           = NULL,"
+arg_line <- function(txt, arg) {
+  lines <- strsplit(txt, "\n", fixed = TRUE)[[1]]
+  hit <- grep(paste0("^\\s*", arg, "\\s*="), lines)
+  if (length(hit) == 0L) return(NA_character_)
+  paste(trimws(lines[hit]), collapse = " ~~ ")
+}
+
+grade_args_fixture <- function() {
+  ma <- make_meta_for_bundle()
+  g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                   rob_rationale = "Consensus RoB2: all low",
+                                   indirectness = "no",
+                                   outcome_name = "Test",
+                                   threshold_type = "null"))
+  list(ma = ma, g = g)
+}
+
+test_that("an inconsistency_ci_diff spec does not leak into inconsistency", {
+  f <- grade_args_fixture()
+  txt <- render_script_txt(
+    f$ma, f$g,
+    grade_args = list(inconsistency_ci_diff = list(origin = "scalar",
+                                                   value = 0.4))
+  )
+
+  expect_match(txt, "inconsistency_ci_diff            = 0.4", fixed = TRUE)
+  # ... and the scalar Inconsistency override stays at grade_meta()'s default.
+  expect_equal(arg_line(txt, "inconsistency"), "inconsistency           = NULL,")
+})
+
+test_that("supplying a long grade_args name never answers for its prefix", {
+  f <- grade_args_fixture()
+  legal <- .grade_arg_names()
+
+  # Every (short, long) pair in the registry where `$` would partial-match.
+  pairs <- do.call(rbind, lapply(legal, function(short) {
+    longs <- setdiff(legal[startsWith(legal, short)], short)
+    if (length(longs) == 0L) return(NULL)
+    data.frame(short = short, long = longs, stringsAsFactors = FALSE)
+  }))
+  expect_true(nrow(pairs) > 10L)   # registry sanity: the hazard is widespread
+
+  # The baseline render is the documented fallback for every argument: NULL for
+  # most, but object-derived for `indirectness` and `threshold`. Comparing
+  # against it therefore asserts the right thing for those two as well.
+  base_txt <- render_script_txt(f$ma, f$g)
+
+  for (i in seq_len(nrow(pairs))) {
+    short <- pairs$short[i]
+    long  <- pairs$long[i]
+    base_line <- arg_line(base_txt, short)
+    # A registry name the template does not render (nothing to leak into).
+    if (is.na(base_line)) next
+
+    spec <- list(list(origin = "scalar", value = 0.4321))
+    names(spec) <- long
+    txt <- render_script_txt(f$ma, f$g, grade_args = spec)
+
+    expect_equal(arg_line(txt, short), base_line,
+                 info = paste0("grade_args$", long, " leaked into ", short))
+  }
+})
+
+test_that("an unknown grade_args name aborts instead of being dropped", {
+  f <- grade_args_fixture()
+  expect_error(
+    render_script_txt(f$ma, f$g,
+                      grade_args = list(inconsistancy = list(origin = "scalar",
+                                                             value = "yes"))),
+    regexp = "inconsistancy"
+  )
+  expect_error(
+    render_script_txt(f$ma, f$g,
+                      grade_args = list(inconsistancy = list(origin = "scalar",
+                                                             value = "yes"))),
+    regexp = "Unknown grade_args name"
+  )
+  # The abort points at the argument that was meant.
+  expect_error(
+    render_script_txt(f$ma, f$g,
+                      grade_args = list(inconsistancy = list(origin = "scalar",
+                                                             value = "yes"))),
+    regexp = "inconsistency"
+  )
+  # Unnamed specs cannot be matched either.
+  expect_error(
+    render_script_txt(f$ma, f$g,
+                      grade_args = list(list(origin = "scalar", value = "yes"))),
+    regexp = "must be named"
+  )
+  out_dir <- tempfile(); dir.create(out_dir)
+  expect_error(
+    export_bundle(f$ma, f$g, output_dir = out_dir,
+                  bundle_name = "bad_name", include = c("script"),
+                  grade_args = list(inconsistancy = list(origin = "scalar",
+                                                         value = "yes"))),
+    regexp = "Unknown grade_args name"
+  )
+})
+
+# ---- threshold_baseline round-trip -----------------------------------------
+
+test_that("the script pins the reviewer's threshold_baseline, not a re-derived one", {
+  # Pooled control-arm risk here is 60/180 = 0.333; the reviewer anchors the
+  # absolute threshold to 0.12 instead, so re-deriving it on re-run would
+  # rescale the threshold and can change the rating.
+  ma <- make_meta_for_bundle()
+  g <- suppressWarnings(grade_meta(
+    ma, study_design = "RCT", rob = "no",
+    rob_rationale = "Consensus RoB2: all low",
+    indirectness = "no", outcome_name = "Test",
+    threshold_type = "mid", threshold = 0.05,
+    threshold_scale = "ard", threshold_baseline = 0.12
+  ))
+  expect_equal(g$threshold_baseline, 0.12)
+
+  txt <- render_script_txt(ma, g)
+
+  # The rendered text actually carries the reviewer's value ...
+  expect_match(txt, "threshold_baseline      = 0.12", fixed = TRUE)
+
+  # ... and re-issuing the generated grade_meta() call reproduces the rating.
+  script_path <- tempfile(fileext = ".R")
+  writeLines(txt, script_path)
+  exprs <- parse(file = script_path)
+  is_grade_call <- vapply(exprs, function(e) {
+    is.call(e) && identical(e[[1]], as.name("<-")) &&
+      is.call(e[[3]]) && identical(e[[3]][[1]], as.name("grade_meta"))
+  }, logical(1))
+  expect_equal(sum(is_grade_call), 1L)
+
+  env <- new.env(parent = environment())
+  env$ma <- ma
+  suppressWarnings(eval(exprs[is_grade_call][[1]], envir = env))
+  g2 <- env$g
+
+  expect_equal(g2$threshold_baseline, g$threshold_baseline)
+  expect_equal(g2$threshold_internal, g$threshold_internal)
+  expect_equal(g2$certainty, g$certainty)
+  expect_equal(g2$domain_assessments$judgment, g$domain_assessments$judgment)
+})
+
+test_that("threshold_baseline stays NULL when the rating never resolved one", {
+  f <- grade_args_fixture()   # threshold_type = "null", no ARD threshold
+  expect_null(f$g$threshold_baseline)
+  expect_equal(arg_line(render_script_txt(f$ma, f$g), "threshold_baseline"),
+               "threshold_baseline      = NULL,")
+})
+
+test_that("the multi-outcome script carries threshold_baseline through", {
+  raw <- rbind(
+    data.frame(studlab = c("A", "B", "C"), outcome = "Mortality",
+               treat = "experimental", n = c(50, 60, 70), event = c(10, 15, 20),
+               mean = NA_real_, sd = NA_real_, stringsAsFactors = FALSE),
+    data.frame(studlab = c("A", "B", "C"), outcome = "Mortality",
+               treat = "control", n = c(50, 60, 70), event = c(15, 20, 25),
+               mean = NA_real_, sd = NA_real_, stringsAsFactors = FALSE)
+  )
+  d  <- suppressMessages(ingest_data(raw, format = "long"))
+  ml <- suppressWarnings(run_ma_multi(d, sm = list("Mortality" = "OR")))
+  set <- suppressWarnings(grade_meta_multi(
+    ml,
+    common = list(study_design = "RCT", rob = "no",
+                  rob_rationale = "Consensus RoB2: all low",
+                  indirectness = "no",
+                  threshold_type = "mid", threshold = 0.05,
+                  threshold_scale = "ard", threshold_baseline = 0.12)
+  ))
+
+  out_path <- tempfile(fileext = ".R")
+  .render_analysis_script_multi(set, per = 1000, prediction = FALSE,
+                                style = "bmj", out_path = out_path)
+  txt <- paste(readLines(out_path, warn = FALSE), collapse = "\n")
+
+  expect_match(txt, "threshold_baseline", fixed = TRUE)
+  expect_match(txt, "threshold_baseline = 0.12", fixed = TRUE)
+})

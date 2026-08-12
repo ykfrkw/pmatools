@@ -2,6 +2,30 @@
 
 ## Bug fixes
 
+* `export_bundle()` read its `grade_args` and `ma_args` specifications with
+  `$`, which partial-matches: a bundle carrying only an
+  `inconsistency_ci_diff` spec had that spec answer for `inconsistency` as
+  well, so the generated `analysis.R` issued a manual Inconsistency override
+  the reviewer never made — and re-running the "reproducible" script could
+  return a different certainty than the bundle it came in. Every one of the
+  ~40 affected lookups (`rob`/`rob_rationale`, `imprecision`/
+  `imprecision_rationale`, `threshold`/`threshold_scale`,
+  `rating_target`/`rating_target_rationale`, `run_ma()`'s `method`/
+  `method.tau`, and the rest) now uses exact `[[` indexing. `grade_args`
+  names are additionally checked against `grade_meta()`'s formals at render
+  time: an unknown name — a typo such as `inconsistancy`, or an argument
+  belonging to another function — now aborts with the closest legal name
+  rather than being silently dropped from the script.
+* The single-outcome `analysis.R` template had no `threshold_baseline` slot,
+  so a rating made with an absolute (ARD) threshold anchored to a
+  reviewer-supplied baseline generated a script that re-derived the baseline
+  from the pooled control-arm risk instead. On a meta-analysis whose pooled
+  control risk is 0.33 and whose reviewer-set baseline was 0.12, the
+  regenerated rating used a threshold on the internal scale of 0.22 where the
+  bundle's was 0.41. The generated call now passes the resolved
+  `threshold_baseline` the rating was actually made with. The multi-outcome
+  template was never affected: it literalises `common`/`per_outcome`
+  wholesale.
 * Baseline (control-arm) risk: `event.c` and `n.c` were filtered with different
   predicates, so a study reporting a denominator but no event count — one that
   contributed a continuous outcome only, say — was dropped from the numerator
