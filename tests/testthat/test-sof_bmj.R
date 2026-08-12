@@ -585,7 +585,12 @@ test_that("the certainty cell shows certainty and reason on separate lines", {
   ft <- sof_table(g, style = "bmj")
   cell <- .body_col(ft, 7)
   expect_match(cell, paste0("^", g$certainty))
-  reason <- .certainty_rate_down_reason(g)
+  # v0.5.1: a rated-down domain that recorded structured facts also carries
+  # the numbered marker of its footnote inside the reason sentence, so the
+  # expected cell has to be built with the same marker register the table used.
+  doms    <- .rated_down_fact_domains(g)
+  markers <- stats::setNames(seq_along(doms), doms)
+  reason  <- .certainty_rate_down_reason(g, markers = markers)
   if (!is.null(reason)) {
     expect_identical(cell, paste0(g$certainty, "\n", reason))
   } else {

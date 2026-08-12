@@ -126,7 +126,13 @@
 
 # "Due to serious risk of bias and imprecision" — the second line of the BMJ
 # certainty cell. Returns NULL when nothing pulled the rating down.
-.certainty_rate_down_reason <- function(x) {
+#
+# `markers` is a named integer vector keyed by domain name; when supplied, the
+# footnote marker for a domain is appended to that domain's name inside the
+# sentence ("Due to serious risk of bias [1] and inconsistency [2]"), which is
+# where a reader looks for it. A NULL or empty `markers` leaves the sentence
+# byte-identical to what it has always been.
+.certainty_rate_down_reason <- function(x, markers = NULL) {
   sd  <- x$study_design %||% ""
   obs <- (length(sd) == 1L && !is.na(sd) &&
             tolower(sd) %in% c("obs", "observational")) ||
@@ -142,6 +148,10 @@
       adj  <- vapply(dn$judgment, .fmt_severity, character(1),
                      USE.NAMES = FALSE)
       doms <- tolower(dn$domain)
+      if (!is.null(markers) && length(markers) > 0L) {
+        mk   <- markers[dn$domain]
+        doms <- ifelse(is.na(mk), doms, sprintf("%s [%d]", doms, mk))
+      }
       dom_parts <- if (length(unique(adj)) == 1L) {
         # Shared adjective is stated once ("serious risk of bias and
         # imprecision"), as in the BMJ tables.
@@ -249,7 +259,8 @@
 .bmj_row_values <- function(nm, g, per = 1000, prediction = FALSE,
                             follow_up = NULL, unit = NULL,
                             cer_str = NULL, ier_str = NULL,
-                            label_intervention = "intervention") {
+                            label_intervention = "intervention",
+                            markers = NULL) {
   meta_obj <- g$meta
 
   outcome_cell <- if (!is.null(follow_up) && length(follow_up) == 1L &&
@@ -259,7 +270,7 @@
     nm
   }
 
-  reason    <- .certainty_rate_down_reason(g)
+  reason    <- .certainty_rate_down_reason(g, markers = markers)
   cert_cell <- if (is.null(reason)) g$certainty else {
     paste0(g$certainty, "\n", reason)
   }
@@ -377,11 +388,26 @@
                            label_control      = "control") {
   meta_obj <- x$meta
 
+  # Numbered footnotes for the domains that pulled the rating down; the
+  # markers ride on the domain names inside the "Due to ..." sentence. The
+  # register starts at [1] -- the analysis-set and publication-bias sentences
+  # below stay unnumbered, as they always have been.
+  fact_domains <- .rated_down_fact_domains(x)
+  fact_notes   <- character(0)
+  fact_markers <- integer(0)
+  for (dm in fact_domains) {
+    note <- .domain_fact_note(x, dm)
+    if (is.null(note)) next
+    fact_notes <- c(fact_notes, note)
+    fact_markers[[dm]] <- length(fact_notes)
+  }
+
   vals <- .bmj_row_values(
     x$outcome_name, x, per = per, prediction = prediction,
     follow_up = follow_up, unit = unit,
     cer_str = cer_str, ier_str = ier_str,
-    label_intervention = label_intervention
+    label_intervention = label_intervention,
+    markers = fact_markers
   )
   # Chinn dichotomisation replaces the arm rates with derived ones; the risk
   # difference implied by them is not the pooled continuous difference, so the
@@ -417,6 +443,11 @@
   # than event rates (see .cont_arm_note()).
   if (!is.null(vals$arm_note)) {
     ft <- flextable::add_footer_lines(ft, values = vals$arm_note)
+  }
+
+  for (i in seq_along(fact_notes)) {
+    ft <- flextable::add_footer_lines(
+      ft, values = sprintf("[%d] %s", i, fact_notes[i]))
   }
 
   # Risk-of-bias analysis set (Core GRADE 4 Fig 2). A refit silently changes
@@ -480,13 +511,16 @@
 .grade_table_bmj <- function(outcomes, nms, prim_nms, sec_nms, primary,
                              pal, per, prediction, follow_up, unit,
                              label_intervention, label_control,
-                             disp, rob_notes) {
+                             disp, rob_notes,
+                             fact_notes = character(0),
+                             fact_markers = list()) {
   row_vals <- lapply(nms, function(nm) {
     .bmj_row_values(disp(nm), outcomes[[nm]], per = per,
                     prediction = prediction,
                     follow_up = .per_outcome_arg(follow_up, nm),
                     unit      = .per_outcome_arg(unit, nm),
-                    label_intervention = label_intervention)
+                    label_intervention = label_intervention,
+                    markers   = fact_markers[[nm]])
   })
   names(row_vals) <- nms
 
@@ -575,6 +609,12 @@
   for (i in seq_along(rob_notes)) {
     ft <- flextable::add_footer_lines(
       ft, values = sprintf("[%d] %s", i, rob_notes[i]))
+  }
+
+  # Domain-fact footnotes continue the same [n] register, already numbered by
+  # the caller so both table styles share one counter.
+  for (line in fact_notes) {
+    ft <- flextable::add_footer_lines(ft, values = line)
   }
 
   for (nm in nms) {

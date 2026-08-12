@@ -2,6 +2,37 @@
 
 ## New features
 
+* The Risk of bias, Inconsistency and Imprecision assessors now record the
+  numbers behind their judgment in a structured form, reachable with the new
+  exported `domain_facts(x, domain = NULL)` and stored on the rated object as
+  `$domain_facts`: a tibble per domain with a stable machine `key`, a human
+  `label`, a pre-formatted `value` and the raw `numeric` when the fact is
+  scalar-numeric. Risk of bias records the high-risk study count and weight
+  share, the pooled estimate with and without those studies, and which Core
+  GRADE 4 Fig 2 branch was taken; Inconsistency records I-squared, tau-squared,
+  the Cochran Q p value and the zone tally against the chosen threshold;
+  Imprecision records the confidence interval, whether it crosses the null and
+  where it sits relative to the threshold, the optimal information size, and
+  the Core GRADE 2 Fig 4 path with a flag for whether the OIS approach was
+  applied. This replaces regex-parsing `domain_assessments$notes` — a host
+  application that wanted the Fig 4 path had to strip it back out of a sentence
+  — with values it can read and compute with. `notes` is unchanged, down to the
+  byte: the facts are a machine-readable companion to the prose, not a
+  replacement for it, and the prose remains the authoritative record of why a
+  domain was rated the way it was. Indirectness and Publication bias keep
+  prose-only notes; the container is domain-agnostic, so they can adopt it
+  later without a change to the accessor or the renderers.
+* `sof_table()`, `grade_table()` (both `"gradepro"` and `"bmj"` layouts) and
+  `evidence_profile()` render those facts as numbered footnotes for the domains
+  that pulled the rating down, with the marker on the certainty cell — after
+  the symbol in the GRADEpro layouts, and beside the domain name inside the BMJ
+  "Due to serious risk of bias [1] ..." sentence. A reader can now see *why* a
+  rating fell without opening the notes. In `grade_table()` the domain-fact
+  footnotes continue the same `[n]` register as the per-outcome analysis-set
+  notes and name the outcome they belong to, so one footer never shows two
+  different `[1]`s; the analysis-set and publication-bias sentences keep their
+  existing numbering and wording.
+
 * `export_bundle()` takes a `style` argument on both methods, so a caller can
   export the Summary of Findings layout it renders on screen. Previously
   `export_bundle.meta()` had no such argument and always wrote the GRADEpro
