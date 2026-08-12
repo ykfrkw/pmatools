@@ -48,23 +48,31 @@ indicate the clinical decision Threshold.}
 \item{show_n}{Logical; if TRUE, add per-arm sample size columns
 (\code{n.e}, \code{n.c}) to the left of the forest.}
 
-\item{show_events}{Logical; if TRUE and binary outcome, add per-arm
-event count columns (\code{event.e}, \code{event.c}).}
+\item{show_events}{Logical; if TRUE, add the per-arm raw data columns that
+the object carries: event counts (\code{event.e}, \code{event.c}) for a
+binary outcome, or means and standard deviations (\code{mean.e},
+\code{sd.e}, \code{mean.c}, \code{sd.c}) for a continuous outcome.
+Ignored for objects that carry neither.}
 
 \item{favors_left, favors_right}{Optional character labels positioned on
 the left and right of the x-axis (e.g., "Favors Control" / "Favors
 Treatment"). Passed to \code{meta::forest()} as \code{label.left} /
 \code{label.right}.}
 
-\item{addrow_above}{Number of blank rows above the pooled summary
-(passed as \code{addrow.overall}).}
+\item{addrow_above}{Blank row above the pooled summary. Passed to
+\code{meta::forest()} as \code{addrow.overall}, which that function
+validates as a \emph{logical}, so only zero versus non-zero carries
+meaning here: the magnitude of a larger number is discarded by design,
+and \code{NA} or \code{NULL} is treated as \code{0}.}
 
 \item{addrow_below}{Number of blank rows between the pooled summary and
 the heterogeneity/test statistics printed at the bottom (passed as
 \code{addrows.below.overall}). Default \code{NULL} computes the value
 from the drawn content so the heterogeneity text clears the x-axis
 band, the \code{label.left}/\code{label.right} row, and any
-\code{xlab} row (see \code{.auto_addrow_below()}).}
+\code{xlab} row (see \code{.auto_addrow_below()}). \code{NA}, a
+negative value, or anything not a length-1 finite number falls back to
+that automatic derivation.}
 
 \item{...}{Additional arguments passed to \code{\link[meta]{forest}}.}
 }
