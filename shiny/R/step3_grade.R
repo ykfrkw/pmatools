@@ -1,5 +1,46 @@
 # step3_grade.R - Step 3: GRADE 5-domain assessment + Final certainty (sub-tabs)
 
+# Map a suggest_threshold() return onto the two threshold reactiveVals used by
+# the Decision threshold tab.
+#
+# pmatools >= 0.5 leads with the ABSOLUTE candidate for binary ratio measures
+# (OR/RR/HR): the top level is threshold_user 0.05 / threshold_scale "ard", and
+# the ratio-scale value (e.g. 1.25 for OR) sits in $threshold_ratio. Other
+# measures return a flat list whose $threshold_scale is "ratio" (RoM), "ard"
+# (ARD) or "te_scale" (SMD, MD); unsupported measures return NULL.
+#
+# Returns list(relative =, absolute1000 =): `relative` feeds threshold_state()
+# (the ratio / te-scale input) and `absolute1000` feeds threshold_abs_state()
+# (events per 1,000). Either element is NA when the object offers no candidate
+# on that scale.
+step3_threshold_suggestions <- function(s) {
+  out <- list(relative = NA_real_, absolute1000 = NA_real_)
+  if (!is.list(s)) return(out)
+
+  .candidate <- function(cand) {
+    if (!is.list(cand)) return(NULL)
+    v <- cand$threshold_user
+    if (is.null(v) || length(v) != 1L || !is.numeric(v) ||
+        !is.finite(v) || v <= 0) {
+      return(NULL)
+    }
+    list(value = v, scale = cand$threshold_scale %||% "")
+  }
+
+  cands <- list(.candidate(s),
+                .candidate(s$threshold_absolute),
+                .candidate(s$threshold_ratio))
+  for (cand in cands) {
+    if (is.null(cand)) next
+    if (identical(cand$scale, "ard")) {
+      if (is.na(out$absolute1000)) out$absolute1000 <- 1000 * cand$value
+    } else if (is.na(out$relative)) {
+      out$relative <- cand$value
+    }
+  }
+  out
+}
+
 step3_ui <- function() {
   s <- EDU_COPY$steps$step3
 
@@ -741,19 +782,21 @@ step3_server <- function(input, output, session, state) {
   shiny::observe({
     obj <- state$ma
     if (is.null(obj)) return()
-    if (!is.na(threshold_state())) return()
+    if (!is.na(threshold_state()) && !is.na(threshold_abs_state())) return()
     s <- tryCatch(suggest_threshold(obj), error = function(e) NULL)
-    if (!is.null(s) && !is.null(s$threshold_user) && !is.na(s$threshold_user)) {
-      threshold_state(round(s$threshold_user, 4))
+    sug <- step3_threshold_suggestions(s)
+    # Only ever prefill a reactiveVal that is still NA: a value the user typed
+    # must never be overwritten.
+    if (is.na(threshold_state()) && !is.na(sug$relative)) {
+      threshold_state(round(sug$relative, 4))
+    }
+    if (is.na(threshold_abs_state()) && !is.na(sug$absolute1000)) {
+      threshold_abs_state(round(sug$absolute1000, 1))
     }
   })
   shiny::observe({
     obj <- state$ma
     if (is.null(obj)) return()
-    if (is.na(threshold_abs_state())) {
-      # 0.05 = 50 per 1,000 (vendored suggest_threshold ARD default)
-      threshold_abs_state(50)
-    }
     if (is.na(threshold_baseline_state())) {
       ec <- obj$event.c; nc <- obj$n.c
       if (!is.null(ec) && !is.null(nc) && sum(nc, na.rm = TRUE) > 0) {
@@ -1217,6 +1260,19 @@ step3_server <- function(input, output, session, state) {
       pubias_registry_complete = if (identical(pubias_rc, "yes")) "yes" else NULL,
       outcome_name = state$outcome_name %||% "Outcome"
     )
+
+    # TEMPORARY BRIDGE (pmatools >= 0.5). grade_meta() now defaults to
+    # threshold_type = "mid" with require_threshold = TRUE, so a NULL threshold
+    # aborts the call. The app can still be in that state (no absolute
+    # threshold entered yet, or suggest_threshold() has not fired because
+    # state$ma was NULL), so opt out of the gate for exactly those cases and
+    # degrade to the pre-0.5 behaviour instead of erroring. When a threshold
+    # IS present the package default (TRUE) is left alone.
+    # Follow-up: the Configuration-tab rework makes the decision threshold a
+    # required, confirmed input; this flag is removed then.
+    if (is.null(th_args$threshold)) {
+      args$require_threshold <- FALSE
+    }
 
     g <- tryCatch(
       suppressWarnings(do.call(grade_meta, args)),
