@@ -3,18 +3,20 @@
 ## 1. The vendoring lifeline (MUST)
 
 The Shiny app at `/Users/furukawayuonore/Developer/pairwise_meta_analysis` **vendors** this
-package: `update_vendor.R` copies `R/*.R` into its `R/_pmatools/` and `inst/` into its
-`_pmatools_inst/`, and `app.R` `source()`s those files. It never installs pmatools.
+package: `update_vendor.R` copies `R/*.R` (all but `R/data.R`) into its `R/_pmatools/` and
+`inst/` into its `_pmatools_inst/`, and `app.R` `source()`s those files. It never installs
+pmatools.
 
 Consequences, and they are not optional:
 
-- A release is NOT done until the app has been re-vendored and
-  `pairwise_meta_analysis/R/_pmatools/VERSION` matches this repo's `DESCRIPTION` `Version:`.
-  This applies doubly to any `feat!:` breaking change — the app runs the old sources until
-  someone runs `Rscript update_vendor.R` there.
+- A release is NOT done until the app has been re-vendored. `R/_pmatools/VERSION` there is
+  two lines: `DESCRIPTION` `Version:`, then `source: <branch>@<sha>`. Check the **second**
+  line — `Version:` stays put for a whole development cycle, so a matching first line proves
+  nothing. This applies doubly to any `feat!:` breaking change — the app runs the old
+  sources until someone runs `Rscript update_vendor.R` there.
 - NEVER rely on `utils::packageVersion("pmatools")` at runtime. It errors under `source()`.
-  Use the existing `.vendored_version_stamp()` / `getOption("pmatools.version_stamp")` path
-  in `R/utils.R`.
+  Call `.pmatools_version()` in `R/utils.R`, which falls back to
+  `.vendored_version_stamp()` / `getOption("pmatools.version_stamp")`.
 - NEVER add a new `system.file(..., package = "pmatools")` call site without arranging the
   matching rewrite in the app's `update_vendor.R`. Unpatched call sites resolve to `""`
   in the app and the feature fails only at runtime, only in production.
