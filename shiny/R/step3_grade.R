@@ -3495,20 +3495,57 @@ step3_server <- function(input, output, session, state) {
     )
   })
 
+  # Presentation fields collected in Step 2 (see step2_ui()), resolved here
+  # into the exact values sof_table() wants.
+  sof_follow_up <- shiny::reactive(pma_sof_follow_up(state$outcome_follow_up))
+  sof_unit <- shiny::reactive({
+    g <- grade_obj()
+    if (is.null(g)) return(NULL)
+    pma_sof_unit(g, state$outcome_unit)
+  })
+
+  # Core GRADE 6's rare-event trap: the Difference and "With intervention"
+  # columns are both derived by applying the pooled relative effect to a
+  # baseline risk, which misleads when events are rare. Computed from the
+  # analysis itself, against the risk the table is actually drawn on (the
+  # responder proportion when the Chinn conversion is active).
+  sof_rare_alert <- shiny::reactive({
+    g <- grade_obj()
+    if (is.null(g)) return(NULL)
+    pma_rare_event_alert(g, baseline_risk = sof_convert_args()$baseline_risk)
+  })
+
   output$sof_preview <- shiny::renderUI({
     g <- grade_obj()
     if (is.null(g)) return(htmltools::p("..."))
     args <- c(
       list(x          = g,
+           # Core GRADE 6 layout for every SoF the app renders or exports;
+           # see PMA_SOF_STYLE in ui_helpers.R for why it is not an option.
+           style      = PMA_SOF_STYLE,
+           palette    = PMA_SOF_PALETTE,
            per        = input$per %||% 1000,
-           prediction = isTRUE(input$prediction)),
+           prediction = isTRUE(input$prediction),
+           follow_up  = sof_follow_up(),
+           unit       = sof_unit()),
       sof_convert_args() %||% list()
     )
     ft <- tryCatch(do.call(sof_table, args),
                    error = function(e) NULL)
     if (is.null(ft)) return(htmltools::p("(SoF not yet available)"))
-    tryCatch(flextable::htmltools_value(ft),
-             error = function(e) htmltools::p(paste("SoF render error:", conditionMessage(e))))
+    alert <- sof_rare_alert()
+    # Both notes go into the flextable footer as well as onto the page, so
+    # they travel into the exported .docx.
+    ft <- pma_sof_add_notes(ft, c(alert$note, PMA_SOF_LIMITATIONS_NOTE))
+    htmltools::tagList(
+      pma_rare_event_banner(alert),
+      pma_sof_scroller(
+        tryCatch(flextable::htmltools_value(ft),
+                 error = function(e)
+                   htmltools::p(paste("SoF render error:",
+                                      conditionMessage(e))))),
+      pma_sof_limitations_ui()
+    )
   })
 
   # The responder-conversion settings are owned by Step 3 (Configuration
@@ -3522,6 +3559,10 @@ step3_server <- function(input, output, session, state) {
     state$display$convert       <- !is.null(ca)
     state$display$baseline_risk <- ca$baseline_risk
     state$display$chinn_invert  <- isTRUE(ca$chinn_invert)
+    # Resolved presentation fields, so Step 4 builds the exported SoF from
+    # exactly the values this preview used.
+    state$display$follow_up     <- sof_follow_up()
+    state$display$unit          <- sof_unit()
   })
 
   # Read-only echo of the outcome name: it is owned by Step 2, so Step 3 shows
@@ -3529,9 +3570,25 @@ step3_server <- function(input, output, session, state) {
   # field to edit.
   output$outcome_name_echo <- shiny::renderUI({
     nm <- state$outcome_name %||% "(not set)"
-    htmltools::p(class = "pma-card-subtitle",
-      "Outcome name: ", htmltools::tags$strong(nm),
-      " - set in Step 2 (Model configuration).")
+    # Raw value, not sof_follow_up(): that one already carries the
+    # "Follow-up: " prefix the table cell needs, and the label supplies it
+    # here.
+    fu <- state$outcome_follow_up
+    if (!is.null(fu) && !nzchar(trimws(fu))) fu <- NULL
+    un <- sof_unit()
+    htmltools::tagList(
+      htmltools::p(class = "pma-card-subtitle",
+        "Outcome name: ", htmltools::tags$strong(nm),
+        " - set in Step 2 (Model configuration)."),
+      htmltools::p(class = "pma-card-subtitle",
+        "Follow-up: ",
+        htmltools::tags$strong(fu %||% "(not set)"),
+        " - shown under the outcome name in the Summary of Findings table ",
+        "and saved with this outcome. Set in Step 2."),
+      if (!is.null(un)) htmltools::p(class = "pma-card-subtitle",
+        "Unit of the Difference column: ", htmltools::tags$strong(un),
+        ".") else NULL
+    )
   })
 
   # Read-only echo of the outcome direction, in the same style. small_values
@@ -3684,6 +3741,14 @@ step3_server <- function(input, output, session, state) {
 
   .store_outcome <- function(key, g) {
     outs <- pma_outcomes_list(state$outcomes)
+    # Follow-up and unit are per-outcome, so they are banked ON the saved
+    # object rather than read from the live Step 2 fields at render time -
+    # otherwise the combined Step 4 table would print the current outcome's
+    # follow-up against every earlier row. grade_table(style = "bmj") picks
+    # these up per row via .display_arg_from_outcomes() (grade_table.R), which
+    # is why Step 4 passes no follow_up / unit argument of its own.
+    g$follow_up <- sof_follow_up()
+    g$unit      <- pma_sof_unit(g, state$outcome_unit)
     attr(g, "pma_saved_at") <- Sys.time()
     # Provenance stamp: which dataset this rating was made on.
     attr(g, PMA_DATASET_SIGNATURE_ATTR) <- pma_dataset_signature(state$data)

@@ -129,6 +129,14 @@ server <- function(input, output, session) {
     # are destroyed whenever another step's body is rendered.
     outcome_name   = NULL,
     small_values   = NULL,
+    # Optional presentation fields for the Core GRADE 6 Summary of Findings
+    # table: the follow-up printed under the outcome name, and the unit of a
+    # continuous scale. Collected in Step 2 beside the outcome name because
+    # they describe the outcome, not the table; copied onto each saved
+    # assessment in Step 3 so the Step 4 combined table can show a different
+    # follow-up per row.
+    outcome_follow_up = NULL,
+    outcome_unit      = NULL,
     arm_e          = NULL,
     arm_c          = NULL,
     display = list(
@@ -136,7 +144,9 @@ server <- function(input, output, session) {
       prediction         = FALSE,
       convert            = FALSE,
       baseline_risk      = NULL,
-      threshold_label    = NULL
+      threshold_label    = NULL,
+      follow_up          = NULL,
+      unit               = NULL
     )
   )
 

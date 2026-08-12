@@ -23,11 +23,20 @@ step2_ui <- function(state = NULL) {
   # trick as auto_rerun_default above) keeps the two fields sticky.
   outcome_name_default  <- ""
   small_values_default  <- character(0)
+  # Follow-up and unit are optional presentation fields for the Core GRADE 6
+  # Summary of Findings table (see ui_helpers.R). They are seeded from state
+  # for the same reason the two required fields are.
+  follow_up_default     <- ""
+  unit_default          <- ""
   if (!is.null(state)) {
     nm <- shiny::isolate(state$outcome_name)
     if (!is.null(nm) && length(nm) == 1 && !is.na(nm)) outcome_name_default <- nm
     sv <- shiny::isolate(state$small_values)
     if (!is.null(sv) && length(sv) == 1 && nzchar(sv)) small_values_default <- sv
+    fu <- shiny::isolate(state$outcome_follow_up)
+    if (!is.null(fu) && length(fu) == 1 && !is.na(fu)) follow_up_default <- fu
+    un <- shiny::isolate(state$outcome_unit)
+    if (!is.null(un) && length(un) == 1 && !is.na(un)) unit_default <- un
   }
 
   htmltools::tagList(
@@ -66,6 +75,33 @@ step2_ui <- function(state = NULL) {
             paste0("Both are required. They name the outcome in the Summary of ",
                    "Findings table, prefill every forest-plot title and axis label, ",
                    "and set the bias direction used by the Risk-of-Bias check in Step 3.")),
+          # Follow-up belongs to the outcome's identity, not to the display
+          # settings: Core GRADE 6's first column is "Outcome and follow-up",
+          # and a review that pools two outcomes measured over different time
+          # frames needs one value per outcome. It is therefore collected here,
+          # beside the name and direction, and saved with the outcome.
+          shiny::textInput("outcome_follow_up",
+                           "Follow-up / time frame (optional)",
+                           value = follow_up_default, width = "100%",
+                           placeholder = "e.g., longest, range 8-52 weeks"),
+          htmltools::p(class = "pma-card-subtitle",
+            paste0("Printed under the outcome name in the \"Outcome and ",
+                   "follow-up\" column of the Summary of Findings table. ",
+                   "Saved with the outcome, so several outcomes can carry ",
+                   "different follow-up times in one table.")),
+          shiny::conditionalPanel(
+            "input.outcome_type == 'continuous'",
+            shiny::textInput("outcome_unit",
+                             "Unit of the scale (optional, continuous only)",
+                             value = unit_default, width = "100%",
+                             placeholder = "e.g., points on the PHQ-9, days"),
+            htmltools::p(class = "pma-card-subtitle",
+              paste0("Labels the Difference column of the Summary of Findings ",
+                     "table for a mean difference. A standardized mean ",
+                     "difference is not on the original scale, so its ",
+                     "difference is always labelled in standard deviation ",
+                     "units; a ratio measure carries no unit."))
+          ),
           htmltools::hr(),
           htmltools::h6("Column mapping"),
           shiny::selectInput("col_studlab", "Study label (studlab)",
@@ -1146,6 +1182,19 @@ step2_server <- function(input, output, session, state) {
     }
     sv <- input$small_values
     if (!is.null(sv) && length(sv) == 1 && nzchar(sv)) state$small_values <- sv
+    # Follow-up and unit are optional, so an empty value is a legitimate
+    # answer and IS written back - otherwise a follow-up could never be
+    # cleared. Safe here because step2_ui() seeds both widgets from state, so
+    # a rebuilt widget pushes back the value state already holds; only the
+    # NULL a torn-down widget reports is ignored.
+    fu <- input$outcome_follow_up
+    if (!is.null(fu) && length(fu) == 1 && !is.na(fu)) {
+      state$outcome_follow_up <- trimws(fu)
+    }
+    un <- input$outcome_unit
+    if (!is.null(un) && length(un) == 1 && !is.na(un)) {
+      state$outcome_unit <- trimws(un)
+    }
     ae <- input$experimental_label
     if (!is.null(ae) && length(ae) == 1 && nzchar(ae)) state$arm_e <- ae
     ac <- input$control_label
