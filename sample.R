@@ -554,3 +554,81 @@ if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable())
 ## ## Output files:
 ## ##   output/GRADE_appendix_I4D.docx  — paste directly into manuscript Appendix
 ## ##   output/GRADE_appendix_I4D.md    — Markdown version
+
+
+## ── 9. 複数アウトカム一括ワークフロー ────────────────────────────────────────
+##
+## セクション 7 は grade_meta() を手で 2 回呼んだ。アウトカムが増えるとこれは
+## 破綻するので、`outcome` 列を持つ long データを 1 本用意し、取込 → アウトカム
+## ごとの MA → アウトカムごとの GRADE → まとめ表 → Export を一気に通す。
+##
+##   run_ma_multi()     : outcome 列で分割し run_ma() をアウトカムごとに実行
+##                        （run_ma() 自体は今も単一アウトカムしか受け付けない）
+##   grade_meta_multi() : grade_meta() をアウトカムごとに実行し pmatools_set を返す
+##   reorder_outcomes() : まとめ表の行順と Export のサブディレクトリ番号を決める
+##   export_bundle()    : outcomes/NN_name/ 構成の ZIP を書き出す
+##
+## NOTE: 以下の "Insomnia remission" はセクション 7 と同じくプレースホルダで、
+##       depression response のイベント数を流用した合成データ。
+
+long_response <- rbind(
+  data.frame(studlab = df$study, outcome = "Depression response",
+             treat = "experimental", n = df$n_e, event = df$event_e,
+             rob = rob_vec, stringsAsFactors = FALSE),
+  data.frame(studlab = df$study, outcome = "Depression response",
+             treat = "control", n = df$n_c, event = df$event_c,
+             rob = rob_vec, stringsAsFactors = FALSE)
+)
+long_remission <- long_response
+long_remission$outcome <- "Insomnia remission"
+long_remission$event   <- pmax(0, round(long_remission$event * 0.7))  # placeholder
+
+data_multi <- ingest_data(rbind(long_response, long_remission), format = "long")
+
+ma_list <- run_ma_multi(
+  data_multi,
+  sm         = "OR",            # 単一値 = 全アウトカム共通。名前付きリストで個別指定も可
+  method.tau = "REML",
+  incr       = 0.1
+)
+
+set <- grade_meta_multi(
+  ma_list,
+  ## 全アウトカム共通の引数
+  common = list(
+    study_design           = "RCT",
+    threshold_type         = "mid",
+    threshold              = 1.25,
+    threshold_scale        = "ratio",
+    small_values           = "undesirable",
+    rob                    = rob_vec,
+    indirectness           = "no",
+    pubias_small_industry  = "no",
+    follow_up              = "8-12 weeks"   # BMJ 様式の "Outcome and follow-up" 列
+  ),
+  ## そのアウトカムだけの引数（common を上書きする）
+  per_outcome = list(
+    "Depression response" = list(ois_p0 = 0.25, ois_p1 = 0.40),
+    "Insomnia remission"  = list(ois_p0 = 0.18, ois_p1 = 0.30)
+  ),
+  primary = "Depression response"
+)
+
+## → アウトカムごとの certainty / rating target / 解析セットを一覧
+print(set)
+
+## 並び替え（まとめ表の行順と outcomes/NN_name/ の番号の両方に効く）
+set <- reorder_outcomes(set, c("Depression response", "Insomnia remission"))
+
+## → Viewer ペインに BMJ 様式のまとめ表が表示される
+ft_set <- grade_table(set, style = "bmj")
+print(ft_set)
+
+## Export: 直下にまとめ表、outcomes/NN_name/ にアウトカム別の図表と results.txt
+zip_path <- export_bundle(set, output_dir = tempdir(), bundle_name = "pmatools_multi")
+cat("\nBundle written to:", zip_path, "\n")
+print(zip::zip_list(zip_path)$filename)
+
+## 原稿用に書き出す場合は output_dir を差し替える:
+## export_bundle(set, output_dir = file.path(here::here(), "outputs"),
+##               bundle_name = "GRADE_multi_I4D")

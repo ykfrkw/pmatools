@@ -1,4 +1,9 @@
 # export_bundle.R - Pack analysis artifacts into a reproducible ZIP
+#
+# export_bundle() is an S3 generic dispatching on its first argument:
+#   meta          -> the single-outcome flat bundle in this file
+#   pmatools      -> convenience wrapper for the same (grade object first)
+#   pmatools_set  -> the multi-outcome layout in export_bundle_multi.R
 
 #' Export a reproducible analysis bundle as a ZIP
 #'
@@ -9,7 +14,13 @@
 #' bundled `analysis.R` runs
 #' standalone with `library(pmatools)` and the bundled CSV.
 #'
-#' @param ma A `meta` object from \code{\link{run_ma}}.
+#' Passing a \code{pmatools_set} from \code{\link{grade_meta_multi}} instead
+#' produces the multi-outcome layout: the summary tables at the top level and
+#' one numbered `outcomes/NN_name/` sub-directory per outcome. See
+#' \code{\link{export_bundle.pmatools_set}}.
+#'
+#' @param x A `meta` object from \code{\link{run_ma}} (the single-outcome
+#'   entry point), a `pmatools` object, or a `pmatools_set`.
 #' @param grade A `pmatools` object from \code{\link{grade_meta}}.
 #' @param output_dir Directory where the ZIP is created.
 #' @param bundle_name Bundle base name (no extension).
@@ -62,10 +73,32 @@
 #'   \code{\link{plot_forest_pubias_subgroup}} when
 #'   `"pubias_missing_forest"` is in `include` (rendered only when k >= 10).
 #'
+#' @param ... Passed to the method.
+#'
 #' @return Character. Absolute path to the created ZIP file.
 #'
 #' @export
-export_bundle <- function(ma,
+export_bundle <- function(x, ...) {
+  UseMethod("export_bundle")
+}
+
+#' @rdname export_bundle
+#' @export
+export_bundle.default <- function(x, ...) {
+  rlang::abort("export_bundle: 'ma' must be a meta object.")
+}
+
+#' @rdname export_bundle
+#' @export
+export_bundle.pmatools <- function(x, ...) {
+  # Convenience: the grade object knows the meta object it rated (the low-RoB
+  # refit, when one happened), so export_bundle(g) is unambiguous.
+  export_bundle.meta(x$meta, grade = x, ...)
+}
+
+#' @rdname export_bundle
+#' @export
+export_bundle.meta <- function(x,
                           grade,
                           output_dir   = ".",
                           bundle_name  = "pmatools_results",
@@ -90,7 +123,9 @@ export_bundle <- function(ma,
                           forest_display_rob = NULL,
                           rare               = NULL,
                           rare_forest_display = NULL,
-                          pubias_missing_df  = NULL) {
+                          pubias_missing_df  = NULL,
+                          ...) {
+  ma <- x
   if (!inherits(ma, "meta")) {
     rlang::abort("export_bundle: 'ma' must be a meta object.")
   }
@@ -278,17 +313,6 @@ export_bundle <- function(ma,
     files_in_zip <- c(files_in_zip, pdf_path, png_path)
   }
 
-  # Helper: write a flextable into a landscape-orientation .docx using
-  # officer directly. Avoids flextable::save_as_docx(pr_section = ...),
-  # whose argument is not present in older flextable versions.
-  .save_landscape_docx <- function(ft, path) {
-    doc <- officer::read_docx()
-    doc <- flextable::body_add_flextable(doc, ft)
-    doc <- officer::body_end_section_landscape(doc, w = 11, h = 8.5)
-    print(doc, target = path)
-    invisible(path)
-  }
-
   # 6a. grade_table.docx — Evidence Profile (Core GRADE series)
   if ("grade_table" %in% include) {
     ep_ft <- evidence_profile(grade,
@@ -345,6 +369,21 @@ export_bundle <- function(ma,
   }
 
   normalizePath(zip_path)
+}
+
+# --------------------------------------------------------------------------
+# Shared writers
+# --------------------------------------------------------------------------
+
+# Write a flextable into a landscape-orientation .docx using officer directly.
+# Avoids flextable::save_as_docx(pr_section = ...), whose argument is not
+# present in older flextable versions.
+.save_landscape_docx <- function(ft, path) {
+  doc <- officer::read_docx()
+  doc <- flextable::body_add_flextable(doc, ft)
+  doc <- officer::body_end_section_landscape(doc, w = 11, h = 8.5)
+  print(doc, target = path)
+  invisible(path)
 }
 
 # --------------------------------------------------------------------------

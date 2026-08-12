@@ -8,6 +8,7 @@ grade_report(
   outcomes,
   primary = NULL,
   palette = c("pastel", "classic"),
+  style = c("gradepro", "bmj"),
   format = "docx",
   output_dir = getwd(),
   output_file = "grade_report",
@@ -20,11 +21,16 @@ grade_report(
 )
 }
 \arguments{
-\item{outcomes}{A named list of \code{pmatools} objects.}
+\item{outcomes}{A named list of \code{pmatools} objects, or a
+\code{pmatools_set} from \code{\link{grade_meta_multi}} (its order and
+primary outcomes are then used).}
 
 \item{primary}{Character vector of primary outcome names (passed to \code{grade_table}).}
 
 \item{palette}{Color palette: \code{"pastel"} (default) or \code{"classic"}.}
+
+\item{style}{(v0.5) Summary-of-findings layout passed to
+\code{\link{grade_table}}: \code{"gradepro"} (default) or \code{"bmj"}.}
 
 \item{format}{Output format(s): one or more of \code{"docx"}, \code{"html"},
 \code{"pdf"}, \code{"md"}. Default \code{"docx"}.}

@@ -79,6 +79,45 @@ export_bundle(ma, g, output_dir = "outputs", bundle_name = "cbti_depression")
 analysis with `library(pmatools)`), `results.txt`, forest/funnel PDF+PNG, the SoF
 docx, and the certainty Appendix docx (Core GRADE series).
 
+### Several outcomes in one session (v0.5)
+
+Give the long-format data an `outcome` column and the whole pipeline runs once
+per outcome. `run_ma()` still takes a single outcome; `run_ma_multi()` is the
+orchestrator above it.
+
+```r
+data <- ingest_data("outcomes_long.csv", format = "long")   # has an `outcome` column
+
+ma_list <- run_ma_multi(
+  data,
+  sm = list("Mortality" = "RR", "Depression severity" = "SMD")  # or one value for all
+)
+
+set <- grade_meta_multi(
+  ma_list,
+  common = list(study_design = "RCT", threshold_type = "mid",
+                threshold = 1.25, threshold_scale = "ratio",
+                small_values = "undesirable", follow_up = "12 weeks"),
+  per_outcome = list(
+    "Depression severity" = list(threshold = 0.2, threshold_scale = "smd",
+                                 unit = "points")
+  ),
+  primary = "Mortality"
+)
+
+print(set)                                   # certainty / rating target / analysis set
+set <- reorder_outcomes(set, c("Mortality", "Depression severity"))
+grade_table(set, style = "bmj")              # rows follow set$order
+export_bundle(set, output_dir = "outputs", bundle_name = "all_outcomes")
+```
+
+`outputs/all_outcomes.zip` puts the summary table, the evidence profiles, the
+multi-outcome `analysis.R`, the data and a `README.txt` at the top level, and one
+`outcomes/NN_name/` directory per outcome (plots, `results.txt`, that outcome's
+data and evidence profile). An outcome that fails to fit or rate is skipped with
+a warning rather than taking the session down — the one exception being the Core
+GRADE 2 entry gate, which still aborts.
+
 ### Shorter version: certainty rating only, on an existing meta object
 
 ```r

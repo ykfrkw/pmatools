@@ -231,12 +231,15 @@ RATING_TARGET_LABELS <- c(
            "'; supply a published or expert-derived MID.")
   }
 
+  # Classed so batch orchestration (grade_meta_multi()) can tell the entry gate
+  # apart from an ordinary per-outcome failure: every other error there is
+  # demoted to a warning, but this one must keep aborting.
   rlang::abort(paste0(
     "threshold_type = 'mid' requires a threshold (the minimal important ",
     "difference). ", hint,
     " Pass require_threshold = FALSE to proceed without one, or use ",
     "threshold_type = 'null' to rate certainty in a true underlying effect."
-  ))
+  ), class = "pmatools_threshold_gate")
 }
 
 # rating_target の手動指定を検証し、target/note を組み立てる。
@@ -260,10 +263,13 @@ RATING_TARGET_LABELS <- c(
   # 判定するため MID が必須 (Core GRADE 2 supplementary appendix 4)。
   if (rating_target %in% c("important_effect", "little_to_no_difference") &&
       !.has_mid(threshold_internal)) {
+    # Same gate, reached from the manual-override side; classed for the same
+    # reason (see .check_threshold_type_gate()).
     rlang::abort(sprintf(paste0(
       "rating_target = '%s' requires a threshold (MID): imprecision for this ",
       "target is judged against +/-MID, not against the null. Supply ",
-      "threshold (and threshold_scale)."), rating_target))
+      "threshold (and threshold_scale)."), rating_target),
+      class = "pmatools_threshold_gate")
   }
 
   list(

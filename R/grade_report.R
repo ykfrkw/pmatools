@@ -11,9 +11,13 @@
 
 #' Generate a certainty-of-evidence appendix report (Core GRADE series)
 #'
-#' @param outcomes A named list of \code{pmatools} objects.
+#' @param outcomes A named list of \code{pmatools} objects, or a
+#'   \code{pmatools_set} from \code{\link{grade_meta_multi}} (its order and
+#'   primary outcomes are then used).
 #' @param primary Character vector of primary outcome names (passed to \code{grade_table}).
 #' @param palette Color palette: \code{"pastel"} (default) or \code{"classic"}.
+#' @param style (v0.5) Summary-of-findings layout passed to
+#'   \code{\link{grade_table}}: \code{"gradepro"} (default) or \code{"bmj"}.
 #' @param format Output format(s): one or more of \code{"docx"}, \code{"html"},
 #'   \code{"pdf"}, \code{"md"}. Default \code{"docx"}.
 #' @param output_dir Directory for output files. Default \code{getwd()}.
@@ -45,6 +49,7 @@
 grade_report <- function(outcomes,
                          primary      = NULL,
                          palette      = c("pastel", "classic"),
+                         style        = c("gradepro", "bmj"),
                          format       = "docx",
                          output_dir   = getwd(),
                          output_file  = "grade_report",
@@ -55,10 +60,16 @@ grade_report <- function(outcomes,
                          label_intervention = "intervention",
                          label_control      = "control") {
 
+  if (inherits(outcomes, "pmatools_set")) {
+    set      <- outcomes
+    outcomes <- .set_outcome_list(set)
+    if (is.null(primary) && length(set$primary) > 0) primary <- set$primary
+  }
   if (!is.list(outcomes) || !all(vapply(outcomes, inherits, logical(1), "pmatools"))) {
     rlang::abort("outcomes must be a named list of pmatools objects.")
   }
   palette <- match.arg(palette)
+  style   <- match.arg(style)
   format  <- match.arg(format, choices = c("docx", "html", "pdf", "md"),
                        several.ok = TRUE)
 
@@ -100,6 +111,7 @@ grade_report <- function(outcomes,
       out_paths <- c(out_paths,
         .write_docx(outcomes, primary, palette, title, show_domains,
                     per, prediction, base_path,
+                    style              = style,
                     label_intervention = label_intervention,
                     label_control      = label_control))
       message("Written: ", base_path)
@@ -235,6 +247,7 @@ grade_report <- function(outcomes,
 # --------------------------------------------------------------------------
 .write_docx <- function(outcomes, primary, palette, title, show_domains,
                          per, prediction, path,
+                         style              = "gradepro",
                          label_intervention = "intervention",
                          label_control      = "control") {
   doc <- officer::read_docx()
@@ -250,6 +263,7 @@ grade_report <- function(outcomes,
   doc <- officer::body_add_par(doc, "Summary of Findings", style = "heading 2")
 
   ft <- grade_table(outcomes, primary = primary, palette = palette,
+                    style = style,
                     show_domains = show_domains, per = per,
                     prediction = prediction,
                     label_intervention = label_intervention,
