@@ -1,0 +1,722 @@
+/* shadcn-style design tokens for pairwise_meta_analysis (bslib + custom CSS) */
+
+:root {
+  --background:               0 0% 100%;
+  --foreground:               222 47% 11%;
+  --card:                     0 0% 100%;
+  --card-foreground:          222 47% 11%;
+  --primary:                  222 47% 11%;
+  --primary-foreground:       210 40% 98%;
+  --secondary:                210 40% 96%;
+  --secondary-foreground:     222 47% 11%;
+  --muted:                    210 40% 96%;
+  --muted-foreground:         215 16% 47%;
+  --accent:                   210 40% 96%;
+  --accent-foreground:        222 47% 11%;
+  --destructive:              0 84% 60%;
+  --destructive-foreground:   210 40% 98%;
+  --border:                   214 32% 91%;
+  --input:                    214 32% 91%;
+  --ring:                     222 47% 11%;
+  --radius:                   0.5rem;
+
+  /* GRADE certainty palette (CINeMA pastel; matches pmatools SoF) */
+  --grade-high-bg:      #d7e8d3;  --grade-high-fg:      #238b21;
+  --grade-moderate-bg:  #cccce9;  --grade-moderate-fg:  #01008b;
+  --grade-low-bg:       #f8edd7;  --grade-low-fg:       #daa521;
+  --grade-vlow-bg:      #e8d0d0;  --grade-vlow-fg:      #8b0000;
+
+  --rob-low-bg:    var(--grade-high-bg);    --rob-low-fg:    var(--grade-high-fg);
+  --rob-some-bg:   var(--grade-low-bg);     --rob-some-fg:   var(--grade-low-fg);
+  --rob-high-bg:   var(--grade-vlow-bg);    --rob-high-fg:   var(--grade-vlow-fg);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: var(--font-sans);
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.container-fluid { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+
+h1, h2, h3, h4, h5 { color: hsl(var(--foreground)); }
+h2 { font-size: 1.5rem; margin-bottom: 0.75rem; }
+h3 { font-size: 1.25rem; }
+h5 { font-size: 0.95rem; margin-top: 0.75rem; margin-bottom: 0.4rem; }
+
+/* Card */
+.pma-card {
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+.pma-card-header   { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
+.pma-card-subtitle { font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.75rem; }
+
+#rare-events-detected-card {
+  background: #fff8e6;
+  border-color: #efd99c;
+  box-shadow: inset 4px 0 0 #d99a21;
+}
+#rare-events-detected-card .pma-card-header {
+  color: #111827;
+}
+#rare-events-detected-card .selectize-control,
+#rare-events-detected-card .selectize-input {
+  width: 100%;
+}
+#rare-events-detected-card .rare-primary-method,
+#rare-events-detected-card .rare-primary-method .form-group,
+#rare-events-detected-card .rare-primary-method select {
+  width: 100%;
+}
+#rare-events-detected-card .rare-primary-method select {
+  min-width: min(22rem, 100%);
+  max-width: 100%;
+  white-space: nowrap;
+}
+#rare-events-detected-card .selectize-input > .item {
+  display: block;
+  max-width: calc(100% - 1.4rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Step header */
+.pma-step-header { margin-bottom: 1.25rem; }
+.pma-why { font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-top: 0.5rem; }
+
+/* Badge */
+.pma-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.pma-badge.grade-high     { background: var(--grade-high-bg);     color: var(--grade-high-fg); }
+.pma-badge.grade-moderate { background: var(--grade-moderate-bg); color: var(--grade-moderate-fg); }
+.pma-badge.grade-low      { background: var(--grade-low-bg);      color: var(--grade-low-fg); }
+.pma-badge.grade-vlow     { background: var(--grade-vlow-bg);     color: var(--grade-vlow-fg); }
+
+/* Stepper */
+.pma-stepper { display: flex; gap: 0.4rem; margin-bottom: 1.5rem; align-items: center;
+               font-size: 0.85rem; flex-wrap: wrap; }
+.pma-step    { display: inline-flex; align-items: center; gap: 0.4rem;
+               color: hsl(var(--muted-foreground));
+               padding: 0.25rem 0.5rem; border-radius: var(--radius);
+               transition: background 0.15s ease; }
+.pma-step:hover { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
+.pma-step.current { color: hsl(var(--foreground)); font-weight: 600;
+                    background: hsl(var(--muted)); }
+.pma-step.done    { color: var(--grade-high-fg); }
+.pma-step .num    { width: 1.4rem; height: 1.4rem; border-radius: 9999px;
+                     display: inline-flex; align-items: center; justify-content: center;
+                     background: hsl(var(--muted)); font-weight: 600; }
+.pma-step.current .num { background: hsl(var(--primary));
+                          color: hsl(var(--primary-foreground)); }
+.pma-step.done    .num { background: var(--grade-high-bg);
+                          color: var(--grade-high-fg); }
+.pma-step .sep    { color: hsl(var(--muted-foreground)); margin: 0 0.15rem;
+                    align-self: center; }
+/* Action-link styling: kill default underline, keep colours from .pma-step */
+.pma-stepper a.action-button { color: inherit; }
+.pma-stepper a.action-button:hover { text-decoration: none; }
+
+/* Banner */
+.pma-banner {
+  background: var(--grade-low-bg);
+  border-left: 4px solid var(--grade-low-fg);
+  color: var(--grade-low-fg);
+  padding: 0.7rem 1rem;
+  border-radius: var(--radius);
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+/* Risk-of-bias analysis set (Core GRADE 4 Fig 2).
+   A state notice, not an error: muted surface, neutral text, and the same
+   amber accent the .pma-banner uses so the two read as one family. */
+.pma-analysis-set {
+  position: sticky;
+  top: 0.5rem;
+  z-index: 99;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+  border-left: 3px solid var(--grade-low-fg);
+  border-radius: var(--radius);
+  padding: 0.45rem 0.85rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  color: hsl(var(--foreground));
+}
+.pma-analysis-set-label {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.pma-analysis-set-compare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.5rem;
+  margin: 0.6rem 0 0.4rem;
+}
+.pma-analysis-set-estimate {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.pma-analysis-set-estimate-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.85;
+}
+.pma-analysis-set-estimate-value {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+.pma-analysis-set-dropped { margin-top: 0.35rem; }
+.pma-analysis-set-studies { color: hsl(var(--foreground)); }
+.pma-analysis-set-details {
+  margin-top: 0.35rem;
+  max-height: 8rem;
+  overflow-y: auto;
+}
+
+/* How-this-is-judged block */
+.pma-how p { margin: 0.25rem 0 0.75rem 0; line-height: 1.5; font-size: 0.9rem; }
+
+/* Standing rule notice (Risk of Bias: the binary low/high classification).
+   A statement of how the app resolves an open choice in the source, so it is
+   quieter than .pma-banner but still set apart from the surrounding copy. */
+.pma-rob-rule {
+  background: hsl(var(--muted));
+  border-left: 3px solid hsl(var(--border));
+  border-radius: var(--radius);
+  padding: 0.6rem 0.85rem;
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: hsl(var(--foreground));
+}
+
+/* Inline help icon */
+.pma-help { color: hsl(var(--muted-foreground)); cursor: help; margin-left: 0.25rem; font-size: 0.8rem; }
+.pma-help:hover { color: hsl(var(--foreground)); }
+
+/* Buttons (work alongside bslib bs5 .btn) */
+.btn-primary {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.btn-primary:hover, .btn-primary:focus {
+  background: hsl(var(--primary)) !important;
+  filter: brightness(1.1);
+  color: hsl(var(--primary-foreground)) !important;
+}
+/* Disabled primary action (the wizard's Next while the step is incomplete).
+   Scoped to .btn-primary on purpose: Back and the small .btn-secondary
+   buttons are never disabled and must not be faded. The :hover/:focus rule
+   above uses !important, so the disabled colours have to as well. */
+.btn-primary:disabled,
+.btn-primary[disabled],
+.btn-primary:disabled:hover,
+.btn-primary[disabled]:hover,
+.btn-primary:disabled:focus,
+.btn-primary[disabled]:focus {
+  background: hsl(var(--primary)) !important;
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground)) !important;
+  opacity: 0.4;
+  filter: none;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.btn-secondary {
+  background: hsl(var(--secondary));
+  border-color: hsl(var(--border));
+  color: hsl(var(--secondary-foreground));
+}
+
+/* Verbatim text styling */
+pre, code {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  background: hsl(var(--muted));
+  border-radius: 4px;
+  padding: 0.5rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Details/summary */
+details {
+  margin-top: 0.75rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  background: hsl(var(--muted));
+}
+details summary {
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: hsl(var(--foreground));
+  padding: 0.2rem 0;
+}
+details > div { padding-top: 0.75rem; }
+
+/* DT table tweaks */
+table.dataTable th { background: hsl(var(--muted)); }
+
+/* Phase 6: summary bar + accordion */
+.pma-summary-bar {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  padding: 0.55rem 0.85rem;
+  background: hsl(var(--muted));
+  border-radius: var(--radius);
+  margin-bottom: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88rem;
+}
+.pma-stat { white-space: nowrap; }
+.pma-stat strong { color: hsl(var(--primary)); font-weight: 600; }
+
+.pma-accordion-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.pma-accordion-title > .pma-domain-name {
+  font-weight: 500;
+  flex: 0 0 auto;
+}
+.pma-badge.pma-chip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  padding: 0.05rem 0.4rem;
+}
+
+/* Phase 7: Forest plot trimmed image and copy-button overlay */
+.pma-forest-image,
+.shiny-image-output {
+  display: block;
+}
+.pma-forest-image img,
+.shiny-image-output img {
+  max-width: 900px;
+  width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.pma-results-wrap {
+  position: relative;
+}
+.pma-results-wrap .pma-copy-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 10;
+}
+.pma-results-wrap pre {
+  padding-top: 2.5rem;
+}
+
+/* Per-study edit accordion (RoB / Indirectness in Step 3) -------------- */
+.pma-edit-details {
+  margin: 1rem 0;
+  border: 1px dashed hsl(var(--border));
+  border-radius: var(--radius);
+  background: hsl(var(--muted) / 0.4);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.pma-edit-details[open] {
+  background: hsl(var(--background));
+  border-style: solid;
+  border-color: hsl(var(--primary) / 0.4);
+}
+.pma-edit-summary {
+  cursor: pointer;
+  padding: 0.6rem 0.9rem;
+  list-style: none;
+  user-select: none;
+  font-size: 0.92rem;
+  color: hsl(var(--foreground));
+  display: flex;
+  align-items: center;
+}
+.pma-edit-summary::-webkit-details-marker { display: none; }
+.pma-edit-summary::before {
+  content: "\25B6";
+  font-size: 0.7rem;
+  margin-right: 0.45rem;
+  color: hsl(var(--muted-foreground));
+  transition: transform 0.15s ease;
+}
+.pma-edit-details[open] > .pma-edit-summary::before {
+  transform: rotate(90deg);
+}
+.pma-edit-summary:hover {
+  color: hsl(var(--primary));
+}
+.pma-edit-hint {
+  color: hsl(var(--muted-foreground));
+  font-weight: 400;
+  font-size: 0.85rem;
+  margin-left: 0.4rem;
+}
+.pma-edit-body {
+  padding: 0.5rem 0.9rem 0.9rem 0.9rem;
+  border-top: 1px solid hsl(var(--border));
+}
+
+/* ---------------------------------------------------------------------------
+   Input width inside cards.
+
+   Shiny's own stylesheet (shiny/www/shared/shiny.min.css) ships
+
+     .shiny-input-container:not(.shiny-input-container-inline)
+       { width: 300px; max-width: 100% }
+
+   so every widget created without an explicit `width = "100%"` is boxed to
+   300px even inside a .pma-card that `.container-fluid` above lets grow to
+   1200px. The visible symptom was Step 3's Decision threshold labels -
+   "Absolute (per 1,000 patients) - recommended" and "Baseline (control-group)
+   risk (per 1,000 patients)" - breaking after two or three words, which two
+   `white-space: nowrap` spans in R/step3_grade.R used to paper over by
+   overflowing horizontally instead.
+
+   Scoped to .pma-card because that is what every step body's inputs sit in
+   (Step 3's tab bodies are .pma-card > .tabbable > .tab-content > .tab-pane),
+   so nothing outside a card is touched - DT's page-length <select> lives in
+   .dataTables_length and is not a .shiny-input-container at all, but the
+   scope keeps any future out-of-card widget out of this too. Specificity
+   0,3,0 beats Shiny's 0,2,0 whatever the stylesheet order turns out to be.
+   --------------------------------------------------------------------------- */
+.pma-card .shiny-input-container:not(.shiny-input-container-inline) {
+  width: 100%;
+}
+
+/* The container is what has to be wide -- that is what stops the label
+   wrapping. The control itself does not: a 1100px box holding "50" reads as
+   a mistake. Cap the numeric spinners only; text inputs and selects carry
+   long values (outcome names, forest titles, column names) and stay full
+   width. Inside .pma-display-grid the grid cell is already narrower than
+   this cap, so the panels are unaffected. */
+.pma-card .shiny-input-container input[type="number"] {
+  max-width: 16rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Display panels (forest / funnel): one four-column grid shared by all three
+   call sites - .forest_display_panel() in R/step3_grade.R, the Step 2 forest
+   panel in R/step2_ma.R and pma_funnel_display_panel() in R/ui_helpers.R.
+   .pma-span-4 is for the children that need the full row (title field, the
+   blank-row hint, the per-arm column checkbox, the Egger toggle).
+   --------------------------------------------------------------------------- */
+.pma-display-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 0.75rem 1rem;
+  padding: 0.75rem 0.25rem 0.25rem;
+}
+.pma-display-grid > .pma-span-4 { grid-column: span 4; }
+
+/* ---------------------------------------------------------------------------
+   Required-but-still-empty fields (Step 2 "Outcome name" / "Direction").
+
+   The class is put on / taken off the .shiny-input-container by
+   www/required-fields.js, driven from a server-side observe() in
+   step2_server(); it is only ever applied after the user has asked for an
+   analysis at least once, so a fresh page load is never red. These are the
+   only consumers of the --destructive tokens declared at the top of this file.
+   --------------------------------------------------------------------------- */
+.pma-required-unset > label::after {
+  content: "required";
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.02rem 0.45rem;
+  border-radius: 9999px;
+  background: hsl(var(--destructive));
+  color: hsl(var(--destructive-foreground));
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  vertical-align: 0.08em;
+}
+.pma-required-unset .form-control,
+.pma-required-unset .selectize-input {
+  border-color: hsl(var(--destructive));
+}
+.pma-required-unset .form-control:focus,
+.pma-required-unset .selectize-input.focus {
+  border-color: hsl(var(--destructive));
+  box-shadow: 0 0 0 2px hsl(var(--destructive) / 0.2);
+}
+/* Radio / checkbox groups carry no .form-control to outline, so the option
+   list itself gets the rule. */
+.pma-required-unset .shiny-options-group {
+  border-left: 3px solid hsl(var(--destructive));
+  padding-left: 0.6rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Form-control labels: keep input labels and option labels aligned cleanly
+   so wrapped text uses a hanging indent (does not flow under the radio /
+   checkbox circle) and short widget labels do not break unnecessarily.
+   --------------------------------------------------------------------------- */
+
+/* Top-level widget label (above the input) */
+.shiny-input-container > label,
+.form-group > label {
+  display: block;
+  white-space: normal;
+  line-height: 1.35;
+  margin-bottom: 0.25rem;
+}
+
+/* Option label (radio, checkbox group): radio circle + text laid out as a
+   flex row so wrapped lines indent past the circle instead of flowing
+   underneath it. */
+.shiny-options-group .radio,
+.shiny-options-group .checkbox {
+  display: block;
+  margin: 0.15rem 0;
+}
+.shiny-options-group .radio > label,
+.shiny-options-group .checkbox > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  line-height: 1.4;
+  margin: 0;
+  padding: 0;
+  font-weight: 400;
+}
+.shiny-options-group .radio > label > input,
+.shiny-options-group .checkbox > label > input {
+  margin-top: 0.25rem;
+  flex: 0 0 auto;
+}
+.shiny-options-group .radio > label > span,
+.shiny-options-group .checkbox > label > span {
+  flex: 1 1 auto;
+}
+
+/* Compact toggle switch for binary workflow settings. */
+.pma-switch-row .checkbox > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 1.6rem;
+}
+.pma-switch-row .checkbox > label > input[type="checkbox"] {
+  appearance: none;
+  width: 2.5rem;
+  height: 1.35rem;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted));
+  position: relative;
+  margin: 0;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.pma-switch-row .checkbox > label > input[type="checkbox"]::before {
+  content: "";
+  position: absolute;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 9999px;
+  left: 0.12rem;
+  top: 0.11rem;
+  background: white;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
+  transition: transform 0.15s ease;
+}
+.pma-switch-row .checkbox > label > input[type="checkbox"]:checked {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+}
+.pma-switch-row .checkbox > label > input[type="checkbox"]:checked::before {
+  transform: translateX(1.1rem);
+}
+
+/* details > summary: keep the title on one line where possible */
+details > summary {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------------------------------------------------------------------------
+   Dropdowns: one white, token-driven look for both flavours of select.
+
+   The app mixes two DOM shapes and the browser default styles them very
+   differently, so side-by-side controls in the same card did not match:
+     - selectInput(..., selectize = FALSE) renders a NATIVE
+       <select class="shiny-input-select form-control"> that inherits the
+       operating system's chrome (grey gradient on macOS, blue caret on
+       Windows);
+     - selectInput(...) (the default) hides its <select> and draws a
+       selectize.js widget whose own stylesheet hard-codes #ccc borders,
+       4px radii and 6px/12px padding - none of which come from our tokens.
+
+   Restyling both against the same variables makes them read as one control.
+   Everything is scoped to .shiny-input-container so DT's own page-length
+   <select> (inside .dataTables_length, outside any Shiny input container)
+   keeps its table-native styling.
+
+   Inputs covered here: col_studlab, col_treat, col_n, col_event, col_mean,
+   col_sd, subgroup_col, selected_outcome, sample_dataset, rare_primary_method
+   (native, selectize = FALSE); experimental_label, control_label, method,
+   method_tau, subgroup_order, rob_override and the other Step 3 / Step 4
+   pickers (selectize).
+   --------------------------------------------------------------------------- */
+
+/* The caret glyph is shared by both flavours, so it lives in a custom property
+   rather than being pasted twice: a line-drawn chevron that drifted out of sync
+   between the native rule and the selectize pseudo-element would reintroduce
+   exactly the mismatch this section exists to remove. It is declared on
+   .shiny-input-container (not :root) to keep the section self-contained and to
+   leave DT's own selects untouched; both consumers below inherit it from there,
+   including ::after, which inherits from its originating element. */
+.shiny-input-container {
+  --pma-select-caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+
+/* --- Native <select> (selectize = FALSE) --- */
+.shiny-input-container select.form-control {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 100%;
+  min-height: 34px;
+  padding: 0.375rem 2rem 0.375rem 0.75rem;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 20px;
+  color: hsl(var(--foreground));
+  background-color: hsl(var(--background));
+  /* Rewritten from an inline data-URI to the shared token above so the two
+     flavours cannot drift apart. */
+  background-image: var(--pma-select-caret);
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 1rem 1rem;
+  border: 1px solid hsl(var(--input));
+  border-radius: var(--radius);
+  box-shadow: none;
+  cursor: pointer;
+}
+.shiny-input-container select.form-control:focus {
+  outline: none;
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.15);
+}
+/* Listbox-shaped selects have no collapsed caret to point at. */
+.shiny-input-container select.form-control[multiple],
+.shiny-input-container select.form-control[size]:not([size="1"]) {
+  background-image: none;
+  padding-right: 0.75rem;
+  cursor: default;
+}
+.shiny-input-container select.form-control:disabled {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  cursor: default;
+}
+
+/* --- selectize.js widgets (selectInput default) ---
+   The outer box, the dropdown surface and the caret are repainted; option
+   rows, multi-select item chips and the drag_drop plugin's affordances keep
+   selectize's own behaviour. (The caret used to be left alone, but selectize
+   draws a filled CSS triangle while the native rule above draws a line chevron,
+   so "Study label" and "Intervention arm value" pointed at each other with two
+   different glyphs inside the same card.) */
+.shiny-input-container .selectize-input {
+  background: hsl(var(--background));
+  min-height: 34px;
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--input));
+  border-radius: var(--radius);
+}
+.shiny-input-container .selectize-control.single .selectize-input.input-active {
+  background: hsl(var(--background));
+}
+.shiny-input-container .selectize-input.dropdown-active {
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.shiny-input-container .selectize-input.focus {
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.15);
+}
+.shiny-input-container .selectize-dropdown {
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--input));
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+/* Swap selectize's filled CSS triangle for the shared chevron. The borders are
+   zeroed (that triangle IS a border trick) and the pseudo-element is given a
+   real 1rem box, positioned to land where the native caret's
+   `background-position: right 0.7rem center` puts it: `right` on an absolutely
+   positioned child is measured from the same padding box the native background
+   is painted in, and top 50% / -0.5rem margin reproduces `center`.
+   .selectize-control.single only, so the multi-select pickers (subgroup_order)
+   stay caret-free exactly as selectize leaves them.
+
+   The `:not(.no-arrow)` qualifier is not decoration: selectize ships the
+   triangle as `.selectize-control.single .selectize-input:not(.no-arrow):after`
+   (specificity 0,3,1) and this file is inlined by includeCSS() into <head>
+   BEFORE the selectize stylesheet link, so a merely equal-specificity selector
+   loses the tie and only the properties selectize does not set (the background)
+   would survive. Repeating the qualifier makes it 0,4,1 and it also preserves
+   selectize's own .no-arrow opt-out. */
+.shiny-input-container
+  .selectize-control.single
+  .selectize-input:not(.no-arrow)::after {
+  border: 0;
+  width: 1rem;
+  height: 1rem;
+  top: 50%;
+  right: 0.7rem;
+  margin-top: -0.5rem;
+  background-image: var(--pma-select-caret);
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: 1rem 1rem;
+}
+/* Open state: selectize points its triangle upwards (and nudges margin-top to
+   -4px), so flip the chevron and restore the centring offset. One class more
+   than selectize's own 0,4,1 open-state rule, for the tie-break reason above. */
+.shiny-input-container
+  .selectize-control.single
+  .selectize-input:not(.no-arrow).dropdown-active::after {
+  border: 0;
+  margin-top: -0.5rem;
+  transform: rotate(180deg);
+}

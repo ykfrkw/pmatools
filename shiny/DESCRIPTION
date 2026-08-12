@@ -1,0 +1,42 @@
+Type: Project
+Package: pairwise.meta.analysis.app
+Title: pmatools wizard (Shiny app for pairwise MA + GRADE)
+Version: 2.1.0
+Authors@R: person("Yuki", "Furukawa", email = "furukawa.y.psy@gmail.com",
+                  role = c("aut", "cre"))
+Description: NOT AN R PACKAGE, AND NOT DELETABLE. This file exists so
+    rsconnect can read the Imports field below and install those
+    packages on the shinyapps.io server; it is a deployment manifest,
+    nothing more. The real package DESCRIPTION is one directory up.
+    Version above is the app's own (wizard/UI work) and deliberately
+    tracks separately from the package version -- rsconnect ignores the
+    field entirely. WARNING - the rare-event backends metafor, mmeta
+    and BiasedUrn are referenced only as name strings in
+    R/_pmatools/rare_events.R, so rsconnect's code scan cannot detect
+    them; this Imports field is the ONLY thing that installs them on
+    the server. Removing them deploys fine and breaks the rare-event
+    method suite at runtime, in production. Never remove them (see
+    deploy.R and stage_bundle.R, and ../CLAUDE.md).
+License: CC BY 4.0
+Imports:
+    shiny,
+    bslib,
+    htmltools,
+    DT,
+    flextable,
+    meta,
+    brglm2,
+    metafor,
+    mmeta,
+    BiasedUrn,
+    tibble,
+    dplyr,
+    rlang,
+    glue,
+    zip,
+    officer,
+    magick,
+    shinycssloaders,
+    readxl
+Suggests:
+    testthat (>= 3.0.0)

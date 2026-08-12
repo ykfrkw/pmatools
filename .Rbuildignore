@@ -12,6 +12,11 @@
 Rplots\.pdf$
 ^\.claude$
 ^CLAUDE\.md$
+# The Shiny app. It lives in this repo so a change lands in the package and in
+# the deployed app at once, but it is not part of the package: it carries its
+# own DESCRIPTION (an rsconnect manifest), its own tests, and a staged copy of
+# R/ that R CMD build must never see twice.
+^shiny$
 # In a git worktree, .git is a plain file (a gitdir pointer), so R CMD build's
 # built-in "skip version-control directories" rule does not catch it and check
 # reports a hidden-file NOTE. Harmless in a normal clone, where .git is a dir.
