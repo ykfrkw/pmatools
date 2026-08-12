@@ -90,15 +90,18 @@ step1_server <- function(input, output, session, state) {
 
   # Map an uploaded RoB / Indirectness column to the Step 3 editor vocabulary
   # ("low" / "some" / "high"; NA = not set). Delegates to the vendored
-  # .rob_plot_strata() so the editor, grade_meta() and the stratified forest
+  # rob_strata() so the editor, grade_meta() and the stratified forest
   # plots all accept the same labels -- including the Cochrane RoB2 wording
   # ("No concerns", "Some concerns", "Serious concerns", "Critical concerns").
+  # rob_strata() is pmatools public API as of 0.5.0 (the dot-prefixed
+  # .rob_plot_strata() is only a back-compat alias) -- do not "fix" this back
+  # to the dot-name to match the rest of the vendored code.
   .study_level_for_editor <- function(x) {
     v <- trimws(as.character(x))
     out <- rep(NA_character_, length(v))
     known <- !is.na(v) & nzchar(v)
     if (any(known)) {
-      lvl <- .rob_plot_strata(v[known], arg = "Uploaded RoB/Indirectness column")
+      lvl <- rob_strata(v[known], arg = "Uploaded RoB/Indirectness column")
       lvl[lvl == "unknown"] <- NA_character_   # unrecognized -> leave unset
       out[known] <- lvl
     }
