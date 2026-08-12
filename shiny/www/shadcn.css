@@ -413,6 +413,16 @@ table.dataTable th { background: hsl(var(--muted)); }
   width: 100%;
 }
 
+/* The container is what has to be wide -- that is what stops the label
+   wrapping. The control itself does not: a 1100px box holding "50" reads as
+   a mistake. Cap the numeric spinners only; text inputs and selects carry
+   long values (outcome names, forest titles, column names) and stay full
+   width. Inside .pma-display-grid the grid cell is already narrower than
+   this cap, so the panels are unaffected. */
+.pma-card .shiny-input-container input[type="number"] {
+  max-width: 16rem;
+}
+
 /* ---------------------------------------------------------------------------
    Display panels (forest / funnel): one four-column grid shared by all three
    call sites - .forest_display_panel() in R/step3_grade.R, the Step 2 forest

@@ -350,7 +350,7 @@ step3_ui <- function() {
               htmltools::HTML(
                 "&#9998;&nbsp; <strong>Edit per-study Indirectness</strong> ",
                 "<span class='pma-edit-hint'>(click to expand &middot; ",
-                "optional per-study notes; the overall rating above is what feeds GRADE)</span>"
+                "optional per-study notes; the overall rating above is what feeds Core GRADE)</span>"
               )
             ),
             htmltools::div(
@@ -515,7 +515,7 @@ step3_ui <- function() {
                               target = "_blank", "Page et al., BMJ 2023 (RoB-ME)"),
             htmltools::HTML(paste0(
               ". This information is <strong>not part of the automated ",
-              "GRADE algorithm</strong>, but you are encouraged to consider ",
+              "Core GRADE algorithm</strong>, but you are encouraged to consider ",
               "it when finalising the publication-bias judgment manually ",
               "(use the override below)."))),
           htmltools::div(
@@ -577,7 +577,7 @@ step3_ui <- function() {
         shiny::tabPanel("Final certainty",
           shiny::uiOutput("cert_incomplete_banner"),
           shiny::uiOutput("analysis_set_banner_cert"),
-          htmltools::h5("GRADE Evidence Profile"),
+          htmltools::h5("Core GRADE Evidence Profile"),
           htmltools::div(
             style = "margin-top: 0.5rem; margin-bottom: 1rem;",
             shinycssloaders::withSpinner(
@@ -1681,7 +1681,7 @@ step3_server <- function(input, output, session, state) {
           "funnel plot. The numerical summary below shows how the pooled ",
           "estimate would shift if these imputed studies actually existed. ",
           htmltools::HTML(paste0(
-            "This information is <strong>not part of the automated GRADE ",
+            "This information is <strong>not part of the automated Core GRADE ",
             "algorithm</strong>, but you are encouraged to consider it ",
             "when finalising the publication-bias judgment manually."))),
         shinycssloaders::withSpinner(
