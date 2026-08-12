@@ -1051,6 +1051,10 @@ step3_server <- function(input, output, session, state) {
     threshold_abs_state(NA_real_)
     threshold_baseline_state(NA_real_)
     threshold_mode_state(THRESHOLD_MODE_DEFAULT)
+    # Back to the app convention, not to NA: 0.20 is what .responder_block()
+    # offers a fresh outcome, and it is labelled an unconfirmed assumption
+    # until the reviewer accepts or replaces it.
+    responder_p0_state(RESPONDER_P0_DEFAULT)
     .seed_thresholds()
     cr <- shiny::isolate(control_risk())
     if (is.finite(cr$value)) threshold_baseline_state(round(1000 * cr$value, 1))
@@ -1186,8 +1190,29 @@ step3_server <- function(input, output, session, state) {
   # starting value is RESPONDER_P0_DEFAULT, at file scope in
   # R/step3_threshold.R beside .responder_block(), which is the widget that
   # offers it.
-  responder_p0 <- shiny::reactive({
+  #
+  # Held in a reactiveVal for the same reason as the thresholds above. It used
+  # to be read straight off input$baseline_risk_chinn with the widget rendered
+  # from the constant, so every rebuild of output$threshold_panel reset a
+  # replaced proportion to 0.20 - including rebuilds WITHIN one outcome, where
+  # nothing had changed that should discard the reviewer's number. That failed
+  # closed (the freshly built confirmation box is unticked, so Next stayed
+  # gated) but it silently threw away an answer they had justified in writing.
+  # Scoped to the outcome: state$step3_reset() puts it back to the convention.
+  responder_p0_state <- shiny::reactiveVal(RESPONDER_P0_DEFAULT)
+  # NA is mirrored through rather than ignored, matching threshold_abs: an
+  # emptied box must not leave the app converting against a number the
+  # reviewer has removed. responder_p0_valid() then closes the Next gate.
+  shiny::observeEvent(input$baseline_risk_chinn, {
     v <- input$baseline_risk_chinn
+    if (is.null(v) || length(v) != 1) return()
+    responder_p0_state(if (is.na(v)) NA_real_ else v)
+  }, ignoreInit = TRUE, ignoreNULL = FALSE)
+  shiny::observeEvent(responder_p0_state(), {
+    .sync_widget("baseline_risk_chinn", responder_p0_state())
+  }, ignoreNULL = FALSE)
+  responder_p0 <- shiny::reactive({
+    v <- responder_p0_state()
     if (is.null(v) || length(v) != 1L || is.na(v)) return(NA_real_)
     v
   })
@@ -1399,7 +1424,9 @@ step3_server <- function(input, output, session, state) {
       )
     } else {
       htmltools::tagList(
-        .responder_block(sm),
+        # isolate() for the same reason as the threshold seeds: a reactive read
+        # would rebuild the panel on every keystroke in this very box.
+        .responder_block(sm, shiny::isolate(responder_p0_state())),
         shiny::uiOutput("direction_echo"),
         .config_section(
           htmltools::tagList("Decision threshold", .source_badge(src)),

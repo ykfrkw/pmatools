@@ -459,7 +459,16 @@ RESPONDER_P0_DEFAULT <- 0.20
 # This app implements the responder proportion only; the departure is
 # stated on screen rather than left implicit, and so is the fact that the
 # conversion used is Chinn's formula, not Core GRADE 6's own procedure.
-.responder_block <- function(sm) {
+#
+# `p0` is the seed for the proportion box, passed in by the caller from the
+# reactiveVal that owns it - the widget must not re-assert the constant on
+# every rebuild, or a proportion the reviewer replaced and justified is thrown
+# away whenever the panel re-renders. RESPONDER_P0_DEFAULT stays the default
+# argument so the block still stands alone, and the two conditionalPanel
+# conditions below deliberately keep comparing against the CONSTANT: what
+# obliges a rationale is departing from the app convention, not departing from
+# whatever happens to be seeded.
+.responder_block <- function(sm, p0 = RESPONDER_P0_DEFAULT) {
   convertible <- sm %in% c("SMD", "MD")
   if (!convertible) {
     return(.config_section(
@@ -494,7 +503,12 @@ RESPONDER_P0_DEFAULT <- 0.20
       shiny::numericInput("baseline_risk_chinn",
         paste0("Proportion of control patients meeting the threshold of ",
                "clinical interest"),
-        value = RESPONDER_P0_DEFAULT, min = 0.01, max = 0.99, step = 0.01),
+        value = if (length(p0) == 1L && is.numeric(p0) && is.finite(p0)) {
+          p0
+        } else {
+          RESPONDER_P0_DEFAULT
+        },
+        min = 0.01, max = 0.99, step = 0.01),
       .config_note(EDU_COPY$config_tab$responder_default),
       # This is not a risk and Core GRADE has no notion of baseline risk
       # for a continuous outcome, so it does not reuse the binary label.

@@ -249,3 +249,34 @@ test_that("step3_widget_sync_value() never pushes an unseeded state", {
   expect_null(step3_widget_sync_value(Inf, 127))
   expect_null(step3_widget_sync_value("127", 127))
 })
+
+test_that(".responder_block() seeds the proportion box from its argument", {
+  # The reviewer's replaced proportion must survive a rebuild of the panel:
+  # the block renders whatever the reactiveVal holds, not the constant.
+  html <- as.character(.responder_block("SMD", 0.35))
+  expect_match(html, 'id="baseline_risk_chinn"[^>]*value="0.35"')
+
+  # Absent / unusable seeds fall back to the app convention rather than
+  # rendering an empty or malformed box.
+  for (bad in list(NULL, NA_real_, numeric(0), c(0.2, 0.3), Inf, "0.3")) {
+    expect_match(as.character(.responder_block("SMD", bad)),
+                 sprintf('id="baseline_risk_chinn"[^>]*value="%s"',
+                         RESPONDER_P0_DEFAULT))
+  }
+  expect_match(as.character(.responder_block("SMD")),
+               sprintf('id="baseline_risk_chinn"[^>]*value="%s"',
+                       RESPONDER_P0_DEFAULT))
+
+  # The rationale / confirm panels still key on the CONSTANT: what obliges a
+  # written justification is departing from the app convention, not from
+  # whatever was seeded.
+  seeded <- as.character(.responder_block("SMD", 0.35))
+  expect_match(seeded, sprintf("baseline_risk_chinn != %s",
+                               RESPONDER_P0_DEFAULT), fixed = FALSE)
+  expect_match(seeded, sprintf("baseline_risk_chinn == %s",
+                               RESPONDER_P0_DEFAULT), fixed = FALSE)
+
+  # Measures with no responder conversion have no box to seed.
+  expect_no_match(as.character(.responder_block("RoM", 0.35)),
+                  "baseline_risk_chinn")
+})

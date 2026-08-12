@@ -317,9 +317,23 @@ pma_outcome_input_ids <- function() {
 
 # The subset whose cleared value is unambiguous: a confirmation is either
 # given or it is not, so these can be pushed to the client without restating
-# any widget's declared default. Everything else in the registry clears itself
-# when app.R rebuilds the step body from step3_ui() - a freshly built widget
-# pushes its own default back to the server, so no default is written twice.
+# any widget's declared default.
+#
+# Everything else in the registry is reset by one of two other mechanisms, and
+# which one applies is worth knowing before changing either:
+#
+#   - The Configuration tab's numeric answers (the thresholds, the
+#     control-group risk, the responder proportion) live in reactiveVals in
+#     step3_server(). state$step3_reset() puts those back, and
+#     output$threshold_panel re-renders from them because it depends on
+#     state$outcome_gen. A rebuild alone does NOT reset them, which is the
+#     point: re-rendering the panel within one outcome must not discard a
+#     number the reviewer entered and justified.
+#   - Everything else clears itself when app.R rebuilds the step body from
+#     step3_ui(), because a freshly built widget pushes its own declared
+#     default back to the server.
+#
+# So no default is written twice, but only the second group is self-clearing.
 PMA_OUTCOME_CONFIRM_IDS <- c("threshold_confirm", "responder_p0_confirm",
                              "rob_confirm_na", "incon_confirm_na",
                              "indir_confirm_na", "impre_confirm_na",
