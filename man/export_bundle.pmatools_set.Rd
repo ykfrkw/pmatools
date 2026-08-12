@@ -34,7 +34,11 @@
 \code{"sof"}, \code{"evidence_profile"}, \code{"indirectness"}, \code{"readme"}.}
 
 \item{style}{Summary-of-findings layout, \code{"bmj"} (default) or
-\code{"gradepro"}.}
+\code{"gradepro"}. Passed to \code{\link{grade_table}} for
+\code{summary_of_findings.docx} and rendered into the bundled \code{analysis.R}.
+Same default as the single-outcome \code{\link{export_bundle.meta}}.
+Per-outcome \code{follow_up} / \code{unit} need no argument here: \code{grade_table()}
+reads them off the rated objects, as does the generated script.}
 
 \item{per}{Denominator for SoF rate columns. Default 1000.}
 

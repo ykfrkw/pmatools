@@ -32,7 +32,11 @@
 #'   `"results"`, `"forest"`, `"forest_full"`, `"forest_rob"`, `"funnel"`,
 #'   `"sof"`, `"evidence_profile"`, `"indirectness"`, `"readme"`.
 #' @param style Summary-of-findings layout, `"bmj"` (default) or
-#'   `"gradepro"`.
+#'   `"gradepro"`. Passed to \code{\link{grade_table}} for
+#'   `summary_of_findings.docx` and rendered into the bundled `analysis.R`.
+#'   Same default as the single-outcome \code{\link{export_bundle.meta}}.
+#'   Per-outcome `follow_up` / `unit` need no argument here: `grade_table()`
+#'   reads them off the rated objects, as does the generated script.
 #' @param per Denominator for SoF rate columns. Default 1000.
 #' @param prediction Show 95 percent prediction interval in the Effect column.
 #' @param rob Optional per-study Risk-of-Bias labels for the RoB-stratified

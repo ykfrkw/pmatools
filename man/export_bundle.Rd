@@ -20,8 +20,11 @@ export_bundle(x, ...)
   bundle_name = "pmatools_results",
   include = c("data", "script", "results", "forest", "forest_rob", "funnel",
     "funnel_trimfill", "pubias_missing_forest", "grade_table"),
+  style = c("bmj", "gradepro"),
   per = 1000,
   prediction = FALSE,
+  follow_up = NULL,
+  unit = NULL,
   convert_smd_to_or = FALSE,
   baseline_risk = NULL,
   threshold_label = NULL,
@@ -54,9 +57,27 @@ entry point), a \code{pmatools} object, or a \code{pmatools_set}.}
 
 \item{include}{Which artifacts to include. See Details.}
 
+\item{style}{(v0.5.1) Summary-of-findings layout, \code{"bmj"} (default) or
+\code{"gradepro"}. Passed to \code{\link{sof_table}} for \code{sof_table.docx} and
+to \code{\link{grade_report}} for the certainty appendix, and rendered
+into the bundled \code{analysis.R} so re-running the script reproduces the
+layout that was exported. Same default as
+\code{\link{export_bundle.pmatools_set}}; note that \code{sof_table()} itself
+still defaults to \code{"gradepro"}.}
+
 \item{per}{Denominator for SoF rate columns. Default 1000.}
 
 \item{prediction}{Show 95 percent prediction interval in SoF Effect column.}
+
+\item{follow_up}{(v0.5.1) Optional free-text time frame shown under the
+outcome name in the \code{"bmj"} layout, e.g.
+\code{"Follow-up: longest, range 7.7-60 months"}. Defaults to
+\code{grade$follow_up} when the rated object carries one (objects rated by
+\code{\link{grade_meta_multi}} do). Ignored by the \code{"gradepro"} layout.}
+
+\item{unit}{(v0.5.1) Optional unit for the Difference column of the
+\code{"bmj"} layout with continuous outcomes, e.g. \code{"days"}. Defaults to
+\code{grade$unit} on the same terms as \code{follow_up}.}
 
 \item{convert_smd_to_or}{Logical. Passed to \code{\link{sof_table}} for
 continuous-outcome dichotomisation.}
