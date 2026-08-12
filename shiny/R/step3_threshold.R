@@ -48,6 +48,48 @@ step3_threshold_suggestions <- function(s) {
   out
 }
 
+# Should the on-screen widget be re-pushed from its reactiveVal, and to what?
+#
+# BUG FIX: the Configuration boxes could show the PREVIOUS outcome's number
+# while the app rated against the current one. output$threshold_panel seeds
+# every widget from its reactiveVal under isolate(), but app.R's provenance
+# guard resets those reactiveVals AFTER the panel has already flushed - that
+# observer is created later than step3_server's outputs, so it runs later in
+# the same flush. The re-created widget therefore carries the old value, and
+# Shiny's client suppresses the re-send of a value the server already holds,
+# so no input event ever corrects it. Confirmed by instrumenting both sides:
+# after switching the event column the box read 74.3 per 1,000 while
+# threshold_baseline_state() held 127.0, and the rating used 127.0. A reviewer
+# reading a baseline risk off the screen and accepting it was accepting a
+# number the app was not using.
+#
+# The caller keys the observer on the reactiveVal, NOT on the input, which is
+# what makes the two guards below safe: emptying a box does not change the
+# state, so a cleared field is never refilled behind the reviewer's back.
+#
+# Returns the value to push, or NULL to leave the widget alone.
+step3_widget_sync_value <- function(state_value, input_value,
+                                    tolerance = 1e-8) {
+  if (is.null(state_value) || length(state_value) != 1L ||
+      !is.numeric(state_value) || !is.finite(state_value)) {
+    # An unseeded (NA) state is not a correction to make. The panel falls back
+    # to the pooled control-group risk / the suggestion on purpose while the
+    # seeding observers catch up (their order is not guaranteed), so pushing
+    # NA here would blank a box that is showing the right number.
+    return(NULL)
+  }
+  if (!is.null(input_value) && length(input_value) == 1L &&
+      is.numeric(input_value) && !is.na(input_value) &&
+      isTRUE(all.equal(as.numeric(input_value), as.numeric(state_value),
+                       tolerance = tolerance))) {
+    # Already agrees - normally because the reviewer has just typed it.
+    # Re-pushing an identical value would move the caret to the end of the box
+    # while they are still editing it.
+    return(NULL)
+  }
+  as.numeric(state_value)
+}
+
 # Does this analysis have an absolute (event-rate) scale at all?
 #
 # BUG FIX: the Configuration panel used to branch on `sm %in% c("OR", "RR")`,

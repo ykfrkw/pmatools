@@ -208,3 +208,44 @@ test_that("step3_append_domain_note() appends in the ' | ' house style", {
   expect_identical(step3_append_domain_note(d, "Imprecision", ""), d)
   expect_null(step3_append_domain_note(NULL, "Imprecision", "new"))
 })
+
+# ---------------------------------------------------------------------------
+# Keeping the Configuration widgets in step with the reactiveVals that back
+# them. The panel seeds each box from its reactiveVal under isolate(), and
+# app.R's provenance guard resets those reactiveVals after the panel has
+# already rendered - so without a push the box can show the previous outcome's
+# number while the rating uses the current one.
+# ---------------------------------------------------------------------------
+
+test_that("step3_widget_sync_value() pushes when the widget has gone stale", {
+  # The reported case: the box still holds the previous outcome's pooled
+  # control-group risk, the state holds this outcome's.
+  expect_equal(step3_widget_sync_value(127, 74.3), 127)
+  # Same for a value the reviewer typed for the previous outcome.
+  expect_equal(step3_widget_sync_value(1.25, 2.5), 1.25)
+  # A box that is empty when the state changes gets the new value.
+  expect_equal(step3_widget_sync_value(127, NA_real_), 127)
+  expect_equal(step3_widget_sync_value(127, NULL), 127)
+})
+
+test_that("step3_widget_sync_value() leaves an agreeing widget alone", {
+  # Re-pushing a value the box already shows would move the caret to the end
+  # while the reviewer is still typing, so agreement means no message.
+  expect_null(step3_widget_sync_value(127, 127))
+  expect_null(step3_widget_sync_value(0.2, 0.2))
+  expect_null(step3_widget_sync_value(127, 127 + 1e-12))
+  # Differences the reviewer could actually have typed are NOT rounding.
+  expect_equal(step3_widget_sync_value(127, 127.1), 127)
+})
+
+test_that("step3_widget_sync_value() never pushes an unseeded state", {
+  # An NA state means "not seeded yet", not "blank the box": the panel falls
+  # back to the pooled value / the suggestion on purpose while the seeding
+  # observers catch up, and blanking would replace a correct number with none.
+  expect_null(step3_widget_sync_value(NA_real_, 127))
+  expect_null(step3_widget_sync_value(NULL, 127))
+  expect_null(step3_widget_sync_value(numeric(0), 127))
+  expect_null(step3_widget_sync_value(c(1, 2), 127))
+  expect_null(step3_widget_sync_value(Inf, 127))
+  expect_null(step3_widget_sync_value("127", 127))
+})

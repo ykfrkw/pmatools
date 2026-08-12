@@ -1148,6 +1148,40 @@ step3_server <- function(input, output, session, state) {
     threshold_state(if (is.na(v)) NA_real_ else v)
   }, ignoreInit = TRUE, ignoreNULL = FALSE)
 
+  # ... and back the other way, so the box cannot show one number while the
+  # app rates against another. The reactiveVals are the single source of
+  # truth, but output$threshold_panel only reads them under isolate() (a
+  # reactive read would rebuild the panel on every keystroke and destroy the
+  # widget being typed into), so a state change that lands AFTER the panel has
+  # rendered never reaches the DOM on its own. That is exactly what app.R's
+  # provenance guard does when the outcome changes. See the long note at
+  # step3_widget_sync_value(), which decides whether a push is warranted.
+  #
+  # Keyed on the reactiveVal, never on the input: an observer that also
+  # depended on the input would fight the reviewer as they type, and would
+  # refill a box they had just emptied.
+  .sync_widget <- function(id, value) {
+    v <- step3_widget_sync_value(value, shiny::isolate(input[[id]]))
+    if (is.null(v)) return(invisible(NULL))
+    shiny::updateNumericInput(session, id, value = v)
+    invisible(NULL)
+  }
+  shiny::observeEvent(threshold_baseline_state(), {
+    .sync_widget("threshold_baseline_input", threshold_baseline_state())
+  }, ignoreNULL = FALSE)
+  shiny::observeEvent(threshold_abs_state(), {
+    .sync_widget("threshold_abs", threshold_abs_state())
+  }, ignoreNULL = FALSE)
+  # threshold_state() backs two widgets - the relative box on the binary
+  # branch and the single box on the continuous one - and only ever one of
+  # them is on screen. An input message addressed to a widget that is not in
+  # the DOM is dropped by the client, so both are addressed unconditionally
+  # rather than re-deriving which branch output$threshold_panel took.
+  shiny::observeEvent(threshold_state(), {
+    .sync_widget("threshold_ratio", threshold_state())
+    .sync_widget("threshold_cont",  threshold_state())
+  }, ignoreNULL = FALSE)
+
   # Responder-conversion state (continuous outcomes). The app-convention
   # starting value is RESPONDER_P0_DEFAULT, at file scope in
   # R/step3_threshold.R beside .responder_block(), which is the widget that
