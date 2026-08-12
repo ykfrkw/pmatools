@@ -16,13 +16,19 @@ step4_ui <- function() {
       # dataset other than the one currently loaded. Warning only - the
       # export is never blocked (see output$sof_stale_warning).
       shiny::uiOutput("sof_stale_warning"),
-      # Kept as a sibling (not nested inside combined_sof_block) so changing
-      # the grouping re-renders the table without rebuilding the selector.
-      shiny::uiOutput("sof_primary_ui"),
       shinycssloaders::withSpinner(
         shiny::uiOutput("combined_sof_block"),
         type = 4, color = "#0f172a", size = 0.6,
-        proxy.height = "120px")
+        proxy.height = "120px"),
+      # Straight from the finished table to the next row of it.
+      pma_add_next_outcome_button(),
+      htmltools::p(
+        class = "pma-card-subtitle",
+        style = "margin-top: 0.4rem;",
+        "Returns to Step 2 with the outcome name, direction, follow-up and ",
+        "every Step 3 answer cleared, ready for the next outcome. The saved ",
+        "outcomes above, the loaded data and the per-study risk-of-bias and ",
+        "indirectness ratings are kept.")
     ),
 
     pma_card(
@@ -146,8 +152,12 @@ step4_server <- function(input, output, session, state) {
   combined_sof <- shiny::reactive({
     outs <- saved_outcomes()
     if (length(outs) == 0) return(NULL)
-    primary <- input$sof_primary
-    primary <- primary[primary %in% names(outs)]
+    # Row order and the primary grouping both come from state now, driven by
+    # the per-row controls in pma_saved_outcomes_ui() and validated by
+    # pmatools' reorder_outcomes() / set_primary() (see step3_server()). The
+    # standalone "Primary outcome(s)" selector that used to sit above the
+    # table is gone: two controls for one property is one too many.
+    primary <- intersect(state$sof_primary %||% character(0), names(outs))
     if (length(primary) == 0) primary <- NULL
     arms <- .arm_labels()
     tryCatch({
@@ -174,18 +184,6 @@ step4_server <- function(input, output, session, state) {
       error = function(e) {
         structure(list(message = conditionMessage(e)), class = "pma_sof_error")
       }
-    )
-  })
-
-  output$sof_primary_ui <- shiny::renderUI({
-    outs <- saved_outcomes()
-    if (length(outs) == 0) return(NULL)
-    shiny::selectizeInput(
-      "sof_primary", "Primary outcome(s) (optional grouping)",
-      choices  = names(outs),
-      selected = shiny::isolate(input$sof_primary),
-      multiple = TRUE, width = "100%",
-      options  = list(placeholder = "None - single ungrouped table")
     )
   })
 
@@ -220,7 +218,8 @@ step4_server <- function(input, output, session, state) {
       pma_sof_scroller(body),
       pma_sof_limitations_ui(),
       pma_saved_outcomes_ui(outs, delete_input_id = "outcome_delete",
-                            signature = current_signature())
+                            signature = current_signature(),
+                            primary = state$sof_primary)
     )
   })
 
@@ -462,11 +461,21 @@ step4_server <- function(input, output, session, state) {
           0.10,
           detail = "Rendering plots, tables, and report (this may take a while)..."
         )
+        # Without grade_args, the analysis.R written into every bundle renders
+        # each grade_meta() argument the app supplied as its template default
+        # - `small_values = NULL` among them, even though Step 2 now REQUIRES
+        # the reviewer to answer it - so the "reproducible" script did not
+        # reproduce the rating it shipped with. The specs are built beside the
+        # grade_meta() call that used them and carried on the rated object
+        # (pma_grade_arg_specs(), ui_helpers.R).
+        grade_args <- attr(state$grade, PMA_GRADE_ARGS_ATTR, exact = TRUE)
+
         # export_bundle() is an S3 generic as of pmatools 0.5.0 and its first
         # formal is 'x'; pass the meta object positionally.
         out <- export_bundle(
           state$ma,
           grade        = state$grade,
+          grade_args   = grade_args,
           output_dir   = tmp_dir,
           bundle_name  = input$bundle_name %||% "pmatools_results",
           # "grade_table" is withheld and handled by .append_grade_docx()

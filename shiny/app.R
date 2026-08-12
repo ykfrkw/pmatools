@@ -124,6 +124,22 @@ server <- function(input, output, session) {
     rare_mode_active = FALSE,
     grade          = NULL,
     indir_reviewed = FALSE,
+    # Certainty assessments banked on the Step 3 "Final certainty" tab, as a
+    # named list of pmatools objects keyed by outcome label (see
+    # pma_outcomes_list() in ui_helpers.R), plus the subset the reviewer has
+    # marked primary for the combined Summary of Findings table.
+    outcomes       = NULL,
+    sof_primary    = character(0),
+    # Which certainty domains have been reviewed for the outcome currently
+    # open; written by step3_server(), read by Step 4's export gate.
+    domain_confirmed = NULL,
+    # Outcome provenance. `outcome_sig` is pma_analysis_signature() of the
+    # analysis the Step 3 answers were given for, and `outcome_gen` counts how
+    # many outcomes this session has begun. Every Step 3 answer is stamped
+    # with the generation it was given in, so an answer left behind by the
+    # previous outcome can be told apart from one given for this one.
+    outcome_sig    = NULL,
+    outcome_gen    = 1L,
     # Outcome identity, collected in Step 2 and consumed by Step 3 / Step 4.
     # Held in state (not read straight off input$) because the Step 2 widgets
     # are destroyed whenever another step's body is rendered.
@@ -171,6 +187,93 @@ server <- function(input, output, session) {
   step2_server(input, output, session, state)
   step3_server(input, output, session, state)
   step4_server(input, output, session, state)
+
+  # ================== Starting a new outcome ==================
+  #
+  # A Summary of Findings table has one row per patient-important outcome, so
+  # a session normally rates several. Everything that belongs to the outcome
+  # being rated is cleared in ONE place, whether the reviewer got there by
+  # pressing "+ Add next outcome" or by walking back to Step 2 and changing
+  # the analysis - the stepper allows free jumping, so a button-only reset
+  # would leave the second route unguarded.
+  #
+  # `identity = TRUE` additionally clears the Step 2 outcome fields and the
+  # analysis itself. The provenance guard below leaves those alone, because
+  # the reviewer is standing in Step 2 having just typed them.
+  #
+  # Never cleared, in either mode: the loaded data, the per-study risk-of-bias
+  # and indirectness table (properties of the studies, not of the outcome),
+  # the saved outcomes, and the forest / funnel display preferences.
+  begin_new_outcome <- function(identity = FALSE) {
+    state$outcome_gen      <- (state$outcome_gen %||% 1L) + 1L
+    state$grade            <- NULL
+    state$domain_confirmed <- NULL
+    state$indir_reviewed   <- FALSE
+    state$pubias_missing   <- NULL
+    # Presentation values describing the outcome rather than a plot.
+    state$display$threshold_label <- NULL
+    state$display$baseline_risk   <- NULL
+    state$display$convert         <- FALSE
+    state$display$chinn_invert    <- FALSE
+    state$display$follow_up       <- NULL
+    state$display$unit            <- NULL
+    if (isTRUE(identity)) {
+      state$outcome_name       <- NULL
+      state$small_values       <- NULL
+      state$outcome_follow_up  <- NULL
+      state$outcome_unit       <- NULL
+      state$ma                 <- NULL
+      state$regular_ma         <- NULL
+      state$rare               <- NULL
+      state$rare_diagnostics   <- NULL
+      state$rare_mode_active   <- FALSE
+      state$rare_primary_method <- NULL
+      # Cleared last: with no analysis the signature is unknown, and the guard
+      # must not read the next one as a second change.
+      state$outcome_sig        <- NULL
+    }
+    # Step-local server state that no input carries (the Step 3 threshold
+    # reactiveVals, Step 2's required-field arming).
+    if (is.function(state$step2_reset)) state$step2_reset()
+    if (is.function(state$step3_reset)) state$step3_reset()
+    # Untick the confirmation boxes that are on screen right now. The rest of
+    # Step 3 clears itself: output$step_body rebuilds the step from step3_ui()
+    # on every entry, and a freshly built widget pushes its own declared
+    # default back to the server, so no default has to be restated here.
+    pma_clear_outcome_confirmations(session)
+  }
+
+  # Provenance guard. pma_analysis_signature() defines what makes an outcome a
+  # different outcome; see the long note at its definition in ui_helpers.R.
+  outcome_signature <- shiny::reactive(
+    pma_analysis_signature(state$ma, state$small_values))
+
+  shiny::observeEvent(outcome_signature(), {
+    sig <- outcome_signature()
+    if (is.na(sig)) return()
+    if (identical(state$outcome_sig, sig)) return()
+    changed <- !is.null(state$outcome_sig)
+    state$outcome_sig <- sig
+    if (!changed) return()   # first analysis of a fresh outcome, nothing to void
+    begin_new_outcome(identity = FALSE)
+    shiny::showNotification(
+      paste0("This is a different outcome from the one Step 3 was answered ",
+             "for, so the certainty assessment has been cleared. Saved ",
+             "outcomes, the loaded data and the per-study risk-of-bias and ",
+             "indirectness ratings are untouched."),
+      id = "pma_outcome_changed", type = "warning", duration = 10)
+  }, ignoreNULL = FALSE)
+
+  shiny::observeEvent(input$add_next_outcome, {
+    begin_new_outcome(identity = TRUE)
+    state$step <- 2L
+    session$sendCustomMessage("scroll_top", list())
+    shiny::showNotification(
+      paste0("Ready for the next outcome. Name it, set its direction and ",
+             "follow-up, map its columns and run the analysis; the saved ",
+             "outcomes and the per-study ratings are kept."),
+      type = "message", duration = 8)
+  }, ignoreInit = TRUE)
 
   # Single dispatcher for Next / Back to avoid observer cascade
   shiny::observeEvent(input$btn_next, {

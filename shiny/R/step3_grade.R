@@ -1287,8 +1287,9 @@ step3_server <- function(input, output, session, state) {
   # threshold_mode_state     : "absolute" / "relative" (binary ratio SMs only)
   # threshold_abs_state      : absolute threshold, events per 1,000
   # threshold_baseline_state : baseline (control-group) risk, per 1,000
+  THRESHOLD_MODE_DEFAULT   <- "absolute"
   threshold_state          <- shiny::reactiveVal(NA_real_)
-  threshold_mode_state     <- shiny::reactiveVal("absolute")
+  threshold_mode_state     <- shiny::reactiveVal(THRESHOLD_MODE_DEFAULT)
   threshold_abs_state      <- shiny::reactiveVal(NA_real_)
   threshold_baseline_state <- shiny::reactiveVal(NA_real_)
 
@@ -1306,9 +1307,13 @@ step3_server <- function(input, output, session, state) {
   # otherwise an OR of 1.25 would silently become an SMD threshold of 1.25.
   threshold_seed_key <- shiny::reactiveVal(NA_character_)
 
-  shiny::observeEvent(state$ma, {
-    obj <- state$ma
-    if (is.null(obj)) return()
+  # Prefill the threshold reactiveVals from suggest_threshold(). Extracted
+  # from the observer below so that voiding an outcome can re-run it: the
+  # observer only fires on a change of state$ma, and it may already have fired
+  # for this analysis by the time the reset lands.
+  .seed_thresholds <- function() {
+    obj <- shiny::isolate(state$ma)
+    if (is.null(obj)) return(invisible(NULL))
     key <- paste(class(obj)[1], obj$sm %||% "", sep = "/")
     fresh <- !identical(key, shiny::isolate(threshold_seed_key()))
     if (fresh) {
@@ -1328,7 +1333,57 @@ step3_server <- function(input, output, session, state) {
         !is.na(sug$absolute1000)) {
       threshold_abs_state(round(sug$absolute1000, 1))
     }
-  }, ignoreNULL = TRUE)
+    invisible(NULL)
+  }
+
+  # ----- Voiding this outcome's Step 3 answers ------------------------------
+  # Called by app.R's begin_new_outcome(). The threshold values live in
+  # reactiveVals, not in input$, so rebuilding the Step 3 body does not touch
+  # them: without this, a threshold entered for one outcome would be re-seeded
+  # into the next outcome's field and silently rated against.
+  #
+  # Both the threshold suggestion and the pooled control-group risk are asked
+  # for again here rather than left to the observers that normally seed them.
+  # Those observers fire on a change of state$ma, which may already have
+  # happened by the time the reset lands - and the reset can also be triggered
+  # by a change of direction alone, which does not touch state$ma at all.
+  state$step3_reset <- function() {
+    threshold_seed_key(NA_character_)
+    threshold_state(NA_real_)
+    threshold_abs_state(NA_real_)
+    threshold_baseline_state(NA_real_)
+    threshold_mode_state(THRESHOLD_MODE_DEFAULT)
+    .seed_thresholds()
+    cr <- shiny::isolate(control_risk())
+    if (is.finite(cr$value)) threshold_baseline_state(round(1000 * cr$value, 1))
+  }
+
+  # Which outcome was each per-outcome input last answered for? Shiny keeps
+  # the last value of an input whose widget has been torn down, so between
+  # "the outcome changed" (app.R bumps state$outcome_gen) and "Step 3 was
+  # rendered again" every input below still reports the PREVIOUS outcome's
+  # answer. That is the whole bug: Step 4's export gate reads
+  # state$domain_confirmed, which is computed from these inputs, so an outcome
+  # nobody had looked at exported as reviewed.
+  #
+  # state$outcome_gen is read under isolate() on purpose. A reactive read would
+  # make every one of these observers re-fire when the generation is bumped,
+  # re-stamping the stale answers as current and defeating the guard.
+  .answer_gen <- shiny::reactiveValues()
+  for (.outcome_input_id in pma_outcome_input_ids()) {
+    local({
+      id <- .outcome_input_id
+      shiny::observeEvent(input[[id]], {
+        .answer_gen[[id]] <- shiny::isolate(state$outcome_gen)
+      }, ignoreInit = FALSE, ignoreNULL = FALSE)
+    })
+  }
+  # An answer counts only if it was given for the outcome now open. Failing
+  # closed is the safe direction: a wrongly-stale answer locks the gate, it
+  # never opens it.
+  .fresh <- function(id) identical(.answer_gen[[id]], state$outcome_gen)
+
+  shiny::observeEvent(state$ma, { .seed_thresholds() }, ignoreNULL = TRUE)
   # Pooled control-group risk. One computation, cached in a reactive, feeding
   # BOTH the Configuration threshold baseline and the Imprecision OIS p0, so
   # the two can no longer disagree. Previously each site recomputed a crude
@@ -2500,6 +2555,20 @@ step3_server <- function(input, output, session, state) {
       g$certainty          <- c("Very Low","Low","Moderate","High")[score]
       g$other_text         <- input$other_text
       g$other_downgrade    <- other_dg
+
+      # The exact grade_meta() call that produced this rating, shaped as the
+      # {value, origin, col} specs export_bundle() renders analysis.R from
+      # (see pma_grade_arg_specs() in ui_helpers.R). Carried on the object
+      # rather than in a separate reactive value so it cannot drift away from
+      # the rating it describes; Step 4 reads it back off state$grade.
+      #
+      # th_args, not args$threshold: the low-risk-of-bias refit above can
+      # re-convert the threshold, and the script must reproduce the conversion
+      # that was actually rated against.
+      args$threshold          <- th_args$threshold
+      args$threshold_scale    <- th_args$threshold_scale
+      args$threshold_baseline <- th_args$threshold_baseline
+      attr(g, PMA_GRADE_ARGS_ATTR) <- pma_grade_arg_specs(args)
     }
 
     g
@@ -2514,16 +2583,22 @@ step3_server <- function(input, output, session, state) {
   # A domain counts as confirmed when it has substantive user input, or
   # when its explicit "I have reviewed this domain" checkbox is ticked.
   # Progression through tabs stays free; only outputs are gated.
+  #
+  # Every read below goes through .fresh(): an answer given for a PREVIOUS
+  # outcome must not confirm this one, however the reviewer got here (see the
+  # .answer_gen note above and begin_new_outcome() in app.R).
   .valid_override <- function(sel_id, rat_id) {
     sel <- input[[sel_id]]
     rat <- input[[rat_id]]
-    !is.null(sel) && length(sel) == 1 && nzchar(sel) &&
+    .fresh(sel_id) &&
+      !is.null(sel) && length(sel) == 1 && nzchar(sel) &&
       !is.null(rat) && nzchar(trimws(rat))
   }
   .answered <- function(id) {
     v <- input[[id]]
-    !is.null(v) && length(v) > 0 && nzchar(v[1])
+    .fresh(id) && !is.null(v) && length(v) > 0 && nzchar(v[1])
   }
+  .confirmed_na <- function(id) .fresh(id) && isTRUE(input[[id]])
 
   # ----- Configuration gate -----------------------------------------------
   # Everything that must be settled before the reviewer starts on the five
@@ -2612,31 +2687,45 @@ step3_server <- function(input, output, session, state) {
     # substantive input on its own: those answers now reach grade_meta() and
     # decide the domain judgment.
     indir_sel <- input$indirectness
-    indir_active <- !is.null(indir_subdomains()) ||
-      (!is.null(indir_sel) && length(indir_sel) == 1 &&
+    indir_pico <- c("indir_population", "indir_intervention",
+                    "indir_comparator", "indir_outcome")
+    indir_active <-
+      (!is.null(indir_subdomains()) &&
+         any(vapply(indir_pico, .fresh, logical(1)))) ||
+      (.fresh("indirectness") &&
+         !is.null(indir_sel) && length(indir_sel) == 1 &&
          nzchar(indir_sel) &&
          (identical(indir_sel, "no") ||
             nzchar(trimws(input$indir_rationale %||% ""))))
 
     c(
-      threshold = length(config_blockers()) == 0L,
+      # config_blockers() already requires input$threshold_confirm, so adding
+      # the freshness test to that one id is enough to say "confirmed FOR THIS
+      # outcome" without restating the whole gate.
+      threshold = length(config_blockers()) == 0L &&
+        .fresh("threshold_confirm"),
+      # rob_data is the per-study risk-of-bias table, which describes the
+      # studies rather than the outcome and is deliberately kept across a
+      # change of outcome - so it legitimately re-confirms this domain.
       rob = rob_data ||
         .valid_override("rob_override", "rob_override_rationale") ||
-        isTRUE(input$rob_confirm_na),
+        .confirmed_na("rob_confirm_na"),
       inconsistency = .answered("ci_diff") ||
         .valid_override("incon_override", "incon_override_rationale") ||
-        isTRUE(input$incon_confirm_na),
-      indirectness = indir_active || isTRUE(input$indir_confirm_na),
-      imprecision = !is.null(.na_null(input$ois_events_override)) ||
-        !is.null(.na_null(input$ois_n_override)) ||
+        .confirmed_na("incon_confirm_na"),
+      indirectness = indir_active || .confirmed_na("indir_confirm_na"),
+      imprecision = (.fresh("ois_events_override") &&
+                       !is.null(.na_null(input$ois_events_override))) ||
+        (.fresh("ois_n_override") &&
+           !is.null(.na_null(input$ois_n_override))) ||
         .valid_override("impre_override", "impre_override_rationale") ||
-        isTRUE(input$impre_confirm_na),
+        .confirmed_na("impre_confirm_na"),
       pubias = .answered("pubias_registry_complete") ||
         .answered("pubias_small_industry") ||
         .answered("pubias_unpublished") ||
         .valid_override("pubias_funnel_asymmetry", "pubias_fa_rationale") ||
         .valid_override("pubias_override", "pubias_override_rationale") ||
-        isTRUE(input$pubias_confirm_na)
+        .confirmed_na("pubias_confirm_na")
     )
   })
 
@@ -3725,11 +3814,18 @@ step3_server <- function(input, output, session, state) {
         "save_outcome",
         sprintf("Save this outcome's assessment as \"%s\"", key),
         class = "btn btn-primary", style = "width: 100%;"),
+      # Sits beside Save so the reviewer can carry straight on to the next
+      # outcome. It returns to Step 2 and clears everything that belongs to
+      # this outcome (app.R's begin_new_outcome()).
+      pma_add_next_outcome_button(style = "width: 100%;"),
       htmltools::p(
         class = "pma-card-subtitle",
         style = "margin-top: 0.4rem;",
         "Saved under the Outcome name set in Step 2 - change it there to ",
-        "relabel the Summary of Findings row.")
+        "relabel the Summary of Findings row. \"+ Add next outcome\" returns ",
+        "to Step 2 with this outcome's name, direction, follow-up and every ",
+        "certainty answer cleared; the saved outcomes, the loaded data and ",
+        "the per-study risk-of-bias and indirectness ratings are kept.")
     )
   })
   shiny::outputOptions(output, "save_outcome_panel", suspendWhenHidden = FALSE)
@@ -3811,10 +3907,27 @@ step3_server <- function(input, output, session, state) {
       pma_saved_outcomes_ui(outs,
                             delete_input_id = "outcome_delete",
                             empty_text = EDU_COPY$multi_outcome$list_empty,
-                            signature = sig)
+                            signature = sig,
+                            primary = state$sof_primary)
     )
   })
   shiny::outputOptions(output, "saved_outcomes_list", suspendWhenHidden = FALSE)
+
+  # ----- Row order and primary outcomes -----------------------------------
+  # state$outcomes stays a plain named list (see the note on
+  # pma_outcomes_list()), so the reordering rules are borrowed rather than
+  # reimplemented: a pmatools_set is built for the call, reorder_outcomes() /
+  # set_primary() validate and apply it, and only the result is kept. Moving
+  # the app's storage to the class would change the ZIP's directory layout,
+  # which is a separate step.
+  #
+  # Both observers live here, beside Remove, and serve BOTH saved-outcome
+  # lists: the Step 3 one and the Step 4 one write to the same input ids, and
+  # only one step body is mounted at a time.
+  .outcome_set <- function(outs, primary = character(0)) {
+    .new_pmatools_set(outcomes = outs, order = names(outs),
+                      primary = intersect(as.character(primary), names(outs)))
+  }
 
   shiny::observeEvent(input$outcome_delete, {
     key  <- as.character(input$outcome_delete)[1]
@@ -3822,8 +3935,51 @@ step3_server <- function(input, output, session, state) {
     if (!key %in% names(outs)) return()
     outs[[key]] <- NULL
     state$outcomes <- outs
+    state$sof_primary <- intersect(state$sof_primary %||% character(0),
+                                   names(outs))
     shiny::showNotification(sprintf("Removed \"%s\" from the saved outcomes.", key),
                             type = "message", duration = 4)
+  }, ignoreInit = TRUE)
+
+  shiny::observeEvent(input$outcome_move, {
+    info <- input$outcome_move
+    key  <- as.character(info$name %||% "")[1]
+    dir  <- as.character(info$dir  %||% "")[1]
+    outs <- pma_outcomes_list(state$outcomes)
+    nms  <- names(outs)
+    i <- match(key, nms)
+    if (is.na(i)) return()
+    j <- if (identical(dir, "up")) i - 1L else i + 1L
+    if (j < 1L || j > length(nms)) return()
+    new_order <- nms
+    new_order[c(i, j)] <- nms[c(j, i)]
+    set <- tryCatch(
+      reorder_outcomes(.outcome_set(outs, state$sof_primary), new_order),
+      error = function(e) {
+        shiny::showNotification(paste("Could not reorder:", conditionMessage(e)),
+                                type = "error", duration = 6)
+        NULL
+      })
+    if (is.null(set)) return()
+    state$outcomes <- set$outcomes[set$order]
+  }, ignoreInit = TRUE)
+
+  shiny::observeEvent(input$outcome_primary, {
+    key  <- as.character(input$outcome_primary$name %||% "")[1]
+    outs <- pma_outcomes_list(state$outcomes)
+    if (!key %in% names(outs)) return()
+    cur <- intersect(state$sof_primary %||% character(0), names(outs))
+    new <- if (key %in% cur) setdiff(cur, key) else c(cur, key)
+    set <- tryCatch(
+      set_primary(.outcome_set(outs), if (length(new)) new else NULL),
+      error = function(e) {
+        shiny::showNotification(
+          paste("Could not set the primary outcomes:", conditionMessage(e)),
+          type = "error", duration = 6)
+        NULL
+      })
+    if (is.null(set)) return()
+    state$sof_primary <- set$primary
   }, ignoreInit = TRUE)
 
   # ----- Per-study RoB / Indirectness editors (synced with Step 1) -----

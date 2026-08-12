@@ -1278,6 +1278,11 @@ step2_server <- function(input, output, session, state) {
     required_touched(TRUE)
   }, ignoreInit = TRUE)
 
+  # Called by app.R's begin_new_outcome(). Starting a new outcome empties the
+  # two required fields on purpose, so the marks are disarmed again rather
+  # than painting the fresh form red before the reviewer has typed anything.
+  state$step2_reset <- function() required_touched(FALSE)
+
   # The ids managed here; `unset` is recomputed from input$ on every change,
   # so the marks clear the moment a field is filled.
   PMA_STEP2_REQUIRED <- c("outcome_name", "small_values")
