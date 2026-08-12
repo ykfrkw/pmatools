@@ -31,6 +31,13 @@ step2_ui <- function(state = NULL) {
   }
 
   htmltools::tagList(
+    # Registers the `pma_required_fields` custom message handler used by the
+    # required-field highlighting below. It lives here rather than in app.R's
+    # <head> because app.R is out of scope for this change; loading it as part
+    # of the Step 2 body also means it re-executes on every rebuild of that
+    # body, which is exactly what repaints the marks (see required-fields.js).
+    htmltools::tags$script(src = "required-fields.js"),
+
     pma_step_header(s$title, s$what, s$why),
 
     htmltools::div(
@@ -160,13 +167,9 @@ step2_ui <- function(state = NULL) {
                 style = "margin-top: 0.5rem;",
                 htmltools::tags$summary("Forest plot display"),
                 htmltools::div(
-                  style = paste(
-                    "display: grid;",
-                    "grid-template-columns: repeat(4, minmax(140px, 1fr));",
-                    "gap: 0.75rem 1rem;",
-                    "padding: 0.75rem 0.25rem 0.25rem;"),
+                  class = "pma-display-grid",
                   htmltools::div(
-                    style = "grid-column: span 4;",
+                    class = "pma-span-4",
                     shiny::textInput("forest_title", "Title", value = "", width = "100%")),
 
                   shiny::textInput("label_e",      "Intervention label", value = "",  width = "100%"),
@@ -177,32 +180,41 @@ step2_ui <- function(state = NULL) {
                   shiny::numericInput("xlim_lo",   "x-min", value = NA, width = "100%"),
                   shiny::numericInput("xlim_hi",   "x-max", value = NA, width = "100%"),
 
-                  # The blank-row spinners only matter once the N / per-arm
-                  # columns are hidden, because that is when the heterogeneity
-                  # footer can collide with the x-axis. They stay in the DOM
-                  # (conditionalPanel only toggles display), so a value typed
-                  # while visible keeps being applied after the columns come
-                  # back - intentional, and the reason nothing resets them.
-                  # Each numeric gets its OWN conditionalPanel: wrapping both
-                  # in one would collapse them into a single grid cell.
-                  shiny::conditionalPanel(
-                    "!input.show_n && !input.show_events",
-                    style = "grid-column: span 4;",
-                    htmltools::p(class = "pma-card-subtitle",
-                      paste0("Columns hidden: if the heterogeneity text overlaps ",
-                             "the x-axis, use these to move it up or down. ",
-                             "Blank = automatic."))),
-                  shiny::conditionalPanel(
-                    "!input.show_n && !input.show_events",
-                    shiny::numericInput("addrows_above_overall", "Blank rows above pooled result", value = NA, min = 0, step = 1, width = "100%")),
-                  shiny::conditionalPanel(
-                    "!input.show_n && !input.show_events",
-                    shiny::numericInput("addrows_below_overall", "Blank rows below pooled result", value = NA, min = 0, step = 1, width = "100%")),
+                  # Blank rows around the pooled result. Always visible: they
+                  # matter most once the per-arm columns are hidden (that is
+                  # when the heterogeneity footer can collide with the x-axis)
+                  # but they are legitimate spacing controls at any time, and
+                  # the conditionalPanels that used to hide them only toggled
+                  # display anyway.
+                  #
+                  # Defaults are NOT symmetric, and deliberately so:
+                  #  * above = 1 reproduces the blank row meta::forest() draws
+                  #    by default (pma_addrow_above() has always treated blank
+                  #    as 1). Rendered with 0 the pooled "Random effects model"
+                  #    row butts straight up against the last study row.
+                  #  * below is left blank = automatic, because
+                  #    plot_forest()'s .auto_addrow_below() is what keeps the
+                  #    heterogeneity line clear of the x-axis band and the
+                  #    Favors labels; typing 0 switches that heuristic off.
+                  htmltools::p(class = "pma-card-subtitle pma-span-4",
+                    paste0("Blank rows around the pooled result. If the ",
+                           "heterogeneity text overlaps the x-axis - most ",
+                           "likely once the per-arm columns are hidden - use ",
+                           "these to move it up or down. Above: 0 removes the ",
+                           "blank row before the pooled result. Below: blank ",
+                           "= automatic.")),
+                  shiny::numericInput("addrows_above_overall", "Blank rows above pooled result", value = 1, min = 0, step = 1, width = "100%"),
+                  shiny::numericInput("addrows_below_overall", "Blank rows below pooled result", value = NA, min = 0, step = 1, width = "100%"),
 
-                  htmltools::div(style = "grid-column: span 2;",
-                    shiny::checkboxInput("show_n", "Show N columns (Intervention / Control)", TRUE)),
-                  htmltools::div(style = "grid-column: span 2;",
-                    shiny::checkboxInput("show_events", "Show per-arm data columns (events for binary, mean & SD for continuous)", TRUE))
+                  # One checkbox, not two: plot_forest() keeps show_n and
+                  # show_events as separate arguments (correct for a library),
+                  # but there is no case where a user wants the N columns
+                  # without the per-arm data columns, so the UI drives both
+                  # from a single value.
+                  htmltools::div(class = "pma-span-4",
+                    shiny::checkboxInput("show_arm_columns",
+                      "Show per-arm data columns (events or mean & SD, and N)",
+                      TRUE))
                 )
               )
             ),
@@ -1075,8 +1087,9 @@ step2_server <- function(input, output, session, state) {
           label_e            = if (nzchar(input$label_e %||% ""))      input$label_e      else NULL,
           label_c            = if (nzchar(input$label_c %||% ""))      input$label_c      else NULL,
           xlim               = xlim,
-          show_n             = isTRUE(input$show_n %||% TRUE),
-          show_events        = isTRUE(input$show_events %||% TRUE),
+          # One checkbox drives both arguments; see the UI comment.
+          show_n             = isTRUE(input$show_arm_columns %||% TRUE),
+          show_events        = isTRUE(input$show_arm_columns %||% TRUE),
           favors_left        = if (nzchar(input$favors_left %||% ""))  input$favors_left  else NULL,
           favors_right       = if (nzchar(input$favors_right %||% "")) input$favors_right else NULL,
           addrow_above       = pma_addrow_above(input$addrows_above_overall),
@@ -1103,8 +1116,10 @@ step2_server <- function(input, output, session, state) {
       xlim         = xlim,
       # The Step 2 body may not have been rendered yet, so an absent checkbox
       # must fall back to the UI default (TRUE) rather than to isTRUE(NULL).
-      show_n       = isTRUE(input$show_n %||% TRUE),
-      show_events  = isTRUE(input$show_events %||% TRUE),
+      # Both keys are written from the single checkbox: R/step4_export.R reads
+      # show_n and show_events off this list and must keep working unchanged.
+      show_n       = isTRUE(input$show_arm_columns %||% TRUE),
+      show_events  = isTRUE(input$show_arm_columns %||% TRUE),
       addrow_above = pma_addrow_above(input$addrows_above_overall),
       addrow_below = pma_addrow_below(input$addrows_below_overall)
     )
@@ -1201,8 +1216,42 @@ step2_server <- function(input, output, session, state) {
     session$sendCustomMessage("copy_to_clipboard", .results_text(obj))
   })
 
+  # ----- Required-field highlighting -------------------------------------
+  # Same "clicked" idea as ma() and state$step2_commit below: nothing is
+  # marked red until the user has actually asked for an analysis (Run
+  # analysis, or Next, which runs the commit hook). A first page load with
+  # both fields empty is a normal state, not an error.
+  required_touched <- shiny::reactiveVal(FALSE)
+  shiny::observeEvent(input$run_ma, {
+    required_touched(TRUE)
+  }, ignoreInit = TRUE)
+
+  # The ids managed here; `unset` is recomputed from input$ on every change,
+  # so the marks clear the moment a field is filled.
+  PMA_STEP2_REQUIRED <- c("outcome_name", "small_values")
+  shiny::observe({
+    unset <- character(0)
+    if (isTRUE(required_touched())) {
+      if (!nzchar(trimws(input$outcome_name %||% ""))) {
+        unset <- c(unset, "outcome_name")
+      }
+      sv <- input$small_values
+      if (is.null(sv) || length(sv) != 1L || !nzchar(sv)) {
+        unset <- c(unset, "small_values")
+      }
+    }
+    # as.list() so a single id (or none) still serialises as a JSON array.
+    session$sendCustomMessage(
+      "pma_required_fields",
+      list(all = as.list(PMA_STEP2_REQUIRED), unset = as.list(unset))
+    )
+  })
+
   # Advance hook for step dispatcher
   state$step2_commit <- function() {
+    # Pressing Next counts as asking for the analysis, so it arms the
+    # required-field marks too.
+    required_touched(TRUE)
     # Outcome identity is checked before the analysis, because "run the
     # analysis first" would be misleading advice when the reason no analysis
     # exists is a blank required field.

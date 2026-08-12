@@ -1,0 +1,74 @@
+/* required-fields.js — mark required-but-still-empty inputs.
+ *
+ * Registers one custom message handler, `pma_required_fields`, whose payload is
+ *   { all: [<input id>, ...], unset: [<input id>, ...] }
+ * `all` is every id the sender manages, `unset` the subset that is currently
+ * blank; the CSS class `.pma-required-unset` (see www/shadcn.css) is added to
+ * the matching .shiny-input-container and removed from the rest.
+ *
+ * The server (step2_server) only sends a message when something it watches
+ * changes, but app.R rebuilds the Step 2 body with renderUI on every step
+ * change, which throws the DOM - and the class with it - away. The flags are
+ * therefore cached on `window`, this file is loaded as part of the Step 2 body
+ * so it re-executes on every rebuild, and the re-execution repaints from that
+ * cache. Anything that re-runs here must stay idempotent for the same reason.
+ */
+(function () {
+  'use strict';
+
+  var MESSAGE = 'pma_required_fields';
+  var CLASS = 'pma-required-unset';
+
+  // id -> is currently blank. Deliberately on window, not in this closure:
+  // see the note above about the renderUI rebuild.
+  var state = window.pmaRequiredUnset || (window.pmaRequiredUnset = {});
+
+  function containerOf(id) {
+    var el = document.getElementById(id);
+    if (!el) return null;
+    // radioButtons() / checkboxGroupInput(): the element carrying the input id
+    // IS the container. textInput() and friends put the id on the <input>.
+    if (el.classList && el.classList.contains('shiny-input-container')) return el;
+    return el.closest ? el.closest('.shiny-input-container') : null;
+  }
+
+  function applyAll() {
+    Object.keys(state).forEach(function (id) {
+      var box = containerOf(id);
+      if (!box) return;
+      if (state[id]) box.classList.add(CLASS);
+      else box.classList.remove(CLASS);
+    });
+  }
+
+  if (window.Shiny && Shiny.addCustomMessageHandler) {
+    // Registering the same message type again replaces the previous handler
+    // rather than erroring, so this is safe on every re-execution.
+    Shiny.addCustomMessageHandler(MESSAGE, function (msg) {
+      var all = (msg && msg.all) || [];
+      var unset = (msg && msg.unset) || [];
+      for (var i = 0; i < all.length; i++) {
+        state[all[i]] = unset.indexOf(all[i]) !== -1;
+      }
+      applyAll();
+    });
+  }
+
+  // Repaint the freshly built body from the cache (no message is in flight
+  // when the user merely navigates back to Step 2 without changing anything).
+  applyAll();
+
+  // Belt and braces: outputs that render after this script runs (the Step 2
+  // body arrives as one output, but the sidebar contains uiOutputs of its own)
+  // get another pass. Bound once per page - the guard is what keeps repeated
+  // executions of this file from stacking listeners.
+  if (!window.pmaRequiredBound) {
+    window.pmaRequiredBound = true;
+    var jq = window.jQuery || window.$;
+    if (jq) {
+      jq(document).on('shiny:value', function () {
+        setTimeout(applyAll, 0);
+      });
+    }
+  }
+})();

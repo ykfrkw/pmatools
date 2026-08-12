@@ -409,11 +409,7 @@ pma_funnel_display_panel <- function(prefix, include_egger = TRUE) {
     style = "margin-top: 0.5rem;",
     htmltools::tags$summary("Funnel plot display"),
     htmltools::div(
-      style = paste(
-        "display: grid;",
-        "grid-template-columns: repeat(4, minmax(140px, 1fr));",
-        "gap: 0.75rem 1rem;",
-        "padding: 0.75rem 0.25rem 0.25rem;"),
+      class = "pma-display-grid",
       shiny::numericInput(paste0(prefix, "_funnel_width"),
                           "Width (px)",  value = 1400,
                           min = 400, step = 100, width = "100%"),
@@ -425,7 +421,7 @@ pma_funnel_display_panel <- function(prefix, include_egger = TRUE) {
       shiny::numericInput(paste0(prefix, "_funnel_xlim_hi"),
                           "x-max", value = NA, width = "100%"),
       if (isTRUE(include_egger)) htmltools::div(
-        style = "grid-column: span 4;",
+        class = "pma-span-4",
         shiny::checkboxInput(paste0(prefix, "_funnel_show_egger"),
                              "Show Egger annotation", TRUE)
       ) else NULL
