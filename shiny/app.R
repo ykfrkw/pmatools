@@ -44,6 +44,7 @@ local_files <- c(
   "R/ui_helpers.R",
   "R/step1_data.R",
   "R/step2_ma.R",
+  "R/step3_threshold.R",
   "R/step3_grade.R",
   "R/step4_export.R"
 )

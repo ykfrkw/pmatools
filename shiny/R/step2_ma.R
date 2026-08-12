@@ -199,60 +199,10 @@ step2_ui <- function(state = NULL) {
                   type = 4, color = "#0f172a", size = 0.6,
                   proxy.height = "320px")),
               shiny::uiOutput("rare_sensitivity_block"),
-              htmltools::tags$details(
-                style = "margin-top: 0.5rem;",
-                htmltools::tags$summary("Forest plot display"),
-                htmltools::div(
-                  class = "pma-display-grid",
-                  htmltools::div(
-                    class = "pma-span-4",
-                    shiny::textInput("forest_title", "Title", value = "", width = "100%")),
-
-                  shiny::textInput("label_e",      "Intervention label", value = "",  width = "100%"),
-                  shiny::textInput("label_c",      "Control label",      value = "",  width = "100%"),
-                  shiny::textInput("favors_left",  "Favors (left)",   placeholder = "e.g., Favors Control", width = "100%"),
-                  shiny::textInput("favors_right", "Favors (right)",  placeholder = "e.g., Favors CBT-I",   width = "100%"),
-
-                  shiny::numericInput("xlim_lo",   "x-min", value = NA, width = "100%"),
-                  shiny::numericInput("xlim_hi",   "x-max", value = NA, width = "100%"),
-
-                  # Blank rows around the pooled result. Always visible: they
-                  # matter most once the per-arm columns are hidden (that is
-                  # when the heterogeneity footer can collide with the x-axis)
-                  # but they are legitimate spacing controls at any time, and
-                  # the conditionalPanels that used to hide them only toggled
-                  # display anyway.
-                  #
-                  # Defaults are NOT symmetric, and deliberately so:
-                  #  * above = 1 reproduces the blank row meta::forest() draws
-                  #    by default (pma_addrow_above() has always treated blank
-                  #    as 1). Rendered with 0 the pooled "Random effects model"
-                  #    row butts straight up against the last study row.
-                  #  * below is left blank = automatic, because
-                  #    plot_forest()'s .auto_addrow_below() is what keeps the
-                  #    heterogeneity line clear of the x-axis band and the
-                  #    Favors labels; typing 0 switches that heuristic off.
-                  htmltools::p(class = "pma-card-subtitle pma-span-4",
-                    paste0("Blank rows around the pooled result. If the ",
-                           "heterogeneity text overlaps the x-axis - most ",
-                           "likely once the per-arm columns are hidden - use ",
-                           "these to move it up or down. Above: 0 removes the ",
-                           "blank row before the pooled result. Below: blank ",
-                           "= automatic.")),
-                  shiny::numericInput("addrows_above_overall", "Blank rows above pooled result", value = 1, min = 0, step = 1, width = "100%"),
-                  shiny::numericInput("addrows_below_overall", "Blank rows below pooled result", value = NA, min = 0, step = 1, width = "100%"),
-
-                  # One checkbox, not two: plot_forest() keeps show_n and
-                  # show_events as separate arguments (correct for a library),
-                  # but there is no case where a user wants the N columns
-                  # without the per-arm data columns, so the UI drives both
-                  # from a single value.
-                  htmltools::div(class = "pma-span-4",
-                    shiny::checkboxInput("show_arm_columns",
-                      "Show per-arm data columns (events or mean & SD, and N)",
-                      TRUE))
-                )
-              )
+              # Ids and layout are shared with the four Step 3 domain
+              # panels; see pma_forest_display_panel() in ui_helpers.R.
+              # NULL prefix = the unprefixed Step 2 ids.
+              pma_forest_display_panel(NULL)
             ),
             shiny::tabPanel("Funnel plot",
               shinycssloaders::withSpinner(

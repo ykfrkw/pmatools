@@ -33,3 +33,5 @@ Imports:
     magick,
     shinycssloaders,
     readxl
+Suggests:
+    testthat (>= 3.0.0)

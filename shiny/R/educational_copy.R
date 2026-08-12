@@ -467,3 +467,24 @@ EDU_COPY <- list(
     )
   )
 )
+
+# The one supported way to read a certainty domain's "How is this judged?" copy.
+#
+# Most domains store `how` as a finished string. Risk of Bias stores a function
+# instead, because two of the numbers its copy quotes are live: the
+# sensitivity-analysis change threshold, and where the reviewer put the low /
+# high boundary. That left `how` with two shapes and no way to tell them apart
+# without looking, so every caller had to know which domain it was reading --
+# `pma_how_collapse(EDU_COPY$domains$inconsistency$how)` for four of them and
+# `EDU_COPY$domains$rob$how(a, b)` for the fifth. Turning any other domain's
+# copy into a template would then have silently rendered a closure into the
+# page.
+#
+# The contract is this accessor: give it the domain key plus whatever arguments
+# that domain's copy interpolates, and get a character string back. Arguments
+# are ignored (not an error) for a domain whose copy is already a string, so a
+# call site does not have to change when a domain gains or loses a slot.
+edu_domain_how <- function(domain, ...) {
+  how <- EDU_COPY$domains[[domain]]$how
+  if (is.function(how)) how(...) else how
+}

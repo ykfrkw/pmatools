@@ -141,6 +141,19 @@ step1_ui <- function() {
   )
 }
 
+# Is this the list(error = "...") shape that raw() and ingested() return on a
+# failure, rather than the ingested tibble?
+#
+# Written as a name test, NOT as `!is.null(x$error)`. A tibble IS a list, so the
+# `$` in the old predicate ran on the success path too and tibble warned
+# "Unknown or uninitialised column: `error`" every time -- fifteen times in a
+# single end-to-end walk-through, which buried the warnings that matter. The
+# failure path returns a plain list whose only element is named "error", so the
+# two predicates agree on every value either function can produce.
+pma_is_error_result <- function(x) {
+  is.list(x) && "error" %in% names(x)
+}
+
 # state: top-level reactiveValues from app.R
 step1_server <- function(input, output, session, state) {
 
@@ -323,7 +336,7 @@ step1_server <- function(input, output, session, state) {
       return(list(error = "No data source selected, or the selected source is empty."))
     }
     # Read-stage failure from raw(): forward the friendly error as is.
-    if (!is.data.frame(df) && is.list(df) && !is.null(df$error)) {
+    if (!is.data.frame(df) && pma_is_error_result(df)) {
       return(df)
     }
     tryCatch(
@@ -350,7 +363,7 @@ step1_server <- function(input, output, session, state) {
   shiny::observeEvent(ingested(), {
     res <- ingested()
     if (is.null(res) ||
-        (!is.data.frame(res) && is.list(res) && !is.null(res$error))) return()
+        (!is.data.frame(res) && pma_is_error_result(res))) return()
     n <- length(pma_outcomes_list(state$outcomes))
     if (n == 0) return()
     shiny::showNotification(
@@ -411,7 +424,7 @@ step1_server <- function(input, output, session, state) {
   shiny::observe({
     res <- ingested()
     if (!isTRUE(loaded_current()) ||
-        is.null(res) || (is.list(res) && !is.null(res$error))) return()
+        is.null(res) || pma_is_error_result(res)) return()
     studs <- unique(as.character(res$studlab))
     rob_init <- if ("rob" %in% names(res)) {
       vals <- as.character(res$rob)
@@ -447,7 +460,7 @@ step1_server <- function(input, output, session, state) {
     if (is.null(res)) {
       return(DT::datatable(data.frame(message = "No data loaded yet.")))
     }
-    if (is.list(res) && !is.null(res$error)) {
+    if (pma_is_error_result(res)) {
       return(DT::datatable(data.frame(error = res$error)))
     }
     DT::datatable(
@@ -462,7 +475,7 @@ step1_server <- function(input, output, session, state) {
     res <- ingested()
     if (!isTRUE(loaded_current())) return("Status: click Load data to preview.")
     if (is.null(res)) return("Status: no data loaded.")
-    if (is.list(res) && !is.null(res$error)) {
+    if (pma_is_error_result(res)) {
       return(paste0("ERROR: ", res$error))
     }
     if ("outcome" %in% names(res)) {
@@ -483,7 +496,7 @@ step1_server <- function(input, output, session, state) {
   shiny::observe({
     res <- ingested()
     if (!isTRUE(loaded_current()) ||
-        is.null(res) || (is.list(res) && !is.null(res$error))) return()
+        is.null(res) || pma_is_error_result(res)) return()
     commit_loaded_data(state$data_edits %||% res)
   })
 
@@ -499,7 +512,7 @@ step1_server <- function(input, output, session, state) {
     if (!isTRUE((input$load_data %||% 0) > 0)) return(FALSE)
     res <- ingested()
     isTRUE(loaded_current()) &&
-      !is.null(res) && !(is.list(res) && !is.null(res$error))
+      !is.null(res) && !pma_is_error_result(res)
   })
 
   # Wizard nav. Rendered as its own output so that flipping Next between
@@ -513,7 +526,7 @@ step1_server <- function(input, output, session, state) {
   state$step1_commit <- function() {
     res <- ingested()
     if (!isTRUE(loaded_current()) ||
-        is.null(res) || (is.list(res) && !is.null(res$error))) {
+        is.null(res) || pma_is_error_result(res)) {
       shiny::showNotification(
         "Cannot advance: click Load data and confirm the preview first.",
         type = "error"
@@ -530,7 +543,7 @@ step1_server <- function(input, output, session, state) {
     if (is.null(info)) return()
     res <- state$data_edits %||% ingested()
     if (!isTRUE(loaded_current()) ||
-        is.null(res) || (is.list(res) && !is.null(res$error))) return()
+        is.null(res) || pma_is_error_result(res)) return()
     new_value <- DT::coerceValue(info$value, res[[info$col + 1]][info$row])
     res[info$row, info$col + 1] <- new_value
     state$data_edits <- res
