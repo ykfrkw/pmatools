@@ -19,12 +19,15 @@ grade_table(
 )
 }
 \arguments{
-\item{outcomes}{A named list of \code{pmatools} objects, one per outcome.
-Names become the outcome labels.}
+\item{outcomes}{A named list of \code{pmatools} objects, one per outcome
+(names become the outcome labels), or a \code{pmatools_set} from
+\code{\link{grade_meta_multi}}, in which case its stored order and primary
+outcomes are used.}
 
 \item{primary}{Character vector of outcome names that are classified as
 primary outcomes. All others are treated as secondary.
-If \code{NULL} (default), no grouping header is added.}
+If \code{NULL} (default), no grouping header is added — except for a
+\code{pmatools_set}, which supplies its own.}
 
 \item{style}{(v0.5) Table layout: \code{"gradepro"} (default) or
 \code{"bmj"}. See \code{\link{sof_table}}.}

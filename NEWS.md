@@ -37,6 +37,44 @@
 
 ## New features
 
+* Multi-outcome workflow: `run_ma_multi()` splits long-format data on its
+  `outcome` column and runs one `run_ma()` per outcome (`sm` and
+  `outcome_type` may be single values or named by outcome, so binary and
+  continuous outcomes can share one session); `grade_meta_multi()` runs one
+  `grade_meta()` per outcome from a `common` argument list plus per-outcome
+  overrides, and returns the new `pmatools_set`. `run_ma()` itself is
+  unchanged and still refuses data holding more than one outcome.
+  An outcome that fails is recorded as `NULL` with a warning so the rest of
+  the batch completes — **except** for the Core GRADE 2 entry gate
+  (`threshold_type = "mid"` without a MID), which now aborts with condition
+  class `"pmatools_threshold_gate"` and is re-raised unchanged, so a batch run
+  cannot become a way around the gate.
+* New `pmatools_set` class with `print()` / `summary()` methods listing each
+  outcome's certainty, rating target and analysis set (a low-risk-of-bias
+  refit is called out per outcome, and a set mixing analysis sets says so).
+  `reorder_outcomes()` and `set_primary()` set the order and grouping, which
+  drive both the Summary of Findings row order and the numbering of the export
+  sub-directories.
+* `grade_table()` and `grade_report()` accept a `pmatools_set` directly, using
+  its order and primary outcomes; the named-list API is unchanged.
+  `grade_report()` gains `style` (`"gradepro"` / `"bmj"`). In the BMJ style,
+  per-outcome `follow_up` / `unit` recorded by `grade_meta_multi()` are picked
+  up automatically, and a table mixing effect measures keeps a generic Effect
+  header with a footnote pointing at the per-cell measure names.
+* `export_bundle()` is now an S3 generic. The single-outcome ZIP is unchanged
+  (`export_bundle(ma, grade, ...)`, flat layout); passing a `pmatools_set`
+  writes the multi-outcome layout instead: `summary_of_findings.docx`/`.csv`,
+  `evidence_profile.docx`, `analysis.R`, `data_long.csv` and `README.txt` at
+  the top level, plus one `outcomes/NN_name/` directory per outcome (forest,
+  RoB-stratified forest and funnel plots, results.txt, that outcome's data,
+  its evidence profile, and `indirectness_table.docx` when subdomains were
+  recorded; `forest_plot_full.*` only when the outcome was refitted on
+  low-risk-of-bias studies). Directory names carry the set order as a numeric
+  prefix; non-ASCII outcome names fall back to `outcome_NN`.
+* The bundled `analysis.R` has a multi-outcome form that re-issues the
+  `run_ma_multi()` / `grade_meta_multi()` / `reorder_outcomes()` /
+  `set_primary()` calls with the arguments actually used, including every
+  Phase A-C argument, and is syntax-checked before it is written.
 * BMJ Core GRADE Summary of Findings layout: `sof_table()` and `grade_table()`
   gain `style = "bmj"` (the GRADEpro layout stays the default and is
   unchanged). The BMJ style presents outcome and follow-up, participants with

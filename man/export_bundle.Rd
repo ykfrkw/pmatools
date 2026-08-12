@@ -2,10 +2,19 @@
 % Please edit documentation in R/export_bundle.R
 \name{export_bundle}
 \alias{export_bundle}
+\alias{export_bundle.default}
+\alias{export_bundle.pmatools}
+\alias{export_bundle.meta}
 \title{Export a reproducible analysis bundle as a ZIP}
 \usage{
-export_bundle(
-  ma,
+export_bundle(x, ...)
+
+\method{export_bundle}{default}(x, ...)
+
+\method{export_bundle}{pmatools}(x, ...)
+
+\method{export_bundle}{meta}(
+  x,
   grade,
   output_dir = ".",
   bundle_name = "pmatools_results",
@@ -27,11 +36,15 @@ export_bundle(
   forest_display_rob = NULL,
   rare = NULL,
   rare_forest_display = NULL,
-  pubias_missing_df = NULL
+  pubias_missing_df = NULL,
+  ...
 )
 }
 \arguments{
-\item{ma}{A \code{meta} object from \code{\link{run_ma}}.}
+\item{x}{A \code{meta} object from \code{\link{run_ma}} (the single-outcome
+entry point), a \code{pmatools} object, or a \code{pmatools_set}.}
+
+\item{...}{Passed to the method.}
 
 \item{grade}{A \code{pmatools} object from \code{\link{grade_meta}}.}
 
@@ -114,4 +127,9 @@ CSV, a reproducible \code{analysis.R} script, results.txt, forest/funnel plots,
 the SoF table, and the certainty appendix (Core GRADE series). The
 bundled \code{analysis.R} runs
 standalone with \code{library(pmatools)} and the bundled CSV.
+
+Passing a \code{pmatools_set} from \code{\link{grade_meta_multi}} instead
+produces the multi-outcome layout: the summary tables at the top level and
+one numbered \verb{outcomes/NN_name/} sub-directory per outcome. See
+\code{\link{export_bundle.pmatools_set}}.
 }

@@ -2,11 +2,14 @@
 
 #' Summary of Findings table for multiple outcomes
 #'
-#' @param outcomes A named list of \code{pmatools} objects, one per outcome.
-#'   Names become the outcome labels.
+#' @param outcomes A named list of \code{pmatools} objects, one per outcome
+#'   (names become the outcome labels), or a \code{pmatools_set} from
+#'   \code{\link{grade_meta_multi}}, in which case its stored order and primary
+#'   outcomes are used.
 #' @param primary Character vector of outcome names that are classified as
 #'   primary outcomes. All others are treated as secondary.
-#'   If \code{NULL} (default), no grouping header is added.
+#'   If \code{NULL} (default), no grouping header is added — except for a
+#'   \code{pmatools_set}, which supplies its own.
 #' @param style (v0.5) Table layout: \code{"gradepro"} (default) or
 #'   \code{"bmj"}. See \code{\link{sof_table}}.
 #' @param palette Color palette for certainty cells.
@@ -52,6 +55,13 @@ grade_table <- function(outcomes,
                         unit         = NULL,
                         label_intervention = "intervention",
                         label_control      = "control") {
+  # A pmatools_set carries its own row order and primary outcomes; unwrap it to
+  # the named-list form the rest of this function (and the v0.4 API) uses.
+  if (inherits(outcomes, "pmatools_set")) {
+    set      <- outcomes
+    outcomes <- .set_outcome_list(set)
+    if (is.null(primary) && length(set$primary) > 0) primary <- set$primary
+  }
   if (!is.list(outcomes) || length(outcomes) == 0) {
     rlang::abort("outcomes must be a non-empty named list of pmatools objects.")
   }
@@ -98,14 +108,38 @@ grade_table <- function(outcomes,
   }
 
   if (identical(style, "bmj")) {
-    return(.grade_table_bmj(
+    # Per-outcome follow-up / unit ride on the rated objects themselves when
+    # grade_meta_multi() was given them, so a multi-outcome caller does not
+    # have to re-assemble a parallel named vector here.
+    follow_up <- follow_up %||% .display_arg_from_outcomes(outcomes, "follow_up")
+    unit      <- unit      %||% .display_arg_from_outcomes(outcomes, "unit")
+
+    ft <- .grade_table_bmj(
       outcomes, nms = nms, prim_nms = prim_nms, sec_nms = sec_nms,
       primary = primary, pal = pal, per = per, prediction = prediction,
       follow_up = follow_up, unit = unit,
       label_intervention = label_intervention,
       label_control      = label_control,
       disp = disp, rob_notes = rob_notes
-    ))
+    )
+    # Mixed effect measures (the norm once binary and continuous outcomes share
+    # a table) leave the BMJ header generic. Each cell still spells its own
+    # measure out ("Odds ratio 0.62 ..."), and the footnote says so, so nothing
+    # is left to be inferred from the header.
+    sms <- unique(vapply(outcomes,
+                         function(g) as.character(g$meta$sm %||% ""),
+                         character(1)))
+    sms <- sms[nzchar(sms)]
+    if (length(sms) > 1L) {
+      ft <- flextable::add_footer_lines(ft, values = paste0(
+        "Outcomes are reported on different effect measures (",
+        paste(sms, collapse = ", "),
+        "), so the Effect column header is generic; each cell names the ",
+        "measure it reports."))
+      ft <- flextable::fontsize(ft, size = 8, part = "footer")
+      ft <- flextable::color(ft, color = "#555555", part = "footer")
+    }
+    return(ft)
   }
 
   # Effect header: sm-specific when all outcomes share one, generic otherwise
@@ -244,6 +278,23 @@ grade_table <- function(outcomes,
 # --------------------------------------------------------------------------
 # Internal helpers
 # --------------------------------------------------------------------------
+
+# Collect a presentation field (follow_up / unit) stored on the rated objects
+# by grade_meta_multi() into the named-vector form .per_outcome_arg() reads.
+# Returns NULL when no outcome carries one.
+.display_arg_from_outcomes <- function(outcomes, field) {
+  vals <- lapply(outcomes, function(g) {
+    v <- g[[field]]
+    if (is.null(v) || length(v) != 1L || is.na(v) || !nzchar(as.character(v))) {
+      NULL
+    } else {
+      as.character(v)
+    }
+  })
+  keep <- !vapply(vals, is.null, logical(1))
+  if (!any(keep)) return(NULL)
+  stats::setNames(unlist(vals[keep], use.names = FALSE), names(outcomes)[keep])
+}
 
 .build_row <- function(nm, g, show_domains, per = 1000, prediction = FALSE) {
   meta_obj <- g$meta
