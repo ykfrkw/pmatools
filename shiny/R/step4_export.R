@@ -381,8 +381,10 @@ step4_server <- function(input, output, session, state) {
           0.10,
           detail = "Rendering plots, tables, and report (this may take a while)..."
         )
+        # export_bundle() is an S3 generic as of pmatools 0.5.0 and its first
+        # formal is 'x'; pass the meta object positionally.
         out <- export_bundle(
-          ma           = state$ma,
+          state$ma,
           grade        = state$grade,
           output_dir   = tmp_dir,
           bundle_name  = input$bundle_name %||% "pmatools_results",
