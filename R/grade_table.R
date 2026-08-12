@@ -5,7 +5,11 @@
 #' @param outcomes A named list of \code{pmatools} objects, one per outcome
 #'   (names become the outcome labels), or a \code{pmatools_set} from
 #'   \code{\link{grade_meta_multi}}, in which case its stored order and primary
-#'   outcomes are used.
+#'   outcomes are used. An element may also be a `pmatools_not_reported` from
+#'   \code{\link{not_reported_outcome}} — an outcome the review prespecified
+#'   that no included study reported. Its row names the outcome and reads
+#'   "Not reported" in every value cell, with "Not rated" for certainty
+#'   (Core GRADE 6).
 #' @param primary Character vector of outcome names that are classified as
 #'   primary outcomes. All others are treated as secondary.
 #'   If \code{NULL} (default), no grouping header is added — except for a
@@ -66,8 +70,13 @@ grade_table <- function(outcomes,
   if (!is.list(outcomes) || length(outcomes) == 0) {
     rlang::abort("outcomes must be a non-empty named list of pmatools objects.")
   }
-  if (!all(vapply(outcomes, inherits, logical(1), "pmatools"))) {
-    rlang::abort("All elements of outcomes must be pmatools objects.")
+  ok_element <- vapply(outcomes, function(g) {
+    inherits(g, "pmatools") || .is_not_reported(g)
+  }, logical(1))
+  if (!all(ok_element)) {
+    rlang::abort(paste0(
+      "All elements of outcomes must be pmatools objects from grade_meta(), ",
+      "or pmatools_not_reported objects from not_reported_outcome()."))
   }
 
   style   <- match.arg(style)
@@ -92,29 +101,37 @@ grade_table <- function(outcomes,
     sec_nms  <- character(0)
   }
 
-  # Risk-of-bias analysis set (Core GRADE 4 Fig 2). The set can differ between
-  # outcomes, so the note is attached to the row it applies to via a numbered
-  # marker rather than stated once for the whole table.
-  rob_notes  <- character(0)
-  rob_marker <- stats::setNames(rep(NA_integer_, length(nms)), nms)
+  # One numbered footnote pool for every note that belongs to a single row
+  # rather than to the table: the risk-of-bias analysis set (Core GRADE 4
+  # Fig 2), which can differ between outcomes, and the reason a not-reported
+  # outcome went unreported. Both are attached to their row by a [n] marker.
+  row_notes  <- character(0)
+  row_marker <- stats::setNames(rep(NA_integer_, length(nms)), nms)
   for (nm in nms) {
-    note <- .rob_analysis_set_note(outcomes[[nm]])
+    g <- outcomes[[nm]]
+    note <- if (.is_not_reported(g)) {
+      if (is.null(g$reason)) NULL else paste0("Not reported: ", g$reason)
+    } else {
+      .rob_analysis_set_note(g)
+    }
     if (!is.null(note)) {
-      rob_notes <- c(rob_notes, note)
-      rob_marker[[nm]] <- length(rob_notes)
+      row_notes <- c(row_notes, note)
+      row_marker[[nm]] <- length(row_notes)
     }
   }
   disp <- function(nm) {
-    if (is.na(rob_marker[[nm]])) nm else paste0(nm, " [", rob_marker[[nm]], "]")
+    if (is.na(row_marker[[nm]])) nm else paste0(nm, " [", row_marker[[nm]], "]")
   }
 
-  # Domain-fact footnotes share the analysis-set register rather than starting
-  # a second one, so a reader never sees two different [1]s in one footer.
+  # Domain-fact footnotes share the row-note register rather than starting a
+  # second one, so a reader never sees two different [1]s in one footer.
   # They are numbered here, once, and consumed by whichever style renders.
-  fact_counter <- length(rob_notes)
+  fact_counter <- length(row_notes)
   fact_notes   <- character(0)
   fact_markers <- list()
   for (nm in nms) {
+    # A not-reported outcome has no domain judgments, so no facts behind them.
+    if (.is_not_reported(outcomes[[nm]])) next
     mk <- integer(0)
     for (dm in .rated_down_fact_domains(outcomes[[nm]])) {
       note <- .domain_fact_note(outcomes[[nm]], dm, outcome_name = nm)
@@ -140,14 +157,15 @@ grade_table <- function(outcomes,
       follow_up = follow_up, unit = unit,
       label_intervention = label_intervention,
       label_control      = label_control,
-      disp = disp, rob_notes = rob_notes,
+      disp = disp, row_notes = row_notes,
       fact_notes = fact_notes, fact_markers = fact_markers
     )
     # Mixed effect measures (the norm once binary and continuous outcomes share
     # a table) leave the BMJ header generic. Each cell still spells its own
     # measure out ("Odds ratio 0.62 ..."), and the footnote says so, so nothing
-    # is left to be inferred from the header.
-    sms <- unique(vapply(outcomes,
+    # is left to be inferred from the header. A not-reported outcome has no
+    # measure at all and must not make a homogeneous table look mixed.
+    sms <- unique(vapply(.rated_outcomes(outcomes),
                          function(g) as.character(g$meta$sm %||% ""),
                          character(1)))
     sms <- sms[nzchar(sms)]
@@ -163,8 +181,11 @@ grade_table <- function(outcomes,
     return(ft)
   }
 
-  # Effect header: sm-specific when all outcomes share one, generic otherwise
-  eff_hdrs <- unique(vapply(outcomes, function(g) .effect_header(g$meta$sm),
+  # Effect header: sm-specific when all *rated* outcomes share one, generic
+  # otherwise. A not-reported outcome carries no effect measure, so it must not
+  # be allowed to degrade the header of an otherwise homogeneous table.
+  eff_hdrs <- unique(vapply(.rated_outcomes(outcomes),
+                            function(g) .effect_header(g$meta$sm),
                             character(1)))
   eff_hdr  <- if (length(eff_hdrs) == 1L) eff_hdrs else "Effect\n(95% CI)"
 
@@ -173,6 +194,10 @@ grade_table <- function(outcomes,
   # control (per 1,000)" wording would misdescribe.
   arms <- lapply(nms, function(nm) {
     g <- outcomes[[nm]]
+    # A not-reported outcome has no arms to describe: NULL here leaves it out
+    # of the continuous-header vote and of the arm-derivation footnote, and
+    # .build_row() never reads it.
+    if (.is_not_reported(g)) return(NULL)
     .sof_arm_cells(g$meta, g$baseline_risk, per,
                    unit = .per_outcome_arg(unit, nm))
   })
@@ -247,6 +272,18 @@ grade_table <- function(outcomes,
   for (ri in names(outcome_map)) {
     i  <- as.integer(ri)
     nm <- outcome_map[[ri]]
+    if (.is_not_reported(outcomes[[nm]])) {
+      # Neutral grey italics: the certainty palette encodes a rating, and there
+      # is no rating here, so the cell must not borrow any of its colours.
+      ft <- flextable::bg(ft,    i = i, j = cert_col, bg = "#F5F5F5",
+                          part = "body")
+      ft <- flextable::color(ft, i = i, j = cert_col, color = "#666666",
+                             part = "body")
+      ft <- flextable::italic(ft, i = i, j = cert_col, part = "body")
+      ft <- flextable::align(ft, i = i, j = cert_col, align = "center",
+                             part = "body")
+      next
+    }
     p  <- pal[[outcomes[[nm]]$certainty]]
     ft <- flextable::bg(ft,    i = i, j = cert_col, bg    = p$bg,   part = "body")
     ft <- flextable::color(ft, i = i, j = cert_col, color = p$text, part = "body")
@@ -285,6 +322,12 @@ grade_table <- function(outcomes,
   )
   ft <- flextable::add_footer_lines(ft, values = footnote)
 
+  # What "Not reported" means, stated once for the table however many such rows
+  # it has.
+  if (.has_not_reported(outcomes)) {
+    ft <- flextable::add_footer_lines(ft, values = .not_reported_table_note())
+  }
+
   # How the arm columns were derived for any continuous outcome in the table
   # (see .cont_arm_note()); written once however many rows it covers.
   for (nt in unique(unlist(lapply(arms, function(a) a$note),
@@ -292,11 +335,11 @@ grade_table <- function(outcomes,
     ft <- flextable::add_footer_lines(ft, values = nt)
   }
 
-  # Per-outcome risk-of-bias analysis-set notes, keyed to the [n] markers on
-  # the Outcome cells.
-  for (i in seq_along(rob_notes)) {
+  # Per-row notes (risk-of-bias analysis set, not-reported reason), keyed to
+  # the [n] markers on the Outcome cells.
+  for (i in seq_along(row_notes)) {
     ft <- flextable::add_footer_lines(
-      ft, values = sprintf("[%d] %s", i, rob_notes[i]))
+      ft, values = sprintf("[%d] %s", i, row_notes[i]))
   }
 
   # Domain-fact footnotes continue the same [n] register (already numbered).
@@ -307,6 +350,7 @@ grade_table <- function(outcomes,
   # Publication bias not formally assessed -> per-outcome qualitative-judgment
   # footnote (see domain_pubias.R)
   for (nm in nms) {
+    if (.is_not_reported(outcomes[[nm]])) next
     pubias_qual_note <- .pubias_qualitative_note(outcomes[[nm]])
     if (!is.null(pubias_qual_note)) {
       ft <- flextable::add_footer_lines(
@@ -344,6 +388,9 @@ grade_table <- function(outcomes,
 
 .build_row <- function(nm, g, show_domains, per = 1000, prediction = FALSE,
                        arm = NULL, markers = NULL) {
+  if (.is_not_reported(g)) return(.build_row_not_reported(nm, g, show_domains))
+
+
   meta_obj <- g$meta
   k        <- meta_obj$k
   n_total  <- .total_n(meta_obj)
@@ -377,6 +424,36 @@ grade_table <- function(outcomes,
     row$d3 <- dom("Inconsistency")
     row$d4 <- dom("Imprecision")
     row$d5 <- dom("Publication bias")
+  }
+  row
+}
+
+# GRADEpro row for an outcome nobody reported. `nm` already carries the [n]
+# marker disp() applied, if any.
+.build_row_not_reported <- function(nm, g, show_domains) {
+  lbl <- .not_reported_label(g)
+
+  # The GRADEpro layout has no follow-up element of its own, so the follow-up
+  # goes under the name - the same shape the BMJ outcome cell uses.
+  name_cell <- if (is.null(g$follow_up)) nm else paste0(nm, "\n", g$follow_up)
+
+  row <- data.frame(
+    col1 = name_cell,
+    col2 = lbl,
+    col3 = lbl,
+    col4 = lbl,
+    col5 = lbl,
+    # No certainty symbol: the symbols are a four-level scale, and this row is
+    # not on it.
+    col6 = NOT_REPORTED_CERTAINTY,
+    stringsAsFactors = FALSE
+  )
+
+  if (show_domains) {
+    # En dash, not "?": "?" means the judgment is unknown, which invites
+    # somebody to go and find it. Here there is nothing to judge. \u escape,
+    # like CERTAINTY_SYMBOLS_UNICODE, so the source stays ASCII-safe.
+    for (j in paste0("d", 1:5)) row[[j]] <- NOT_REPORTED_DOMAIN_SYMBOL
   }
   row
 }

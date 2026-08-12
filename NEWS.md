@@ -33,6 +33,24 @@
   different `[1]`s; the analysis-set and publication-bias sentences keep their
   existing numbering and wording.
 
+* New exported `not_reported_outcome()` and `add_not_reported()`: a Summary of
+  Findings table can now carry an outcome the review prespecified that **no
+  included study reported**. Core GRADE 6 asks the table to cover every
+  patient-important outcome the review addressed, including the ones the
+  evidence base is silent on, but every row of `grade_table()` was derived from
+  `x$meta`, so such an outcome could not be expressed at all. Its row names the
+  outcome (and its follow-up), reads "Not reported" in the participants,
+  effect, arm-level and Difference cells, and "Not rated" in the certainty
+  cell — not blank, because a blank cell cannot be told apart from a forgotten
+  one, which is the whole argument for showing the row. A supplied `reason`
+  becomes a numbered footnote on the row, sharing the pool with the
+  risk-of-bias analysis-set notes. Both table layouts are supported, as are
+  `grade_report()` and `export_bundle()` on the set; `reorder_outcomes()` and
+  `set_primary()` treat the outcome like any other. The row is deliberately
+  *not* an `evidence_profile()` row — all five domain columns are judgments
+  about a body of evidence, and there is none — so `evidence_profile()` and
+  `sof_table()` refuse it with a message saying where it belongs instead.
+
 * `export_bundle()` takes a `style` argument on both methods, so a caller can
   export the Summary of Findings layout it renders on screen. Previously
   `export_bundle.meta()` had no such argument and always wrote the GRADEpro
