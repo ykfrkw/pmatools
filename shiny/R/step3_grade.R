@@ -1320,6 +1320,26 @@ step3_server <- function(input, output, session, state) {
 
   # ----- Configuration tab: centralized input panel -----------------
   output$threshold_panel <- shiny::renderUI({
+    # Re-render when the outcome changes, so the seeds below are read AFTER
+    # app.R's provenance guard has reset them rather than before. The guard
+    # bumps outcome_gen and calls state$step3_reset() in one observer, which
+    # runs later in the flush than this output (it is created later, at
+    # app.R:252 vs step3_server() at app.R:189) - so on a change of state$ma
+    # alone this panel rebuilds from the PREVIOUS outcome's thresholds. Taking
+    # a dependency on the generation forces a second render once the reset has
+    # landed.
+    #
+    # This is the load-bearing half of the fix. The updateNumericInput()
+    # observers above cannot cover this case on their own: the reviewer is
+    # normally still standing in Step 2 when the guard fires, the Step 3 body
+    # is not in the DOM, and an input message addressed to a widget that does
+    # not exist is dropped by the client with nothing to re-send it later.
+    #
+    # outcome_gen is the right trigger precisely because it changes only when
+    # the outcome does. Depending on the threshold reactiveVals instead would
+    # rebuild the panel on every keystroke and destroy the widget being typed
+    # into, which is why they are read under isolate() below.
+    state$outcome_gen
     obj <- state$ma
     if (is.null(obj)) {
       return(htmltools::p("Run the analysis in Step 2 first."))
