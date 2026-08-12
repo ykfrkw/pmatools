@@ -236,8 +236,17 @@
                               unit = paste0("per ", per_str), digits = 0L))
   }
 
-  if (sm %in% c("MD", "SMD")) {
+  if (identical(sm, "MD")) {
     return(.difference_string(est, lo, hi, unit = unit, digits = 2L))
+  }
+
+  # An SMD is in standard deviation units, so it never takes the outcome's own
+  # unit -- and now that the two arm columns beside it can be re-expressed on
+  # the original scale, labelling it "days" would invite the reader to subtract
+  # one from the other and find the numbers do not agree.
+  if (identical(sm, "SMD")) {
+    return(.difference_string(est, lo, hi, unit = "standard deviations",
+                              digits = 2L))
   }
 
   "-"
@@ -276,21 +285,27 @@
 
   nf <- .bmj_number_format("bmj")
 
+  # Both arm columns of the "Absolute effects" block. A Chinn dichotomisation
+  # supplies its own pair; otherwise they come off the object -- the baseline
+  # risk for a binary outcome, the pooled control arms for a continuous one.
+  arm <- .sof_arm_cells(meta_obj, g$baseline_risk, per,
+                        big_mark = nf$big_mark, ci_sep = nf$ci_sep,
+                        unit = unit)
+  caller_cells <- !is.null(cer_str) || !is.null(ier_str)
+
   list(
     outcome   = outcome_cell,
     n         = .n_participants_studies_bmj(meta_obj$k, .total_n(meta_obj),
                                             g$study_design),
     effect    = .format_effect_bmj(meta_obj, g$outcome_type,
                                    prediction = prediction),
-    cer       = cer_str %||% .format_cer(g$baseline_risk, per,
-                                         big_mark = nf$big_mark),
-    ier       = ier_str %||% .format_ier(meta_obj, g$baseline_risk, per,
-                                         big_mark = nf$big_mark,
-                                         ci_sep   = nf$ci_sep),
+    cer       = cer_str %||% arm$cer,
+    ier       = ier_str %||% arm$ier,
     diff      = .format_difference(meta_obj, g$baseline_risk, per, unit,
                                    g$outcome_type),
     certainty = cert_cell,
-    plain     = .plain_language_for(g, intervention_label = pl_tx)
+    plain     = .plain_language_for(g, intervention_label = pl_tx),
+    arm_note  = if (caller_cells) NULL else arm$note
   )
 }
 
@@ -338,16 +353,20 @@
 }
 
 # Footer shared by the single- and multi-outcome BMJ tables.
+# `rate_arms` says whether any row's arm columns hold event rates derived from
+# a baseline risk. A table whose rows are all continuous outcomes drops that
+# sentence, since nothing in it was computed that way.
 .bmj_base_note <- function(label_intervention = "intervention",
-                           prediction = FALSE) {
+                           prediction = FALSE, rate_arms = TRUE) {
   paste0(
     "Certainty of the evidence rated with the BMJ 2025 Core GRADE series ",
     "(Guyatt et al.); not an official GRADE Working Group assessment. ",
     "CI = confidence interval.",
     if (prediction) " PrI = 95 percent prediction interval." else "",
-    " Absolute effects: the ", label_intervention, "-arm rate and the ",
-    "difference are computed from the control-arm (baseline) risk and the ",
-    "pooled relative effect."
+    if (rate_arms) paste0(
+      " Absolute effects: the ", label_intervention, "-arm rate and the ",
+      "difference are computed from the control-arm (baseline) risk and the ",
+      "pooled relative effect.") else ""
   )
 }
 
@@ -417,7 +436,14 @@
   ft <- flextable::align(ft, j = 7, align = "center", part = "body")
 
   ft <- flextable::add_footer_lines(
-    ft, values = .bmj_base_note(label_intervention, prediction))
+    ft, values = .bmj_base_note(label_intervention, prediction,
+                                rate_arms = is.null(vals$arm_note)))
+
+  # How the two arm columns were derived when they hold arm-level means rather
+  # than event rates (see .cont_arm_note()).
+  if (!is.null(vals$arm_note)) {
+    ft <- flextable::add_footer_lines(ft, values = vals$arm_note)
+  }
 
   for (i in seq_along(fact_notes)) {
     ft <- flextable::add_footer_lines(
@@ -564,8 +590,19 @@
     ft <- flextable::align(ft, i = i, j = 7, align = "center", part = "body")
   }
 
+  # Continuous outcomes derive their arm columns differently; the note is
+  # written once however many rows it covers, and the rate sentence is kept
+  # only while some row still reports rates.
+  n_cont    <- sum(vapply(row_vals, function(v) !is.null(v$arm_note),
+                          logical(1)))
+  arm_notes <- unique(unlist(lapply(row_vals, function(v) v$arm_note),
+                             use.names = FALSE))
   ft <- flextable::add_footer_lines(
-    ft, values = .bmj_base_note(label_intervention, prediction))
+    ft, values = .bmj_base_note(label_intervention, prediction,
+                                rate_arms = n_cont < length(row_vals)))
+  for (nt in arm_notes) {
+    ft <- flextable::add_footer_lines(ft, values = nt)
+  }
 
   # Per-outcome risk-of-bias analysis-set notes, keyed to the [n] markers on
   # the outcome cells (the analysis set can differ from outcome to outcome).
