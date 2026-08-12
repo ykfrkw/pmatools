@@ -257,7 +257,9 @@ pma_outcome_summary_df <- function(outcomes, signature = NULL) {
       if (is.na(k)) "-" else as.character(k)
     }, character(1)),
     effect = vapply(outcomes, function(g) {
-      out <- tryCatch(.format_effect(g$meta, g$outcome_type), error = function(e) NA_character_)
+      # format_effect() is pmatools public API as of 0.5.0 (the dot-prefixed
+      # .format_effect() is only a back-compat alias) -- keep the public name.
+      out <- tryCatch(format_effect(g$meta, g$outcome_type), error = function(e) NA_character_)
       if (is.null(out) || is.na(out)) "-" else gsub("\n", "; ", out)
     }, character(1)),
     certainty = vapply(outcomes, function(g) g$certainty %||% "-", character(1)),

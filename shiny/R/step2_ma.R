@@ -640,8 +640,10 @@ step2_server <- function(input, output, session, state) {
     # but the user can pick different studlab / treat columns above, which
     # may re-introduce duplicates (e.g. a multi-arm trial where two
     # intervention sub-arms share the same canonical treat label).
+    # combine_arms() is pmatools public API as of 0.5.0 (the dot-prefixed
+    # .combine_arms() is only a back-compat alias) -- keep the public name.
     n_before <- nrow(d)
-    d <- tryCatch(.combine_arms(d), error = function(e) d)
+    d <- tryCatch(combine_arms(d), error = function(e) d)
     if (nrow(d) < n_before) {
       unit_label <- if ("outcome" %in% names(d)) {
         "(studlab, outcome, treat)"
