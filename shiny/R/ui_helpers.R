@@ -90,25 +90,6 @@ pma_unconfirmed_domains <- function(conf) {
 # carried as attr(<obj>, "pma_saved_at") because attributes survive both the
 # list round-trip and grade_table()'s inherits() check.
 
-# Default label for the outcome currently being rated. Long-format data with
-# an `outcome` column drives it from the Step 2 selection; otherwise it falls
-# back to an effect-measure-flavoured placeholder. Pure function so the rule
-# is testable without a Shiny session.
-pma_default_outcome_label <- function(selected_outcome = NULL,
-                                      outcome_type = "binary") {
-  if (!is.null(selected_outcome) && length(selected_outcome) == 1 &&
-      !is.na(selected_outcome) && nzchar(selected_outcome)) {
-    return(as.character(selected_outcome))
-  }
-  if (identical(outcome_type, "binary")) "Depression response" else "Depression severity"
-}
-
-# Labels this app may have auto-filled into the "Outcome label" field. A value
-# outside this set was typed by the user and must never be overwritten.
-pma_auto_outcome_labels <- function(last_auto = NULL) {
-  c("", "Outcome", "Depression response", "Depression severity", last_auto)
-}
-
 # ----- Dataset provenance guard -------------------------------------------
 # A saved outcome carries the signature of the dataset it was rated on, so
 # Step 3 / Step 4 can flag outcomes that came from a DIFFERENT dataset than
@@ -447,6 +428,155 @@ pma_funnel_display_args <- function(input, prefix, include_egger = TRUE) {
                    isTRUE(input[[paste0(prefix, "_funnel_show_egger")]])
                  else NA
   )
+}
+
+# ---------------------------------------------------------------------------
+# Forest plot display: smart defaults
+#
+# Every forest panel in the app (Step 2 and the four Step 3 domain tabs) has
+# the same five text fields plus two "blank rows" numerics. The helpers below
+# (a) name those input ids in one place, (b) derive what the app WOULD fill in
+# from the outcome definition, and (c) prefill them without ever clobbering a
+# value the user typed.
+# ---------------------------------------------------------------------------
+
+# Input ids of the five prefillable text fields of a forest display panel.
+# `prefix = NULL` (or "") means the Step 2 panel, whose ids carry no prefix.
+pma_forest_label_ids <- function(prefix = NULL) {
+  p <- prefix %||% ""
+  if (length(p) != 1 || is.na(p) || !nzchar(p)) {
+    return(c(title        = "forest_title",
+             label_e      = "label_e",
+             label_c      = "label_c",
+             favors_left  = "favors_left",
+             favors_right = "favors_right"))
+  }
+  c(title        = paste0(p, "_title"),
+    label_e      = paste0(p, "_label_e"),
+    label_c      = paste0(p, "_label_c"),
+    favors_left  = paste0(p, "_favors_left"),
+    favors_right = paste0(p, "_favors_right"))
+}
+
+# Input ids of the two "blank rows around the pooled result" numerics.
+# Step 2 and Step 3 disagree on the suffix, so never build these by hand.
+pma_forest_addrow_ids <- function(prefix = NULL) {
+  p <- prefix %||% ""
+  if (length(p) != 1 || is.na(p) || !nzchar(p)) {
+    return(c(above = "addrows_above_overall",
+             below = "addrows_below_overall"))
+  }
+  c(above = paste0(p, "_addrows_above"),
+    below = paste0(p, "_addrows_below"))
+}
+
+# Derive the "Favors ..." axis labels from the outcome direction.
+#
+# `small_values` is the pmatools vocabulary set in Step 2:
+#   "undesirable" - a smaller value is worse (response, remission), so a
+#                   larger effect favours the intervention: right = intervention.
+#   "desirable"   - a smaller value is better (mortality, symptom score), so
+#                   the sides are mirrored.
+# Anything else (not yet chosen, unrecognised) or a missing arm name yields
+# empty strings: better no prefill than a wrong direction on the axis.
+pma_favors_labels <- function(small_values, intervention, control) {
+  .clean <- function(x) {
+    if (is.null(x) || length(x) != 1 || is.na(x)) return("")
+    trimws(as.character(x))
+  }
+  sv <- .clean(small_values)
+  iv <- .clean(intervention)
+  ct <- .clean(control)
+  none <- list(left = "", right = "")
+  if (!nzchar(iv) || !nzchar(ct)) return(none)
+  if (identical(sv, "undesirable")) {
+    list(left = paste("Favors", ct), right = paste("Favors", iv))
+  } else if (identical(sv, "desirable")) {
+    list(left = paste("Favors", iv), right = paste("Favors", ct))
+  } else {
+    none
+  }
+}
+
+# Coerce the "blank rows below the pooled result" input. Blank / NA / invalid
+# means "let plot_forest() decide" (its .auto_addrow_below() heuristic), which
+# is expressed as NULL.
+pma_addrow_below <- function(x) {
+  if (is.null(x) || length(x) != 1) return(NULL)
+  x <- suppressWarnings(as.numeric(x))
+  if (is.na(x) || !is.finite(x) || x < 0) return(NULL)
+  x
+}
+
+# Same for "blank rows above the pooled result", where there is no auto mode;
+# a blank field falls back to the historical default of one row.
+pma_addrow_above <- function(x, default = 1) {
+  if (is.null(x) || length(x) != 1) return(default)
+  x <- suppressWarnings(as.numeric(x))
+  if (is.na(x) || !is.finite(x) || x < 0) return(default)
+  x
+}
+
+# Prefill a textInput without ever overwriting something the user typed.
+#
+# Design notes (this generalises the former Step 3 `.auto_name` observer):
+#  * `shiny::observe()`, not `observeEvent()`: the field must also be filled
+#    the first time the input appears, i.e. when the step body is rendered.
+#  * `mem` is a plain environment, NOT a reactiveVal: it records the last value
+#    this observer wrote, and a reactiveVal would make our own write re-trigger
+#    the observer.
+#  * The field is only updated when its current value is one we could have put
+#    there ourselves - empty, an explicitly whitelisted `extra_auto` value, or
+#    our own previous write. Anything else is the user's text and is left alone.
+pma_autofill_text <- function(input, session, input_id, expected_fn,
+                              extra_auto = character(0)) {
+  mem <- new.env(parent = emptyenv())
+  mem$last <- NULL
+  shiny::observe({
+    cur <- input[[input_id]]
+    if (is.null(cur)) return()
+    expected <- tryCatch(expected_fn(), error = function(e) NULL)
+    if (is.null(expected) || length(expected) != 1 || is.na(expected)) return()
+    expected <- as.character(expected)
+    auto_filled <- unique(c("", extra_auto, mem$last))
+    if (cur %in% auto_filled && !identical(cur, expected)) {
+      mem$last <- expected
+      shiny::updateTextInput(session, input_id, value = expected)
+    }
+  })
+  invisible(NULL)
+}
+
+# Wire all five prefillable text fields of one forest display panel.
+#
+# `values_fn` is a reactive (or plain function) returning a list with the names
+# title / label_e / label_c / favors_left / favors_right. `title_suffix` is
+# appended to a non-empty title only, so panels that plot a stratified version
+# of the outcome carry the same title the export bundle writes.
+pma_autofill_forest_panel <- function(input, session, prefix = NULL,
+                                      values_fn, title_suffix = "") {
+  ids <- pma_forest_label_ids(prefix)
+  for (key in names(ids)) {
+    # local() is required: without it every closure below would capture the
+    # same loop variable and all five observers would end up watching the last
+    # key only.
+    local({
+      k  <- key
+      id <- ids[[k]]
+      sfx <- if (identical(k, "title")) title_suffix else ""
+      pma_autofill_text(
+        input, session, id,
+        expected_fn = function() {
+          vals <- values_fn()
+          v <- vals[[k]] %||% ""
+          if (length(v) != 1 || is.na(v)) v <- ""
+          v <- as.character(v)
+          if (nzchar(v) && nzchar(sfx)) paste0(v, sfx) else v
+        }
+      )
+    })
+  }
+  invisible(NULL)
 }
 
 # Banner (used for Indirectness review reminder)

@@ -219,7 +219,7 @@ run_ma <- function(data,
     c_row <- sub[sub$treat == control_label,      , drop = FALSE]
     if (nrow(e_row) != 1 || nrow(c_row) != 1) {
       rlang::abort(sprintf(
-        "Study '%s' does not have exactly one experimental and one control arm.",
+        "Study '%s' does not have exactly one intervention and one control arm.",
         s
       ))
     }

@@ -86,14 +86,37 @@ step3_ui <- function() {
         shiny::textInput(paste0(prefix, "_favors_right"), "Favors (right)", placeholder = "e.g., Favors CBT-I",   width = "100%"),
         shiny::numericInput(paste0(prefix, "_xlim_lo"), "x-min", value = NA, width = "100%"),
         shiny::numericInput(paste0(prefix, "_xlim_hi"), "x-max", value = NA, width = "100%"),
-        shiny::numericInput(paste0(prefix, "_addrows_above"), "addrows.above.overall",
-                            value = 1, min = 0, step = 1, width = "100%"),
-        shiny::numericInput(paste0(prefix, "_addrows_below"), "addrows.below.overall",
-                            value = 1, min = 0, step = 1, width = "100%"),
+        # Blank-row spinners: only relevant once the N / per-arm columns are
+        # hidden, since that is when the heterogeneity footer can collide with
+        # the x-axis. conditionalPanel only toggles display, so a value typed
+        # while visible stays bound and keeps being applied when the panel is
+        # hidden again - intentional. Each numeric needs its own panel, or the
+        # two would share a single cell of the 4-column grid. The ids are
+        # dynamic, hence the JS bracket notation.
+        shiny::conditionalPanel(
+          sprintf("!input['%s_show_n'] && !input['%s_show_events']", prefix, prefix),
+          style = "grid-column: span 4;",
+          htmltools::p(class = "pma-card-subtitle",
+            paste0("Columns hidden: if the heterogeneity text overlaps the ",
+                   "x-axis, use these to move it up or down. ",
+                   "Blank = automatic."))),
+        shiny::conditionalPanel(
+          sprintf("!input['%s_show_n'] && !input['%s_show_events']", prefix, prefix),
+          shiny::numericInput(paste0(prefix, "_addrows_above"),
+                              "Blank rows above pooled result",
+                              value = NA, min = 0, step = 1, width = "100%")),
+        shiny::conditionalPanel(
+          sprintf("!input['%s_show_n'] && !input['%s_show_events']", prefix, prefix),
+          shiny::numericInput(paste0(prefix, "_addrows_below"),
+                              "Blank rows below pooled result",
+                              value = NA, min = 0, step = 1, width = "100%")),
         htmltools::div(style = "grid-column: span 2;",
-          shiny::checkboxInput(paste0(prefix, "_show_n"), "Show N columns (Intervention / Control)", FALSE)),
+          shiny::checkboxInput(paste0(prefix, "_show_n"), "Show N columns (Intervention / Control)", TRUE)),
         htmltools::div(style = "grid-column: span 2;",
-          shiny::checkboxInput(paste0(prefix, "_show_events"), "Show event columns (binary)", FALSE))
+          shiny::checkboxInput(paste0(prefix, "_show_events"),
+                               paste0("Show per-arm data columns ",
+                                      "(events for binary, mean & SD for continuous)"),
+                               TRUE))
       )
     )
   }
@@ -187,12 +210,7 @@ step3_ui <- function() {
           .inputs_details(open = FALSE, title = "Inputs for this domain",
             shiny::sliderInput("rob_inf_threshold",
               "Sensitivity-analysis change threshold (RoB-specific)",
-              min = 0.05, max = 0.5, value = 0.10, step = 0.05),
-            shiny::radioButtons("small_values", "Outcome direction",
-              choices = c("(no override)" = "",
-                          "Desirable (small = good, e.g., mortality)" = "desirable",
-                          "Undesirable (small = bad, e.g., response)" = "undesirable"),
-              inline = FALSE)
+              min = 0.05, max = 0.5, value = 0.10, step = 0.05)
           ),
           .override_details(
             shiny::selectInput("rob_override", NULL,
@@ -535,7 +553,7 @@ step3_ui <- function() {
           ),
           htmltools::p(
             style = "font-size: 0.85rem; color: hsl(var(--muted-foreground)); font-style: italic;",
-            "Recommended: report both control event rate (CER) and experimental event rate (EER) ",
+            "Recommended: report both control event rate (CER) and intervention event rate (EER) ",
             "alongside the relative effect to aid clinical interpretation (",
             htmltools::tags$a(href = "https://doi.org/10.1136/bmjment-2023-300978",
                               target = "_blank", "Heimke et al., BMJ Ment Health 2024"),
@@ -548,8 +566,8 @@ step3_ui <- function() {
               "display: grid;",
               "grid-template-columns: repeat(2, minmax(220px, 1fr));",
               "gap: 0.75rem 1rem;"),
-            shiny::textInput("outcome_name", "Outcome label",
-              value = "Outcome"),
+            htmltools::div(style = "grid-column: span 2;",
+              shiny::uiOutput("outcome_name_echo")),
             shiny::numericInput("per", "Display rates per N patients",
               value = 1000, min = 1, step = 100),
             htmltools::div(style = "grid-column: span 2;",
@@ -1100,7 +1118,8 @@ step3_server <- function(input, output, session, state) {
       rob_rationale <- rob_ov$rationale
     }
 
-    sv <- if (nzchar(input$small_values %||% "")) input$small_values else NULL
+    # Outcome direction is a required Step 2 answer, mirrored into state.
+    sv <- state$small_values
 
     # --- Inconsistency: scalar override + rationale, or manual flowchart ---
     incon_ov <- .override_or_ignore("incon_override",
@@ -1196,8 +1215,7 @@ step3_server <- function(input, output, session, state) {
       # "no" (suspected) is handled by a post-override below so it forces
       # rate-down regardless of Q2-Q5.
       pubias_registry_complete = if (identical(pubias_rc, "yes")) "yes" else NULL,
-      outcome_name = if (!is.null(input$outcome_name) && nzchar(input$outcome_name))
-                       input$outcome_name else "Outcome"
+      outcome_name = state$outcome_name %||% "Outcome"
     )
 
     g <- tryCatch(
@@ -1429,6 +1447,7 @@ step3_server <- function(input, output, session, state) {
     xlim <- if (!is.null(lo) && !is.null(hi) && !is.na(lo) && !is.na(hi) && lo < hi) {
       c(lo, hi)
     } else NULL
+    addrow_ids <- pma_forest_addrow_ids(prefix)
     list(
       title        = pick_text(paste0(prefix, "_title")),
       label_e      = pick_text(paste0(prefix, "_label_e")),
@@ -1436,10 +1455,12 @@ step3_server <- function(input, output, session, state) {
       favors_left  = pick_text(paste0(prefix, "_favors_left")),
       favors_right = pick_text(paste0(prefix, "_favors_right")),
       xlim         = xlim,
-      show_n       = isTRUE(input[[paste0(prefix, "_show_n")]]),
-      show_events  = isTRUE(input[[paste0(prefix, "_show_events")]]),
-      addrow_above = input[[paste0(prefix, "_addrows_above")]] %||% 1,
-      addrow_below = input[[paste0(prefix, "_addrows_below")]] %||% 1
+      # An absent checkbox means the tab has not been rendered yet; fall back
+      # to the UI default (TRUE) rather than to isTRUE(NULL).
+      show_n       = isTRUE(input[[paste0(prefix, "_show_n")]] %||% TRUE),
+      show_events  = isTRUE(input[[paste0(prefix, "_show_events")]] %||% TRUE),
+      addrow_above = pma_addrow_above(input[[addrow_ids[["above"]]]]),
+      addrow_below = pma_addrow_below(input[[addrow_ids[["below"]]]])
     )
   }
 
@@ -1967,39 +1988,52 @@ step3_server <- function(input, output, session, state) {
              error = function(e) htmltools::p(paste("SoF render error:", conditionMessage(e))))
   })
 
-  # ----- Outcome name default: follow the Step 2 outcome selection when the
-  # dataset is long-format with an `outcome` column, otherwise fall back to
-  # the effect-measure-flavoured default. Uses observe (not observeEvent) so
-  # it fires both when outcome_type / selected_outcome change AND when
-  # outcome_name first appears (i.e., when Step 3 UI is rendered).
-  #
-  # `.auto_name` remembers the last value this observer wrote, so a name the
-  # USER typed is never overwritten, while a name we auto-filled from a
-  # previous Step 2 outcome still tracks a later Step 2 switch. A plain
-  # environment (not reactiveVal) keeps the observer from re-triggering
-  # itself.
-  .auto_name <- new.env(parent = emptyenv())
-  .auto_name$last <- NULL
-
-  shiny::observe({
-    cur <- input$outcome_name
-    if (is.null(cur)) return()
-    expected <- pma_default_outcome_label(input$selected_outcome,
-                                          input$outcome_type %||% "binary")
-    auto_filled <- pma_auto_outcome_labels(.auto_name$last)
-    if (cur %in% auto_filled && !identical(cur, expected)) {
-      .auto_name$last <- expected
-      shiny::updateTextInput(session, "outcome_name", value = expected)
-    }
+  # Read-only echo of the outcome name: it is owned by Step 2, so Step 3 shows
+  # it (the SoF row label depends on it) without offering a second, divergent
+  # field to edit.
+  output$outcome_name_echo <- shiny::renderUI({
+    nm <- state$outcome_name %||% "(not set)"
+    htmltools::p(class = "pma-card-subtitle",
+      "Outcome name: ", htmltools::tags$strong(nm),
+      " - set in Step 2 (Model configuration).")
   })
 
+  # Smart defaults for the four Step 3 forest display panels. Only state$ is
+  # read: while the user is on Step 3, the Step 2 body (and therefore
+  # input$experimental_label / input$control_label) does not exist.
+  #
+  # The title suffix mirrors what export_bundle.R writes for each stratified
+  # plot, so the on-screen title and the exported one agree.
+  .forest_label_defaults <- shiny::reactive({
+    iv  <- state$arm_e %||% ""
+    ct  <- state$arm_c %||% ""
+    fav <- pma_favors_labels(state$small_values, iv, ct)
+    list(title = state$outcome_name %||% "", label_e = iv, label_c = ct,
+         favors_left = fav$left, favors_right = fav$right)
+  })
+  .forest_title_suffix <- c(
+    rob    = " (stratified by Risk of Bias)",
+    incon  = "",
+    indir  = " (stratified by Indirectness)",
+    pubias = " (available vs missing results)"
+  )
+  for (.pfx in names(.forest_title_suffix)) {
+    # local() binds the prefix per iteration; without it all four panels would
+    # be wired to the last prefix.
+    local({
+      p <- .pfx
+      pma_autofill_forest_panel(input, session, prefix = p,
+                                values_fn = .forest_label_defaults,
+                                title_suffix = .forest_title_suffix[[p]])
+    })
+  }
+
   # ----- Saving the current outcome into state$outcomes -------------------
-  # Key for the saved outcome: whatever is in the "Outcome label" field,
-  # which itself defaults to the Step 2 outcome selection (observer above).
-  # The label is what grade_table() prints in the Outcome column, so keeping
-  # the two identical avoids a second, divergent name field.
+  # Key for the saved outcome: the Outcome name entered in Step 2. The label
+  # is what grade_table() prints in the Outcome column, so keeping the two
+  # identical avoids a second, divergent name field.
   .save_key <- shiny::reactive({
-    nm <- trimws(input$outcome_name %||% "")
+    nm <- trimws(state$outcome_name %||% "")
     if (nzchar(nm)) nm else "Outcome"
   })
 
@@ -2045,8 +2079,8 @@ step3_server <- function(input, output, session, state) {
       htmltools::p(
         class = "pma-card-subtitle",
         style = "margin-top: 0.4rem;",
-        "Saved under the 'Outcome label' set above - edit it there to change ",
-        "the row label in the Summary of Findings table.")
+        "Saved under the Outcome name set in Step 2 - change it there to ",
+        "relabel the Summary of Findings row.")
     )
   })
   shiny::outputOptions(output, "save_outcome_panel", suspendWhenHidden = FALSE)

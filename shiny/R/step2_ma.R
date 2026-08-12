@@ -15,6 +15,21 @@ step2_ui <- function(state = NULL) {
     if (!is.null(diag) && isTRUE(diag$rare_flow)) auto_rerun_default <- FALSE
   }
 
+  # Outcome identity (name + direction) is required before the analysis runs.
+  # app.R's step_body renderUI rebuilds this whole UI on every step change, so
+  # a freshly created widget pushes its DOM default back to the server: hard
+  # -coding value = "" / selected = character(0) would wipe the user's answers
+  # on every 2 -> 3 -> 2 round trip. Seeding from the mirrored state (same
+  # trick as auto_rerun_default above) keeps the two fields sticky.
+  outcome_name_default  <- ""
+  small_values_default  <- character(0)
+  if (!is.null(state)) {
+    nm <- shiny::isolate(state$outcome_name)
+    if (!is.null(nm) && length(nm) == 1 && !is.na(nm)) outcome_name_default <- nm
+    sv <- shiny::isolate(state$small_values)
+    if (!is.null(sv) && length(sv) == 1 && nzchar(sv)) small_values_default <- sv
+  }
+
   htmltools::tagList(
     pma_step_header(s$title, s$what, s$why),
 
@@ -27,6 +42,24 @@ step2_ui <- function(state = NULL) {
         style = "flex: 0 0 320px;",
         pma_card(
           title = "Model configuration",
+          htmltools::h6("Outcome"),
+          shiny::textInput("outcome_name", "Outcome name (required)",
+                           value = outcome_name_default, width = "100%",
+                           placeholder = "e.g., Depression response"),
+          # No preselected direction: the user must actively choose. The
+          # values "desirable" / "undesirable" are the vocabulary the vendored
+          # pmatools validates, so only the labels are re-worded here.
+          shiny::radioButtons("small_values",
+            "Direction (required): is a SMALLER value of this outcome favorable?",
+            choices = c(
+              "Favorable - smaller is better (e.g., mortality, symptom score)" = "desirable",
+              "Unfavorable - smaller is worse (e.g., response, remission)"     = "undesirable"),
+            selected = small_values_default, inline = FALSE),
+          htmltools::p(class = "pma-card-subtitle",
+            paste0("Both are required. They name the outcome in the Summary of ",
+                   "Findings table, prefill every forest-plot title and axis label, ",
+                   "and set the bias direction used by the Risk-of-Bias check in Step 3.")),
+          htmltools::hr(),
           htmltools::h6("Column mapping"),
           shiny::selectInput("col_studlab", "Study label (studlab)",
                              choices = NULL, selectize = FALSE),
@@ -143,13 +176,33 @@ step2_ui <- function(state = NULL) {
 
                   shiny::numericInput("xlim_lo",   "x-min", value = NA, width = "100%"),
                   shiny::numericInput("xlim_hi",   "x-max", value = NA, width = "100%"),
-                  shiny::numericInput("addrows_above_overall", "addrows.above.overall", value = 1, min = 0, step = 1, width = "100%"),
-                  shiny::numericInput("addrows_below_overall", "addrows.below.overall", value = 1, min = 0, step = 1, width = "100%"),
+
+                  # The blank-row spinners only matter once the N / per-arm
+                  # columns are hidden, because that is when the heterogeneity
+                  # footer can collide with the x-axis. They stay in the DOM
+                  # (conditionalPanel only toggles display), so a value typed
+                  # while visible keeps being applied after the columns come
+                  # back - intentional, and the reason nothing resets them.
+                  # Each numeric gets its OWN conditionalPanel: wrapping both
+                  # in one would collapse them into a single grid cell.
+                  shiny::conditionalPanel(
+                    "!input.show_n && !input.show_events",
+                    style = "grid-column: span 4;",
+                    htmltools::p(class = "pma-card-subtitle",
+                      paste0("Columns hidden: if the heterogeneity text overlaps ",
+                             "the x-axis, use these to move it up or down. ",
+                             "Blank = automatic."))),
+                  shiny::conditionalPanel(
+                    "!input.show_n && !input.show_events",
+                    shiny::numericInput("addrows_above_overall", "Blank rows above pooled result", value = NA, min = 0, step = 1, width = "100%")),
+                  shiny::conditionalPanel(
+                    "!input.show_n && !input.show_events",
+                    shiny::numericInput("addrows_below_overall", "Blank rows below pooled result", value = NA, min = 0, step = 1, width = "100%")),
 
                   htmltools::div(style = "grid-column: span 2;",
-                    shiny::checkboxInput("show_n", "Show N columns (Intervention / Control)", FALSE)),
+                    shiny::checkboxInput("show_n", "Show N columns (Intervention / Control)", TRUE)),
                   htmltools::div(style = "grid-column: span 2;",
-                    shiny::checkboxInput("show_events", "Show event columns (binary)", FALSE))
+                    shiny::checkboxInput("show_events", "Show per-arm data columns (events for binary, mean & SD for continuous)", TRUE))
                 )
               )
             ),
@@ -432,7 +485,15 @@ step2_server <- function(input, output, session, state) {
       col_mean       = input$col_mean,
       col_sd         = input$col_sd,
       subgroup_col   = if (nzchar(input$subgroup_col %||% "")) input$subgroup_col else NULL,
-      subgroup_order = input$subgroup_order
+      subgroup_order = input$subgroup_order,
+      # Booleans, not the values themselves: the raw outcome name would make
+      # this bundle change on every keystroke (after the 500 ms debounce),
+      # re-running run_ma() - and for rare-event data the whole multi-method
+      # suite - while the user is still typing. A boolean only invalidates on
+      # the empty <-> non-empty transition, which is all the gate below needs.
+      outcome_name_set = nzchar(trimws(input$outcome_name %||% "")),
+      small_values_set = { sv <- input$small_values
+                           !is.null(sv) && length(sv) == 1L && nzchar(sv) }
     )
   }) |> shiny::debounce(500)
 
@@ -491,13 +552,38 @@ step2_server <- function(input, output, session, state) {
         missing_cols <- c(missing_cols, "sd")
       }
     }
-    if (length(missing_cols) > 0) {
+    # Outcome identity is as mandatory as the column mapping, but it lives in
+    # its own list so the warning can name the fields rather than pretend they
+    # are columns.
+    missing_required <- character()
+    if (!isTRUE(args$outcome_name_set)) {
+      missing_required <- c(missing_required, "Outcome name")
+    }
+    if (!isTRUE(args$small_values_set)) {
+      missing_required <- c(missing_required, "Direction (smaller = favorable?)")
+    }
+
+    if (length(missing_cols) > 0 || length(missing_required) > 0) {
       state$ma <- NULL
+      # The existing gate keeps the first page load quiet (auto_rerun defaults
+      # to TRUE and run_ma has not been clicked), so the user only gets told
+      # off once they actually ask for an analysis.
       if (!auto || clicked) {
+        msgs <- character()
+        if (length(missing_cols) > 0) {
+          msgs <- c(msgs, paste("Select required column(s):",
+                                paste(unique(missing_cols), collapse = ", ")))
+        }
+        if (length(missing_required) > 0) {
+          msgs <- c(msgs, paste("Complete required field(s):",
+                                paste(missing_required, collapse = ", ")))
+        }
+        # `clicked` latches TRUE forever once Run analysis is pressed, so this
+        # branch can fire on every later input change. A fixed id makes each
+        # new toast replace the previous one instead of stacking them up.
         shiny::showNotification(
-          paste("Select required column(s):",
-                paste(unique(missing_cols), collapse = ", ")),
-          type = "warning"
+          paste(msgs, collapse = " "),
+          id = "step2_required_fields", type = "warning", duration = 8
         )
       }
       return(NULL)
@@ -512,7 +598,7 @@ step2_server <- function(input, output, session, state) {
     # Guard: when the user just swapped data, input$experimental_label /
     # input$control_label may still hold values from the previous dataset.
     # Running run_ma() with arm labels that do not appear in d$treat
-    # produces a misleading "Study X does not have exactly one experimental
+    # produces a misleading "Study X does not have exactly one intervention
     # and one control arm" error for every row. Wait silently for the
     # arm_assignment_ui to re-render with valid defaults.
     arms_in_data <- unique(as.character(d$treat))
@@ -600,11 +686,11 @@ step2_server <- function(input, output, session, state) {
       },
         error = function(e) {
           msg <- conditionMessage(e)
-          hint <- if (grepl("does not have exactly one experimental", msg, fixed = TRUE)) {
+          hint <- if (grepl("does not have exactly one intervention", msg, fixed = TRUE)) {
             paste0(
               " Same (studlab, treat) rows are auto-combined per Cochrane ",
               "Handbook 6.5.2.10. If a study still has more than one ",
-              "experimental or control arm, pick a single arm per study in the ",
+              "intervention or control arm, pick a single arm per study in the ",
               "intervention/control selectors above, or remove the extra rows."
             )
           } else {
@@ -987,12 +1073,12 @@ step2_server <- function(input, output, session, state) {
           label_e            = if (nzchar(input$label_e %||% ""))      input$label_e      else NULL,
           label_c            = if (nzchar(input$label_c %||% ""))      input$label_c      else NULL,
           xlim               = xlim,
-          show_n             = isTRUE(input$show_n),
-          show_events        = isTRUE(input$show_events),
+          show_n             = isTRUE(input$show_n %||% TRUE),
+          show_events        = isTRUE(input$show_events %||% TRUE),
           favors_left        = if (nzchar(input$favors_left %||% ""))  input$favors_left  else NULL,
           favors_right       = if (nzchar(input$favors_right %||% "")) input$favors_right else NULL,
-          addrow_above       = input$addrows_above_overall %||% 1,
-          addrow_below       = input$addrows_below_overall %||% 1
+          addrow_above       = pma_addrow_above(input$addrows_above_overall),
+          addrow_below       = pma_addrow_below(input$addrows_below_overall)
         )
       }
     )
@@ -1013,12 +1099,52 @@ step2_server <- function(input, output, session, state) {
       favors_left  = pick_text("favors_left"),
       favors_right = pick_text("favors_right"),
       xlim         = xlim,
-      show_n       = isTRUE(input$show_n),
-      show_events  = isTRUE(input$show_events),
-      addrow_above = input$addrows_above_overall %||% 1,
-      addrow_below = input$addrows_below_overall %||% 1
+      # The Step 2 body may not have been rendered yet, so an absent checkbox
+      # must fall back to the UI default (TRUE) rather than to isTRUE(NULL).
+      show_n       = isTRUE(input$show_n %||% TRUE),
+      show_events  = isTRUE(input$show_events %||% TRUE),
+      addrow_above = pma_addrow_above(input$addrows_above_overall),
+      addrow_below = pma_addrow_below(input$addrows_below_overall)
     )
   })
+
+  # Mirror the outcome identity and the arm labels into state so Step 3 and
+  # Step 4 can read them while the Step 2 widgets do not exist.
+  #
+  # NULL / empty is never written back. Leaving and re-entering Step 2 tears
+  # the widgets down and rebuilds them, and a freshly built widget pushes its
+  # own default to the server before step2_ui()'s seeding has any effect; a
+  # blank write at that moment would destroy exactly the values Step 3 needs.
+  # The cost is an asymmetry - clearing "Outcome name" in Step 2 leaves
+  # state$outcome_name at its previous value - which is harmless because the
+  # required-field checks read input$ directly, and step2_ui() reseeds from
+  # state only when a non-empty value is there.
+  shiny::observe({
+    nm <- input$outcome_name
+    if (!is.null(nm) && length(nm) == 1 && nzchar(trimws(nm))) {
+      state$outcome_name <- trimws(nm)
+    }
+    sv <- input$small_values
+    if (!is.null(sv) && length(sv) == 1 && nzchar(sv)) state$small_values <- sv
+    ae <- input$experimental_label
+    if (!is.null(ae) && length(ae) == 1 && nzchar(ae)) state$arm_e <- ae
+    ac <- input$control_label
+    if (!is.null(ac) && length(ac) == 1 && nzchar(ac)) state$arm_c <- ac
+  })
+
+  # Smart defaults for the Forest plot display panel: the outcome name becomes
+  # the title, the two arm selectors become the arm labels, and the outcome
+  # direction decides which side each "Favors ..." label goes on. Nothing the
+  # user typed is ever overwritten (see pma_autofill_text()).
+  .forest_label_defaults <- shiny::reactive({
+    iv  <- input$experimental_label %||% state$arm_e %||% ""
+    ct  <- input$control_label      %||% state$arm_c %||% ""
+    fav <- pma_favors_labels(state$small_values, iv, ct)
+    list(title = state$outcome_name %||% "", label_e = iv, label_c = ct,
+         favors_left = fav$left, favors_right = fav$right)
+  })
+  pma_autofill_forest_panel(input, session, prefix = NULL,
+                            values_fn = .forest_label_defaults)
 
   output$funnel_plot <- shiny::renderImage({
     obj <- state$ma
@@ -1073,6 +1199,25 @@ step2_server <- function(input, output, session, state) {
 
   # Advance hook for step dispatcher
   state$step2_commit <- function() {
+    # Outcome identity is checked before the analysis, because "run the
+    # analysis first" would be misleading advice when the reason no analysis
+    # exists is a blank required field.
+    missing_required <- character()
+    if (!nzchar(trimws(input$outcome_name %||% ""))) {
+      missing_required <- c(missing_required, "Outcome name")
+    }
+    sv <- input$small_values
+    if (is.null(sv) || length(sv) != 1L || !nzchar(sv)) {
+      missing_required <- c(missing_required, "Direction (smaller = favorable?)")
+    }
+    if (length(missing_required) > 0) {
+      shiny::showNotification(
+        paste("Complete required field(s):",
+              paste(missing_required, collapse = ", ")),
+        id = "step2_required_fields", type = "warning", duration = 8
+      )
+      return(FALSE)
+    }
     if (is.null(state$ma)) {
       shiny::showNotification(
         "Please run the analysis first.", type = "warning"

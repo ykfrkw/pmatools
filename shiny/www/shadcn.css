@@ -414,3 +414,151 @@ details > summary {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ---------------------------------------------------------------------------
+   Dropdowns: one white, token-driven look for both flavours of select.
+
+   The app mixes two DOM shapes and the browser default styles them very
+   differently, so side-by-side controls in the same card did not match:
+     - selectInput(..., selectize = FALSE) renders a NATIVE
+       <select class="shiny-input-select form-control"> that inherits the
+       operating system's chrome (grey gradient on macOS, blue caret on
+       Windows);
+     - selectInput(...) (the default) hides its <select> and draws a
+       selectize.js widget whose own stylesheet hard-codes #ccc borders,
+       4px radii and 6px/12px padding - none of which come from our tokens.
+
+   Restyling both against the same variables makes them read as one control.
+   Everything is scoped to .shiny-input-container so DT's own page-length
+   <select> (inside .dataTables_length, outside any Shiny input container)
+   keeps its table-native styling.
+
+   Inputs covered here: col_studlab, col_treat, col_n, col_event, col_mean,
+   col_sd, subgroup_col, selected_outcome, sample_dataset, rare_primary_method
+   (native, selectize = FALSE); experimental_label, control_label, method,
+   method_tau, subgroup_order, rob_override and the other Step 3 / Step 4
+   pickers (selectize).
+   --------------------------------------------------------------------------- */
+
+/* The caret glyph is shared by both flavours, so it lives in a custom property
+   rather than being pasted twice: a line-drawn chevron that drifted out of sync
+   between the native rule and the selectize pseudo-element would reintroduce
+   exactly the mismatch this section exists to remove. It is declared on
+   .shiny-input-container (not :root) to keep the section self-contained and to
+   leave DT's own selects untouched; both consumers below inherit it from there,
+   including ::after, which inherits from its originating element. */
+.shiny-input-container {
+  --pma-select-caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+
+/* --- Native <select> (selectize = FALSE) --- */
+.shiny-input-container select.form-control {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 100%;
+  min-height: 34px;
+  padding: 0.375rem 2rem 0.375rem 0.75rem;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 20px;
+  color: hsl(var(--foreground));
+  background-color: hsl(var(--background));
+  /* Rewritten from an inline data-URI to the shared token above so the two
+     flavours cannot drift apart. */
+  background-image: var(--pma-select-caret);
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 1rem 1rem;
+  border: 1px solid hsl(var(--input));
+  border-radius: var(--radius);
+  box-shadow: none;
+  cursor: pointer;
+}
+.shiny-input-container select.form-control:focus {
+  outline: none;
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.15);
+}
+/* Listbox-shaped selects have no collapsed caret to point at. */
+.shiny-input-container select.form-control[multiple],
+.shiny-input-container select.form-control[size]:not([size="1"]) {
+  background-image: none;
+  padding-right: 0.75rem;
+  cursor: default;
+}
+.shiny-input-container select.form-control:disabled {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  cursor: default;
+}
+
+/* --- selectize.js widgets (selectInput default) ---
+   The outer box, the dropdown surface and the caret are repainted; option
+   rows, multi-select item chips and the drag_drop plugin's affordances keep
+   selectize's own behaviour. (The caret used to be left alone, but selectize
+   draws a filled CSS triangle while the native rule above draws a line chevron,
+   so "Study label" and "Intervention arm value" pointed at each other with two
+   different glyphs inside the same card.) */
+.shiny-input-container .selectize-input {
+  background: hsl(var(--background));
+  min-height: 34px;
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--input));
+  border-radius: var(--radius);
+}
+.shiny-input-container .selectize-control.single .selectize-input.input-active {
+  background: hsl(var(--background));
+}
+.shiny-input-container .selectize-input.dropdown-active {
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.shiny-input-container .selectize-input.focus {
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.15);
+}
+.shiny-input-container .selectize-dropdown {
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--input));
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+/* Swap selectize's filled CSS triangle for the shared chevron. The borders are
+   zeroed (that triangle IS a border trick) and the pseudo-element is given a
+   real 1rem box, positioned to land where the native caret's
+   `background-position: right 0.7rem center` puts it: `right` on an absolutely
+   positioned child is measured from the same padding box the native background
+   is painted in, and top 50% / -0.5rem margin reproduces `center`.
+   .selectize-control.single only, so the multi-select pickers (subgroup_order)
+   stay caret-free exactly as selectize leaves them.
+
+   The `:not(.no-arrow)` qualifier is not decoration: selectize ships the
+   triangle as `.selectize-control.single .selectize-input:not(.no-arrow):after`
+   (specificity 0,3,1) and this file is inlined by includeCSS() into <head>
+   BEFORE the selectize stylesheet link, so a merely equal-specificity selector
+   loses the tie and only the properties selectize does not set (the background)
+   would survive. Repeating the qualifier makes it 0,4,1 and it also preserves
+   selectize's own .no-arrow opt-out. */
+.shiny-input-container
+  .selectize-control.single
+  .selectize-input:not(.no-arrow)::after {
+  border: 0;
+  width: 1rem;
+  height: 1rem;
+  top: 50%;
+  right: 0.7rem;
+  margin-top: -0.5rem;
+  background-image: var(--pma-select-caret);
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: 1rem 1rem;
+}
+/* Open state: selectize points its triangle upwards (and nudges margin-top to
+   -4px), so flip the chevron and restore the centring offset. One class more
+   than selectize's own 0,4,1 open-state rule, for the tie-break reason above. */
+.shiny-input-container
+  .selectize-control.single
+  .selectize-input:not(.no-arrow).dropdown-active::after {
+  border: 0;
+  margin-top: -0.5rem;
+  transform: rotate(180deg);
+}

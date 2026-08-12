@@ -27,20 +27,28 @@
 #'   indicate the clinical decision Threshold.
 #' @param show_n Logical; if TRUE, add per-arm sample size columns
 #'   (\code{n.e}, \code{n.c}) to the left of the forest.
-#' @param show_events Logical; if TRUE and binary outcome, add per-arm
-#'   event count columns (\code{event.e}, \code{event.c}).
+#' @param show_events Logical; if TRUE, add the per-arm raw data columns that
+#'   the object carries: event counts (\code{event.e}, \code{event.c}) for a
+#'   binary outcome, or means and standard deviations (\code{mean.e},
+#'   \code{sd.e}, \code{mean.c}, \code{sd.c}) for a continuous outcome.
+#'   Ignored for objects that carry neither.
 #' @param favors_left,favors_right Optional character labels positioned on
 #'   the left and right of the x-axis (e.g., "Favors Control" / "Favors
 #'   Treatment"). Passed to \code{meta::forest()} as \code{label.left} /
 #'   \code{label.right}.
-#' @param addrow_above Number of blank rows above the pooled summary
-#'   (passed as \code{addrow.overall}).
+#' @param addrow_above Blank row above the pooled summary. Passed to
+#'   \code{meta::forest()} as \code{addrow.overall}, which that function
+#'   validates as a \emph{logical}, so only zero versus non-zero carries
+#'   meaning here: the magnitude of a larger number is discarded by design,
+#'   and \code{NA} or \code{NULL} is treated as \code{0}.
 #' @param addrow_below Number of blank rows between the pooled summary and
 #'   the heterogeneity/test statistics printed at the bottom (passed as
 #'   \code{addrows.below.overall}). Default \code{NULL} computes the value
 #'   from the drawn content so the heterogeneity text clears the x-axis
 #'   band, the \code{label.left}/\code{label.right} row, and any
-#'   \code{xlab} row (see \code{.auto_addrow_below()}).
+#'   \code{xlab} row (see \code{.auto_addrow_below()}). \code{NA}, a
+#'   negative value, or anything not a length-1 finite number falls back to
+#'   that automatic derivation.
 #' @param ... Additional arguments passed to \code{\link[meta]{forest}}.
 #'
 #' @return Invisibly NULL. Side effect: draws on the active graphics device.
@@ -71,6 +79,22 @@ plot_forest <- function(meta_obj,
   # xlab occupy the same vertical region. A fixed value of 1 made the
   # heterogeneity text overlap those elements (reviewer report), so when
   # the caller does not pin a value we derive it from the drawn content.
+  #
+  # Sanitise the addrow_* inputs BEFORE the auto-derivation below. An NA or
+  # non-finite addrow_below would otherwise skip .auto_addrow_below() (it is
+  # not NULL) and reach meta::forest(), which errors on it; the tryCatch retry
+  # further down then re-runs the plot with leftcols/leftlabs stripped, so the
+  # data columns silently vanish instead of surfacing the bad input.
+  if (is.null(addrow_above) || length(addrow_above) != 1L ||
+      is.na(addrow_above) || !is.finite(addrow_above)) {
+    addrow_above <- 0
+  }
+  if (!is.null(addrow_below) &&
+      (length(addrow_below) != 1L || is.na(addrow_below) ||
+       !is.finite(addrow_below) || addrow_below < 0)) {
+    addrow_below <- NULL
+  }
+
   dots <- list(...)
   if (is.null(addrow_below)) {
     has_favors <- .nzchar1(favors_left) || .nzchar1(favors_right) ||
@@ -84,9 +108,11 @@ plot_forest <- function(meta_obj,
   sm <- meta_obj$sm
   is_ratio <- !is.null(sm) && sm %in% c("OR", "RR", "HR", "RoM", "IRR")
 
-  # Resolve labels
-  if (is.null(label_e)) label_e <- meta_obj$label.e
-  if (is.null(label_c)) label_c <- meta_obj$label.c
+  # Resolve arm labels (see .resolve_arm_labels() for the "Experimental"
+  # default that {meta} bakes into the pooled object).
+  arm_labs <- .resolve_arm_labels(label_e, label_c, meta_obj)
+  label_e  <- arm_labs$e
+  label_c  <- arm_labs$c
 
   # auto_layout: x-limits + base-graphics margins. Note: meta::forest() draws
   # with grid, so par(mar) only affects base-graphics fallbacks (plot.new /
@@ -103,31 +129,41 @@ plot_forest <- function(meta_obj,
   long_lbl <- !is.null(studlab) && any(nchar(as.character(studlab)) > 30)
   fs_lab <- if (isTRUE(auto_layout) && long_lbl) 0.85 else 1
 
-  # Optional N + event columns: intervention event, intervention N,
-  # control event, control N order.
+  # Optional per-arm data columns, grouped intervention-first then control:
+  #   studlab [event.e] [mean.e sd.e] [n.e] [event.c] [mean.c sd.c] [n.c]
+  # `show_events` gates both the binary event counts and the continuous
+  # mean/SD pair: a metabin object carries event.e/event.c but no mean.e,
+  # and a metacont object carries mean.e/sd.e but no event.e, so the two
+  # branches are mutually exclusive in practice and one flag serves both.
   has_events <- isTRUE(show_events) &&
                 !is.null(meta_obj$event.e) && !is.null(meta_obj$event.c)
+  has_meansd <- isTRUE(show_events) &&
+                !is.null(meta_obj$mean.e) && !is.null(meta_obj$mean.c) &&
+                !is.null(meta_obj$sd.e)   && !is.null(meta_obj$sd.c)
   has_n      <- isTRUE(show_n) &&
                 !is.null(meta_obj$n.e) && !is.null(meta_obj$n.c)
 
+  # The labels stay bare column names ("Events", "N", "Mean", "SD"): the arm
+  # name must NOT be repeated here. Whenever per-arm columns are drawn,
+  # meta::forest() always prints label.e/label.c as a spanning heading over
+  # them (see .resolve_arm_labels() below, which supplies those strings), and
+  # that heading lands in the same header cell as the first line of leftlabs.
+  # Putting the arm name in both places made the two collide and render as
+  # "CBTN" / "ControN". Bare labels give the intended two-level header:
+  #                   CBT-I           Control
+  #   Study    Events   N       Events   N
   left_cols <- "studlab"
   left_labs <- "Study"
-  if (has_events) {
-    left_cols <- c(left_cols, "event.e")
-    left_labs <- c(left_labs, "Events\nIntervention")
+  add_col <- function(cols, labs) {
+    left_cols <<- c(left_cols, cols)
+    left_labs <<- c(left_labs, labs)
   }
-  if (has_n) {
-    left_cols <- c(left_cols, "n.e")
-    left_labs <- c(left_labs, "N\nIntervention")
-  }
-  if (has_events) {
-    left_cols <- c(left_cols, "event.c")
-    left_labs <- c(left_labs, "Events\nControl")
-  }
-  if (has_n) {
-    left_cols <- c(left_cols, "n.c")
-    left_labs <- c(left_labs, "N\nControl")
-  }
+  if (has_events) add_col("event.e", "Events")
+  if (has_meansd) add_col(c("mean.e", "sd.e"), c("Mean", "SD"))
+  if (has_n)      add_col("n.e", "N")
+  if (has_events) add_col("event.c", "Events")
+  if (has_meansd) add_col(c("mean.c", "sd.c"), c("Mean", "SD"))
+  if (has_n)      add_col("n.c", "N")
 
   effect_label <- if (!is.null(sm) && nzchar(sm)) {
     paste0(sm, " (95% CI)")
@@ -231,6 +267,33 @@ plot_forest <- function(meta_obj,
   if (is.null(x) || length(x) == 0L) return(FALSE)
   x <- as.character(x)[1]
   !is.na(x) && nzchar(x)
+}
+
+# --------------------------------------------------------------------------
+# Arm labels for the forest header
+# --------------------------------------------------------------------------
+# run_ma() does not set label.e/label.c, so meta::metabin()/metacont() fall
+# back to meta::gs("label.e"), which is the string "Experimental". That
+# default then travels with the pooled object into every forest header. We
+# rewrite it here, in the display layer only: patching run_ma() would also
+# change summary() output on stored meta objects and the results.txt written
+# by export_bundle(). A caller-supplied label always wins.
+.resolve_arm_labels <- function(label_e, label_c, meta_obj) {
+  if (!.nzchar1(label_e)) label_e <- meta_obj$label.e
+  if (!.nzchar1(label_c)) label_c <- meta_obj$label.c
+
+  label_e <- if (!.nzchar1(label_e)) {
+    "Intervention"
+  } else if (identical(as.character(label_e)[1], "Experimental")) {
+    # {meta}'s package default, not a deliberate caller choice.
+    "Intervention"
+  } else {
+    as.character(label_e)[1]
+  }
+
+  label_c <- if (!.nzchar1(label_c)) "Control" else as.character(label_c)[1]
+
+  list(e = label_e, c = label_c)
 }
 
 # --------------------------------------------------------------------------

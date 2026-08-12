@@ -109,6 +109,13 @@ server <- function(input, output, session) {
     rare_mode_active = FALSE,
     grade          = NULL,
     indir_reviewed = FALSE,
+    # Outcome identity, collected in Step 2 and consumed by Step 3 / Step 4.
+    # Held in state (not read straight off input$) because the Step 2 widgets
+    # are destroyed whenever another step's body is rendered.
+    outcome_name   = NULL,
+    small_values   = NULL,
+    arm_e          = NULL,
+    arm_c          = NULL,
     display = list(
       per                = 1000,
       prediction         = FALSE,
