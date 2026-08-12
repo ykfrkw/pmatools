@@ -268,62 +268,6 @@ step4_server <- function(input, output, session, state) {
     invisible(ok)
   }
 
-  # Core GRADE Evidence Profile + single-outcome Summary of Findings.
-  #
-  # Built here rather than inside export_bundle(): the vendored bundler calls
-  # sof_table() without a style argument, so it can only ever write the
-  # six-column GRADEpro layout, and R/_pmatools/ must not be edited. The
-  # download handler therefore withholds "grade_table" from the include vector
-  # it passes to export_bundle() and writes the same two file names here -
-  # grade_table.docx from the same evidence_profile() call the bundler makes,
-  # and sof_table.docx in the Core GRADE 6 layout shown on screen, carrying
-  # the same rare-event and not-implemented footnotes.
-  .append_grade_docx <- function(zip_path) {
-    g <- state$grade
-    if (is.null(g)) return(invisible(FALSE))
-    dir <- tempfile("pmatools_grade_docx_")
-    on.exit(unlink(dir, recursive = TRUE), add = TRUE)
-    dir.create(dir)
-    ok <- tryCatch({
-      ep_ft <- evidence_profile(
-        g,
-        other_text      = state$display$other_text,
-        other_downgrade = state$display$other_downgrade %||% 0L)
-      .save_landscape_docx(ep_ft, file.path(dir, "grade_table.docx"))
-
-      convert <- isTRUE(state$display$convert)
-      sof_ft <- sof_table(
-        g,
-        style             = PMA_SOF_STYLE,
-        palette           = PMA_SOF_PALETTE,
-        per               = state$display$per %||% 1000,
-        prediction        = isTRUE(state$display$prediction),
-        follow_up         = state$display$follow_up,
-        unit              = state$display$unit,
-        convert_smd_to_or = convert,
-        baseline_risk     = state$display$baseline_risk,
-        threshold_label   = state$display$threshold_label,
-        chinn_invert      = isTRUE(state$display$chinn_invert))
-      alert <- pma_rare_event_alert(
-        g, baseline_risk = if (convert) state$display$baseline_risk else NULL)
-      sof_ft <- pma_sof_add_notes(
-        sof_ft, c(alert$note, PMA_SOF_LIMITATIONS_NOTE))
-      .save_landscape_docx(sof_ft, file.path(dir, "sof_table.docx"))
-
-      zip::zip_append(zipfile = zip_path,
-                      files   = c("grade_table.docx", "sof_table.docx"),
-                      root    = dir)
-      TRUE
-    }, error = function(e) {
-      shiny::showNotification(
-        paste("Evidence Profile / SoF docx could not be added to the ZIP:",
-              conditionMessage(e)),
-        type = "warning", duration = 8)
-      FALSE
-    })
-    invisible(ok)
-  }
-
   output$rare_export_note <- shiny::renderUI({
     if (!isTRUE(state$rare_mode_active)) return(NULL)
     htmltools::p(
@@ -470,6 +414,17 @@ step4_server <- function(input, output, session, state) {
         # (pma_grade_arg_specs(), ui_helpers.R).
         grade_args <- attr(state$grade, PMA_GRADE_ARGS_ATTR, exact = TRUE)
 
+        # Footnotes the bundler cannot derive: the rare-event alert (computed
+        # from the same rates the SoF absolute columns rest on) and the
+        # not-implemented note shown under every on-screen table.
+        sof_notes <- c(
+          pma_rare_event_alert(
+            state$grade,
+            baseline_risk = if (isTRUE(state$display$convert)) {
+              state$display$baseline_risk
+            })$note,
+          PMA_SOF_LIMITATIONS_NOTE)
+
         # export_bundle() is an S3 generic as of pmatools 0.5.0 and its first
         # formal is 'x'; pass the meta object positionally.
         out <- export_bundle(
@@ -478,10 +433,15 @@ step4_server <- function(input, output, session, state) {
           grade_args   = grade_args,
           output_dir   = tmp_dir,
           bundle_name  = input$bundle_name %||% "pmatools_results",
-          # "grade_table" is withheld and handled by .append_grade_docx()
-          # below, so the exported sof_table.docx is the Core GRADE 6 layout
-          # the app renders rather than the bundler's GRADEpro one.
-          include      = setdiff(include, "grade_table"),
+          include      = include,
+          # Same Core GRADE 6 layout, follow-up line and footnotes as the
+          # on-screen table (pmatools >= 0.5.1); the bundler writes
+          # grade_table.docx and sof_table.docx itself, and the analysis.R it
+          # generates reproduces exactly what it wrote.
+          style        = PMA_SOF_STYLE,
+          follow_up    = state$display$follow_up,
+          unit         = state$display$unit,
+          sof_notes    = sof_notes,
           per          = state$display$per             %||% 1000,
           prediction   = state$display$prediction      %||% FALSE,
           convert_smd_to_or = state$display$convert    %||% FALSE,
@@ -499,11 +459,6 @@ step4_server <- function(input, output, session, state) {
           pubias_missing_df  = state$pubias_missing
         )
         shiny::incProgress(0.75, detail = "Packaging ZIP...")
-        if ("grade_table" %in% include) {
-          shiny::incProgress(0.02,
-                             detail = "Adding Evidence Profile and SoF table...")
-          .append_grade_docx(out)
-        }
         # Multi-outcome SoF: added to the archive after export_bundle() has
         # built it. Additive - the single-outcome Evidence Profile and SoF
         # docx above are untouched.
