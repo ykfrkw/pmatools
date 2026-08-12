@@ -75,10 +75,37 @@
 #'
 #' @param ... Passed to the method.
 #'
+#' @section Legacy `ma =` calls:
+#' Before version 0.5.0 `export_bundle()` was a plain function whose first
+#' argument was named `ma`. It is now an S3 generic whose first argument is
+#' `x`. Named calls of the form `export_bundle(ma = m, grade = g, ...)` are
+#' still honoured, with a deprecation warning issued once per session; they
+#' are dispatched as if `ma` had been passed as `x`. Update such calls to
+#' pass the meta object positionally (or as `x =`).
+#'
 #' @return Character. Absolute path to the created ZIP file.
 #'
 #' @export
 export_bundle <- function(x, ...) {
+  if (missing(x)) {
+    args <- list(...)
+    if (!is.null(args$ma)) {
+      # v0.5.0 renamed the first formal from 'ma' to 'x' when export_bundle()
+      # became an S3 generic. Keep legacy named calls working for now.
+      rlang::warn(
+        paste0(
+          "export_bundle(ma = ) is deprecated as of pmatools 0.5.0.\n",
+          "export_bundle() is now an S3 generic; its first argument is 'x'.\n",
+          "Pass the meta object positionally, e.g. export_bundle(m, grade = g)."
+        ),
+        .frequency    = "once",
+        .frequency_id = "export_bundle_ma_arg"
+      )
+      x <- args$ma
+      args$ma <- NULL
+      return(do.call(export_bundle, c(list(x), args)))
+    }
+  }
   UseMethod("export_bundle")
 }
 

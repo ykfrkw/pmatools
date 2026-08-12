@@ -11,3 +11,7 @@
 ^~\$
 Rplots\.pdf$
 ^\.claude$
+# In a git worktree, .git is a plain file (a gitdir pointer), so R CMD build's
+# built-in "skip version-control directories" rule does not catch it and check
+# reports a hidden-file NOTE. Harmless in a normal clone, where .git is a dir.
+^\.git$

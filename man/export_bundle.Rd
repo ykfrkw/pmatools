@@ -133,3 +133,13 @@ produces the multi-outcome layout: the summary tables at the top level and
 one numbered \verb{outcomes/NN_name/} sub-directory per outcome. See
 \code{\link{export_bundle.pmatools_set}}.
 }
+\section{Legacy \verb{ma =} calls}{
+
+Before version 0.5.0 \code{export_bundle()} was a plain function whose first
+argument was named \code{ma}. It is now an S3 generic whose first argument is
+\code{x}. Named calls of the form \code{export_bundle(ma = m, grade = g, ...)} are
+still honoured, with a deprecation warning issued once per session; they
+are dispatched as if \code{ma} had been passed as \code{x}. Update such calls to
+pass the meta object positionally (or as \verb{x =}).
+}
+
