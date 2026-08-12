@@ -2,6 +2,31 @@
 
 ## Bug fixes
 
+* Baseline (control-arm) risk: `event.c` and `n.c` were filtered with different
+  predicates, so a study reporting a denominator but no event count — one that
+  contributed a continuous outcome only, say — was dropped from the numerator
+  while its controls stayed in the denominator. Two consequences, both silent.
+  The crude pooled proportion was diluted by controls that could never
+  contribute an event; and the two vectors reached `meta::metaprop()` at
+  different lengths, so `baseline_risk = "metaprop"` errored, warned, and
+  returned that same crude proportion in place of the random-effects estimate
+  it advertises. On the bundled `cbti_depression` dataset the pooled baseline
+  risk was reported as 173.8 per 1,000 where the metaprop estimate is 155.6 and
+  the crude proportion is 175.5 — a gap wide enough to move the absolute-risk
+  column of a Summary of Findings table. Both vectors now use one complete-case
+  filter (`!is.na(event.c) & !is.na(n.c) & n.c > 0`), and a meta object with no
+  complete control arm returns `NULL` rather than `NaN`. Analyses that left
+  `baseline_risk` at its default and had at least one such study will see the
+  absolute risks move.
+* `suggest_threshold()` returned `NULL` for a risk-difference meta-analysis:
+  its `switch` handled the internal scale name `"ARD"` but not `"RD"`, which is
+  what `meta::metabin(sm = "RD")` actually reports (`"ARD"` is not a {meta}
+  effect measure, so that branch was unreachable). `"RD"` now yields the
+  absolute 0.05 suggestion, and `threshold_to_te_scale(threshold_scale =
+  "auto")` resolves it to the `"ard"` scale instead of aborting. Note that
+  `run_ma()` does not emit `sm = "RD"`; this affects meta objects built
+  directly with {meta}, which the risk-difference paths in the SoF and
+  Imprecision code already support.
 * Risk of bias: the whole flowchart works in "estimable study" space (length
   `meta_obj$k`), but the refit on the low risk of bias subset and the
   study-level `rob_overrides` work in study-label space (length
