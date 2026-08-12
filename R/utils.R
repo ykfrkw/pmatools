@@ -632,3 +632,44 @@ threshold_to_te_scale <- function(threshold, threshold_scale = "auto", sm = NULL
     threshold_baseline = p0
   )
 }
+
+# ==========================================================================
+# VERSION STAMP FOR PROVENANCE LINES IN EXPORTED ARTIFACTS
+# ==========================================================================
+# A host that vendors the pmatools sources (source()s R/*.R instead of
+# installing the package) has no installed DESCRIPTION, so
+# utils::packageVersion("pmatools") always errors there. Such a host sets
+#   options(pmatools.version_stamp = "0.5.1")
+# so the exported bundles report the version of the sources it vendored.
+# The option is ignored whenever the package is genuinely installed.
+
+#' Version stamp used when pmatools is not installed
+#'
+#' Returns `getOption("pmatools.version_stamp")` suffixed with
+#' `" (vendored)"` when it is a single non-empty string. Anything else
+#' (unset, `NULL`, non-character, length != 1, `NA`, blank) yields
+#' `"(vendored; version unknown)"`.
+#'
+#' @param stamp The option value. Exposed as an argument so that the
+#'   validation can be tested without touching the session options.
+#' @return Character scalar.
+#' @keywords internal
+#' @noRd
+.vendored_version_stamp <- function(stamp = getOption("pmatools.version_stamp")) {
+  ok <- is.character(stamp) && length(stamp) == 1L &&
+    !is.na(stamp) && nzchar(trimws(stamp))
+  if (ok) paste0(trimws(stamp), " (vendored)") else "(vendored; version unknown)"
+}
+
+#' Resolve the pmatools version for provenance stamps
+#'
+#' Precedence: the installed package version, then the
+#' `pmatools.version_stamp` option, then `"(vendored; version unknown)"`.
+#'
+#' @return Character scalar.
+#' @keywords internal
+#' @noRd
+.pmatools_version <- function() {
+  tryCatch(as.character(utils::packageVersion("pmatools")),
+           error = function(e) .vendored_version_stamp())
+}

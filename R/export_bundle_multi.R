@@ -371,8 +371,7 @@ export_bundle.pmatools_set <- function(x,
 
 .write_set_readme <- function(set, dir_nms, path, rel_files) {
   outcomes <- .set_outcome_list(set)
-  ver <- tryCatch(as.character(utils::packageVersion("pmatools")),
-                  error = function(e) "(vendored)")
+  ver <- .pmatools_version()
 
   lines <- c(
     "pmatools multi-outcome bundle",
@@ -475,10 +474,7 @@ export_bundle.pmatools_set <- function(x,
 
   values <- list(
     timestamp        = format(Sys.time()),
-    pmatools_version = tryCatch(
-      as.character(utils::packageVersion("pmatools")),
-      error = function(e) "0.4.0 (vendored)"
-    ),
+    pmatools_version = .pmatools_version(),
     outcomes_arg     = .multi_arg_lit(ma_args$outcomes %||% names(set$outcomes)),
     sm_arg           = .multi_arg_lit(ma_args$sm),
     outcome_type_arg = .multi_arg_lit(ma_args$outcome_type),
