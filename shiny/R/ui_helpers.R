@@ -759,6 +759,82 @@ pma_forest_addrow_ids <- function(prefix = NULL) {
     below = paste0(p, "_addrows_below"))
 }
 
+# The whole "Forest plot display" <details>, in one place.
+#
+# Step 2 and each of the four Step 3 domain tabs used to carry a hand-copied
+# version of this panel; the two copies had already drifted apart in their id
+# scheme (Step 2's `addrows_above_overall` against Step 3's
+# `<prefix>_addrows_above`), which is exactly what pma_forest_addrow_ids()
+# exists to absorb. Ids are therefore never built by hand here either: the five
+# text fields come from pma_forest_label_ids() and the two blank-row numerics
+# from pma_forest_addrow_ids(). Only x-min / x-max and the per-arm column
+# toggle follow the plain `<prefix>_<name>` rule in both steps, so those three
+# are derived locally.
+#
+# `prefix = NULL` (or "") builds the Step 2 panel, whose ids carry no prefix.
+pma_forest_display_panel <- function(prefix = NULL) {
+  labels  <- pma_forest_label_ids(prefix)
+  addrows <- pma_forest_addrow_ids(prefix)
+  p <- prefix %||% ""
+  bare <- length(p) != 1 || is.na(p) || !nzchar(p)
+  .id <- function(name) if (bare) name else paste0(p, "_", name)
+
+  htmltools::tags$details(
+    style = "margin-top: 0.5rem;",
+    htmltools::tags$summary("Forest plot display"),
+    htmltools::div(
+      class = "pma-display-grid",
+      htmltools::div(
+        class = "pma-span-4",
+        shiny::textInput(labels[["title"]], "Title", value = "", width = "100%")),
+
+      shiny::textInput(labels[["label_e"]], "Intervention label", value = "", width = "100%"),
+      shiny::textInput(labels[["label_c"]], "Control label",      value = "", width = "100%"),
+      shiny::textInput(labels[["favors_left"]],  "Favors (left)",  placeholder = "e.g., Favors Control", width = "100%"),
+      shiny::textInput(labels[["favors_right"]], "Favors (right)", placeholder = "e.g., Favors CBT-I",   width = "100%"),
+
+      shiny::numericInput(.id("xlim_lo"), "x-min", value = NA, width = "100%"),
+      shiny::numericInput(.id("xlim_hi"), "x-max", value = NA, width = "100%"),
+
+      # Blank rows around the pooled result. Always visible: they matter most
+      # once the per-arm columns are hidden (that is when the heterogeneity
+      # footer can collide with the x-axis) but they are legitimate spacing
+      # controls at any time, and the conditionalPanels that used to hide them
+      # only toggled display anyway.
+      #
+      # Defaults are NOT symmetric, and deliberately so:
+      #  * above = 1 reproduces the blank row meta::forest() draws by default
+      #    (pma_addrow_above() has always treated blank as 1). Rendered with 0
+      #    the pooled "Random effects model" row butts straight up against the
+      #    last study row.
+      #  * below is left blank = automatic, because plot_forest()'s
+      #    .auto_addrow_below() is what keeps the heterogeneity line clear of
+      #    the x-axis band and the Favors labels; typing 0 switches that
+      #    heuristic off.
+      htmltools::p(class = "pma-card-subtitle pma-span-4",
+        paste0("Blank rows around the pooled result. If the ",
+               "heterogeneity text overlaps the x-axis - most ",
+               "likely once the per-arm columns are hidden - use ",
+               "these to move it up or down. Above: 0 removes the ",
+               "blank row before the pooled result. Below: blank ",
+               "= automatic.")),
+      shiny::numericInput(addrows[["above"]], "Blank rows above pooled result",
+                          value = 1, min = 0, step = 1, width = "100%"),
+      shiny::numericInput(addrows[["below"]], "Blank rows below pooled result",
+                          value = NA, min = 0, step = 1, width = "100%"),
+
+      # One checkbox, not two: plot_forest() keeps show_n and show_events as
+      # separate arguments (correct for a library), but there is no case where
+      # a user wants the N columns without the per-arm data columns, so the UI
+      # drives both from a single value.
+      htmltools::div(class = "pma-span-4",
+        shiny::checkboxInput(.id("show_arm_columns"),
+          "Show per-arm data columns (events or mean & SD, and N)",
+          TRUE))
+    )
+  )
+}
+
 # Derive the "Favors ..." axis labels from the outcome direction.
 #
 # `small_values` is the pmatools vocabulary set in Step 2:
