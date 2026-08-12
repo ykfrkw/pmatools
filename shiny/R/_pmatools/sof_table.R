@@ -203,7 +203,21 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
     "Certainty of the evidence\n(Core GRADE series)"
   )
 
-  certainty_cell <- paste0(certainty_label, "\n", certainty_sym)
+  # Numbered footnotes for the domains that pulled the rating down, with the
+  # markers on the certainty cell. The register starts at [1]: the
+  # analysis-set and publication-bias sentences below stay unnumbered.
+  fact_domains <- .rated_down_fact_domains(x)
+  fact_notes   <- character(0)
+  fact_markers <- integer(0)
+  for (dm in fact_domains) {
+    note <- .domain_fact_note(x, dm)
+    if (is.null(note)) next
+    fact_notes   <- c(fact_notes, note)
+    fact_markers <- c(fact_markers, length(fact_notes))
+  }
+
+  certainty_cell <- paste0(certainty_label, "\n", certainty_sym,
+                           .fact_marker_suffix(fact_markers))
 
   df <- data.frame(
     col1 = x$outcome_name,
@@ -260,6 +274,13 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
   # than event rates (see .cont_arm_note()).
   if (!is.null(arm$note)) {
     ft <- flextable::add_footer_lines(ft, values = arm$note)
+  }
+
+  # What actually drove each downgrade, keyed to the [n] markers on the
+  # certainty cell.
+  for (i in seq_along(fact_notes)) {
+    ft <- flextable::add_footer_lines(
+      ft, values = sprintf("[%d] %s", i, fact_notes[i]))
   }
 
   # Risk-of-bias analysis set (Core GRADE 4 Fig 2). A refit silently changes
@@ -394,6 +415,64 @@ sof_add_notes <- function(x, notes) {
     ))
   }
   NULL
+}
+
+# --------------------------------------------------------------------------
+# Structured domain facts as footnote text
+#
+# The prose in domain_assessments$notes is written for a reader following the
+# Core GRADE flowcharts and is far too long for a table footer; the facts are
+# the same numbers already formatted for printing, so a footnote can state
+# what drove a downgrade in one line. Shared by the SoF renderers and
+# evidence_profile() so the two cannot word the same fact differently.
+# --------------------------------------------------------------------------
+
+# "<Label>: <value>. <Label>: <value>." -- the clauses only, no domain name.
+# NULL when the domain recorded nothing. Trailing periods are stripped per
+# clause so a value that already ends in one (Inconsistency's zone_decision)
+# does not produce "..".
+.domain_fact_body <- function(facts) {
+  if (is.null(facts) || !is.data.frame(facts) || nrow(facts) == 0L) return(NULL)
+  clauses <- sprintf("%s: %s", facts$label, facts$value)
+  clauses <- sub("\\.+$", "", clauses)
+  clauses <- clauses[nzchar(clauses)]
+  if (length(clauses) == 0L) return(NULL)
+  paste0(paste(clauses, collapse = ". "), ".")
+}
+
+# One footnote line's worth of text for a domain, or NULL. `outcome_name`
+# names the row in a multi-outcome table, where one footer serves several
+# ratings.
+.domain_fact_note <- function(x, domain, outcome_name = NULL) {
+  body <- .domain_fact_body((x$domain_facts %||% list())[[domain]])
+  if (is.null(body)) return(NULL)
+  head <- if (!is.null(outcome_name) && length(outcome_name) == 1L &&
+               !is.na(outcome_name) && nzchar(outcome_name)) {
+    sprintf("%s (%s).", domain, outcome_name)
+  } else {
+    paste0(domain, ".")
+  }
+  paste(head, body)
+}
+
+# Domains that pulled the rating down AND have facts to show for it, in
+# domain_assessments order. A domain that did not rate down needs no
+# explanation in the footer.
+.rated_down_fact_domains <- function(x) {
+  all_facts <- x$domain_facts %||% list()
+  if (length(all_facts) == 0L) return(character(0))
+  d <- x$domain_assessments
+  if (is.null(d) || nrow(d) == 0L) return(character(0))
+  dg   <- d$downgrade
+  doms <- d$domain[!is.na(dg) & dg < 0]
+  doms[doms %in% names(all_facts)]
+}
+
+# The certainty-cell marker for the GRADEpro layouts: " [1]", " [1][2]".
+# Empty string when nothing is marked, so the cell text is unchanged.
+.fact_marker_suffix <- function(markers) {
+  if (is.null(markers) || length(markers) == 0L) return("")
+  paste0(" ", paste0("[", as.integer(markers), "]", collapse = ""))
 }
 
 # Combined "No of participants (studies)" cell, GRADEpro style:
