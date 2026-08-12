@@ -1316,19 +1316,23 @@ pma_rare_event_banner <- function(alert) {
   )
 }
 
-# Three Core GRADE 6 features neither pmatools layout implements. Stated in
-# the table footer and again under the table, so a reader cannot take the
-# table for a complete Core GRADE 6 summary of findings.
+# Two Core GRADE 6 features neither pmatools layout implements, plus what is
+# left of a third: pmatools now fills the arm-level columns of a continuous
+# outcome from the control arms, but only when the analysis carries them.
+# Stated in the table footer and again under the table, so a reader cannot
+# take the table for a complete Core GRADE 6 summary of findings.
 PMA_SOF_LIMITATIONS_NOTE <- paste0(
   "Not implemented in this table (Core GRADE 6 features pmatools does not yet ",
-  "produce). (1) Arm-level values for continuous outcomes: Core GRADE 6's ",
-  "preferred approach reports the control-group value, the intervention-group ",
-  "value and the difference; only the difference is shown here. ",
-  "(2) \"Not reported\" rows: outcomes the evidence base did not measure are ",
-  "absent from this table, so it is not the full list of outcomes important to ",
-  "patients. (3) Per-domain footnotes: the certainty cell names the domains ",
-  "that were rated down but not why. The reasons are recorded in the Evidence ",
-  "Profile and in each domain's notes; they are not reproduced here."
+  "produce). (1) \"Not reported\" rows: outcomes the evidence base did not ",
+  "measure are absent from this table, so it is not the full list of outcomes ",
+  "important to patients. (2) Per-domain footnotes: the certainty cell names ",
+  "the domains that were rated down but not why. The reasons are recorded in ",
+  "the Evidence Profile and in each domain's notes; they are not reproduced ",
+  "here. Arm-level values for continuous outcomes -- the control-group value, ",
+  "the intervention-group value and the difference, which Core GRADE 6 calls ",
+  "its preferred approach -- are now reported, except where the analysis ",
+  "carries no arm-level means (a generic inverse-variance analysis) or uses a ",
+  "ratio-of-means measure; those still leave the two arm columns empty."
 )
 
 pma_sof_limitations_ui <- function() {
@@ -1338,13 +1342,13 @@ pma_sof_limitations_ui <- function() {
       "border: 1px solid hsl(var(--border)); ",
       "font-size: 0.82rem; color: hsl(var(--muted-foreground));"),
     htmltools::strong("Not implemented in this table. "),
-    "Core GRADE 6 also asks for arm-level values for continuous outcomes (the ",
-    "control-group value, the intervention-group value and the difference; ",
-    "only the difference is shown here), \"Not reported\" rows for outcomes ",
-    "the evidence base did not measure, and per-domain footnotes stating why ",
-    "each domain was rated down (the certainty cell names the domains but not ",
-    "the reasons, which stay in the Evidence Profile). The same statement is ",
-    "printed in the table footer, so it travels with the exported document."
+    "Core GRADE 6 also asks for \"Not reported\" rows for outcomes the ",
+    "evidence base did not measure, and per-domain footnotes stating why each ",
+    "domain was rated down (the certainty cell names the domains but not the ",
+    "reasons, which stay in the Evidence Profile). Arm-level values for ",
+    "continuous outcomes are now reported, except where the analysis carries ",
+    "no arm-level means or uses a ratio-of-means measure. The same statement ",
+    "is printed in the table footer, so it travels with the exported document."
   )
 }
 

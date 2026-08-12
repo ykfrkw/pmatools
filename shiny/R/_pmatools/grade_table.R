@@ -20,8 +20,9 @@
 #' @param follow_up (v0.5) Follow-up / time frame text for the \code{"bmj"}
 #'   style: a character vector named by outcome, or a single unnamed value
 #'   applied to every outcome. \code{NULL} (default) omits the line.
-#' @param unit (v0.5) Unit for the Difference column of the \code{"bmj"} style
-#'   with continuous outcomes; same named-vector convention as
+#' @param unit (v0.5) Unit for the continuous-outcome cells -- the Difference
+#'   column of the \code{"bmj"} style and the arm columns of either style (see
+#'   \code{\link{sof_table}}); same named-vector convention as
 #'   \code{follow_up}.
 #' @param per Denominator for SoF rate columns. \code{1000} (default) or
 #'   \code{100}.
@@ -107,13 +108,14 @@ grade_table <- function(outcomes,
     if (is.na(rob_marker[[nm]])) nm else paste0(nm, " [", rob_marker[[nm]], "]")
   }
 
-  if (identical(style, "bmj")) {
-    # Per-outcome follow-up / unit ride on the rated objects themselves when
-    # grade_meta_multi() was given them, so a multi-outcome caller does not
-    # have to re-assemble a parallel named vector here.
-    follow_up <- follow_up %||% .display_arg_from_outcomes(outcomes, "follow_up")
-    unit      <- unit      %||% .display_arg_from_outcomes(outcomes, "unit")
+  # Per-outcome follow-up / unit ride on the rated objects themselves when
+  # grade_meta_multi() was given them, so a multi-outcome caller does not have
+  # to re-assemble a parallel named vector here. `unit` reaches the GRADEpro
+  # layout too, which labels the arm columns of a continuous outcome with it.
+  follow_up <- follow_up %||% .display_arg_from_outcomes(outcomes, "follow_up")
+  unit      <- unit      %||% .display_arg_from_outcomes(outcomes, "unit")
 
+  if (identical(style, "bmj")) {
     ft <- .grade_table_bmj(
       outcomes, nms = nms, prim_nms = prim_nms, sec_nms = sec_nms,
       primary = primary, pal = pal, per = per, prediction = prediction,
@@ -147,8 +149,20 @@ grade_table <- function(outcomes,
                             character(1)))
   eff_hdr  <- if (length(eff_hdrs) == 1L) eff_hdrs else "Effect\n(95% CI)"
 
+  # The arm cells are built before the headers because they decide them: a
+  # continuous outcome fills them with arm-level means, which the "Risk with
+  # control (per 1,000)" wording would misdescribe.
+  arms <- lapply(nms, function(nm) {
+    g <- outcomes[[nm]]
+    .sof_arm_cells(g$meta, g$baseline_risk, per,
+                   unit = .per_outcome_arg(unit, nm))
+  })
+  names(arms) <- nms
+  cont_any <- any(vapply(arms, function(a) isTRUE(a$continuous), logical(1)))
+
   hdrs  <- .col_headers(show_domains, per, eff_hdr,
-                        label_intervention, label_control)
+                        label_intervention, label_control,
+                        continuous = cont_any)
   ncols <- length(hdrs)
 
   # Build rows, inserting group-label rows where needed
@@ -168,7 +182,8 @@ grade_table <- function(outcomes,
 
   add_outcome <- function(nm) {
     row_idx <<- row_idx + 1L
-    r <- .build_row(disp(nm), outcomes[[nm]], show_domains, per, prediction)
+    r <- .build_row(disp(nm), outcomes[[nm]], show_domains, per, prediction,
+                    arm = arms[[nm]])
     names(r) <- hdrs
     all_rows[[length(all_rows) + 1L]] <<- r
     outcome_map[[as.character(row_idx)]] <<- nm
@@ -251,6 +266,13 @@ grade_table <- function(outcomes,
   )
   ft <- flextable::add_footer_lines(ft, values = footnote)
 
+  # How the arm columns were derived for any continuous outcome in the table
+  # (see .cont_arm_note()); written once however many rows it covers.
+  for (nt in unique(unlist(lapply(arms, function(a) a$note),
+                           use.names = FALSE))) {
+    ft <- flextable::add_footer_lines(ft, values = nt)
+  }
+
   # Per-outcome risk-of-bias analysis-set notes, keyed to the [n] markers on
   # the Outcome cells.
   for (i in seq_along(rob_notes)) {
@@ -296,12 +318,14 @@ grade_table <- function(outcomes,
   stats::setNames(unlist(vals[keep], use.names = FALSE), names(outcomes)[keep])
 }
 
-.build_row <- function(nm, g, show_domains, per = 1000, prediction = FALSE) {
+.build_row <- function(nm, g, show_domains, per = 1000, prediction = FALSE,
+                       arm = NULL) {
   meta_obj <- g$meta
   k        <- meta_obj$k
   n_total  <- .total_n(meta_obj)
-  cer_str  <- .format_cer(g$baseline_risk, per)
-  ier_str  <- .format_ier(meta_obj, g$baseline_risk, per)
+  arm      <- arm %||% .sof_arm_cells(meta_obj, g$baseline_risk, per)
+  cer_str  <- arm$cer
+  ier_str  <- arm$ier
   eff      <- .format_effect(meta_obj, g$outcome_type, prediction = prediction)
   cert_str <- paste0(g$certainty, "\n", CERTAINTY_SYMBOLS[[g$certainty]])
 
@@ -345,12 +369,11 @@ grade_table <- function(outcomes,
 .col_headers <- function(show_domains, per = 1000,
                          effect_header      = "Effect\n(95% CI)",
                          label_intervention = "intervention",
-                         label_control      = "control") {
-  per_str <- format(per, big.mark = ",", scientific = FALSE)
+                         label_control      = "control",
+                         continuous         = FALSE) {
   base <- c("Outcome",
             "No. of participants\n(studies)",
-            paste0("Risk with ", label_control, "\n(per ", per_str, ")"),
-            paste0("Risk with ", label_intervention, "\n(per ", per_str, ")"),
+            .arm_headers(continuous, per, label_intervention, label_control),
             effect_header,
             "Certainty of the evidence\n(Core GRADE series)")
   doms <- c("RoB", "Indir.", "Incon.", "Impre.", "PB")
