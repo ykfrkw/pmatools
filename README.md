@@ -105,8 +105,14 @@ set <- grade_meta_multi(
   primary = "Mortality"
 )
 
+# An outcome the review prespecified that no included study reported (v0.5.1).
+# It gets a row of the summary table, but no effect estimate and no rating.
+set <- add_not_reported(set, "Quality of life",
+                        follow_up = "12 weeks",
+                        reason    = "Prespecified; no included trial measured it.")
+
 print(set)                                   # certainty / rating target / analysis set
-set <- reorder_outcomes(set, c("Mortality", "Depression severity"))
+set <- reorder_outcomes(set, c("Mortality", "Depression severity", "Quality of life"))
 grade_table(set, style = "bmj")              # rows follow set$order
 export_bundle(set, output_dir = "outputs", bundle_name = "all_outcomes")
 ```
@@ -309,6 +315,14 @@ the rating target and the SoF table use the restricted estimate. The original
 analysis stays available as `$meta_full`; `$rob_analysis_set` and `$rob_refit`
 record what happened, and `sof_table()` footnotes the restriction.
 
+After a refit the `results.txt` of an exported bundle **names the analysis set
+in its heading** (v0.5.1) — `[ Meta-analysis summary - low risk of bias studies
+only (3 of 4 studies; rated below) ]`, or `- all studies (4 studies; NOT the
+analysis rated below)` when the caller handed `export_bundle()` the
+all-studies object. In that second case the rated analysis is printed below as
+a separate block, so the file always contains the analysis the certainty rating
+was actually made on. Without a refit the heading is unchanged.
+
 **Direction-of-bias check (dominated branch) — 5-rule zone decision:**
 
 `pmatools` classifies the pooled effect from all studies (`TE_all`) and the
@@ -487,6 +501,37 @@ vocabulary.
 ```r
 plot_forest_rob(ma, rob = rob_vec)   # rob_vec: character, length k
 ```
+
+**The label vocabulary itself: `rob_strata()`.** The mapping from free-text
+risk-of-bias judgments onto the four strata pmatools groups studies by is
+exported, so a caller that stores or edits RoB judgments of its own (a
+data-entry grid with a RoB dropdown, an import step reading someone else's
+extraction sheet) can agree with `grade_meta()` about what a label means
+instead of keeping a second copy of the alias table.
+
+```r
+rob_strata(c("L", "S", "H"))
+#> [1] "low"  "some" "high"
+
+rob_strata(c("No concerns", "Some concerns", "Critical concerns"))
+#> [1] "low"  "some" "high"
+
+# NA / "" / "?" / "unknown" become the "unknown" stratum quietly.
+rob_strata(c("low", NA, "", "?"))
+#> [1] "low"     "unknown" "unknown" "unknown"
+
+# Anything unrecognised also becomes "unknown", but with a warning naming it.
+rob_strata(c("low", "not sure yet"))
+#> Warning: rob: unrecognized label(s) -> "unknown" stratum: not sure yet. ...
+
+# `arg` names the caller's own argument in that warning.
+rob_strata("not sure yet", arg = "my_app: rob column")
+```
+
+It returns exactly the strata `grade_meta()` and `plot_forest_rob()` will use.
+It deliberately **warns rather than aborts** on an unrecognised label — it feeds
+plots, and a plot with an "unknown" stratum is more useful than no plot; a
+caller that needs a hard failure should check the result for `"unknown"` itself.
 
 ---
 
@@ -1035,6 +1080,56 @@ g$domain_assessments
 
 `auto = TRUE` = computed by `pmatools`; `auto = FALSE` = supplied by the user.
 
+### `domain_facts()` — the numbers behind a judgment (v0.5.1)
+
+`$domain_assessments$notes` is the authoritative **prose** record of why a
+domain was rated the way it was. `domain_facts()` is its machine-readable
+companion: the same numbers, as a tibble per domain with a stable machine `key`,
+a human `label`, the pre-formatted display `value`, and the raw `numeric` when
+the fact is scalar-numeric. Read the facts when you need to compute with the
+numbers or branch on them; read `notes` when you need the reasoning.
+
+```r
+names(domain_facts(g))          # every domain that recorded something
+#> [1] "Risk of bias"  "Inconsistency" "Imprecision"
+
+domain_facts(g, "Imprecision")
+#> # A tibble: 6 x 4
+#>   key                 label                              value           numeric
+#> 1 confidence_interval 95% confidence interval            OR [1.62, 3.34]   NA
+#> 2 crosses_null        Crosses the null                   no                NA
+#> 3 threshold_position  Position relative to the threshold beyond Thresho~   NA
+#> 4 ois                 Optimal information size           observed 4808 ~  2.20
+#> 5 fig4_path           Core GRADE 2 Fig 4 path            CI does not cr~   NA
+#> 6 ois_used            OIS approach applied               yes               NA
+
+# The raw numbers are there to compute with, and the keys to branch on.
+f <- domain_facts(g, "Inconsistency")
+f$numeric[f$key == "i2"]
+#> [1] 36.11877
+
+isTRUE(domain_facts(g, "Imprecision")$value[
+  domain_facts(g, "Imprecision")$key == "ois_used"] == "yes")
+#> [1] TRUE
+```
+
+Which facts each domain records:
+
+| Domain | Keys |
+|---|---|
+| Risk of bias | `high_rob_studies`, `high_rob_weight_share`, `estimate_shift`, `fig2_branch` |
+| Inconsistency | `i2`, `tau2`, `q_pvalue`, `zone_counts`, `zone_decision` |
+| Imprecision | `confidence_interval`, `crosses_null`, `threshold_position`, `ois`, `fig4_path`, `ois_used` |
+| Indirectness, Publication bias | none yet — `domain_facts(g, "Indirectness")` returns `NULL`, which is a valid domain name with nothing recorded, not an error |
+
+`domain` must match `$domain_assessments$domain` exactly (`"Risk of bias"`,
+`"Indirectness"`, `"Inconsistency"`, `"Imprecision"`, `"Publication bias"`); a
+name outside that set aborts with the valid ones listed. `domain = NULL`
+(the default) returns the whole named list. The same facts are also what
+`sof_table()`, `grade_table()` and `evidence_profile()` render as the numbered
+per-domain footnotes on the certainty cell, so a reader sees *why* a rating fell
+without opening the notes.
+
 ---
 
 ## Worked example: CBT-I for depression response
@@ -1158,6 +1253,81 @@ grade_table(
 # primary = c("A", "B")   → "Primary outcomes" (plural)
 ```
 
+#### Outcomes no included study reported (v0.5.1)
+
+Core GRADE 6 asks the summary of findings table to cover **every**
+patient-important outcome the review set out to address, including the ones the
+evidence base turns out to be silent on. Every other row is derived from
+`x$meta`, so such an outcome could not be expressed at all — there is no
+meta-analysis to derive it from. `not_reported_outcome()` builds the row
+directly:
+
+```r
+nr <- not_reported_outcome(
+  "Quality of life",
+  follow_up = "12 months",
+  reason    = "Prespecified in the protocol; no included trial measured it."
+)
+print(nr)
+#> -- Outcome not reported by any included study ------------
+#>  Outcome  : Quality of life
+#>  Follow-up: 12 months
+#>  Reason   : Prespecified in the protocol; no included trial measured it.
+#>  No included study reported this outcome; no certainty rating.
+#> ----------------------------------------------------------
+
+# It sits in the outcomes list next to the rated objects, in either style.
+grade_table(list("Depression response" = g1,
+                 "Insomnia remission"  = g2,
+                 "Quality of life"     = nr),
+            primary = "Depression response", style = "bmj")
+```
+
+`label` (default `"Not reported"`) is the text put in every value cell of the
+row — participants, effect, both arm-level cells and Difference. The certainty
+cell reads **`"Not rated"`**, and in the GRADEpro layout the five domain cells
+read an en dash. Neither is left blank on purpose: a blank cell cannot be told
+apart from a cell somebody forgot to fill in, which is the whole argument for
+showing the row. A supplied `reason` becomes a numbered footnote on the row,
+sharing the `[n]` register with the risk-of-bias analysis-set notes, and one
+table-level footnote explains the `"Not reported"` vocabulary once per table.
+
+Inside a multi-outcome session, `add_not_reported()` puts the same thing
+straight into a `pmatools_set`:
+
+```r
+set <- add_not_reported(
+  set, "Quality of life",
+  follow_up = "12 months",
+  reason    = "Prespecified; no included trial measured it.",
+  after     = "Depression response"    # NULL appends; 0 puts it first
+)
+```
+
+`after` takes an outcome name already in the set, a non-negative integer
+position, or `NULL` (append). Adding a name the set already holds is an error —
+an outcome is either rated or not reported, not both.
+
+**Where it is and is not accepted.**
+
+| Function | Behaviour |
+|---|---|
+| `grade_table()`, `grade_report()`, `export_bundle()` | accepted, in both `"gradepro"` and `"bmj"` styles |
+| `reorder_outcomes()`, `set_primary()` | treated exactly like a rated outcome — both key off names only, so it can be moved or marked primary |
+| `print()` / `summary()` on the set | listed with `<not reported>` in place of certainty, and no rating target or analysis set |
+| `sof_table()`, `evidence_profile()` | **refused**, with a message saying where the outcome belongs instead |
+
+The refusal is deliberate. `sof_table()` summarises one analysis and there is
+none; and all five columns of an evidence profile are judgments about a body of
+evidence, which is undefined here rather than "not serious". The class is
+`pmatools_not_reported` and deliberately does **not** inherit `"pmatools"`, so
+every `inherits(x, "pmatools")` guard elsewhere fails loudly instead of quietly
+producing a table of blank cells.
+
+In a `pmatools_set` bundle the outcome keeps its numbered `outcomes/NN_name/`
+directory, holding a `results.txt` that says it was not reported, and the
+generated `analysis.R` re-issues the `add_not_reported()` call.
+
 ### `grade_report()` — Appendix report (docx / html / pdf / md)
 
 ```r
@@ -1273,13 +1443,34 @@ improvement larger than the MID within each arm ... They can then pool these
 proportions across studies." Option 2 is **not implemented** in pmatools; the
 two approaches will not in general give the same numbers.
 
-**What this layout does not yet produce** (all requested by Core GRADE 6): arm
-columns for continuous outcomes — the paper's "preferred approach ... to
-provide information about the outcome in the comparison group ..., the
-intervention group ..., and the difference between the two" — "not reported"
-rows, per-domain rate-down footnotes, and a warning to analyse risk differences
-directly when the outcome is rare ("event rates <2% and most problematic <1%").
-See [Limitations](#limitations-and-future-work).
+**Arm-level columns for continuous outcomes** (v0.5.1) implement Core GRADE 6's
+"preferred approach ... to provide information about the outcome in the
+comparison group ..., the intervention group ..., and the difference between the
+two". Both arm cells used to be driven off `baseline_risk`, which is meaningful
+only for a binary outcome with a relative effect measure, so a `metacont`
+analysis filled them with `-`. The control cell is now the inverse-variance
+weighted mean of the control arms (weights `n / SD²`), and the intervention cell
+is that value plus the pooled difference, its interval coming from the pooled
+difference alone; an SMD is multiplied by the pooled within-arm SD of the
+control arms (Cochrane Handbook 15.5.3.2) first, since SD units cannot be added
+to a mean on the original scale. Both derivations are footnoted, the Difference
+column keeps the SMD in SD units, and binary tables are unchanged. In the
+GRADEpro layout the arm headers fall back to "With control" / "With
+intervention" when the cells hold means, because the rate wording and the `per`
+denominator would misdescribe them.
+
+**Per-domain rate-down footnotes** (v0.5.1) come from `domain_facts()`: the
+domains that pulled the rating down carry a numbered marker on the certainty
+cell — after the symbol in the GRADEpro layouts, and beside the domain name
+inside the BMJ "Due to serious risk of bias [1] ..." sentence — so a reader sees
+*why* a rating fell without opening `$domain_assessments$notes`. **"Not
+reported" rows** (v0.5.1) are described under
+[`grade_table()`](#outcomes-no-included-study-reported-v051).
+
+**What this layout still does not produce**, of the things Core GRADE 6 asks
+for: a warning to analyse risk differences directly when the outcome is rare
+("event rates <2% and most problematic <1%"). See
+[Limitations](#limitations-and-future-work).
 
 When the rated analysis is a low-risk-of-bias refit, the table carries a
 footnote saying so; `grade_table()` numbers the marker per row, so a table
@@ -1583,6 +1774,96 @@ other method id in `method_table`).
 
 ---
 
+## Helpers for callers building on pmatools
+
+A normal pmatools pipeline never needs these: they are steps the pipeline
+already takes internally, exported so that a caller assembling its own view of
+the same analysis — an interactive data editor, a custom results panel, a plot
+annotation — agrees with pmatools instead of re-deriving the same thing and
+drifting out of step. `rob_strata()` is the third one; it is documented with
+[Risk of Bias](#1-risk-of-bias-5-rule-mece-zone-based-decision-aligned-with-bmj-core-grade-4)
+because its subject is the RoB label vocabulary.
+
+### `combine_arms()` — collapse multi-arm trials
+
+Collapses every group of rows sharing a study unit (`studlab`, `outcome` when
+that column is present, and `treat`) into a single row, following Cochrane
+Handbook 6.5.2.10. This is the step that turns a multi-arm trial — two active
+dose groups against one shared control — into the two-arm shape a pairwise
+meta-analysis needs, without counting the shared arm twice or treating the dose
+groups as independent studies.
+
+```r
+# A three-arm trial: two CBT-I doses against one shared control.
+df <- data.frame(
+  studlab = c("Trial 1", "Trial 1", "Trial 1", "Trial 2", "Trial 2"),
+  treat   = c("experimental", "experimental", "control",
+              "experimental", "control"),
+  n       = c(30, 28, 60, 50, 50),
+  event   = c(12, 10, 15, 20, 18),
+  stringsAsFactors = FALSE
+)
+combine_arms(df)
+#>   studlab        treat  n event
+#> 1 Trial 1 experimental 58    22
+#> 2 Trial 1      control 60    15
+#> 3 Trial 2 experimental 50    20
+#> 4 Trial 2      control 50    18
+
+# Continuous outcomes pool the mean and SD instead of summing.
+cont <- data.frame(
+  studlab = c("Trial 1", "Trial 1", "Trial 1"),
+  treat   = c("experimental", "experimental", "control"),
+  n       = c(30, 28, 60),
+  mean    = c(-5.2, -4.4, -1.1),
+  sd      = c(6.0, 6.4, 5.8),
+  stringsAsFactors = FALSE
+)
+combine_arms(cont)
+```
+
+Sample sizes and events are summed; means and SDs are pooled by the Handbook's
+iterative pairing formula, which preserves the between-subgroup variance. Any
+other column (`rob`, `indirectness`, `subgroup`, user-supplied extras) is a
+per-study property, so the first row's value is carried over. When no study
+unit is duplicated, the input is returned unchanged.
+
+`ingest_data()` calls this on the way to canonical long format, so the normal
+pipeline never has to. It is exported for callers that assemble their own long
+data frame — notably a data editor that wants to show the user what the merged
+rows will look like before the analysis runs.
+
+### `format_effect()` — the Effect-column string
+
+Renders the pooled estimate of a `meta` object exactly the way `sof_table()`,
+`grade_table()` and `grade_report()` put it in their Effect column: the effect
+measure, the point estimate and its 95% CI, back-transformed out of the log
+scale for ratio measures.
+
+```r
+format_effect(ma, outcome_type = "relative")
+#> [1] "OR 2.33 (1.62; 3.34)"
+
+# TRUE appends the prediction interval on a second line, when the object has one.
+cat(format_effect(ma, outcome_type = "relative", prediction = TRUE), "\n")
+#> OR 2.33 (1.62; 3.34)
+#> PrI (0.91; 5.97)
+```
+
+`outcome_type` is `"relative"` for ratio measures (RR, OR, HR, IRR), whose
+estimate and CI are exponentiated before printing, or `"absolute"` for measures
+already on their natural scale (MD, SMD, RD) — the same argument
+`grade_meta()` takes. Which model is read follows the object: the
+random-effects pool when `meta_obj$random` is `TRUE`, otherwise the
+common-effect pool, falling back to the other model when the preferred one was
+not fitted. An object with no usable pooled estimate gives `"NR"`.
+
+Use it instead of re-deriving the string, which is where the two drift apart:
+choosing the wrong model when only one of random/common was fitted, or
+forgetting to exponentiate.
+
+---
+
 ## API reference
 
 ### `grade_meta()`
@@ -1697,12 +1978,13 @@ format. `outcomes` accepts a `pmatools_set` too.
 
 ### Exported functions at a glance
 
-All 25 exports of `NAMESPACE`, one line each. Details are in `?function_name`
+All 32 exports of `NAMESPACE`, one line each. Details are in `?function_name`
 and in [SPEC.md §4](SPEC.md).
 
 | Function | What it does |
 |---|---|
 | `ingest_data()` | Read long or wide study data (file, data frame or clipboard), auto-detect the format, apply column-name mapping, return the canonical long tibble |
+| `combine_arms()` | Collapse the rows sharing a study unit into one, pooling multi-arm trials per Cochrane Handbook 6.5.2.10 (`ingest_data()` applies it automatically) |
 | `run_ma()` | Fit one pairwise meta-analysis via `{meta}` (binary or continuous); aborts on data holding more than one outcome |
 | `run_ma_multi()` | Split long data on its `outcome` column and run one `run_ma()` per outcome |
 | `run_rare_ma()` | Fit a suite of rare-event methods side by side (beta-binomial is the default primary on the OR scale) |
@@ -1711,6 +1993,9 @@ and in [SPEC.md §4](SPEC.md).
 | `grade_meta_multi()` | Run `grade_meta()` per outcome from `common` + `per_outcome` arguments; returns a `pmatools_set` |
 | `reorder_outcomes()` | Set the display order of a `pmatools_set` (table rows and export directory numbers) |
 | `set_primary()` | Set (or clear) the primary outcomes of a `pmatools_set` |
+| `not_reported_outcome()` | Build a `pmatools_not_reported` row for an outcome the review prespecified but no included study reported |
+| `add_not_reported()` | Append such an outcome to a `pmatools_set`, at a chosen position in its order |
+| `domain_facts()` | The structured numbers behind a domain judgment (`key` / `label` / `value` / `numeric`), the machine-readable companion to `$domain_assessments$notes` |
 | `sof_table()` | Single-outcome Summary of Findings flextable (GRADEpro or BMJ style) |
 | `grade_table()` | Multi-outcome Summary of Findings flextable, with primary/secondary grouping |
 | `sof_add_notes()` | Append caller footnote lines to a SoF flextable, styled like its own footnotes |
@@ -1728,6 +2013,8 @@ and in [SPEC.md §4](SPEC.md).
 | `suggest_threshold()` | Placeholder MID for the effect measure in hand, with a `source` field saying whether it is a pmatools convention or a Core GRADE value (absolute candidate first for binary outcomes) |
 | `chinn_smd_to_or()` | Chinn's conversion of an SMD (and its CI) to an odds ratio |
 | `compute_pooled_sd()` | Sample-size-weighted pooled within-study SD across a `metacont` analysis, for deriving a continuous OIS or converting an MD threshold |
+| `rob_strata()` | Normalise free-text risk-of-bias labels onto the four strata pmatools groups studies by (`low` / `some` / `high` / `unknown`) |
+| `format_effect()` | Render a pooled estimate as the exact Effect-column string the SoF tables print |
 
 ---
 
@@ -1748,6 +2035,7 @@ pmatools/
 ├── R/
 │   ├── utils.R                 # constants, threshold + baseline_risk helpers
 │   ├── data_ingest.R           # long/wide ingestion, aliases, `outcome` column
+│   ├── combine_arms.R          # multi-arm collapse (Cochrane Handbook 6.5.2.10)
 │   ├── run_ma.R                # {meta} wrapper
 │   ├── multi_outcome.R         # run_ma_multi / grade_meta_multi / pmatools_set
 │   ├── rare_events.R           # rare-event method suite + diagnostics
@@ -1756,8 +2044,10 @@ pmatools/
 │   ├── domain_inconsistency.R  # auto-detect + manual flowchart
 │   ├── domain_imprecision.R    # Fig 4 flowchart + OIS
 │   ├── domain_pubias.R         # Egger's test + Fig 5 flowchart
+│   ├── domain_facts.R          # domain_facts() accessor over $domain_facts
 │   ├── rating_target.R         # Core GRADE 2 entry gate + rating target
 │   ├── grade_meta.R            # main function + print/summary
+│   ├── not_reported.R          # pmatools_not_reported + add_not_reported()
 │   ├── sof_table.R             # single-outcome flextable (GRADEpro layout)
 │   ├── sof_bmj.R               # BMJ Core GRADE SoF layout
 │   ├── plain_language.R        # Core GRADE 6 Box 1 statements
@@ -1774,7 +2064,7 @@ pmatools/
 │   └── templates/                        # analysis.R templates (single + multi)
 ├── data-raw/
 │   └── cbti_depression.R    # script to generate data/*.rda
-├── tests/testthat/          # 24 test files
+├── tests/testthat/          # 30 test files
 └── outputs/                 # generated output (gitignored)
 ```
 
@@ -1832,14 +2122,14 @@ pmatools/
 
 4. **Summary of findings features Core GRADE 6 asks for, but pmatools does not
    produce:**
-   - **Arm-level columns for continuous outcomes.** Core GRADE 6 calls this
-     "the preferred approach ... to provide information about the outcome in
-     the comparison group ..., the intervention group ..., and the difference
-     between the two". pmatools reports the difference only.
-   - **"Not reported" rows** for outcomes an included body of evidence did not
-     measure.
-   - **Per-domain rate-down footnotes** spelling out *why* each domain was
-     rated down (the reasons live in `$domain_assessments$notes` instead).
+   - ~~**Arm-level columns for continuous outcomes.**~~ Delivered in v0.5.1 —
+     both SoF layouts now fill the comparison-group and intervention-group
+     cells for a `metacont` analysis, not just the difference.
+   - ~~**"Not reported" rows**~~ Delivered in v0.5.1 —
+     `not_reported_outcome()` / `add_not_reported()`.
+   - ~~**Per-domain rate-down footnotes**~~ Delivered in v0.5.1 — the numbered
+     markers are generated from `domain_facts()`; `$domain_assessments$notes`
+     remains the authoritative prose record.
    - **A rare-event warning.** Core GRADE 6: applying relative effects to
      baseline risks misleads "when the outcome is rare (event rates <2% and
      most problematic <1%)", and in that case "review authors should generally

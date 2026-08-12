@@ -4,11 +4,11 @@
 
 データ取込 → メタアナリシス（{meta}）→ GRADE 確実性評価（BMJ 2025 Core GRADE 準拠）→ SoF/Appendix → 再現性 ZIP までを一気通貫で行う R パッケージ。Shiny UI は別リポジトリ `pairwise_meta_analysis`（shinyapps.io 公開済み）。
 
-**バージョン**: 0.5.0
+**バージョン**: 0.5.1
 **仕様書**: [SPEC.md](SPEC.md)
 **変更履歴**: [NEWS.md](NEWS.md)
 **使い方**: [README.md](README.md)
-**作成日**: 2026-03-16（v0.1.0）／2026-05-01（v0.2.0）／2026-08-11（v0.5.0）
+**作成日**: 2026-03-16（v0.1.0）／2026-05-01（v0.2.0）／2026-08-11（v0.5.0）／2026-08-12（v0.5.1）
 
 このファイルの役割は **実装ステータスとロードマップだけ**。API シグネチャ・ドメイン判定ロジック・Downgrade 表は [SPEC.md](SPEC.md) が唯一の正であり、ここには複製しない（複製がドリフトの原因になったため v0.5.0 で削除した）。
 
@@ -32,7 +32,7 @@
 
 ---
 
-## 実装ステータス（v0.5.0）
+## 実装ステータス（v0.5.1）
 
 ### v0.1.0 既存
 - [x] パッケージ骨格（DESCRIPTION, NAMESPACE）
@@ -83,7 +83,7 @@
 - [x] Core GRADE 2 エントリゲート：`threshold_type`（既定 `"mid"`）が MID を必須化（**breaking**、condition class `"pmatools_threshold_gate"`）／`require_threshold = FALSE` が退避路
 - [x] Rating target（Core GRADE 2 Fig 2）：`$rating_target` / `$rating_target_note` / `$rating_target_auto` を点推定値から自動導出
 - [x] Imprecision を Core GRADE 2 Fig 4 フローチャートに準拠（**breaking**、OIS は CI が Threshold をまたがない場合のみ参照）
-- [x] Risk of bias を Core GRADE 4 Fig 2 に準拠（**breaking**）。weight-share dominance gate を復活（`rob_dominant_threshold`、既定 0.60）
+- [x] Risk of bias を Core GRADE 4 Fig 2 に準拠（**breaking**）。weight-share dominance gate を復活（`rob_dominant_threshold`、既定 0.55 — Fig 2 脚注が挙げる 2 候補のうち保守的な方。0.60 はどちらとも一致しないため 0.5.0 内で訂正済み）
 - [x] low-RoB サブセットでの再フィット（`rob_refit`、既定 TRUE）＋ `$meta_full` / `$rob_analysis_set`
 - [x] `rob_some_concerns` / `rob_overrides` / `rob_override_rationale`
 - [x] Indirectness サブドメイン（Core GRADE 5）：`indirectness_subdomains`（PICO × 4 択）＋ `indirectness_table()`
@@ -93,6 +93,34 @@
 - [x] Plain language summary（**Core GRADE 6 Box 1** の文言を逐語採用。当初は Core GRADE 2 Table 1 を典拠としていたが、Box 1 がそれを包含する正典であり、方向（reduces / increases）を明示する点が異なる）
 - [x] `inst/templates/analysis_script_multi.R.tpl`（複数アウトカム版 analysis.R、書き出し前に `parse()` で構文検査）
 - [x] tests: 936 pass / 0 fail、`R CMD check` 0 errors / 0 warnings / 0 notes
+
+### v0.5.1 追加
+
+典拠は [NEWS.md](NEWS.md) の `# pmatools 0.5.1 (development version)` 節。
+
+**新機能**
+
+- [x] 構造化ドメインファクト：`domain_facts(x, domain = NULL)` を export、`$domain_facts` に格納（`key` / `label` / `value` / `numeric`）。Risk of bias・Inconsistency・Imprecision が記録し、Indirectness・Publication bias は当面 prose のみ。`domain_assessments$notes` は 1 バイトも変えていない（ファクトは prose の機械可読な**併走物**）（SPEC §4.15 / §5.6）
+- [x] ドメイン別 rate-down 脚注：`sof_table()` / `grade_table()`（gradepro・bmj 両方）／`evidence_profile()` が上記ファクトを番号付き脚注として certainty セルに出力。`grade_table()` では analysis-set 脚注と同じ `[n]` 連番を共有し、どのアウトカムの脚注かを明記
+- [x] 報告されなかったアウトカム：`not_reported_outcome()` / `add_not_reported()` を export。どの included study も報告しなかった prespecified outcome を SoF 表の 1 行として持てる（Core GRADE 6）。certainty セルは空欄ではなく `"Not rated"`。`grade_table()` / `grade_report()` / `export_bundle()` は受け入れ、`sof_table()` / `evidence_profile()` は理由を述べて拒否。クラス `pmatools_not_reported` は意図的に `"pmatools"` を継承しない（SPEC §4.14）
+- [x] 連続アウトカムの arm-level 列：両 SoF レイアウトが対照群セル（対照アームの逆分散加重平均）と介入群セルを埋めるようになった。SMD は対照アームの pooled within-arm SD（Cochrane Handbook 15.5.3.2）を掛けてから加算。導出は脚注化、binary 表は不変（SPEC §4.6）
+- [x] `export_bundle()` の両メソッドに `style` 引数（既定は `"bmj"` に変更、**behaviour change**）、`export_bundle.meta()` に `follow_up` / `unit`、両メソッドに `sof_notes`。いずれも `analysis.R` にレンダリングされる
+- [x] `sof_add_notes(x, notes)` を export（呼び出し側の脚注行を SoF flextable に追記）
+
+**バグ修正（抜粋）**
+
+- [x] `.total_n()` の名前衝突（`domain_imprecision.R` 側を `.total_n_strict()` にリネーム）
+- [x] `export_bundle()` の `grade_args` / `ma_args` 参照を `$` の部分一致から厳密な `[[` へ。`grade_args` の名前は `grade_meta()` の formals と照合
+- [x] 単一アウトカム `analysis.R` テンプレートに `threshold_baseline` スロットを追加
+- [x] baseline risk：`event.c` / `n.c` を同一の complete-case フィルタに統一
+- [x] `suggest_threshold()` が `sm = "RD"` を扱えるように
+- [x] Risk of bias の k-space / studlab-space マッピングを明示化。refit と `rob_overrides` が {meta} の drop 発生時にも動く。v0.5.1 中に `.rob_alignment()` / `.rob_expand()` / `.rob_contract()` へ切り出し（純粋なリファクタ、外部挙動は不変）（SPEC §5.1）
+- [x] `results.txt` の pooled 推定値の見出しが解析セット名を含むように（low-RoB refit 時）。呼び出し側が all-studies オブジェクトを渡した場合は rated 側を第 2 ブロックとして併記（SPEC §4.8.2）
+
+**ドキュメント / 運用**
+
+- [x] `CLAUDE.md` 新設（ベンダリングのライフライン + docs は変更と同じ PR で更新するルール）
+- [x] SPEC.md の `Version target:` を 0.5.1 に同期（CLAUDE.md ルール 2）
 
 ---
 

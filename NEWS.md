@@ -33,6 +33,14 @@
   different `[1]`s; the analysis-set and publication-bias sentences keep their
   existing numbering and wording.
 
+* Both Summary of Findings layouts now fill **both arm-level columns for
+  continuous outcomes** — Core GRADE 6's preferred presentation — instead of the
+  difference alone: the control cell is the inverse-variance weighted mean of
+  the control arms and the intervention cell is that value plus the pooled
+  difference, with an SMD rescaled by the pooled within-arm SD of the control
+  arms (Cochrane Handbook 15.5.3.2) first; both derivations are footnoted and
+  binary tables are byte-for-byte unchanged.
+
 * New exported `not_reported_outcome()` and `add_not_reported()`: a Summary of
   Findings table can now carry an outcome the review prespecified that **no
   included study reported**. Core GRADE 6 asks the table to cover every
