@@ -79,24 +79,65 @@ EDU_COPY <- list(
       header   = "Risk of Bias",
       doi      = "10.1136/bmj-2024-083864",
       ref_text = "BMJ Core GRADE 4 (Guyatt et al., 2025)",
-      how      = paste0(
-        "pmatools applies a single MECE 5-rule decision that operationalises ",
-        "the BMJ Core GRADE 4 Figure 2 question: would risk of bias change ",
-        "the clinical conclusion? The pooled estimate from all studies ",
-        "(TE_all) and the IV-weighted pooled estimate of low / some-RoB ",
-        "studies only (TE_low) are each classified into one of three zones ",
-        "defined by +/-Threshold: above (TE > +Threshold), trivial (within ",
-        "+/-Threshold of the null), or below (TE < -Threshold). Decision: ",
-        "(1) both in the trivial zone -> no rate down; (2) same non-trivial ",
-        "zone with relative inflation <= 10 percent (or in the bias- ",
-        "deflating direction) -> no rate down; (3) same non-trivial zone ",
-        "with bias-favouring inflation > 10 percent -> rate down 1; (4) ",
-        "zones differ but on the same side of the null -> rate down 1; (5) ",
-        "zones differ across the null (above <-> below) -> rate down 2. ",
-        "Note: the Threshold is set once in the 'Decision threshold' tab ",
-        "and shared with Inconsistency and Imprecision; one Threshold ",
-        "drives all three domains."
-      )
+      # `how` is a function, not a string, because two of its inputs are live:
+      # the sensitivity-analysis change threshold (quoted in rules 2 and 3)
+      # and the reviewer's low/high boundary. Called from the Risk of Bias tab
+      # with input$rob_inf_threshold and input$rob_some_concerns.
+      how      = function(inflation_threshold = 0.10,
+                          some_concerns_as = "high") {
+        pct <- format(round(100 * inflation_threshold, 1),
+                      trim = TRUE, scientific = FALSE)
+        high_side <- identical(some_concerns_as, "high")
+        paste0(
+          "Each study is classified as low or high risk of bias. The binary ",
+          "split is Core GRADE 4's (\"Core GRADE users can assess the ",
+          "overall risk of bias in individual studies as low or high\"), but ",
+          "the position of the boundary is not: Core GRADE 4 defines it by ",
+          "counting high-risk items, uses three different counts in its ",
+          "three worked examples, and leaves the choice open as one that ",
+          "\"may be an issue that will be impossible to resolve\". Where the ",
+          "boundary falls is therefore a review decision, set under 'Inputs ",
+          "for this domain'. ",
+          if (high_side) {
+            paste0("It is currently set so that only studies explicitly ",
+                   "rated low count as low: studies rated 'some concerns', ",
+                   "studies rated high, and studies left unrated are all ",
+                   "placed in the high-risk group. ")
+          } else {
+            paste0("It is currently set so that studies rated 'some ",
+                   "concerns' count as low, together with studies rated low ",
+                   "and studies left unrated; only studies rated high are ",
+                   "placed in the high-risk group. ")
+          },
+          "The phrase 'some concerns' belongs to three-level tools such as ",
+          "RoB 2 and does not appear in Core GRADE 4; this app keeps the ",
+          "three-level input because reviewers assess with RoB 2, and folds ",
+          "it onto whichever side the review decision selects. ",
+          "pmatools then applies a single MECE 5-rule decision that ",
+          "operationalises the BMJ Core GRADE 4 Figure 2 question: would risk ",
+          "of bias change the clinical conclusion? The pooled estimate from ",
+          "all studies (TE_all) and the IV-weighted pooled estimate of the ",
+          "low risk-of-bias studies only (TE_low) are each classified into ",
+          "one of three zones defined by +/-Threshold: above (TE > ",
+          "+Threshold), trivial (within +/-Threshold of the null), or below ",
+          "(TE < -Threshold). Decision: ",
+          "(1) both in the trivial zone -> no rate down; (2) same non-trivial ",
+          "zone with relative change <= ", pct, " percent (or in the bias-",
+          "deflating direction) -> no rate down; (3) same non-trivial zone ",
+          "with bias-favouring inflation > ", pct, " percent -> rate down 1; ",
+          "(4) zones differ but on the same side of the null -> rate down 1; ",
+          "(5) zones differ across the null (above <-> below) -> rate down 2. ",
+          "The ", pct, " percent figure is the sensitivity-analysis change ",
+          "threshold set below. Of the five rules only rule 3 consults it; ",
+          "rules 1, 4 and 5 ignore it entirely. It also decides, when the ",
+          "high risk-of-bias studies do not dominate, whether the analysis ",
+          "is restricted to the low risk-of-bias studies, so it governs both ",
+          "rating down and restriction. ",
+          "Note: the Threshold is set once in the 'Decision threshold' tab ",
+          "and shared with Inconsistency and Imprecision; one Threshold ",
+          "drives all three domains."
+        )
+      }
     ),
 
     inconsistency = list(

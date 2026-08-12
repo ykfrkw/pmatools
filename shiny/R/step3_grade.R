@@ -104,9 +104,7 @@ step3_ui <- function() {
   # Explicit per-domain confirmation checkbox (output gate W4-A). Checking
   # it marks the domain as reviewed even if no substantive input was given.
   .confirm_checkbox <- function(id,
-                                label = paste0(
-                                  "I have reviewed this domain ",
-                                  "(it may remain unassessed / at its default)")) {
+                                label = "I have reviewed this domain") {
     htmltools::div(
       style = paste(
         "margin-top: 1rem; padding: 0.5rem 0.75rem;",
@@ -164,23 +162,11 @@ step3_ui <- function() {
   htmltools::tagList(
     pma_step_header(s$title, s$what),
 
-    # Sticky Final certainty banner
-    htmltools::div(
-      class = "pma-sticky-cert",
-      htmltools::span(class = "pma-cert-label", "Final certainty"),
-      shiny::uiOutput("sticky_cert_badge", inline = TRUE),
-      htmltools::span(
-        style = "color: hsl(var(--muted-foreground)); font-size: 0.8rem;",
-        shiny::uiOutput("sticky_cert_summary", inline = TRUE)
-      )
-    ),
-
-    # Which studies the numbers on this step came from. Deliberately its own
-    # top-level output, sibling to (not nested in) the sticky certainty bar,
-    # so it survives that bar's removal untouched: one uiOutput here, one
-    # renderer below, no shared state. Renders nothing when the analysis
-    # rests on all studies, and the bare uiOutput wrapper is unstyled, so the
-    # "all studies" case adds no box and no whitespace.
+    # Which studies the numbers on this step came from. Renders nothing when
+    # the analysis rests on all studies, and the bare uiOutput wrapper is
+    # unstyled, so the "all studies" case adds no box and no whitespace.
+    # (A sticky "FINAL CERTAINTY" bar used to sit above this one; it was
+    # removed because the Final certainty tab states the same thing properly.)
     shiny::uiOutput("analysis_set_indicator"),
 
     pma_card(
@@ -208,8 +194,18 @@ step3_ui <- function() {
         shiny::tabPanel("Risk of Bias",
           .domain_header("Risk of Bias", "rob_badge", "rob_chip"),
           shiny::uiOutput("analysis_set_banner_rob"),
-          pma_how_collapse(EDU_COPY$domains$rob$how),
+          # The body is a live output, not a fixed string: EDU_COPY$domains$
+          # rob$how() interpolates the sensitivity-analysis change threshold
+          # so the explanation always quotes the value the algorithm used.
+          # inline = TRUE keeps it a <span> inside the <p> pma_how_collapse()
+          # builds, and re-rendering the span leaves the <details> open.
+          pma_how_collapse(shiny::uiOutput("rob_how_body", inline = TRUE)),
           pma_reference(EDU_COPY$domains$rob$ref_text, EDU_COPY$domains$rob$doi),
+          # The binary classification rule, stated where it takes effect.
+          # Live, because the boundary is a reviewer choice: a fixed
+          # assertion here would contradict the control under "Inputs for
+          # this domain" as soon as it is moved.
+          shiny::uiOutput("rob_rule_note"),
           htmltools::p(
             style = "font-size: 0.85rem; color: hsl(var(--muted-foreground)); font-style: italic;",
             "See also: ",
@@ -257,9 +253,63 @@ step3_ui <- function() {
               proxy.height = "320px")),
           .forest_display_panel("rob"),
           .inputs_details(open = FALSE, title = "Inputs for this domain",
+            # Where the low/high boundary falls. Core GRADE 4 endorses the
+            # binary split but declines to fix the cut-off, so this is a
+            # review decision rather than a rule taken from the source.
+            shiny::radioButtons("rob_some_concerns",
+              paste0("Review decision: where do studies rated 'some ",
+                     "concerns' belong? (Core GRADE 4 leaves this boundary ",
+                     "open; it is not a Core GRADE rule)"),
+              choices = c(
+                "Some concerns count as high risk of bias (default)" = "high",
+                "Some concerns count as low risk of bias"            = "low"),
+              selected = "high"),
+            htmltools::p(class = "pma-card-subtitle",
+              "Studies left unrated follow whichever side 'some concerns' ",
+              "takes. The choice feeds the dominance gate, the ",
+              "low-risk-only comparison estimate, and any refit on the ",
+              "low-risk set, so it can change the certainty rating."),
             shiny::sliderInput("rob_inf_threshold",
               "Sensitivity-analysis change threshold (RoB-specific)",
-              min = 0.05, max = 0.5, value = 0.10, step = 0.05)
+              min = 0.05, max = 0.5, value = 0.10, step = 0.05),
+            htmltools::div(
+              class = "pma-card-subtitle",
+              htmltools::p(
+                "The analysis is pooled twice: once over all studies (TE_all) ",
+                "and once over the low risk-of-bias studies only (TE_low). ",
+                "This slider is how far the estimate must move between the ",
+                "two before the domain is rated down. The comparison is ",
+                "strict: a relative change of exactly the threshold does not ",
+                "rate down, only a change greater than it."),
+              htmltools::p(
+                "The shift must also run in the direction that means the ",
+                "high risk-of-bias studies were inflating the effect. Which ",
+                "direction that is follows the outcome direction set in Step ",
+                "2: when small values are undesirable, inflation means ",
+                "TE_all above TE_low; when small values are desirable, it ",
+                "means TE_all below TE_low. A shift of any size in the ",
+                "opposite direction does not rate down."),
+              htmltools::p(
+                "Only one of the five decision rules consults this value ",
+                "(rule 3, a bias-favouring change within the same non-trivial ",
+                "zone). The trivial-zone rule, the zone-change rule and the ",
+                "sign-flip rule ignore it entirely, so moving the slider ",
+                "changes nothing on those paths. It has a second effect ",
+                "outside the five rules: when high risk-of-bias studies do ",
+                "not dominate the evidence, the same threshold decides ",
+                "whether the two estimates count as substantially different ",
+                "and the analysis is therefore restricted to the low ",
+                "risk-of-bias studies. The slider governs both whether the ",
+                "domain is rated down and whether the analysis is ",
+                "restricted."),
+              htmltools::p(
+                htmltools::em("Caveat: "),
+                "TE_low is always a fixed-effect inverse-variance mean, even ",
+                "when the parent model is random-effects. Part of any ",
+                "observed shift is therefore an estimator difference rather ",
+                "than bias, and the gap widens with heterogeneity and with ",
+                "unequal study sizes.")
+            )
           ),
           .override_details(
             shiny::selectInput("rob_override", NULL,
@@ -1081,6 +1131,15 @@ step3_server <- function(input, output, session, state) {
     x
   }
 
+  # Which side of the binary low/high split "some concerns" (and, through the
+  # "*" default of the rob vector, an unrated study) falls on. Reviewer
+  # choice; "high" until the radio group reports in, so the first render
+  # matches the documented default rather than the vendored one.
+  .rob_some_concerns_setting <- function() {
+    v <- input$rob_some_concerns
+    if (is.null(v) || length(v) != 1L || !v %in% c("low", "high")) "high" else v
+  }
+
   .study_labels_for_grade <- function(obj) {
     studs <- as.character(obj$studlab)
     if (!length(studs)) return(character())
@@ -1237,6 +1296,13 @@ step3_server <- function(input, output, session, state) {
       study_design             = "RCT",
       rob                      = rob_arg,
       rob_rationale            = rob_rationale,
+      # Where the low/high boundary falls. The app defaults to "high" (only
+      # studies explicitly rated low are low), not the vendored default
+      # "low"; unrated studies normalise to 'some concerns' (the "*" default
+      # of rob_arg above) and so follow the same side. Core GRADE 4 endorses
+      # the binary split but leaves the boundary open, so it is a reviewer
+      # choice, exposed on the tab.
+      rob_some_concerns        = .rob_some_concerns_setting(),
       rob_inflation_threshold  = input$rob_inf_threshold %||% 0.10,
       small_values             = sv,
       indirectness             = indir_arg,
@@ -1475,47 +1541,45 @@ step3_server <- function(input, output, session, state) {
   output$analysis_set_banner_cert <- shiny::renderUI(
     pma_analysis_set_banner(grade_obj()))
 
-  output$sticky_cert_badge <- shiny::renderUI({
-    g <- grade_obj()
-    if (is.null(g)) return(htmltools::span("--"))
-    unconf <- pma_unconfirmed_domains(domain_confirmed())
-    htmltools::tagList(
-      pma_certainty_badge(g$certainty),
-      if (length(unconf)) {
-        htmltools::span(
-          style = paste0("color: #b45309; font-weight: 600; ",
-                         "font-size: 0.8rem; margin-left: 0.4rem;"),
-          title = paste0("Unconfirmed: ", paste(unconf, collapse = ", ")),
-          "(incomplete)")
-      }
-    )
-  })
+  # Live "How is this judged?" body for Risk of Bias. Rendered rather than
+  # baked into the UI so the sensitivity-analysis change threshold quoted in
+  # the copy is the one the algorithm actually used.
+  output$rob_how_body <- shiny::renderUI(
+    htmltools::HTML(htmltools::htmlEscape(
+      EDU_COPY$domains$rob$how(input$rob_inf_threshold %||% 0.10,
+                               .rob_some_concerns_setting()))))
+  # It lives inside a collapsed <details>, so without this the copy is only
+  # filled in after the user opens the block.
+  shiny::outputOptions(output, "rob_how_body", suspendWhenHidden = FALSE)
 
-  output$sticky_cert_summary <- shiny::renderUI({
-    g <- grade_obj()
-    if (is.null(g)) return(htmltools::span(""))
-    unconf <- pma_unconfirmed_domains(domain_confirmed())
-    d <- g$domain_assessments
-    total_dg <- sum(d$downgrade)
-    parts <- vapply(seq_len(nrow(d)), function(i) {
-      sprintf("%s:%s",
-              substr(d$domain[i], 1, 4),
-              switch(d$judgment[i],
-                     no             = "OK",
-                     some           = "S",   # legacy
-                     some_concerns  = "S",
-                     serious        = "X",
-                     very_serious   = "X",   # legacy (now -2 same as serious)
-                     "?"))
-    }, character(1))
-    htmltools::span(
-      sprintf("(start High; total %+d) ", total_dg),
-      paste(parts, collapse = " | "),
-      if (length(unconf)) {
-        htmltools::span(
-          style = "color: #b45309;",
-          paste0(" -- unconfirmed: ", paste(unconf, collapse = ", ")))
-      }
+  # Standing statement of the binary rule currently in force. Tracks the
+  # reviewer's choice, so it never contradicts the control that set it.
+  output$rob_rule_note <- shiny::renderUI({
+    high_side <- identical(.rob_some_concerns_setting(), "high")
+    htmltools::div(
+      class = "pma-rob-rule",
+      htmltools::strong(if (high_side) {
+        "Currently: only studies rated low count as low risk of bias. "
+      } else {
+        "Currently: studies rated low or 'some concerns' count as low risk of bias. "
+      }),
+      "Core GRADE 4 permits each study to be classified as low or high risk ",
+      "of bias overall, but defines that boundary by counting high-risk ",
+      "items, uses three different counts in its three worked examples, and ",
+      "leaves the choice open. Where 'some concerns' falls is therefore a ",
+      "review decision, not a Core GRADE rule; set it under 'Inputs for this ",
+      "domain' below. Under the current setting, studies rated ",
+      if (high_side) {
+        "'some concerns', studies rated high and studies left unrated all count as high risk of bias. "
+      } else {
+        "'some concerns' and studies left unrated count as low risk of bias, and only studies rated high count as high. "
+      },
+      "The classification feeds the dominance gate, the low-risk-only ",
+      "comparison estimate and any refit on the low-risk set. The ",
+      "three-level input is retained because reviewers assess studies with ",
+      "RoB 2, whose vocabulary Core GRADE 4 does not use; the 'Risk group' ",
+      "column shows which of the two groups each study reaches the analysis ",
+      "in."
     )
   })
 
@@ -2275,19 +2339,47 @@ step3_server <- function(input, output, session, state) {
   shiny::observeEvent(input$step3_indir_set_high, { .step3_bulk_set("indirectness", "high") })
   shiny::observeEvent(input$step3_indir_clear,    { .step3_bulk_set("indirectness", NA_character_) })
 
+  # Binary consequence of a three-level entry, under the reviewer's chosen
+  # boundary. "some" and an unrated study follow `some_as`; an explicit "low"
+  # is always low and an explicit "high" always high. Purely a display of
+  # what grade_meta() will do; it changes nothing.
+  .rob_risk_group <- function(v, some_as = "high") {
+    side <- if (identical(some_as, "high")) "High" else "Low"
+    v <- tolower(trimws(as.character(v)))
+    out <- rep(paste0(side, " (unrated)"), length(v))
+    out[!is.na(v) & v == "low"]  <- "Low"
+    out[!is.na(v) & v == "some"] <- paste0(side, " (some concerns)")
+    out[!is.na(v) & v == "high"] <- "High"
+    out
+  }
+
   output$step3_rob_editor <- DT::renderDT({
     d <- state$rob_table
     if (is.null(d)) {
       return(DT::datatable(data.frame(message = "Load data in Step 1 first."),
                            options = list(dom = "t"), rownames = FALSE))
     }
-    DT::datatable(
-      d[, c("studlab", "rob"), drop = FALSE],
-      editable = list(target = "cell", disable = list(columns = 0)),
+    some_as <- .rob_some_concerns_setting()
+    tbl <- d[, c("studlab", "rob"), drop = FALSE]
+    tbl[["Risk group"]] <- .rob_risk_group(d$rob, some_as)
+    dt <- DT::datatable(
+      tbl,
+      # Only the rating is editable; "Risk group" is derived from it.
+      editable = list(target = "cell", disable = list(columns = c(0, 2))),
       options  = list(pageLength = 25, dom = "tip", scrollX = TRUE),
       rownames = FALSE
     )
+    DT::formatStyle(
+      dt, "Risk group",
+      color = DT::styleEqual(
+        c("Low", "Low (some concerns)", "Low (unrated)"),
+        rep("#166534", 3), default = "#b45309"),
+      fontWeight = "600")
   })
+  # The editor sits in a collapsed <details>. Suspended, it does not pick up a
+  # change to the low/high boundary made while it is closed, so the derived
+  # "Risk group" column would be stale the next time it is opened.
+  shiny::outputOptions(output, "step3_rob_editor", suspendWhenHidden = FALSE)
 
   output$step3_indir_editor <- DT::renderDT({
     d <- state$rob_table
