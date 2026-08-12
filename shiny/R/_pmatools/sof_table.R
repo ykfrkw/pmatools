@@ -278,6 +278,62 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
   ft
 }
 
+#' Append caller footnotes to a Summary of Findings table
+#'
+#' @description
+#' Adds one footer line per note to a table built by \code{\link{sof_table}} or
+#' \code{\link{grade_table}}, styled like the footnotes those functions write
+#' themselves. A host application that annotates its tables with something
+#' pmatools cannot know about — a rare-event alert, a scope caveat, a local
+#' registration number — can therefore hand the same annotation to
+#' \code{\link{export_bundle}} via its `sof_notes` argument instead of writing
+#' the .docx itself.
+#'
+#' @param x A \code{flextable}, typically from \code{\link{sof_table}} or
+#'   \code{\link{grade_table}}.
+#' @param notes Character vector (or list) of footnote lines, one footer line
+#'   each, appended in order after the table's own footnotes. \code{NULL},
+#'   \code{NA} and empty entries are dropped; a `notes` argument with nothing
+#'   usable in it returns `x` unchanged.
+#'
+#' @return The \code{flextable} with the notes appended.
+#'
+#' @examples
+#' \dontrun{
+#' ft <- sof_table(g, style = "bmj")
+#' sof_add_notes(ft, "Event rates below 1%: analyse risk differences directly.")
+#' }
+#'
+#' @export
+sof_add_notes <- function(x, notes) {
+  if (!inherits(x, "flextable")) {
+    rlang::abort("sof_add_notes: 'x' must be a flextable.")
+  }
+  notes <- .usable_notes(notes)
+  if (length(notes) == 0L) return(x)
+
+  for (nt in notes) {
+    x <- flextable::add_footer_lines(x, values = nt)
+  }
+  # Re-applied over the whole footer, matching what sof_table() and
+  # grade_table() do to their own footnotes, so appended lines cannot be told
+  # apart from the built-in ones.
+  x <- flextable::fontsize(x, size = 8, part = "footer")
+  x <- flextable::color(x, color = "#555555", part = "footer")
+  x
+}
+
+# Flatten a notes argument to the character vector actually worth printing.
+# Shared by sof_add_notes() and the export_bundle() script renderers, so a note
+# dropped from the table is dropped from the generated script too.
+.usable_notes <- function(notes) {
+  if (is.null(notes)) return(character(0))
+  if (is.list(notes)) notes <- unlist(notes, use.names = FALSE)
+  if (length(notes) == 0L) return(character(0))
+  notes <- as.character(notes)
+  notes[!is.na(notes) & nzchar(notes)]
+}
+
 # --------------------------------------------------------------------------
 # Helpers (shared with grade_table.R via package namespace)
 # --------------------------------------------------------------------------

@@ -52,6 +52,7 @@ g <- grade_meta(
   threshold_type          = "{{threshold_type}}",
   threshold               = {{threshold_arg}},
   threshold_scale         = "{{threshold_scale}}",
+  threshold_baseline      = {{threshold_baseline_arg}},
   require_threshold       = {{require_threshold_arg}},
   rating_target           = {{rating_target_arg}},
   rating_target_rationale = {{rating_target_rationale_arg}},
@@ -85,7 +86,7 @@ plot_funnel(ma)
 # ----- 5. SoF table -----
 sof <- sof_table(g, style = "{{sof_style}}", per = {{per}},
                  prediction = {{sof_prediction}}{{display_args}}{{convert_args}})
-print(sof)
+{{sof_notes_block}}print(sof)
 
 # ----- 6. Appendix report (docx) -----
 grade_report(

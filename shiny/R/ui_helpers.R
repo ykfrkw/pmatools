@@ -369,10 +369,12 @@ pma_arg_spec <- function(value) {
 # them from the rated object: study_design, outcome_type, outcome_name, and
 # (whenever a subdomain table exists) indirectness / indirectness_rationale.
 #
-# Not covered by the template at all: threshold_baseline. The app converts an
-# absolute threshold to the analysis scale at that baseline, and
-# analysis_script.R.tpl has no slot for the argument, so the regenerated call
-# omits it. Nothing can be done from here without editing R/_pmatools/.
+# threshold_baseline belongs here as of pmatools 0.5.1: the app converts an
+# absolute threshold to the analysis scale at a baseline risk it chooses (a
+# pooled metaprop estimate, or a manual override with a written rationale),
+# and the template now has a slot for it. Without the argument the regenerated
+# call re-derives the baseline from the pooled control-arm risk, which is not
+# in general the number the reviewer set.
 PMA_GRADE_ARGS_EXPORTED <- c(
   "rob", "rob_rationale", "rob_some_concerns", "rob_inflation_threshold",
   "small_values",
@@ -380,22 +382,25 @@ PMA_GRADE_ARGS_EXPORTED <- c(
   "inconsistency", "inconsistency_rationale", "inconsistency_ci_diff",
   "inconsistency_threshold_side", "inconsistency_subgroup_explained",
   "imprecision", "imprecision_rationale",
-  "threshold", "threshold_scale",
+  "threshold", "threshold_scale", "threshold_baseline",
   "ois_p0", "ois_rrr", "ois_sd", "ois_events", "ois_n",
   "pubias_small_industry", "pubias_funnel_asymmetry", "pubias_rationale",
   "pubias_unpublished", "pubias_registry_complete"
 )
 
-# Every name above is always emitted, with a "null" spec when the app passed
-# nothing. That is not cosmetic: export_bundle() looks the specs up with
-# `grade_args$<name>`, and `$` partial-matches on lists - with `inconsistency`
-# absent, `grade_args$inconsistency` would silently return the
-# `inconsistency_ci_diff` spec and write that answer into the wrong argument.
-# A complete list makes every lookup an exact match.
+# Only the arguments the app actually set are emitted. Before pmatools 0.5.1
+# every name above had to be emitted unconditionally, with a "null" spec
+# standing in for the ones the app never passed: export_bundle() looked the
+# specs up with `grade_args$<name>`, and `$` partial-matches on lists, so with
+# `inconsistency` absent `grade_args$inconsistency` returned the
+# `inconsistency_ci_diff` spec and wrote that answer into the wrong argument.
+# A complete list was the workaround. export_bundle() now looks every name up
+# exactly and rejects one it does not know, so a partial list is safe again -
+# and a typo here fails loudly instead of vanishing from the script.
 pma_grade_arg_specs <- function(args) {
   out <- list()
-  for (nm in PMA_GRADE_ARGS_EXPORTED) {
-    out[[nm]] <- pma_arg_spec(if (nm %in% names(args)) args[[nm]] else NULL)
+  for (nm in intersect(PMA_GRADE_ARGS_EXPORTED, names(args))) {
+    out[[nm]] <- pma_arg_spec(args[[nm]])
   }
   out
 }
