@@ -455,8 +455,9 @@ export_bundle.pmatools_set <- function(x,
     ))
   }
 
-  tpl_path <- system.file("templates", "analysis_script_multi.R.tpl",
-                          package = "pmatools")
+  tpl_path <- file.path(getOption("pmatools.vendored_root", "."),
+                          "_pmatools_inst", "templates",
+                          "analysis_script_multi.R.tpl")
   if (!nzchar(tpl_path) || !file.exists(tpl_path)) {
     tpl_path <- file.path("inst", "templates", "analysis_script_multi.R.tpl")
   }

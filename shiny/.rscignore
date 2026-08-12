@@ -1,6 +1,7 @@
 app_*.R
 prompt.Rmd
 SPEC.md
+CLAUDE.md
 Core GRADE papers
 .Rproj.user
 .DS_Store
