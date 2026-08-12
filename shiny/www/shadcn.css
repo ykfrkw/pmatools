@@ -151,9 +151,7 @@ h5 { font-size: 0.95rem; margin-top: 0.75rem; margin-bottom: 0.4rem; }
    amber accent the .pma-banner uses so the two read as one family. */
 .pma-analysis-set {
   position: sticky;
-  /* Clears the .pma-sticky-cert bar above it. If that bar is ever removed,
-     drop this to 0.5rem; nothing else here depends on it. */
-  top: 3.2rem;
+  top: 0.5rem;
   z-index: 99;
   display: flex;
   align-items: baseline;
@@ -207,6 +205,20 @@ h5 { font-size: 0.95rem; margin-top: 0.75rem; margin-bottom: 0.4rem; }
 
 /* How-this-is-judged block */
 .pma-how p { margin: 0.25rem 0 0.75rem 0; line-height: 1.5; font-size: 0.9rem; }
+
+/* Standing rule notice (Risk of Bias: the binary low/high classification).
+   A statement of how the app resolves an open choice in the source, so it is
+   quieter than .pma-banner but still set apart from the surrounding copy. */
+.pma-rob-rule {
+  background: hsl(var(--muted));
+  border-left: 3px solid hsl(var(--border));
+  border-radius: var(--radius);
+  padding: 0.6rem 0.85rem;
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: hsl(var(--foreground));
+}
 
 /* Inline help icon */
 .pma-help { color: hsl(var(--muted-foreground)); cursor: help; margin-left: 0.25rem; font-size: 0.8rem; }
@@ -278,28 +290,7 @@ details > div { padding-top: 0.75rem; }
 /* DT table tweaks */
 table.dataTable th { background: hsl(var(--muted)); }
 
-/* Phase 6: Sticky Final certainty + summary bar + accordion */
-.pma-sticky-cert {
-  position: sticky;
-  top: 0.5rem;
-  z-index: 100;
-  background: hsl(var(--background));
-  border: 1px solid hsl(var(--border));
-  border-radius: var(--radius);
-  padding: 0.6rem 0.85rem;
-  margin-bottom: 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-}
-.pma-sticky-cert .pma-cert-label {
-  font-size: 0.8rem;
-  color: hsl(var(--muted-foreground));
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
+/* Phase 6: summary bar + accordion */
 .pma-summary-bar {
   display: flex;
   gap: 1.25rem;
