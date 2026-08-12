@@ -301,6 +301,57 @@ test_that("explicit ois_events still drives an event-based comparison", {
   expect_match(row$notes, "target 1000 events", fixed = TRUE)
 })
 
+# --------------------------------------------------------------------------
+# .total_n_strict() vs .total_n(): two same-named helpers used to collide, and
+# sof_table.R's lenient display version silently won package-wide. They must
+# now diverge exactly where it matters -- a single-arm meta, which has $n but
+# no arm totals.
+# --------------------------------------------------------------------------
+
+# metamean(): a genuine single-arm object -- $n populated, n.e / n.c absent.
+.make_single_arm_meta <- function() {
+  metamean(n = c(300, 300, 300), mean = c(5, 5.2, 4.8), sd = c(2, 2, 2),
+           studlab = c("A", "B", "C"), random = TRUE, common = FALSE)
+}
+
+test_that("on a single-arm meta the strict helper is NA while the display one uses $n", {
+  m <- .make_single_arm_meta()
+  expect_null(m$n.e)
+  expect_null(m$n.c)
+  expect_identical(pmatools:::.total_n_strict(m), NA_real_)
+  expect_equal(pmatools:::.total_n(m), 900)
+})
+
+test_that("on a two-arm meta both helpers return sum(n.e) + sum(n.c)", {
+  m <- small_meta()
+  expected <- sum(m$n.e) + sum(m$n.c)
+  expect_equal(pmatools:::.total_n_strict(m), expected)
+  expect_equal(pmatools:::.total_n(m), expected)
+})
+
+test_that("the 800 rule of thumb no longer fires off a single-arm total", {
+  # Fig 4's continuous rule of thumb is "400 patients per group (total sample
+  # size 800)", so it needs a real two-arm total. Before the helpers were
+  # separated, a $n-only object with N = 900 reached that branch and the notes
+  # claimed "total N = 900 >= 800". SMD keeps the effect large without a pooled
+  # SD, which is what carries this object into the OIS approach at all.
+  m <- meta::metagen(TE = c(1.0, 1.1, 0.9), seTE = c(0.1, 0.1, 0.1),
+                     studlab = c("A", "B", "C"), sm = "SMD",
+                     random = TRUE, common = FALSE)
+  m$n.e <- NULL
+  m$n.c <- NULL
+  m$n   <- c(300, 300, 300)
+  expect_equal(pmatools:::.total_n(m), 900)   # the note would have fired on this
+
+  res <- suppressWarnings(assess_imprecision(m, threshold_type = "null"))
+  expect_false(grepl("rule of thumb", res$notes, fixed = TRUE))
+  expect_false(grepl("total N =", res$notes, fixed = TRUE))
+  # The judgment is unchanged: the object falls through to the "OIS could not
+  # be computed" branch, which also does not rate down.
+  expect_equal(res$judgment, "no")
+  expect_match(res$notes, "OIS could not be computed", fixed = TRUE)
+})
+
 test_that("Crosses null but not both Thresholds, OIS met (>=100%) -> some_concerns", {
   # Small effect, narrow-ish CI that crosses null but stays inside ±Threshold.
   m <- metabin(
