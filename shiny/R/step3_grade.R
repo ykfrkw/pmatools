@@ -74,12 +74,12 @@ step3_is_binary_outcome <- function(obj, outcome_type = NULL) {
 # captured here rather than swallowed, so the UI can say which of the two it
 # is actually showing. A crude ratio must never be presented as pooled.
 #
-# The input is sanitised to complete (event.c, n.c) pairs first. Not
-# cosmetic: .compute_control_risk() drops NA events but not the matching
-# denominators, so an event.c with an NA (common - a study that reported the
-# continuous outcome only) leaves the two vectors at different lengths and
-# metaprop() errors out on every such dataset. Sanitising here restores the
-# metaprop path without touching vendored code (R/_pmatools/ is generated).
+# Up to pmatools 0.5.0 the input had to be sanitised to complete
+# (event.c, n.c) pairs before calling in, because .compute_control_risk()
+# dropped NA events but not the matching denominators and metaprop() then
+# errored on every such dataset. pmatools 0.5.1 filters both vectors on one
+# complete-case predicate, so the meta object is now passed through untouched.
+# `keep` survives only to report how many studies the estimate rests on.
 #
 # Known limitation, stated not fixed: .compute_control_risk() returns a bare
 # scalar and discards metaprop's confidence interval, so the uncertainty in
@@ -96,16 +96,14 @@ step3_control_risk <- function(meta_obj) {
   }
   keep <- !is.na(ec) & !is.na(nc) & nc > 0
   if (!any(keep)) return(out)
-  clean <- meta_obj
-  clean$event.c <- ec[keep]
-  clean$n.c     <- nc[keep]
   out$k_used    <- sum(keep)
   out$k_dropped <- sum(!keep)
-  out$crude     <- sum(clean$event.c) / sum(clean$n.c)
+  crude <- .compute_control_risk(meta_obj, method = "simple")
+  out$crude <- if (is.null(crude)) NA_real_ else crude
 
   fell_back <- FALSE
   val <- withCallingHandlers(
-    tryCatch(.compute_control_risk(clean, method = "metaprop"),
+    tryCatch(.compute_control_risk(meta_obj, method = "metaprop"),
              error = function(e) NULL),
     warning = function(w) {
       if (grepl("metaprop", conditionMessage(w), fixed = TRUE)) {
