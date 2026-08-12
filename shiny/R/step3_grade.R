@@ -187,6 +187,42 @@ step3_ard_equivalence <- function(sm, abs1000, base1000) {
   )
 }
 
+# --------------------------------------------------------------------------
+# Indirectness subdomains (Core GRADE 5 / pmatools indirectness_subdomains)
+# --------------------------------------------------------------------------
+# The four PICO questions are inputs to grade_meta(indirectness_subdomains =),
+# so the UI and the server have to agree on the input ids, the subdomain
+# labels pmatools expects, and the 4-point answer scale. File scope, because
+# both step3_ui() and step3_server() read them.
+#
+# Asking the indirectness question per PICO element is Core GRADE 5's; the
+# 4-point scale below and the worst-case fold pmatools applies to it are
+# pmatools conventions (see EDU_COPY$domains$indirectness$gradient).
+STEP3_INDIR_SUBDOMAINS <- c(
+  Population   = "indir_population",
+  Intervention = "indir_intervention",
+  Comparison   = "indir_comparator",
+  Outcome      = "indir_outcome"
+)
+
+STEP3_INDIR_ANSWERS <- c(
+  "Yes"          = "yes",
+  "Probably yes" = "probably_yes",
+  "Probably no"  = "probably_no",
+  "No"           = "no"
+)
+
+# pmatools maps the 4-point answer onto a GRADE level; mirrored here so the
+# app can tell whether an overall rating restates the worst case (no rationale
+# needed) or overrides it (rationale required) without a second grade_meta()
+# call.
+STEP3_INDIR_ANSWER_TO_LEVEL <- c(
+  yes          = "no",
+  probably_yes = "no",
+  probably_no  = "some_concerns",
+  no           = "serious"
+)
+
 # Sub-tab navigation inside Step 3. File scope rather than local to
 # step3_ui(), because step3_server() re-renders the Final certainty copy of
 # it whenever the confirmation state changes (see output$grade_nav_final).
@@ -535,23 +571,114 @@ step3_ui <- function() {
           pma_how_collapse(EDU_COPY$domains$indirectness$how),
           pma_reference(EDU_COPY$domains$indirectness$ref_text,
                         EDU_COPY$domains$indirectness$doi),
-          # No preselected value (W4-A): the user must actively choose a
-          # rating. grade_meta() receives "no" while unselected, but the
-          # domain does not count as confirmed until a choice is made.
-          shiny::radioButtons("indirectness", "Overall indirectness rating",
+
+          # ----- The four Core GRADE 5 PICO questions ----------------------
+          # These used to sit collapsed under a "Considerations" summary and
+          # fed nothing. They are now the primary input of the domain: the
+          # answers become grade_meta(indirectness_subdomains = ), which
+          # folds them worst-case into the domain judgment.
+          htmltools::h5("Subdomain judgments (Core GRADE 5)",
+                        style = "margin-top: 1rem;"),
+          htmltools::p(class = "pma-card-subtitle",
+            paste0("Core GRADE 5 asks the indirectness question separately ",
+                   "for each PICO element. Answer each on the four-point ",
+                   "scale - 'Is the evidence sufficiently direct?' - and the ",
+                   "answers drive the domain judgment. Leave an element ",
+                   "blank to omit it.")),
+          htmltools::p(class = "pma-card-subtitle",
+            EDU_COPY$domains$indirectness$mapping),
+          htmltools::div(
+            style = paste0(
+              "padding: 0.5rem 0.75rem; background: #f5f5f5; ",
+              "border-left: 4px solid #c07020; margin: 0.5rem 0 1rem; ",
+              "font-size: 0.85rem;"),
+            htmltools::p(style = "margin: 0;",
+              htmltools::strong("Departure from the source, stated rather than implied: "),
+              EDU_COPY$domains$indirectness$gradient)
+          ),
+          shiny::radioButtons("indir_population",
+            "Population - trial population sufficiently similar to target patients?",
+            choices = STEP3_INDIR_ANSWERS, inline = TRUE,
+            selected = character(0)),
+          htmltools::p(
+            style = paste0("font-size: 0.8rem; color: hsl(var(--muted-foreground)); ",
+                           "margin-top: -0.4rem; margin-bottom: 0.8rem;"),
+            "Core GRADE 5 Table 2 rates Population the LEAST likely element to ",
+            "justify rating down; differences in trial population rarely ",
+            "affect relative effects in most clinical contexts (",
+            htmltools::tags$a(href = "https://doi.org/10.1503/cmaj.200077",
+                              target = "_blank", "ICEMAN; Schandelmaier et al., CMAJ 2020"),
+            ")."
+          ),
+          shiny::radioButtons("indir_intervention",
+            "Intervention - deliverable as studied?",
+            choices = STEP3_INDIR_ANSWERS, inline = TRUE,
+            selected = character(0)),
+          htmltools::p(
+            style = paste0("font-size: 0.8rem; color: hsl(var(--muted-foreground)); ",
+                           "margin-top: -0.4rem; margin-bottom: 0.8rem;"),
+            "Core GRADE 5 lists non-adherence to interventions as one of three ",
+            "situations that warrant considering a downgrade even on an ",
+            "ordinary search for direct evidence."
+          ),
+          shiny::radioButtons("indir_comparator",
+            "Comparison - representative of usual care?",
+            choices = STEP3_INDIR_ANSWERS, inline = TRUE,
+            selected = character(0)),
+          htmltools::p(
+            style = paste0("font-size: 0.8rem; color: hsl(var(--muted-foreground)); ",
+                           "margin-top: -0.4rem; margin-bottom: 0.8rem;"),
+            "Problematic comparators are the second of those three situations."
+          ),
+          shiny::radioButtons("indir_outcome",
+            "Outcome - patient-important, rather than a surrogate?",
+            choices = STEP3_INDIR_ANSWERS, inline = TRUE,
+            selected = character(0)),
+          htmltools::div(
+            style = paste0(
+              "padding: 0.5rem 0.75rem; background: #f9f9f9; ",
+              "border-left: 4px solid #0f172a; margin: 0.25rem 0 1rem; ",
+              "font-size: 0.85rem;"),
+            htmltools::p(style = "margin: 0;",
+              EDU_COPY$domains$indirectness$surrogate)
+          ),
+
+          # The subdomain table pmatools built from those answers. Surfaced
+          # because it is the only rendering of exactly what was sent to
+          # grade_meta(): it shows which element drove the worst-case fold,
+          # and its footer repeats the Core GRADE 5 Table 2 gradient caveat
+          # next to the judgment rather than only in the collapsed copy.
+          shiny::uiOutput("indir_subdomain_table"),
+
+          # No preselected value (W4-A). With subdomain answers present this
+          # radio OVERRIDES their worst-case fold; with none it is the whole
+          # judgment. Either way a rating that differs from the automatic
+          # value requires a written rationale.
+          htmltools::h5("Overall indirectness rating",
+                        style = "margin-top: 1.25rem;"),
+          htmltools::p(class = "pma-card-subtitle",
+            paste0("Leave this blank to accept the worst case across the ",
+                   "subdomains above. Selecting a rating overrides it - use ",
+                   "this when the symmetric fold misplaces the judgment, for ",
+                   "example when the only concern sits on Population (low ",
+                   "likelihood in Core GRADE 5 Table 2) or on Outcome ",
+                   "(high).")),
+          shiny::radioButtons("indirectness", NULL,
             choices = c("No" = "no",
                         "Some concerns" = "some_concerns",
                         "Serious" = "serious"),
             selected = character(0), inline = TRUE),
           shiny::conditionalPanel(
-            "input.indirectness == 'some_concerns' || input.indirectness == 'serious'",
+            "(input.indirectness || '') != ''",
             shiny::textAreaInput(
               "indir_rationale",
-              "Rationale (required for any rating other than 'No')",
+              paste0("Rationale (required whenever this rating differs from ",
+                     "the automatic judgment)"),
               rows = 2, width = "100%",
               placeholder = paste0(
-                "State which aspect (population / intervention / comparator ",
-                "/ outcome) raises concern and why.")
+                "State which element (population / intervention / comparison ",
+                "/ outcome) drives the rating and why it outweighs the ",
+                "worst-case fold.")
             )
           ),
           htmltools::tags$details(
@@ -561,7 +688,9 @@ step3_ui <- function() {
               htmltools::HTML(
                 "&#9998;&nbsp; <strong>Edit per-study Indirectness</strong> ",
                 "<span class='pma-edit-hint'>(click to expand &middot; ",
-                "optional per-study notes; the overall rating above is what feeds Core GRADE)</span>"
+                "optional per-study notes; they label the stratified forest ",
+                "plot only. The subdomain answers above, or an overall ",
+                "rating, are what feed Core GRADE)</span>"
               )
             ),
             htmltools::div(
@@ -580,34 +709,6 @@ step3_ui <- function() {
               DT::DTOutput("step3_indir_editor")
             )
           ),
-          htmltools::tags$details(
-            htmltools::tags$summary("Considerations"),
-            htmltools::div(
-              shiny::radioButtons("indir_population",
-                "Trial population sufficiently similar to target patients?",
-                choices = c("Yes", "Some concern", "Serious concern"), inline = TRUE,
-                selected = character(0)),
-              htmltools::p(
-                style = "font-size: 0.8rem; color: hsl(var(--muted-foreground)); margin-top: -0.4rem; margin-bottom: 0.6rem;",
-                "Note: differences in trial population rarely affect relative effects in most clinical contexts (",
-                htmltools::tags$a(href = "https://doi.org/10.1503/cmaj.200077",
-                                  target = "_blank", "ICEMAN; Schandelmaier et al., CMAJ 2020"),
-                ")."
-              ),
-              shiny::radioButtons("indir_intervention",
-                "Intervention deliverable as studied?",
-                choices = c("Yes", "Some concern", "Serious concern"), inline = TRUE,
-                selected = character(0)),
-              shiny::radioButtons("indir_comparator",
-                "Comparator representative of usual care?",
-                choices = c("Yes", "Some concern", "Serious concern"), inline = TRUE,
-                selected = character(0)),
-              shiny::radioButtons("indir_outcome",
-                "Outcome patient-important (vs surrogate)?",
-                choices = c("Yes", "Some concern", "Serious concern"), inline = TRUE,
-                selected = character(0))
-            )
-          ),
           shiny::uiOutput("indir_forest_image_block"),
           .forest_display_panel("indir"),
           .confirm_checkbox("indir_confirm_na"),
@@ -622,6 +723,14 @@ step3_ui <- function() {
           pma_reference(EDU_COPY$domains$imprecision$ref_text,
                         EDU_COPY$domains$imprecision$doi),
           shiny::uiOutput("threshold_block_impre"),
+          # Which Fig 4 branch this analysis took. Stated on the tab because
+          # the branch decides whether sample size is consulted at all: on
+          # the CI-crosses-threshold path the OIS is never reached, and a
+          # reviewer reading OIS figures further down must be able to see
+          # that they did not drive the judgment.
+          htmltools::h5("Core GRADE 2 Figure 4 branch taken",
+                        style = "margin-top: 1rem;"),
+          shiny::uiOutput("impre_branch"),
           htmltools::h5("Evaluation"),
           shinycssloaders::withSpinner(
             shiny::verbatimTextOutput("impre_notes"),
@@ -630,20 +739,53 @@ step3_ui <- function() {
           .inputs_details(open = TRUE, title = "Inputs for this domain",
             shiny::conditionalPanel(
               "input.outcome_type == 'binary'",
-              shiny::uiOutput("ois_p0_ui")
+              shiny::uiOutput("ois_p0_ui"),
+              # Core GRADE 2 parameterises the BINARY OIS by a modest
+              # relative risk reduction, not by the threshold, and names two
+              # values. Both are offered; the absolute-scale equivalent is
+              # shown alongside so the target can be read in the same units
+              # as the threshold.
+              shiny::radioButtons("ois_rrr",
+                paste0("Modest relative risk reduction the OIS is powered to ",
+                       "detect (Core GRADE 2 names 20% and 25%)"),
+                choices = c("20 percent (default)" = "0.20",
+                            "25 percent"           = "0.25"),
+                selected = "0.20", inline = TRUE),
+              shiny::uiOutput("ois_rrr_equiv")
             ),
             shiny::conditionalPanel(
               "input.outcome_type == 'continuous'",
-              shiny::uiOutput("ois_sd_ui")
+              shiny::uiOutput("ois_sd_ui"),
+              htmltools::p(class = "pma-card-subtitle",
+                paste0("For continuous outcomes Core GRADE 2 directs the OIS ",
+                       "to the threshold rather than to a relative risk ",
+                       "reduction, so the Configuration threshold is used as ",
+                       "the target difference and no RRR is asked for."))
             ),
             shiny::numericInput("ois_events_override",
               "Override OIS - target events (binary)",
               value = NA, min = 0, step = 1),
             shiny::numericInput("ois_n_override",
               "Override OIS - target N (continuous)",
-              value = NA, min = 0, step = 1)
+              value = NA, min = 0, step = 1),
+            htmltools::p(class = "pma-card-subtitle",
+              paste0("Either override replaces the calculated OIS. Figure 4 ",
+                     "compares the OIS against participants, not events: ",
+                     "'If the total sample size of all the studies included ",
+                     "in a meta-analysis exceeds the OIS, one does not rate ",
+                     "down.' The events override is kept for backward ",
+                     "compatibility and switches the comparison to total ",
+                     "events."))
           ),
           .override_details(
+            htmltools::p(class = "pma-card-subtitle",
+              paste0("Figure 4's second two-level condition is a reviewer ",
+                     "judgment and is not assessed automatically: consider ",
+                     "rating down two levels when the most appropriate plain ",
+                     "language summary of the result warrants 'may' rather ",
+                     "than 'likely'. Read the Summary of Findings wording ",
+                     "against the message you intend to convey, and record ",
+                     "the conclusion here.")),
             shiny::selectInput("impre_override", NULL,
               choices = c("(no override)" = "", "No" = "no",
                           "Some concerns" = "some_concerns",
@@ -669,9 +811,38 @@ step3_ui <- function() {
             " to assess risk of bias due to missing evidence (Page et al., BMJ 2023)."
           ),
 
-          # ----- Q1: overall judgment gate ---------------------------------
-          htmltools::h5("Q1. Does the situation argue against reporting bias?",
+          htmltools::p(class = "pma-card-subtitle",
+            paste0("Core GRADE 4 Figure 5 has exactly four decision nodes and ",
+                   "no entry-level rule-out. The headings below are numbered ",
+                   "in the source's order, and the collapsible explanation ",
+                   "above uses the same numbers.")),
+
+          # ----- Q1 (Fig 5 node 1): small + industry-sponsored -------------
+          htmltools::h5("Q1. Most or all studies small AND industry-sponsored?",
                         style = "margin-top: 1rem;"),
+          htmltools::p(class = "pma-card-subtitle",
+            "A 'yes' answer is sufficient evidence on its own (rate down 1; some concerns)."
+          ),
+          shiny::radioButtons("pubias_small_industry", NULL,
+            choices = c("(use default: no)" = "", "No" = "no", "Yes" = "yes"),
+            inline = TRUE),
+          htmltools::hr(),
+
+          # ----- Not a Fig 5 node: the overall reporting-bias judgment -----
+          # pmatools 0.5 moved this convenience input from an entry rule-out
+          # to a check applied AFTER Q1, so a body of small industry-sponsored
+          # trials still rates down even when registry coverage is asserted
+          # complete. The UI position mirrors the evaluation order.
+          htmltools::h5("Additional input (not a node of Figure 5): overall reporting-bias judgment"),
+          htmltools::p(class = "pma-card-subtitle",
+            paste0("This question is a pmatools convenience input, not one of ",
+                   "Figure 5's four nodes. pmatools 0.5 evaluates it after ",
+                   "Q1, which is why it sits here rather than at the top: ",
+                   "'Yes' then short-circuits the domain to no rate down, ",
+                   "while a 'yes' answer to Q1 still rates down. Answering ",
+                   "'No' is an app-level rule that forces rate down 1 ",
+                   "regardless of Q2-Q4. Leave it blank to let the four ",
+                   "Figure 5 nodes decide.")),
           htmltools::div(class = "pma-card-subtitle",
             htmltools::p(htmltools::strong("Suspect reporting bias when:")),
             htmltools::tags$ul(
@@ -695,17 +866,7 @@ step3_ui <- function() {
             inline = FALSE),
           htmltools::hr(),
 
-          # ----- Q2: small + industry-sponsored ----------------------------
-          htmltools::h5("Q2. Most or all studies small AND industry-sponsored?"),
-          htmltools::p(class = "pma-card-subtitle",
-            "A 'yes' answer is sufficient evidence on its own (rate down 1; some concerns)."
-          ),
-          shiny::radioButtons("pubias_small_industry", NULL,
-            choices = c("(use default: no)" = "", "No" = "no", "Yes" = "yes"),
-            inline = TRUE),
-          htmltools::hr(),
-
-          # ----- Q3 + Q4 + reference materials (server-rendered) ----------
+          # ----- Q2 + Q3 (or Q4) + reference materials (server-rendered) ---
           shiny::uiOutput("pubias_main_block"),
 
           # Reference: Subgroup analysis (Available vs Missing results) - RoB-ME.
@@ -1627,6 +1788,62 @@ step3_server <- function(input, output, session, state) {
     if (is.finite(tb) && tb > 0 && tb < 1000) tb / 1000 else NULL
   })
 
+  # The modest relative risk reduction the binary OIS is powered to detect.
+  # Core GRADE 2 names 20 percent and 25 percent; the radio offers both and
+  # 0.20 is pmatools' default.
+  ois_rrr_value <- shiny::reactive({
+    v <- suppressWarnings(as.numeric(input$ois_rrr %||% "0.20"))
+    if (!is.finite(v) || v <= 0 || v >= 1) 0.20 else v
+  })
+
+  # The RRR read on the absolute scale, so the OIS target can be compared
+  # with the Configuration threshold in the same units. The control-group
+  # risk is the one the Configuration tab established; it is not recomputed
+  # here.
+  output$ois_rrr_equiv <- shiny::renderUI({
+    rrr <- ois_rrr_value()
+    tb  <- threshold_baseline_state()
+    if (!is.finite(tb) || tb <= 0 || tb >= 1000) {
+      return(htmltools::p(
+        class = "pma-card-subtitle", style = "font-style: italic;",
+        paste0("Set a control-group risk on the Configuration tab to see the ",
+               "absolute-scale equivalent of this relative risk reduction.")))
+    }
+    # Round the control-group risk before applying the RRR so the three
+    # displayed numbers add up; the calculation itself uses the unrounded
+    # rate (ois_p0 = threshold baseline / 1,000).
+    p0d <- round(tb)
+    p1d <- round(p0d * (1 - rrr))
+    dif <- p0d - p1d
+    htmltools::div(
+      style = paste0(
+        "padding: 0.5rem 0.75rem; background: #f5f5f5; ",
+        "border-left: 4px solid #0f172a; margin: 0.5rem 0; ",
+        "font-size: 0.85rem;"),
+      htmltools::p(style = "margin: 0;",
+        htmltools::strong(sprintf(
+          "RRR %.0f%% = %.0f -> %.0f per 1,000 (%.0f fewer per 1,000)",
+          100 * rrr, p0d, p1d, dif))),
+      htmltools::p(style = "margin: 0.25rem 0 0;",
+        sprintf(paste0("The OIS is powered to detect this difference at ",
+                       "alpha = 0.05 and beta = 0.20, using the ",
+                       "control-group risk of %g per 1,000 set on the ",
+                       "Configuration tab. It is a separate quantity from ",
+                       "the decision threshold and is not derived from it."),
+                tb)),
+      htmltools::p(style = paste0("margin: 0.35rem 0 0; font-style: italic; ",
+                                  "color: hsl(var(--muted-foreground));"),
+        paste0("Core GRADE 2, verbatim: 'For binary outcomes, these involve ",
+               "specifying the acceptable error rates: alpha (typically ",
+               "0.05) and beta (typically 0.20), the control group event ",
+               "rate (chosen from the context), and a modest relative risk ",
+               "reduction, typically 20% or 25%.' Core GRADE's separate ",
+               "advice that binary thresholds belong on the absolute scale ",
+               "concerns thresholds, not the OIS."))
+    )
+  })
+  shiny::outputOptions(output, "ois_rrr_equiv", suspendWhenHidden = FALSE)
+
   output$ois_sd_ui <- shiny::renderUI({
     obj <- state$ma
     val <- if (!is.null(obj)) {
@@ -1734,6 +1951,39 @@ step3_server <- function(input, output, session, state) {
     list(value = sel, rationale = rat)
   }
 
+  # ----- Indirectness subdomains (Core GRADE 5 / pmatools 0.5) ------------
+  # The four PICO answers, shaped as the data frame grade_meta() documents
+  # for indirectness_subdomains: one row per subdomain, `subdomain` and
+  # `judgment` required, `target` / `evidence` optional and display-only.
+  # NULL while nothing has been answered, so an unanswered domain falls back
+  # to the scalar path rather than asserting four "yes" answers.
+  indir_subdomains <- shiny::reactive({
+    ans <- vapply(STEP3_INDIR_SUBDOMAINS, function(id) {
+      v <- input[[id]]
+      if (is.null(v) || length(v) != 1L || !nzchar(v)) NA_character_
+      else as.character(v)
+    }, character(1))
+    keep <- !is.na(ans) & ans %in% STEP3_INDIR_ANSWERS
+    if (!any(keep)) return(NULL)
+    data.frame(
+      subdomain = names(STEP3_INDIR_SUBDOMAINS)[keep],
+      judgment  = unname(ans[keep]),
+      stringsAsFactors = FALSE
+    )
+  })
+
+  # Worst case across the answered subdomains. Mirrors the symmetric fold
+  # pmatools applies (.indirectness_worst_case), so the app can tell a
+  # restatement of the automatic judgment (no rationale needed) from a real
+  # override (rationale required) without a second grade_meta() call.
+  indir_worst_case <- shiny::reactive({
+    sd <- indir_subdomains()
+    if (is.null(sd)) return(NULL)
+    lv  <- unname(STEP3_INDIR_ANSWER_TO_LEVEL[sd$judgment])
+    ord <- c(no = 1L, some_concerns = 2L, serious = 3L)
+    names(which.max(ord[lv]))
+  })
+
   grade_obj <- shiny::reactive({
     obj <- state$ma
     if (is.null(obj)) return(NULL)
@@ -1777,24 +2027,38 @@ step3_server <- function(input, output, session, state) {
                          length(input$subgroup_explained) > 0 &&
                          nzchar(input$subgroup_explained)) input$subgroup_explained else NULL
 
-    # --- Indirectness: active selection; non-"no" needs a rationale.
-    # While unselected (or rationale missing) grade_meta() receives the
-    # safe default "no" - the confirmation gate (not an error) is what
-    # tells the user the domain is still unassessed.
-    indir_arg       <- "no"
+    # --- Indirectness: the four Core GRADE 5 subdomain answers, plus an
+    # optional scalar override of their worst-case fold.
+    #
+    # `indirectness` MUST be NULL - not "no" - whenever no override is
+    # intended: grade_meta() reads any non-NULL scalar alongside a subdomain
+    # table as a manual override and demands indirectness_rationale for it.
+    # With no subdomain answers the scalar path is unchanged and "no" is the
+    # safe default; the confirmation gate (not an error) is what tells the
+    # user the domain is still unassessed.
+    indir_sub       <- indir_subdomains()
+    indir_worst     <- indir_worst_case()
+    indir_arg       <- if (is.null(indir_sub)) "no" else NULL
     indir_rationale <- NULL
     indir_sel <- input$indirectness
-    if (!is.null(indir_sel) && length(indir_sel) == 1 && nzchar(indir_sel) &&
-        !identical(indir_sel, "no")) {
-      r <- .rat_val("indir_rationale")
-      if (is.null(r)) {
-        shiny::showNotification(
-          paste0("Indirectness: rating ignored - a written rationale is ",
-                 "required for any rating other than 'No'."),
-          id = "indir_rationale_missing", type = "warning", duration = 6)
+    if (!is.null(indir_sel) && length(indir_sel) == 1 && nzchar(indir_sel)) {
+      auto_level <- indir_worst %||% "no"
+      if (identical(indir_sel, auto_level)) {
+        # A restatement of the automatic judgment: accepted without a
+        # rationale, and it changes nothing.
+        indir_arg <- indir_sel
       } else {
-        indir_arg       <- indir_sel
-        indir_rationale <- r
+        r <- .rat_val("indir_rationale")
+        if (is.null(r)) {
+          shiny::showNotification(
+            paste0("Indirectness: overall rating ignored - a written ",
+                   "rationale is required whenever it differs from the ",
+                   "automatic judgment."),
+            id = "indir_rationale_missing", type = "warning", duration = 6)
+        } else {
+          indir_arg       <- indir_sel
+          indir_rationale <- r
+        }
       }
     }
 
@@ -1843,6 +2107,11 @@ step3_server <- function(input, output, session, state) {
       small_values             = sv,
       indirectness             = indir_arg,
       indirectness_rationale   = indir_rationale,
+      # Core GRADE 5 asks the indirectness question per PICO element; the
+      # four answers on the tab are that table. pmatools folds them
+      # worst-case, which does NOT reproduce the Table 2 gradient - the tab
+      # says so next to the questions.
+      indirectness_subdomains  = indir_sub,
       inconsistency            = incon_ov$value,
       inconsistency_rationale  = incon_ov$rationale,
       inconsistency_ci_diff            = ci_diff,
@@ -1857,6 +2126,10 @@ step3_server <- function(input, output, session, state) {
       # Same control-group risk the Configuration tab shows, not a second
       # crude computation of its own.
       ois_p0       = ois_p0_value(),
+      # Core GRADE 2 parameterises the binary OIS by a modest relative risk
+      # reduction ("typically 20% or 25%"), not by the threshold. Reviewer
+      # choice between the two values the paper names.
+      ois_rrr      = ois_rrr_value(),
       ois_sd       = .na_null(input$ois_sd),
       ois_events   = .na_null(input$ois_events_override),
       ois_n        = .na_null(input$ois_n_override),
@@ -2030,11 +2303,15 @@ step3_server <- function(input, output, session, state) {
     rob_data <- !is.null(rt) && "rob" %in% names(rt) &&
       any(!is.na(rt$rob) & nzchar(trimws(as.character(rt$rob))))
 
+    # Answering any of the four Core GRADE 5 subdomain questions counts as
+    # substantive input on its own: those answers now reach grade_meta() and
+    # decide the domain judgment.
     indir_sel <- input$indirectness
-    indir_active <- !is.null(indir_sel) && length(indir_sel) == 1 &&
-      nzchar(indir_sel) &&
-      (identical(indir_sel, "no") ||
-         nzchar(trimws(input$indir_rationale %||% "")))
+    indir_active <- !is.null(indir_subdomains()) ||
+      (!is.null(indir_sel) && length(indir_sel) == 1 &&
+         nzchar(indir_sel) &&
+         (identical(indir_sel, "no") ||
+            nzchar(trimws(input$indir_rationale %||% ""))))
 
     c(
       threshold = length(config_blockers()) == 0L,
@@ -2191,6 +2468,115 @@ step3_server <- function(input, output, session, state) {
   output$impre_notes  <- shiny::renderText(domain_notes("Imprecision"))
   output$pubias_notes <- shiny::renderText(domain_notes("Publication bias"))
 
+  # ----- Which Core GRADE 2 Fig 4 branch the analysis took ----------------
+  # Parsed from the "Fig 4 path: ..." fragment pmatools writes into the
+  # domain note, so the headline here can never disagree with the note below
+  # it. The point of stating it is that the two branches treat sample size
+  # differently: on the CI-crosses-threshold path the OIS is never consulted,
+  # and the OIS figures printed further down are informational only.
+  output$impre_branch <- shiny::renderUI({
+    g <- grade_obj()
+    if (is.null(g)) {
+      return(htmltools::p(
+        class = "pma-card-subtitle", style = "font-style: italic;",
+        "Run the analysis and set a threshold to see which branch applies."))
+    }
+    notes <- domain_notes("Imprecision")
+    path  <- if (grepl("Fig 4 path: ", notes, fixed = TRUE)) {
+      p <- sub("^.*Fig 4 path: ", "", notes)
+      p <- sub("\\s*\\[Second Fig 4.*$", "", p)
+      trimws(strsplit(p, " | ", fixed = TRUE)[[1]][1])
+    } else ""
+    if (!nzchar(path)) {
+      return(htmltools::div(
+        style = paste0(
+          "padding: 0.6rem 0.85rem; background: #f5f5f5; ",
+          "border-left: 4px solid #6b7280; margin: 0.5rem 0; ",
+          "font-size: 0.85rem;"),
+        htmltools::p(style = "margin: 0;",
+          htmltools::strong("Figure 4 was not applied."),
+          " The imprecision judgment was supplied manually through the ",
+          "override below, which bypasses the automated assessment.")))
+    }
+    crosses  <- grepl("^CI crosses", path)
+    ois_used <- grepl("OIS approach", path, fixed = TRUE)
+    head <- if (crosses) {
+      "Yes branch - the CI crosses the chosen threshold."
+    } else if (ois_used) {
+      "No branch, implausibly large effect - the OIS approach was applied."
+    } else {
+      "No branch, moderate effect - do not rate down."
+    }
+    detail <- if (crosses) {
+      paste0("Sample size is NOT considered on this path: the Optimal ",
+             "Information Size is not consulted, and any OIS figures in the ",
+             "evaluation below are reported for information only. Rate down ",
+             "one level; two only if the CI crosses two thresholds ",
+             "(important benefit and important harm), or if the most ",
+             "appropriate plain language summary warrants 'may' rather than ",
+             "'likely'. The second condition is a reviewer judgment and is ",
+             "not assessed automatically - record it through the override ",
+             "below.")
+    } else if (ois_used) {
+      paste0("This is the only route to the OIS: the CI stays clear of the ",
+             "threshold AND the effect is implausibly large. The participant ",
+             "count therefore did drive the judgment. Figure 4 compares the ",
+             "OIS against participants, not events.")
+    } else {
+      paste0("Figure 4 stops here. A moderate effect whose CI stays clear of ",
+             "the threshold does not rate down, and sample size never enters ",
+             "the decision: the OIS is reached only when the effect is ",
+             "implausibly large.")
+    }
+    color <- if (crosses) "#c07020" else if (ois_used) "#0f172a" else "#208050"
+    htmltools::div(
+      style = sprintf(paste0(
+        "padding: 0.6rem 0.85rem; background: #f5f5f5; ",
+        "border-left: 4px solid %s; margin: 0.5rem 0; font-size: 0.85rem;"),
+        color),
+      htmltools::p(style = "margin: 0;", htmltools::strong(head)),
+      htmltools::p(style = "margin: 0.25rem 0 0;", detail),
+      htmltools::p(
+        style = paste0("margin: 0.35rem 0 0; font-family: monospace; ",
+                       "font-size: 0.78rem; color: #444;"),
+        path)
+    )
+  })
+  shiny::outputOptions(output, "impre_branch", suspendWhenHidden = FALSE)
+
+  # ----- Indirectness subdomain table (pmatools indirectness_table) -------
+  # Surfaced deliberately: it is the only rendering of exactly what the app
+  # sent to grade_meta(), it shows which element drove the worst-case fold,
+  # and its footer repeats the Core GRADE 5 Table 2 gradient caveat next to
+  # the judgment rather than only inside the collapsed explanation.
+  output$indir_subdomain_table <- shiny::renderUI({
+    if (is.null(indir_subdomains())) {
+      return(htmltools::p(
+        class = "pma-card-subtitle", style = "font-style: italic;",
+        paste0("Answer at least one subdomain question above to record a ",
+               "subdomain table. Until then the domain rests on the overall ",
+               "rating alone.")))
+    }
+    g <- grade_obj()
+    if (is.null(g) || is.null(g$indirectness_subdomains)) {
+      return(htmltools::p(
+        class = "pma-card-subtitle", style = "font-style: italic;",
+        "(Subdomain table not yet available - set a threshold first.)"))
+    }
+    ft <- tryCatch(indirectness_table(g), error = function(e) NULL)
+    if (is.null(ft)) {
+      return(htmltools::p(
+        class = "pma-card-subtitle", style = "font-style: italic;",
+        "(Subdomain table could not be rendered.)"))
+    }
+    htmltools::div(
+      style = "margin-top: 0.75rem;",
+      tryCatch(flextable::htmltools_value(ft),
+               error = function(e) htmltools::p(paste("Render error:",
+                                                      conditionMessage(e))))
+    )
+  })
+
   # Helper to collect display-panel inputs for a given prefix.
   .display_args <- function(prefix) {
     pick_text <- function(id) {
@@ -2315,7 +2701,11 @@ step3_server <- function(input, output, session, state) {
     )
   }, deleteFile = TRUE)
 
-  # ----- Publication bias: Q3 + Q4 (or Q5) flowchart-ordered block -----
+  # ----- Publication bias: Q2 + Q3 (or Q4) flowchart-ordered block -----
+  # Numbered to match Core GRADE 4 Fig 5's four nodes and the headings in
+  # step3_ui(): Q1 small-and-industry-sponsored (static, above), Q2
+  # statistical feasibility, Q3 asymmetry (k >= 10), Q4 documented
+  # unpublished studies (k < 10).
   output$pubias_main_block <- shiny::renderUI({
     obj <- state$ma
     if (is.null(obj)) {
@@ -2325,20 +2715,32 @@ step3_server <- function(input, output, session, state) {
 
     if (k >= 10) {
       htmltools::tagList(
-        # Q3
+        # Q2
         htmltools::h5(sprintf(
-          "Q3. Statistical analysis feasible - k = %d >= 10", k)),
+          "Q2. Statistical analysis feasible - k = %d >= 10", k)),
         htmltools::p(class = "pma-card-subtitle",
-          "Egger's linear regression test is run automatically and shown ",
-          "below the funnel plot."),
+          sprintf(paste0("k counts the studies contributing a usable ",
+                         "estimate (finite effect and positive standard ",
+                         "error); studies with missing results are excluded ",
+                         "from it. The same k = %d gates every block on this ",
+                         "tab. Egger's linear regression test is run ",
+                         "automatically and shown below the funnel plot."),
+                  k)),
 
-        # Q4 funnel + Egger auto + visual override
-        htmltools::h5("Q4. Funnel plot inspection + Egger's test",
+        # Q3 funnel + Egger auto + visual override
+        htmltools::h5("Q3. Does funnel plot asymmetry strongly suggest publication bias?",
                       style = "margin-top: 1rem;"),
         htmltools::p(class = "pma-card-subtitle",
-          "Egger's p < 0.01 -> rate down 2 (serious); ",
-          "0.01 <= p < 0.05 -> rate down 1 (some concerns); ",
-          "p >= 0.05 -> do not rate down."),
+          "Egger's p < 0.05 -> rate down 1 (some concerns); ",
+          "p >= 0.05 -> do not rate down. There is no second tier: Core ",
+          "GRADE 4 never rates down two levels for publication bias."),
+        htmltools::p(class = "pma-card-subtitle",
+          htmltools::strong("Provenance: "),
+          paste0("the p < 0.05 cut-off is a pmatools operational convention, ",
+                 "not a Core GRADE criterion. Figure 5 asks this node ",
+                 "qualitatively - whether asymmetry 'strongly suggests ",
+                 "publication bias' - and names no threshold. Override it ",
+                 "with a visual judgment whenever the plot warrants one.")),
         shinycssloaders::withSpinner(
           shiny::imageOutput("pubias_funnel", height = "auto"),
           type = 4, color = "#0f172a", size = 0.6,
@@ -2382,18 +2784,23 @@ step3_server <- function(input, output, session, state) {
     } else {
       htmltools::tagList(
         htmltools::h5(sprintf(
-          "Q3. Statistical analysis NOT feasible - k = %d < 10", k)),
+          "Q2. Statistical analysis NOT feasible - k = %d < 10", k)),
         htmltools::p(class = "pma-card-subtitle",
-          "Egger's test would be unreliable below 10 studies. The algorithm ",
-          "relies on a registry / regulatory-database search instead."),
+          sprintf(paste0("k counts the studies contributing a usable ",
+                         "estimate (finite effect and positive standard ",
+                         "error); studies with missing results are excluded ",
+                         "from it. The same k = %d gates every block on this ",
+                         "tab. Egger's test would be unreliable below 10 ",
+                         "studies, so Figure 5 routes to the registry ",
+                         "question instead."), k)),
 
-        htmltools::h5("Q5. Documentation of unpublished studies",
+        htmltools::h5("Q4. Documentation of unpublished studies",
                       style = "margin-top: 1rem;"),
         htmltools::p(class = "pma-card-subtitle",
           "If unpublished trials are documented in a registry ",
           "(eg, ClinicalTrials.gov, FDA), rate down 1."),
         shiny::radioButtons("pubias_unpublished",
-          "Q5. Unpublished studies documented?",
+          "Q4. Unpublished studies documented?",
           choices = c("(use default: no)" = "", "No" = "no", "Yes" = "yes"),
           inline = TRUE)
       )
@@ -2436,14 +2843,17 @@ step3_server <- function(input, output, session, state) {
         "Egger's test could not be computed."))
     }
     pval <- res$p.value
-    judgment <- if (pval < 0.01) {
-      list(text = sprintf("p = %.3f < 0.01 - strong evidence of asymmetry. Auto judgment: serious (rate down 2).", pval),
-           color = "#a02020")
-    } else if (pval < 0.05) {
-      list(text = sprintf("p = %.3f (0.01 <= p < 0.05) - moderate evidence of asymmetry. Auto judgment: some concerns (rate down 1).", pval),
+    # Single tier. pmatools 0.5 removed the p < 0.01 -> "serious" (-2) rule
+    # because Core GRADE 4 never rates down two levels for publication bias.
+    judgment <- if (pval < 0.05) {
+      list(text = sprintf(paste0("p = %.3f < 0.05 - evidence of asymmetry. ",
+                                 "Auto judgment: some concerns (rate down 1)."),
+                          pval),
            color = "#c07020")
     } else {
-      list(text = sprintf("p = %.3f >= 0.05 - no strong evidence of asymmetry. Auto judgment: no rate down.", pval),
+      list(text = sprintf(paste0("p = %.3f >= 0.05 - no strong evidence of ",
+                                 "asymmetry. Auto judgment: no rate down."),
+                          pval),
            color = "#208050")
     }
     htmltools::div(
@@ -2452,7 +2862,14 @@ step3_server <- function(input, output, session, state) {
         judgment$color),
       htmltools::p(style = "margin: 0;",
         htmltools::strong("Egger's regression: "),
-        judgment$text)
+        judgment$text),
+      htmltools::p(style = paste0("margin: 0.35rem 0 0; font-size: 0.8rem; ",
+                                  "font-style: italic; ",
+                                  "color: hsl(var(--muted-foreground));"),
+        paste0("The p < 0.05 cut-off is a pmatools convention. Core GRADE 4 ",
+               "Figure 5 asks only whether asymmetry strongly suggests ",
+               "publication bias and names no p-value; the judgment can be ",
+               "no more than one level down either way."))
     )
   })
 
@@ -2528,7 +2945,12 @@ step3_server <- function(input, output, session, state) {
   # Trim-and-fill numerical summary
   output$pubias_trimfill_summary <- shiny::renderUI({
     obj <- state$ma
-    if (is.null(obj) || (obj$k %||% 0L) < 10) return(NULL)
+    # Same k as Q2, the funnel block and the missing-results forest. This
+    # used to gate on the raw obj$k, which counts studies with missing
+    # results too, so a dataset with missing-results studies could show the
+    # trim-and-fill summary while Q2 said statistical analysis was not
+    # feasible (and vice versa).
+    if (is.null(obj) || .effective_pubias_k(obj) < 10) return(NULL)
     tf <- tryCatch(suppressWarnings(meta::trimfill(obj)),
                    error = function(e) NULL)
     if (is.null(tf)) return(NULL)
@@ -2667,7 +3089,8 @@ step3_server <- function(input, output, session, state) {
 
   output$pubias_missing_forest <- shiny::renderImage({
     obj <- state$ma
-    if (is.null(obj) || (obj$k %||% 0L) < 10) {
+    # Effective k, not obj$k: see output$pubias_trimfill_summary.
+    if (is.null(obj) || .effective_pubias_k(obj) < 10) {
       return(list(src = "", contentType = "image/png",
                   alt = "Missing-results forest requires k >= 10.",
                   width = "100%"))
@@ -2692,6 +3115,16 @@ step3_server <- function(input, output, session, state) {
   shiny::observeEvent(input$indirectness, {
     state$indir_reviewed <- TRUE
   })
+  # The four subdomain answers are the primary input of the domain, so any of
+  # them clears the "no judgment recorded yet" banner too.
+  for (.indir_id in unname(STEP3_INDIR_SUBDOMAINS)) {
+    local({
+      id <- .indir_id
+      shiny::observeEvent(input[[id]], {
+        state$indir_reviewed <- TRUE
+      })
+    })
+  }
 
   output$indirectness_banner <- shiny::renderUI({
     if (isTRUE(state$indir_reviewed)) return(NULL)
