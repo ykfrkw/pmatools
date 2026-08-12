@@ -99,8 +99,8 @@ set <- grade_meta_multi(
                 threshold = 1.25, threshold_scale = "ratio",
                 small_values = "undesirable", follow_up = "12 weeks"),
   per_outcome = list(
-    "Depression severity" = list(threshold = 0.2, threshold_scale = "smd",
-                                 unit = "points")
+    "Depression severity" = list(threshold = 0.2, threshold_scale = "auto",
+                                 outcome_type = "absolute", unit = "points")
   ),
   primary = "Mortality"
 )
@@ -117,6 +117,9 @@ multi-outcome `analysis.R`, the data and a `README.txt` at the top level, and on
 data and evidence profile). An outcome that fails to fit or rate is skipped with
 a warning rather than taking the session down — the one exception being the Core
 GRADE 2 entry gate, which still aborts.
+
+Full walkthrough, `pmatools_set` reference and the export layout:
+[Multi-outcome workflow](#multi-outcome-workflow-v05).
 
 ### Shorter version: certainty rating only, on an existing meta object
 
@@ -151,6 +154,7 @@ GRADE is the international standard for rating certainty of evidence and grading
 |---------|-------|------|
 | Introduction | Why Core GRADE is needed | — |
 | Core GRADE 1 | Overview and PICO framing | 40262844 |
+| Core GRADE 2 | Choosing the target of certainty rating and assessing imprecision | doi:10.1136/bmj-2024-081904 |
 | Core GRADE 3 | Rating inconsistency | 40328467 |
 | Core GRADE 4 | Risk of bias, publication bias, rating up | 40360206 |
 | Core GRADE 5 | Assessing indirectness | 40393729 |
@@ -167,7 +171,7 @@ GRADE certainty starts at **High** for RCTs (or **Low** for observational studie
 |--------|---------------|--------|
 | Risk of Bias | Partial (auto flowchart when vector supplied) | User argument + meta weights |
 | Inconsistency | **Yes** (flowchart auto-detected from I², Q, TE direction) | meta object |
-| Indirectness | **No** — manual input | User argument |
+| Indirectness | **No** — manual input (optionally as PICO subdomains) | User argument |
 | Imprecision | **Yes** | CI width, null crossing, OIS |
 | Publication Bias | **Yes** (Egger's test when k ≥ 10) | meta object |
 
@@ -464,6 +468,89 @@ grade_meta(m, indirectness = "no")                  # scalar
 grade_meta(m, indirectness = indirectness_vec)       # per-study vector
 ```
 
+#### PICO subdomains (v0.5): `indirectness_subdomains`
+
+Core GRADE 5 asks the indirectness question **separately for each element of the
+PICO**, on a 4-point scale, rather than as one global judgment. Pass a data frame
+with the columns `subdomain`, `target`, `evidence` and `judgment`, one row per
+PICO element:
+
+```r
+ind_sub <- data.frame(
+  subdomain = c("Population", "Intervention", "Comparison", "Outcome"),
+  target    = c("Adults with major depressive disorder and comorbid insomnia",
+                "Cognitive behavioural therapy for insomnia (CBT-I)",
+                "Treatment as usual or attention control",
+                "Depression response (>=50% reduction in severity)"),
+  evidence  = c("17 RCTs, mostly recruited in sleep or psychiatry clinics.",
+                "Therapist-delivered and digital CBT-I; both used in practice.",
+                "Comparators ranged from waitlist to active attention control.",
+                "Response derived from continuous scales at 8-12 weeks only."),
+  judgment  = c("yes", "probably_yes", "probably_no", "probably_yes"),
+  stringsAsFactors = FALSE
+)
+
+g_ind <- grade_meta(m_response,
+                    study_design            = "RCT",
+                    rob                     = rob_vec,
+                    small_values            = "undesirable",
+                    threshold_type          = "mid",
+                    threshold               = 1.25,
+                    threshold_scale         = "ratio",
+                    indirectness_subdomains = ind_sub,   # `indirectness` left at NULL
+                    ois_p0                  = 0.25, ois_p1 = 0.40,
+                    outcome_name            = "Depression response")
+```
+
+**Judgment mapping** ("Is the evidence sufficiently direct?"):
+
+| Subdomain judgment | Levels down |
+|---|---|
+| `"yes"` | 0 |
+| `"probably_yes"` | 0 |
+| `"probably_no"` | −1 (serious indirectness) |
+| `"no"` | −2 (very serious indirectness) |
+
+Aliases such as `"Probably No"` are normalized. The **domain judgment defaults to
+the worst case across the four subdomains** — in the example above
+`probably_no` for Comparison drives the whole domain to `some_concerns` (−1),
+even though the other three subdomains raise no concern.
+
+The normalized table comes back on the object as `$indirectness_subdomains`;
+`$domain_assessments` keeps its one-row-per-domain schema, so nothing downstream
+has to change.
+
+**Overriding the worst case requires a rationale.** Leave `indirectness` at its
+`NULL` default whenever the subdomain worst case should stand: once a subdomain
+table is supplied, *any* non-`NULL` scalar `indirectness` is read as a manual
+override and needs `indirectness_rationale`.
+
+```r
+# Aborts: "Overriding the Indirectness judgment requires indirectness_rationale ..."
+grade_meta(m_response, indirectness_subdomains = ind_sub, indirectness = "no",
+           threshold = 1.25, threshold_scale = "ratio")
+
+# Correct form of the override
+grade_meta(m_response, indirectness_subdomains = ind_sub,
+           indirectness           = "no",
+           indirectness_rationale = "Panel judged the waitlist comparator acceptable",
+           threshold = 1.25, threshold_scale = "ratio")
+```
+
+#### `indirectness_table()` — BMJ Core GRADE 5 judgment table
+
+```r
+indirectness_table(g_ind)                       # flextable, renders in the RStudio Viewer
+flextable::save_as_docx(indirectness_table(g_ind), path = "indirectness.docx")
+```
+
+Renders `$indirectness_subdomains` in the publication format used by Core GRADE
+5: the target question, the evidence found, a colour-graded 4-option judgment row
+with the recorded answer ticked, and a merged "Judgment across subdomains" row
+carrying the overall judgment. It aborts (with a message telling you how to
+record subdomains) when the object has none. `export_bundle()` writes it as
+`indirectness_table.docx` for every outcome that recorded subdomains.
+
 ---
 
 ### 4. Imprecision (auto — BMJ Core GRADE 2, Fig 4)
@@ -675,6 +762,12 @@ g_response <- grade_meta(
   rob_dominant_threshold = 0.60,
   small_values           = "undesirable",  # large OR = more response = desirable
   indirectness           = "no",
+  ## Core GRADE 2 entry gate (v0.5): threshold_type defaults to "mid", so a
+  ## minimal important difference is mandatory. suggest_threshold(m_response)
+  ## returns the conventional OR 1.25 for a binary outcome.
+  threshold_type         = "mid",
+  threshold              = 1.25,
+  threshold_scale        = "ratio",
   ## Inconsistency: auto-detected (or override manually)
   ## inconsistency_ci_diff        = "yes"
   ## inconsistency_threshold_side = "majority_one_side"
@@ -691,9 +784,12 @@ g_response <- grade_meta(
 |--------|----------|-----------|--------|
 | **Risk of Bias** | no | High-RoB weight ≈ 38% < 60% → NOT dominated | auto flowchart |
 | **Indirectness** | no | Directly applicable PICO | manual |
-| **Inconsistency** | some_concerns | I² ≈ 36% > 25%; majority on same side (OR > 1) | auto |
-| **Imprecision** | no | CI [1.64, 3.23] does not cross null; OIS met | auto |
+| **Inconsistency** | some_concerns | I² ≈ 36% > 25%; all 17 estimates favour CBT-I, but no single zone around ±MID holds ≥ 80% → magnitude genuinely heterogeneous | auto |
+| **Imprecision** | no | OR 2.33, CI [1.66, 3.26] lies entirely beyond the MID; OIS met (1,222 / 97 events) | auto |
 | **Publication Bias** | no | Egger p ≈ 0.93; k = 17 ≥ 10 | auto |
+
+Rating target: **important effect** (Core GRADE 2 Fig 2), derived automatically
+because \|point estimate\| exceeds the MID.
 
 **Final certainty: Moderate ⊕⊕⊕○**
 (High − 1 for inconsistency = Moderate)
@@ -767,6 +863,221 @@ evidence_profile(g, palette = "classic",
                  other_downgrade = -1L)   # extra downgrade on top of domains
 flextable::save_as_docx(evidence_profile(g), path = "evidence_profile.docx")
 ```
+
+### `style = "bmj"` — BMJ Core GRADE Summary of Findings layout (v0.5)
+
+`sof_table()` and `grade_table()` take a `style` argument. **The GRADEpro layout
+is the default and is unchanged** — existing calls keep producing exactly the
+table they produced in v0.4. `style = "bmj"` switches to the Summary of Findings
+layout used in the BMJ Core GRADE series.
+
+```r
+sof_table(g_response, style = "bmj", follow_up = "8-12 weeks")
+
+# continuous outcome: name the unit of the absolute difference
+sof_table(g_severity, style = "bmj", follow_up = "12 weeks", unit = "PHQ-9 points")
+
+grade_table(list("Depression response" = g1, "Insomnia remission" = g2),
+            primary = "Depression response", style = "bmj")
+```
+
+The BMJ layout differs from GRADEpro in what each column carries:
+
+| Column | Example content |
+|---|---|
+| Outcome and follow-up | `Depression response` / `8-12 weeks` |
+| No of participants (No of studies and type) | `4762 (17 randomised controlled trials)` — the design is spelled out |
+| Relative effect (95% CI) | `Odds ratio 2.33 (1.66 to 3.26)` — the measure is spelled out, not just "OR" |
+| **Absolute effects (95% CI)** | A spanning block over three columns: *With control* `250 per 1000`, *With intervention* `437 per 1000 (356 to 521)`, and a new **Difference** column `187 more per 1000 (106 more to 271 more)`. `unit` labels the difference for continuous outcomes |
+| Certainty of evidence (quality of evidence) | `Moderate` / `Due to serious inconsistency` — the domains that pulled it down |
+| Plain language summary | `Treatment likely has an important benefit` (see below) |
+
+**Plain language summaries** are the statements from **Core GRADE 2, Table 1**,
+carried verbatim. Which one is used follows from the certainty level,
+`threshold_type` and the derived `rating_target` — pmatools does not paraphrase
+them. Objects created before the Core GRADE 2 entry gate (no `$rating_target`)
+simply omit the column rather than guessing.
+
+When the rated analysis is a low-risk-of-bias refit, the table carries a
+footnote saying so; `grade_table()` numbers the marker per row, so a table
+mixing analysis sets says which rows were restricted.
+
+`grade_report()` accepts the same `style` argument (`"gradepro"` by default).
+`export_bundle()` on a `pmatools_set` is the one place where **`"bmj"` is the
+default**; the single-outcome bundle has no `style` argument and always writes
+the GRADEpro layout.
+
+---
+
+## Multi-outcome workflow (v0.5)
+
+Calling `grade_meta()` by hand once per outcome stops scaling after two or three
+outcomes. Give the long-format data an **`outcome` column** and the whole
+pipeline runs once per outcome:
+
+```
+ingest_data()        long data with an `outcome` column
+      |
+run_ma_multi()       splits on `outcome`, one run_ma() per outcome
+      |              -> named list of meta objects
+grade_meta_multi()   one grade_meta() per outcome (common + per-outcome args)
+      |              -> pmatools_set
+reorder_outcomes()   row order of the summary table = export directory numbering
+set_primary()        primary / secondary grouping
+      |
+grade_table()        one summary table for the whole set
+export_bundle()      ZIP with outcomes/NN_name/ sub-directories
+```
+
+`run_ma()` itself is unchanged and still **aborts** on data holding more than one
+outcome — `run_ma_multi()` is the only supported way to batch.
+
+### Worked example
+
+Runs end to end on the bundled sample data (see also `sample.R`, section 9).
+`df`, `rob_vec` and the CBT-I data frame come from the
+[worked example](#worked-example-cbt-i-for-depression-response) above.
+
+```r
+## One long table holding both outcomes ------------------------------------
+long_response <- rbind(
+  data.frame(studlab = df$study, outcome = "Depression response",
+             treat = "experimental", n = df$n_e, event = df$event_e,
+             rob = rob_vec, stringsAsFactors = FALSE),
+  data.frame(studlab = df$study, outcome = "Depression response",
+             treat = "control", n = df$n_c, event = df$event_c,
+             rob = rob_vec, stringsAsFactors = FALSE)
+)
+long_remission <- long_response
+long_remission$outcome <- "Insomnia remission"
+long_remission$event   <- pmax(0, round(long_remission$event * 0.7))  # placeholder
+
+data_multi <- ingest_data(rbind(long_response, long_remission), format = "long")
+
+## One meta-analysis per outcome -------------------------------------------
+ma_list <- run_ma_multi(data_multi, sm = "OR", method.tau = "REML", incr = 0.1)
+names(ma_list)
+#> [1] "Depression response" "Insomnia remission"
+
+## One certainty rating per outcome ----------------------------------------
+set <- grade_meta_multi(
+  ma_list,
+  ## arguments shared by every outcome
+  common = list(
+    study_design          = "RCT",
+    threshold_type        = "mid",
+    threshold             = 1.25,
+    threshold_scale       = "ratio",
+    small_values          = "undesirable",
+    rob                   = rob_vec,
+    pubias_small_industry = "no",
+    follow_up             = "8-12 weeks"   # BMJ "Outcome and follow-up" column
+  ),
+  ## arguments for one outcome only; these override `common`
+  per_outcome = list(
+    "Depression response" = list(ois_p0 = 0.25, ois_p1 = 0.40),
+    "Insomnia remission"  = list(ois_p0 = 0.18, ois_p1 = 0.30)
+  ),
+  primary = "Depression response"
+)
+
+print(set)
+#> -- Multi-outcome Certainty Set (Core GRADE series) -------
+#>  Outcomes : 2
+#>  Primary  : Depression response
+#>  Data     : 68 rows of long-format data
+#>
+#>   #  Outcome / certainty / rating target / analysis set
+#>   1  Depression response  [primary]
+#>      Moderate   | Important effect         | all studies
+#>   2  Insomnia remission
+#>      High       | Important effect         | all studies
+#> ----------------------------------------------------------
+
+## Order and grouping ------------------------------------------------------
+set <- reorder_outcomes(set, c("Insomnia remission", "Depression response"))
+set <- set_primary(set, "Depression response")
+
+## Outputs -----------------------------------------------------------------
+grade_table(set, style = "bmj")     # rows follow set$order
+grade_report(set, format = "docx", output_dir = "outputs")
+export_bundle(set, output_dir = "outputs", bundle_name = "cbti_multi")
+```
+
+`sm` and `outcome_type` may be a single value (applied to every outcome) or a
+list named by outcome, so **binary and continuous outcomes can share one
+session**:
+
+```r
+run_ma_multi(data_multi,
+             sm           = list("Mortality" = "RR", "Depression severity" = "SMD"),
+             outcome_type = list("Mortality" = "binary",
+                                 "Depression severity" = "continuous"))
+```
+
+### The `pmatools_set` class
+
+`grade_meta_multi()` returns a `pmatools_set`:
+
+| Field | Contents |
+|---|---|
+| `$outcomes` | named list of `pmatools` objects (a failed outcome is `NULL`) |
+| `$order` | display order; every outcome exactly once |
+| `$primary` | primary outcomes (possibly empty) |
+| `$data` | the long-format data the set was built from |
+
+`print()` / `summary()` list each outcome's certainty, rating target and
+analysis set — a low-risk-of-bias refit is called out per outcome, and a set
+mixing analysis sets says so. `grade_table()`, `grade_report()` and
+`export_bundle()` all accept the set directly; the named-list API is unchanged.
+
+`reorder_outcomes(set, order)` requires `order` to list every outcome exactly
+once. `set_primary(set, primary)` sets the primary group; `NULL` clears it.
+Both drive the summary-table row order **and** the numbering of the export
+sub-directories.
+
+**Failure semantics.** An outcome that fails to fit or rate is recorded as
+`NULL` with a warning, so the rest of the batch completes. The one exception is
+the Core GRADE 2 entry gate (`threshold_type = "mid"` without a MID): that abort
+carries condition class `"pmatools_threshold_gate"` and is re-raised unchanged,
+so a batch run cannot be used to get around the gate.
+
+### Export layout
+
+`export_bundle()` on a `pmatools_set` writes the hierarchical layout — set-level
+files at the top, one directory per outcome below:
+
+```
+cbti_multi.zip
+├── summary_of_findings.docx      rows in set$order
+├── summary_of_findings.csv       the same table as plain text
+├── evidence_profile.docx         one profile per outcome
+├── analysis.R                    multi-outcome reproducibility script
+├── data_long.csv                 every outcome
+├── README.txt                    outcome order and per-outcome analysis sets
+└── outcomes/
+    ├── 01_insomnia_remission/
+    │   ├── forest_plot.pdf / .png          the analysis actually rated
+    │   ├── forest_plot_full.pdf / .png     only after a low-RoB refit
+    │   ├── forest_plot_rob.pdf / .png      only when RoB labels are known
+    │   ├── funnel_plot.pdf / .png
+    │   ├── results.txt
+    │   ├── data_long.csv                   this outcome only
+    │   ├── evidence_profile.docx
+    │   └── indirectness_table.docx         only when subdomains were recorded
+    └── 02_depression_response/
+        └── ...
+```
+
+Directory names carry the set order as a zero-padded numeric prefix, so
+`reorder_outcomes()` renumbers them. A non-ASCII outcome name falls back to
+`outcome_NN` so the ZIP stays portable. The bundled `analysis.R` re-issues the
+`run_ma_multi()` / `grade_meta_multi()` / `reorder_outcomes()` / `set_primary()`
+calls with the arguments actually used, and is syntax-checked before it is
+written.
+
+The **single-outcome** bundle (`export_bundle(ma, g, ...)`) still writes the
+original flat layout; only a `pmatools_set` triggers the hierarchical one.
 
 ---
 
@@ -882,30 +1193,52 @@ other method id in `method_table`).
 
 ### `grade_meta()`
 
+> Abridged — [SPEC.md §4.5](SPEC.md) is authoritative for the full signature and
+> `?grade_meta` for every argument.
+
 ```r
 grade_meta(
   meta_obj,
   study_design  = "RCT",           # "RCT" | "obs"
 
+  ## Entry gate and rating target (Core GRADE 2, v0.5)
+  threshold_type    = "mid",       # "mid" (requires a threshold) | "null"
+  threshold         = NULL,        # minimal important difference
+  threshold_scale   = "auto",      # "auto" | "ratio" | "ard" | "te_scale"
+                                   #   "auto" reads the scale off meta_obj$sm:
+                                   #   ratio for OR/RR/HR/RoM, raw units for MD,
+                                   #   standardized units for SMD
+  threshold_baseline = NULL,       # baseline risk when threshold_scale = "ard"
+  require_threshold = TRUE,        # FALSE restores the pre-0.5 MID-free behaviour
+  rating_target     = NULL,        # manual override; needs rating_target_rationale
+  rating_target_rationale = NULL,
+
   ## Risk of Bias
   rob           = NULL,            # scalar | vector length k | column name | NULL
+  rob_rationale          = NULL,   # required when `rob` is a scalar override
   rob_some_concerns      = "low",  # fold "some concerns" into "low" | "high"
   rob_overrides          = NULL,   # named chr, keyed on studlab
   rob_override_rationale = NULL,   # named chr, same keys
   rob_dominant_threshold = 0.60,   # weight share at/above which evidence is "dominated"
   rob_refit              = TRUE,   # refit on low-RoB studies when Fig 2 says so
+  rob_inflation_threshold = 0.10,  # relative inflation feeding the direction check
   small_values  = NULL,            # "undesirable" | "desirable" | NULL (conservative)
 
   ## Indirectness
-  indirectness  = "no",            # scalar | vector | column name
+  indirectness  = NULL,            # scalar | vector | column name; NULL = no concern
+  indirectness_rationale  = NULL,  # required for a scalar override
+  indirectness_subdomains = NULL,  # PICO data.frame (Core GRADE 5, v0.5)
 
   ## Inconsistency
   inconsistency = NULL,            # scalar override (skips flowchart)
+  inconsistency_rationale          = NULL,  # required for a scalar override
   inconsistency_ci_diff            = NULL,  # "yes" | "no" | NULL (auto-detect)
   inconsistency_threshold_side     = NULL,  # "majority_one_side" | "opposite_sides"
   inconsistency_subgroup_explained = NULL,  # "yes" | "no"
 
   ## Imprecision
+  imprecision   = NULL,            # scalar override (bypasses the Fig 4 flowchart)
+  imprecision_rationale = NULL,    # required for a scalar override
   outcome_type  = "relative",      # "relative" (OR/RR/HR) | "absolute" (MD/SMD)
   ois_events    = NULL,            # binary: target events (direct)
   ois_n         = NULL,            # continuous: target N (direct)
@@ -923,6 +1256,8 @@ grade_meta(
   pubias_small_industry   = NULL,  # "yes" | "no"
   pubias_funnel_asymmetry = NULL,  # "yes" | "no" | NULL (auto Egger, k ≥ 10)
   pubias_unpublished      = NULL,  # "yes" | "no" | NULL (k < 10)
+  pubias_registry_complete = NULL, # "yes" rules the domain out structurally
+  pubias_rationale         = NULL, # required for a scalar override
 
   ## Labels
   outcome_name  = NULL             # outcome label for SoF table
@@ -941,19 +1276,61 @@ grade_meta(
 | `$outcome_name` | outcome label |
 | `$outcome_type` | "relative" or "absolute" |
 | `$baseline_risk` | resolved baseline risk (numeric or NULL) |
-| `$meta` | original meta object |
+| `$meta` | the analysis every domain was assessed on — the **refitted** one after a low-RoB refit |
+| `$meta_full` | the all-studies analysis (v0.5) |
+| `$rob_analysis_set` | `"all"` or `"low_only"` (v0.5) |
+| `$rob_refit` | whether the refit actually happened (v0.5) |
+| `$rating_target` | `"important_effect"` / `"little_to_no_difference"` / `"non_null_effect"` (v0.5) |
+| `$rating_target_note`, `$rating_target_auto`, `$threshold_type` | how the target was arrived at (v0.5) |
+| `$indirectness_subdomains` | normalized PICO subdomain table, when supplied (v0.5) |
 
-### `sof_table(x, palette, per, prediction)`
+### `sof_table(x, style, palette, per, prediction, follow_up, unit, ...)`
 
 Generates a single-outcome flextable. `auto = TRUE` rows are computed by `pmatools`.
+`style = "bmj"` switches to the BMJ Core GRADE layout; `follow_up` / `unit` feed it.
 
-### `grade_table(outcomes, primary, palette, show_domains, per, prediction)`
+### `grade_table(outcomes, primary, style, palette, show_domains, per, prediction, follow_up, unit, ...)`
 
 Generates a multi-outcome flextable with optional primary/secondary grouping.
+`outcomes` is a named list of `pmatools` objects **or** a `pmatools_set`.
 
-### `grade_report(outcomes, primary, palette, format, output_dir, output_file, title, show_domains, per, prediction)`
+### `grade_report(outcomes, primary, palette, style, format, output_dir, output_file, title, show_domains, per, prediction, ...)`
 
-Exports a full certainty appendix (Core GRADE series) in docx / html / pdf / md format.
+Exports a full certainty appendix (Core GRADE series) in docx / html / pdf / md
+format. `outcomes` accepts a `pmatools_set` too.
+
+### Exported functions at a glance
+
+All 25 exports of `NAMESPACE`, one line each. Details are in `?function_name`
+and in [SPEC.md §4](SPEC.md).
+
+| Function | What it does |
+|---|---|
+| `ingest_data()` | Read long or wide study data (file, data frame or clipboard), auto-detect the format, apply column-name mapping, return the canonical long tibble |
+| `run_ma()` | Fit one pairwise meta-analysis via `{meta}` (binary or continuous); aborts on data holding more than one outcome |
+| `run_ma_multi()` | Split long data on its `outcome` column and run one `run_ma()` per outcome |
+| `run_rare_ma()` | Fit a suite of rare-event methods side by side (beta-binomial is the default primary on the OR scale) |
+| `rare_event_diagnostics()` | Report event rates, zero cells and whether the rare-event flow should be used |
+| `grade_meta()` | Rate certainty for one outcome across the five Core GRADE domains; returns a `pmatools` object |
+| `grade_meta_multi()` | Run `grade_meta()` per outcome from `common` + `per_outcome` arguments; returns a `pmatools_set` |
+| `reorder_outcomes()` | Set the display order of a `pmatools_set` (table rows and export directory numbers) |
+| `set_primary()` | Set (or clear) the primary outcomes of a `pmatools_set` |
+| `sof_table()` | Single-outcome Summary of Findings flextable (GRADEpro or BMJ style) |
+| `grade_table()` | Multi-outcome Summary of Findings flextable, with primary/secondary grouping |
+| `evidence_profile()` | Single-outcome Evidence Profile flextable with per-domain footnotes |
+| `indirectness_table()` | Core GRADE 5 PICO subdomain judgment table as a flextable |
+| `grade_report()` | Full certainty appendix in docx / html / pdf / md |
+| `export_bundle()` | Reproducible ZIP: data, `analysis.R`, results, plots and tables (S3 generic; flat layout for one outcome, `outcomes/NN_name/` for a `pmatools_set`) |
+| `plot_forest()` | Forest plot with automatic layout and log/linear axis selection |
+| `plot_forest_rob()` | Forest plot stratified by risk-of-bias level |
+| `plot_forest_indirectness()` | Forest plot stratified by indirectness level |
+| `plot_forest_pubias_subgroup()` | Two-subgroup forest plot of studies with available vs missing results (reference diagnostic; does not drive the judgment) |
+| `plot_trimfill_forest()` | Forest plot of the trim-and-fill imputed analysis |
+| `plot_rare_sensitivity_forest()` | Method-comparison forest for a `run_rare_ma()` result |
+| `plot_funnel()` | Contour-enhanced funnel plot, annotated with Egger's test when k ≥ 10 |
+| `suggest_threshold()` | Suggest a conventional minimal important difference for the effect measure in hand (ratio and absolute scales) |
+| `chinn_smd_to_or()` | Chinn's conversion of an SMD (and its CI) to an odds ratio |
+| `compute_pooled_sd()` | Sample-size-weighted pooled within-study SD across a `metacont` analysis, for deriving a continuous OIS or converting an MD threshold |
 
 ---
 
@@ -966,33 +1343,49 @@ pmatools/
 ├── DESCRIPTION
 ├── NAMESPACE
 ├── LICENSE                  ← CC BY 4.0
-├── PLAN.md
+├── PLAN.md                  ← implementation status + roadmap
+├── SPEC.md                  ← authoritative specification
+├── NEWS.md                  ← per-release change list
 ├── README.md
 ├── sample.R                 ← worked example; run line-by-line in RStudio
 ├── R/
-│   ├── utils.R              # constants + baseline_risk helpers
-│   ├── domain_rob.R         # Risk of Bias flowchart + Cochrane alias normalisation
-│   ├── domain_indirectness.R
+│   ├── utils.R                 # constants, threshold + baseline_risk helpers
+│   ├── data_ingest.R           # long/wide ingestion, aliases, `outcome` column
+│   ├── run_ma.R                # {meta} wrapper
+│   ├── multi_outcome.R         # run_ma_multi / grade_meta_multi / pmatools_set
+│   ├── rare_events.R           # rare-event method suite + diagnostics
+│   ├── domain_rob.R            # Risk of Bias Fig 2 flowchart + low-RoB refit
+│   ├── domain_indirectness.R   # domain judgment + PICO subdomains
 │   ├── domain_inconsistency.R  # auto-detect + manual flowchart
-│   ├── domain_imprecision.R    # OIS auto-calculation
+│   ├── domain_imprecision.R    # Fig 4 flowchart + OIS
 │   ├── domain_pubias.R         # Egger's test + Fig 5 flowchart
+│   ├── rating_target.R         # Core GRADE 2 entry gate + rating target
 │   ├── grade_meta.R            # main function + print/summary
-│   ├── sof_table.R             # single-outcome flextable + helpers
+│   ├── sof_table.R             # single-outcome flextable (GRADEpro layout)
+│   ├── sof_bmj.R               # BMJ Core GRADE SoF layout
+│   ├── plain_language.R        # Core GRADE 2 Table 1 statements
 │   ├── grade_table.R           # multi-outcome flextable
+│   ├── evidence_profile.R      # evidence-profile flextable
+│   ├── indirectness_table.R    # Core GRADE 5 subdomain table
 │   ├── grade_report.R          # Appendix report
+│   ├── plot_*.R                # forest / funnel / stratified / trim-fill plots
+│   ├── export_bundle.R         # single-outcome ZIP
+│   ├── export_bundle_multi.R   # pmatools_set ZIP (outcomes/NN_name/)
 │   └── data.R                  # cbti_depression dataset documentation
-├── inst/extdata/
-│   └── cbti_depression.csv  # bundled sample data (synthetic)
+├── inst/
+│   ├── extdata/cbti_depression.csv       # bundled sample data (synthetic)
+│   └── templates/                        # analysis.R templates (single + multi)
 ├── data-raw/
 │   └── cbti_depression.R    # script to generate data/*.rda
-├── tests/testthat/
-│   └── test-grade_meta.R
+├── tests/testthat/          # 23 test files (936 tests as of v0.5.0)
 └── outputs/                 # generated output (gitignored)
 ```
 
 ---
 
 ## Dependencies
+
+`DESCRIPTION` is authoritative; this table is the short version.
 
 | Package | Role |
 |---------|------|
@@ -1001,14 +1394,23 @@ pmatools/
 | officer | Word (docx) report generation |
 | tibble, dplyr | Data manipulation |
 | rlang | Error/warning handling |
+| glue | `analysis.R` template rendering |
+| zip | Export bundle archives |
 | rmarkdown | html/pdf report generation (Suggests) |
+| BiasedUrn, metafor, mmeta | Rare-event methods (Suggests) |
+| readxl, DT | Excel / clipboard ingestion and Shiny consumers (Suggests) |
 
 ---
 
 ## Limitations and future work
 
-1. **GRADE upgrade criteria** (large effect, dose-response, plausible confounding) not yet implemented (v0.2).
-2. **GRADEpro GDT integration** (JSON export) planned.
+1. **GRADE upgrade criteria** (large effect, dose-response, plausible confounding) are not implemented. Certainty can only be rated down; use `evidence_profile(other_text =, other_downgrade =)` to record any other consideration by hand.
+2. **GRADEpro GDT integration** (JSON import/export) planned.
+3. **No internationalization.** Every table, report and label is English only; there is no language argument anywhere in the API.
+4. **Pairwise only.** Network meta-analysis is out of scope.
+
+See [PLAN.md](PLAN.md) for the roadmap and [SPEC.md](SPEC.md) §11 for the full
+out-of-scope list.
 
 ---
 
@@ -1022,6 +1424,7 @@ pmatools/
 
 - Guyatt G, et al. Why Core GRADE is needed. BMJ 2025;389:bmj-2024-081902.
 - Guyatt G, et al. Core GRADE 1: Overview. BMJ 2025. PMID: 40262844.
+- Guyatt G, et al. Core GRADE 2: Choosing the target of certainty rating and assessing imprecision. BMJ 2025;389:e081904. doi:10.1136/bmj-2024-081904.
 - Guyatt G, et al. Core GRADE 3: Inconsistency. BMJ 2025. PMID: 40328467.
 - Guyatt G, et al. Core GRADE 4: Risk of bias, publication bias. BMJ 2025. PMID: 40360206.
 - Guyatt G, et al. Core GRADE 5: Indirectness. BMJ 2025. PMID: 40393729.

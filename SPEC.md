@@ -93,9 +93,12 @@ One row per **study × arm**. Required columns:
 
 | Column | Type | Description |
 |---|---|---|
+| `outcome` | chr | Outcome label. Per study × outcome. When present, the unit of a row is **study × outcome × arm** and `studlab` must appear twice *per outcome*. Required by `run_ma_multi()` (§4.10). |
 | `rob` | chr | Risk of bias label (Cochrane RoB 2.0 or GRADE level). Per-study. |
 | `indirectness` | chr | Indirectness label (No / Some / Serious / Very serious). Per-study. |
 | `subgroup` | chr / fct | Subgroup variable. Per-study. |
+
+**`outcome` column semantics.** `ingest_data()` recognises `outcome` and validates arm pairing within each (`studlab`, `outcome`) pair rather than within `studlab` alone; its diagnostics name the unit accordingly. `run_ma()` still **aborts** on data holding more than one outcome — `run_ma_multi()` splits on this column and is the only supported way to batch (§4.10). Data without an `outcome` column behaves exactly as before.
 
 ### 3.2 Wide format
 
@@ -119,7 +122,7 @@ One row per **study**. Required columns:
 | `mean_e`, `mean_c` | num | Means |
 | `sd_e`, `sd_c` | num | Standard deviations |
 
-Optional columns (`rob`, `indirectness`, `subgroup`) are per-study (single column).
+Optional columns (`rob`, `indirectness`, `subgroup`) are per-study (single column). An `outcome` column is accepted here too, but the multi-outcome workflow (§4.10) consumes the canonical **long** tibble that `ingest_data()` returns.
 
 ### 3.3 Format auto-detection
 
@@ -1016,7 +1019,9 @@ A list with at least:
 
 Exported but not specified in detail here; see the roxygen pages. They predate this section and their signatures are authoritative in the code:
 
-`run_rare_ma()`, `rare_event_diagnostics()`, `plot_rare_sensitivity_forest()`, `plot_trimfill_forest()`, `plot_forest_rob()`, `plot_forest_indirectness()`, `plot_forest_pubias_subgroup()`, `evidence_profile()`, `combine_arms()`.
+`run_rare_ma()`, `rare_event_diagnostics()`, `plot_rare_sensitivity_forest()`, `plot_trimfill_forest()`, `plot_forest_rob()`, `plot_forest_indirectness()`, `plot_forest_pubias_subgroup()`, `evidence_profile()`.
+
+(`combine_arms()` in `R/combine_arms.R` is **internal**, not in `NAMESPACE`; earlier revisions of this list wrongly named it as exported.)
 
 `evidence_profile(grade, palette, study_design, other_text, other_downgrade)` renders the per-outcome GRADE evidence profile used by both bundle layouts.
 
@@ -1409,9 +1414,11 @@ Does the CI cross the chosen threshold?
 
 ## 8. Performance & resource
 
-- `metaprop` baseline-risk pooling can be slow for large k. The function falls back to `"simple"` after 10 seconds (existing v0.1.0 behavior).
-- ZIP creation should complete in < 5 seconds for k ≤ 100.
-- `plot_forest()` should render in < 2 seconds for k ≤ 50.
+> **[v0.2 targets — not re-verified.]** The numbers below were written as v0.2 design targets and have **not** been measured again since. Treat them as intent, not as measured behaviour; in particular the multi-outcome bundle (§4.8.3) writes one plot set per outcome, so its wall time scales with the number of outcomes and was never covered by the single-outcome ZIP target. Re-measure before quoting any of these figures.
+
+- `metaprop` baseline-risk pooling can be slow for large k. **Correction:** the implementation falls back to the simple pooled proportion (with a warning) when `meta::metaprop()` **errors**; there is no time limit. Earlier revisions of this section claimed a 10-second timeout — no such timeout exists in `.compute_control_risk()`.
+- ZIP creation should complete in < 5 seconds for k ≤ 100. *(v0.2 target, unverified; single-outcome layout only.)*
+- `plot_forest()` should render in < 2 seconds for k ≤ 50. *(v0.2 target, unverified.)*
 - Memory: assume the `meta` object fits in memory; no streaming required.
 
 ---
@@ -1420,9 +1427,10 @@ Does the CI cross the chosen threshold?
 
 | File | Audience | Content |
 |---|---|---|
-| `README.md` (updated) | First-time users | install_github, 30-line quick start (CLI + Shiny URL), feature highlights |
+| `README.md` (updated) | First-time users | install_github, quick start (CLI + Shiny URL), how-to sections and an index of every exported function |
 | `sample.R` | R users | End-to-end CLI workflow on bundled `cbti_depression.csv`, run as part of the release gate (§10). **This is what shipped instead of `vignettes/pmatools_cli.Rmd`, which does not exist.** |
-| `PLAN.md` (updated) | Maintainer | v0.2 scope, what's done / not done, v0.3 roadmap |
+| `PLAN.md` (updated) | Maintainer | Implementation status per release + roadmap **only**. It deliberately holds no API signatures and no domain logic — those live here, and duplicating them is what made PLAN.md drift. |
+| `NEWS.md` | Users upgrading | Authoritative per-release change list, including breaking changes |
 | `SPEC.md` (this file) | Maintainer + AI implementers | Authoritative spec |
 | roxygen man pages | Function-level reference | `?grade_meta`, `?sof_table`, etc., kept in sync with SPEC |
 
