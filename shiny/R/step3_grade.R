@@ -121,17 +121,33 @@ step3_control_risk <- function(meta_obj) {
   out
 }
 
-# Both directions of the absolute threshold, plus what the algorithm
-# actually uses on the decrease side.
+# Event rate <-> ratio at a fixed control-group risk. Kept at file scope
+# because the equivalence table, the directed conversion and the notes all
+# need the same two maps; OR works on the odds, everything else on the risk.
+step3_ratio_from_p1 <- function(sm, p0, p1) {
+  if (identical(sm, "OR")) (p1 / (1 - p1)) / (p0 / (1 - p0)) else p1 / p0
+}
+step3_p1_from_ratio <- function(sm, p0, ratio) {
+  if (identical(sm, "OR")) {
+    odds <- (p0 / (1 - p0)) * ratio
+    odds / (1 + odds)
+  } else {
+    p0 * ratio
+  }
+}
+
+# Both directions of the absolute threshold, plus the mirror of the increase
+# side.
 #
 # The rating algorithm works on the log scale with a symmetric
-# +/- threshold_internal, so the decrease side it applies is the ratio
-# 1 / T where T is the increase-side ratio. That is NOT the ratio implied by
-# p0 - ard: e.g. RR with p0 = 0.18 and ard = 0.05 gives T = 0.23 / 0.18 =
-# 1.278 on the increase side, whose mirror 1 / 1.278 = 0.782 implies
-# p1 = 0.141, an absolute difference of -0.039 rather than -0.050. The gap is
-# larger for OR. Showing p0 - ard is a presentational convenience; the
-# mirrored values returned here are what the algorithm sees.
+# +/- threshold_internal, so whichever ratio it is given, the opposite side
+# it applies is that ratio inverted. Inverting the increase-side ratio T does
+# NOT give the ratio implied by p0 - ard: e.g. RR with p0 = 0.18 and
+# ard = 0.05 gives T = 0.23 / 0.18 = 1.278 on the increase side, whose mirror
+# 1 / 1.278 = 0.782 implies p1 = 0.141, an absolute difference of -0.039
+# rather than -0.050. The gap is larger for OR. `mirror_*` below is that
+# mirror of the increase side; step3_directed_threshold() decides which of
+# the two sides the app makes exact.
 #
 # Returns NULL unless p0 and the threshold are usable. `down_ok` is FALSE
 # when p0 - ard would leave the (0, 1) interval, in which case only the
@@ -148,19 +164,10 @@ step3_ard_equivalence <- function(sm, abs1000, base1000) {
   if (p1_up >= 1) return(NULL)
   p1_dn <- p0 - ard
 
-  .ratio <- function(p1) {
-    if (identical(sm, "OR")) (p1 / (1 - p1)) / (p0 / (1 - p0)) else p1 / p0
-  }
-  # Invert a ratio back to an event rate at the same p0 (the algorithm's
-  # decrease side).
-  .invert <- function(ratio) {
-    if (identical(sm, "OR")) {
-      odds <- (p0 / (1 - p0)) * ratio
-      odds / (1 + odds)
-    } else {
-      p0 * ratio
-    }
-  }
+  .ratio  <- function(p1)    step3_ratio_from_p1(sm, p0, p1)
+  # Invert a ratio back to an event rate at the same p0 (the side the
+  # algorithm mirrors).
+  .invert <- function(ratio) step3_p1_from_ratio(sm, p0, ratio)
 
   ratio_up     <- .ratio(p1_up)
   mirror_ratio <- 1 / ratio_up
@@ -183,6 +190,150 @@ step3_ard_equivalence <- function(sm, abs1000, base1000) {
     rr_up         = p1_up / p0,
     or_up         = (p1_up / (1 - p1_up)) / (p0 / (1 - p0))
   )
+}
+
+# --------------------------------------------------------------------------
+# Directed conversion of the absolute threshold
+# --------------------------------------------------------------------------
+# grade_meta() takes one scalar threshold and every domain judges against the
+# symmetric band +/- threshold_internal, so exactly one of the two sides can
+# be exact on the absolute scale. Which one matters is settled by where the
+# pooled effect lies: that is the crossing Risk of Bias, Inconsistency and
+# Imprecision actually turn on. So the app converts the absolute threshold on
+# that side and passes the result as threshold_scale = "ratio", instead of
+# handing pmatools the ARD (which always converts on the increase side).
+#
+# Effects closer to the null than this tolerance on the TE (log) scale have no
+# meaningful direction; the increase side is then made exact by convention and
+# the UI says so.
+STEP3_TE_NULL_TOL <- 1e-6
+
+step3_threshold_direction <- function(te_point) {
+  if (is.null(te_point) || length(te_point) != 1L || !is.numeric(te_point) ||
+      is.na(te_point) || !is.finite(te_point)) {
+    return("unavailable")
+  }
+  if (abs(te_point) <= STEP3_TE_NULL_TOL) return("indeterminate")
+  if (te_point < 0) "decrease" else "increase"
+}
+
+# Pooled TE of a meta object, on the TE (log) scale. Mirrors the vendored
+# .pooled_te() but is defined here so the app does not depend on an internal.
+step3_pooled_te <- function(obj) {
+  if (is.null(obj)) return(NA_real_)
+  te <- if (isTRUE(obj$random)) obj$TE.random else obj$TE.common
+  if (is.null(te) || length(te) == 0L || !all(is.finite(te))) {
+    te <- if (isTRUE(obj$random)) obj$TE.common else obj$TE.random
+  }
+  if (is.null(te) || length(te) == 0L) return(NA_real_)
+  as.numeric(te)[1]
+}
+
+# The ratio to pass to grade_meta(threshold =, threshold_scale = "ratio").
+#
+# `eq` is step3_ard_equivalence(); `direction` is step3_threshold_direction().
+# Returns NULL when `eq` is unusable. Fields:
+#   ratio        value to pass; always > 1, so threshold_internal =
+#                log(ratio) > 0 as pmatools requires. On the decrease side
+#                that is 1 / T_down, i.e. threshold_internal = |log(T_down)|.
+#   exact_side   "increase" or "decrease" - the side that is exact per 1,000
+#   exact_ratio  the equivalent effect measure on the exact side (< 1 when
+#                the exact side is the decrease side)
+#   exact_p1 / exact_ard     event rate and absolute difference it implies
+#   approx_ratio / approx_p1 / approx_ard   the mirrored, opposite side
+#   caveat       why the requested direction was not honoured, or NA
+step3_directed_threshold <- function(eq, direction = "increase") {
+  if (is.null(eq)) return(NULL)
+  sm <- eq$sm
+  p0 <- eq$p0
+  caveat <- NA_character_
+  want_down <- identical(direction, "decrease")
+
+  # Edge case 1: p0 - ard <= 0. The decrease-side conversion is undefined
+  # (no event rate is `ard` per 1,000 below the control-group risk), so the
+  # increase side is used and the decrease side stays the mirrored value.
+  if (want_down && !isTRUE(eq$down_ok)) {
+    caveat <- sprintf(paste0(
+      "The pooled effect is below the null, but the threshold (%g per 1,000) ",
+      "is not smaller than the control-group risk (%g per 1,000), so no event ",
+      "rate lies that far below it and the decrease-side conversion is ",
+      "undefined. The increase side is used instead; the decrease side ",
+      "remains the mirrored approximation."),
+      1000 * eq$ard, 1000 * p0)
+    want_down <- FALSE
+  }
+  # Edge case 2: the pooled effect sits on the null (or is unavailable), so
+  # neither side is the one that decides the judgments.
+  if (identical(direction, "indeterminate")) {
+    caveat <- paste0(
+      "The pooled effect is at (or indistinguishable from) the null, so ",
+      "neither direction is the one the judgments turn on. The increase side ",
+      "is made exact by convention.")
+  } else if (identical(direction, "unavailable")) {
+    caveat <- paste0(
+      "The pooled effect is not available, so the direction could not be ",
+      "read from it. The increase side is made exact by convention.")
+  }
+
+  exact_ratio <- if (want_down) eq$ratio_dn else eq$ratio_up
+  if (is.null(exact_ratio) || !is.finite(exact_ratio) || exact_ratio <= 0) {
+    return(NULL)
+  }
+  ratio_arg    <- if (exact_ratio < 1) 1 / exact_ratio else exact_ratio
+  approx_ratio <- 1 / exact_ratio
+  approx_p1    <- step3_p1_from_ratio(sm, p0, approx_ratio)
+  exact_p1     <- step3_p1_from_ratio(sm, p0, exact_ratio)
+
+  list(
+    sm           = sm,
+    p0           = p0,
+    ard          = eq$ard,
+    direction    = direction,
+    exact_side   = if (want_down) "decrease" else "increase",
+    approx_side  = if (want_down) "increase" else "decrease",
+    ratio        = ratio_arg,
+    exact_ratio  = exact_ratio,
+    exact_p1     = exact_p1,
+    exact_ard    = exact_p1 - p0,
+    approx_ratio = approx_ratio,
+    approx_p1    = approx_p1,
+    approx_ard   = approx_p1 - p0,
+    caveat       = caveat
+  )
+}
+
+# One sentence stating, in absolute terms, the threshold that was used and
+# which side of it is exact. This replaces the pmatools $threshold_note that
+# threshold_scale = "ard" used to produce: with threshold_scale = "ratio" the
+# package no longer knows the absolute value, so the app has to say it, or the
+# Evidence Profile footnote and the domain notes would lose the provenance.
+step3_threshold_note <- function(dir) {
+  if (is.null(dir)) return(NULL)
+  sm <- dir$sm
+  note <- sprintf(paste0(
+    "Absolute threshold %g per 1,000 at a baseline risk %g per 1,000, ",
+    "converted on the %s side, where it is exact (equivalent %s %.3f: ",
+    "%.0f -> %.0f per 1,000, %+.0f per 1,000). Domains judge against the ",
+    "symmetric band +/- log(%.3f), so the %s side is the mirrored value ",
+    "%s %.3f, implying %+.0f per 1,000 rather than %+.0f"),
+    1000 * dir$ard, 1000 * dir$p0, dir$exact_side, sm, dir$exact_ratio,
+    1000 * dir$p0, 1000 * dir$exact_p1, 1000 * dir$exact_ard,
+    dir$ratio, dir$approx_side, sm, dir$approx_ratio,
+    1000 * dir$approx_ard, -1000 * dir$exact_ard)
+  if (!is.na(dir$caveat)) note <- paste0(note, ". ", sub("[.]$", "", dir$caveat))
+  note
+}
+
+# Append a sentence to ONE domain's notes, in the " | " style the vendored
+# .append_domain_note() uses across the whole table. Needed because the app
+# now writes the threshold note itself (see grade_obj()).
+step3_append_domain_note <- function(d, domain, note) {
+  if (is.null(d) || is.null(note) || !length(note) || !nzchar(note)) return(d)
+  idx <- which(d$domain == domain)
+  if (!length(idx)) return(d)
+  d$notes[idx] <- ifelse(is.na(d$notes[idx]), note,
+                         paste0(d$notes[idx], " | ", note))
+  d
 }
 
 # --------------------------------------------------------------------------
@@ -1598,14 +1749,26 @@ step3_server <- function(input, output, session, state) {
   })
   shiny::outputOptions(output, "threshold_panel", suspendWhenHidden = FALSE)
 
+  # The direction the pooled effect lies in, and the conversion the app
+  # therefore uses. Read from state$ma, the Step 2 all-studies analysis: it
+  # is the only analysis available before grade_meta() runs, and it is the
+  # one Risk of Bias is assessed on. When Core GRADE 4 sends grade_meta()
+  # off to refit on the low-risk subset and that refit flips the sign,
+  # grade_obj() re-runs with the corrected direction (see there).
+  .threshold_direction <- shiny::reactive(
+    step3_threshold_direction(step3_pooled_te(state$ma)))
+
   # Live equivalent-effect display for the absolute mode. Shows BOTH
-  # directions, and states plainly that the decrease side is a
-  # presentational convenience: the algorithm is symmetric on the log scale,
-  # so the decrease side it applies is 1 / T, not the ratio implied by
-  # p0 - threshold. Same wording as threshold_summary_text() below - these
-  # two are the app's copies; a third, near-identical sentence lives in the
-  # vendored utils.R and lands in the domain notes and is left alone.
-  .equiv_lines <- function(eq) {
+  # directions and names the one that is exact.
+  #
+  # The algorithm is symmetric on the log scale: whichever ratio it is given,
+  # the opposite side it applies is that ratio inverted. So the app converts
+  # the absolute threshold on the side the pooled effect lies (that is the
+  # crossing the judgments turn on) and hands grade_meta() the ratio rather
+  # than the ARD. The residual asymmetry cannot be removed - it is moved to
+  # the other side, and named here. Same wording as threshold_summary_text()
+  # below; these two are the app's copies.
+  .equiv_lines <- function(eq, dir = NULL) {
     sm <- eq$sm
     up <- sprintf("Increase: %.0f -> %.0f per 1,000, equivalent %s %.3f",
                   1000 * eq$p0, 1000 * eq$p1_up, sm, eq$ratio_up)
@@ -1615,14 +1778,27 @@ step3_server <- function(input, output, session, state) {
     } else {
       "Decrease: not shown - the threshold exceeds the control-group risk."
     }
+    if (is.null(dir)) {
+      return(list(up = up, dn = dn, alg = character(), approx = character()))
+    }
     alg <- sprintf(
-      paste0("What the algorithm uses: a symmetric +/- log(%.3f) band, so ",
-             "its decrease side is %s %.3f, which at this control-group ",
-             "risk implies %.0f per 1,000 - an absolute difference of ",
-             "%+.0f per 1,000, not %+.0f."),
-      eq$ratio_up, sm, eq$mirror_ratio, 1000 * eq$mirror_p1,
-      1000 * eq$mirror_ard, -1000 * eq$ard)
-    list(up = up, dn = dn, alg = alg)
+      paste0("What the algorithm uses: a symmetric +/- log(%.3f) band, ",
+             "converted on the %s side because the pooled effect lies %s ",
+             "the null. That side is exact - %s %.3f is %+.0f per 1,000 at ",
+             "this control-group risk."),
+      dir$ratio, dir$exact_side,
+      if (identical(dir$exact_side, "decrease")) "below" else "above",
+      sm, dir$exact_ratio, 1000 * dir$exact_ard)
+    approx <- sprintf(
+      paste0("The %s side is therefore the approximate one: the band's ",
+             "mirror is %s %.3f, which implies %+.0f per 1,000 rather than ",
+             "%+.0f. Imprecision's two-level rule asks whether the ",
+             "confidence interval crosses both thresholds, so that one ",
+             "crossing is judged against the mirrored value."),
+      dir$approx_side, sm, dir$approx_ratio,
+      1000 * dir$approx_ard, -1000 * dir$exact_ard)
+    if (!is.na(dir$caveat)) approx <- paste(approx, dir$caveat)
+    list(up = up, dn = dn, alg = alg, approx = approx)
   }
 
   output$threshold_equiv <- shiny::renderUI({
@@ -1639,14 +1815,18 @@ step3_server <- function(input, output, session, state) {
         "1,000 (threshold + control-group risk must stay below 1,000) to ",
         "see the equivalent relative effect."))
     }
-    ln <- .equiv_lines(eq)
+    dir <- step3_directed_threshold(eq, .threshold_direction())
+    ln  <- .equiv_lines(eq, dir)
+    .exact_first <- identical(dir$exact_side %||% "increase", "decrease")
     htmltools::div(
       style = paste0(
         "padding: 0.5rem 0.75rem; background: #f5f5f5; ",
         "border-left: 4px solid #0f172a; margin: 0.5rem 0; ",
         "font-size: 0.85rem;"),
-      htmltools::div(htmltools::strong(ln$up)),
-      htmltools::div(ln$dn),
+      # The exact side is emboldened, so the reader can see at a glance which
+      # of the two the judgments are anchored to.
+      htmltools::div(if (.exact_first) ln$up else htmltools::strong(ln$up)),
+      htmltools::div(if (.exact_first) htmltools::strong(ln$dn) else ln$dn),
       htmltools::div(
         style = "margin-top: 0.35rem;",
         sprintf("On other scales, the increase side is RR %.3f / OR %.3f.",
@@ -1654,7 +1834,13 @@ step3_server <- function(input, output, session, state) {
       htmltools::div(
         style = paste0("margin-top: 0.35rem; font-style: italic; ",
                        "color: hsl(var(--muted-foreground));"),
-        ln$alg)
+        ln$alg),
+      if (length(ln$approx)) {
+        htmltools::div(
+          style = paste0("margin-top: 0.35rem; font-style: italic; ",
+                         "color: hsl(var(--muted-foreground));"),
+          ln$approx)
+      }
     )
   })
   shiny::outputOptions(output, "threshold_equiv", suspendWhenHidden = FALSE)
@@ -1683,12 +1869,14 @@ step3_server <- function(input, output, session, state) {
           "Absolute threshold: %g per 1,000 (control-group risk missing ",
           "or invalid)"), ta), lines = character()))
       }
-      ln <- .equiv_lines(eq)
+      dir <- step3_directed_threshold(eq, .threshold_direction())
+      ln  <- .equiv_lines(eq, dir)
       return(list(
         head = sprintf(
           "Absolute threshold: %g per 1,000 at a control-group risk of %g per 1,000",
           ta, tb),
-        lines = c(ln$up, ln$dn, ln$alg)))
+        lines = c(ln$up, ln$dn, ln$alg),
+        approx = ln$approx))
     }
     th <- threshold_state()
     if (!is.finite(th)) {
@@ -1699,7 +1887,13 @@ step3_server <- function(input, output, session, state) {
   threshold_summary_text <- shiny::reactive(threshold_summary()$head)
 
   # Read-only threshold display inside RoB / Inconsistency / Imprecision.
-  .render_threshold_readonly <- function() {
+  #
+  # `domain = "impre"` adds the residual-asymmetry sentence, because
+  # Imprecision is the domain it bites in: its two-level rule tests the
+  # confidence interval against both the important-benefit and the
+  # important-harm threshold, and by construction only one of those two is
+  # exact on the absolute scale.
+  .render_threshold_readonly <- function(domain = NULL) {
     ts <- threshold_summary()
     htmltools::div(
       style = paste0(
@@ -1713,6 +1907,13 @@ step3_server <- function(input, output, session, state) {
                          "color: hsl(var(--muted-foreground));"),
           lapply(ts$lines, htmltools::div))
       },
+      if (identical(domain, "impre") && length(ts$approx %||% character())) {
+        htmltools::div(
+          style = paste0("margin: 0.35rem 0 0; font-size: 0.85rem; ",
+                         "font-style: italic; ",
+                         "color: hsl(var(--muted-foreground));"),
+          ts$approx)
+      },
       htmltools::p(
         class = "pma-card-subtitle",
         style = "margin: 0.25rem 0 0;",
@@ -1720,9 +1921,9 @@ step3_server <- function(input, output, session, state) {
         "and Imprecision. Change it in the Configuration tab.")
     )
   }
-  output$threshold_block_rob   <- shiny::renderUI(.render_threshold_readonly())
-  output$threshold_block_inco  <- shiny::renderUI(.render_threshold_readonly())
-  output$threshold_block_impre <- shiny::renderUI(.render_threshold_readonly())
+  output$threshold_block_rob   <- shiny::renderUI(.render_threshold_readonly("rob"))
+  output$threshold_block_inco  <- shiny::renderUI(.render_threshold_readonly("inco"))
+  output$threshold_block_impre <- shiny::renderUI(.render_threshold_readonly("impre"))
   shiny::outputOptions(output, "threshold_block_rob",   suspendWhenHidden = FALSE)
   shiny::outputOptions(output, "threshold_block_inco",  suspendWhenHidden = FALSE)
   shiny::outputOptions(output, "threshold_block_impre", suspendWhenHidden = FALSE)
@@ -1731,7 +1932,26 @@ step3_server <- function(input, output, session, state) {
   # Gated on the outcome type, matching output$threshold_panel: a binary
   # outcome analysed as something other than OR / RR still has an absolute
   # threshold to convert.
-  .threshold_grade_args <- function(obj) {
+  #
+  # For a binary outcome with an absolute threshold the app converts to the
+  # ratio scale ITSELF and passes threshold_scale = "ratio", rather than
+  # handing pmatools the ARD. threshold_scale = "ard" always converts on the
+  # increase side (T = ratio implied by p0 + ard) and every domain then judges
+  # against the symmetric band +/- log(T), whose decrease side 1 / T is not
+  # the ratio implied by p0 - ard. Converting in the direction the pooled
+  # effect actually lies makes the comparison that decides each judgment exact
+  # on the absolute scale, which is the scale Core GRADE 7 puts the threshold
+  # on. `direction`, `dir` and `note` are carried along so grade_obj() can
+  # detect a refit-induced flip and rebuild the provenance note that
+  # threshold_scale = "ratio" no longer gets from pmatools.
+  #
+  # `te_point` overrides the direction source; it defaults to the Step 2
+  # all-studies analysis.
+  #
+  # Falls back to the previous threshold_scale = "ard" call whenever the app
+  # cannot do the conversion (control-group risk missing or out of range), so
+  # pmatools' own validation and error messages still apply there.
+  .threshold_grade_args <- function(obj, te_point = NULL) {
     sm <- obj$sm %||% "OR"
     if (step3_is_binary_outcome(obj, shiny::isolate(input$outcome_type)) &&
         identical(threshold_mode_state(), "absolute")) {
@@ -1740,18 +1960,33 @@ step3_server <- function(input, output, session, state) {
       if (is.finite(ta) && ta > 0) {
         base <- if (is.finite(tb) && tb > 0 && tb < 1000 &&
                     (tb + ta) < 1000) tb / 1000 else NULL
+        direction <- step3_threshold_direction(
+          if (is.null(te_point)) step3_pooled_te(obj) else te_point)
+        dir <- step3_directed_threshold(step3_ard_equivalence(sm, ta, tb),
+                                        direction)
+        if (!is.null(dir) && is.finite(dir$ratio) && dir$ratio > 1) {
+          return(list(threshold          = dir$ratio,
+                      threshold_scale    = "ratio",
+                      threshold_baseline = NULL,
+                      direction          = direction,
+                      dir                = dir,
+                      note               = step3_threshold_note(dir)))
+        }
         return(list(threshold          = ta / 1000,
                     threshold_scale    = "ard",
-                    threshold_baseline = base))
+                    threshold_baseline = base,
+                    direction          = NULL, dir = NULL, note = NULL))
       }
       return(list(threshold = NULL, threshold_scale = "auto",
-                  threshold_baseline = NULL))
+                  threshold_baseline = NULL,
+                  direction = NULL, dir = NULL, note = NULL))
     }
     th <- threshold_state()
     list(
       threshold = if (is.numeric(th) && !is.na(th) && th > 0) th else NULL,
       threshold_scale    = "auto",
-      threshold_baseline = NULL
+      threshold_baseline = NULL,
+      direction = NULL, dir = NULL, note = NULL
     )
   }
 
@@ -2142,14 +2377,86 @@ step3_server <- function(input, output, session, state) {
       outcome_name = state$outcome_name %||% "Outcome"
     )
 
-    g <- tryCatch(
-      suppressWarnings(do.call(grade_meta, args)),
-      error = function(e) {
-        shiny::showNotification(paste("grade_meta error:", conditionMessage(e)),
-                                type = "error")
-        NULL
+    .run_grade <- function(th) {
+      args$threshold          <- th$threshold
+      args$threshold_scale    <- th$threshold_scale
+      args$threshold_baseline <- th$threshold_baseline
+      tryCatch(
+        suppressWarnings(do.call(grade_meta, args)),
+        error = function(e) {
+          shiny::showNotification(
+            paste("grade_meta error:", conditionMessage(e)), type = "error")
+          NULL
+        }
+      )
+    }
+    g <- .run_grade(th_args)
+
+    # Core GRADE 4 can send grade_meta() off to refit on the low risk-of-bias
+    # subset, and the rating target plus the other four domains are then read
+    # off THAT analysis. The directed conversion above used the all-studies
+    # pooled effect, because it is the only one available before the call. If
+    # the refit put the pooled effect on the other side of the null, the
+    # threshold was converted in the wrong direction, so re-run once against
+    # the refitted analysis. One correction, not a fixed point: the threshold
+    # feeds back into the Risk of Bias analysis-set decision, so iterating
+    # could oscillate.
+    if (!is.null(g) && !is.null(th_args$direction) && isTRUE(g$rob_refit)) {
+      th2 <- .threshold_grade_args(obj, te_point = step3_pooled_te(g$meta))
+      if (!identical(th2$direction, th_args$direction) &&
+          !is.null(th2$threshold)) {
+        g2 <- .run_grade(th2)
+        if (!is.null(g2)) {
+          th_args <- th2
+          g       <- g2
+          g$domain_assessments <- step3_append_domain_note(
+            g$domain_assessments, "Risk of bias",
+            paste0("The absolute threshold was re-converted on the ",
+                   th2$dir$exact_side, " side after the refit on the low ",
+                   "risk of bias studies moved the pooled effect to the ",
+                   "other side of the null."))
+        }
       }
-    )
+    }
+
+    # threshold_scale = "ratio" means pmatools no longer returns
+    # $threshold_ard or the $threshold_note it used to append to the three
+    # threshold-aware domains and to the Evidence Profile footnote. Rebuild
+    # both here, in absolute terms, so nothing loses that provenance.
+    if (!is.null(g) && !is.null(th_args$note)) {
+      g$threshold_note     <- th_args$note
+      g$threshold_ard      <- th_args$dir$ard
+      g$threshold_baseline <- th_args$dir$p0
+      for (dom in c("Risk of bias", "Inconsistency", "Imprecision")) {
+        g$domain_assessments <- step3_append_domain_note(
+          g$domain_assessments, dom, th_args$note)
+      }
+      # .derive_rating_target() writes a scale note off threshold_kind, which
+      # is now "ratio", so it says the target was derived on the relative
+      # scale and recommends threshold_scale = "ard". Both are wrong here -
+      # the threshold IS absolute, converted app-side - so swap the sentence
+      # for one that describes what happened. A no-op if the vendored wording
+      # ever changes.
+      sm_g   <- obj$sm %||% "OR"
+      stale  <- paste0(
+        " Target derived on the relative-effect scale (", sm_g,
+        "); Core GRADE 2 recommends an absolute-effect threshold ",
+        "(threshold_scale = 'ard') where a baseline risk is available.")
+      fresh <- sprintf(paste0(
+        " Target derived from the absolute-effect threshold (%g per 1,000 at ",
+        "a baseline risk %g per 1,000), converted to the %s scale on the %s ",
+        "side."), 1000 * th_args$dir$ard, 1000 * th_args$dir$p0, sm_g,
+        th_args$dir$exact_side)
+      if (!is.null(g$rating_target_note)) {
+        g$rating_target_note <- sub(stale, fresh, g$rating_target_note,
+                                    fixed = TRUE)
+      }
+      idx <- which(g$domain_assessments$domain == "Imprecision")
+      if (length(idx)) {
+        g$domain_assessments$notes[idx] <-
+          sub(stale, fresh, g$domain_assessments$notes[idx], fixed = TRUE)
+      }
+    }
 
     if (!is.null(g)) {
       # Q1 = "no" (reporting bias suspected) forces rate-down 1 regardless
