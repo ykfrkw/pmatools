@@ -85,7 +85,7 @@ plot_funnel(ma)
 # ----- 5. SoF table -----
 sof <- sof_table(g, style = "{{sof_style}}", per = {{per}},
                  prediction = {{sof_prediction}}{{display_args}}{{convert_args}})
-print(sof)
+{{sof_notes_block}}print(sof)
 
 # ----- 6. Appendix report (docx) -----
 grade_report(

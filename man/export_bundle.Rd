@@ -25,6 +25,7 @@ export_bundle(x, ...)
   prediction = FALSE,
   follow_up = NULL,
   unit = NULL,
+  sof_notes = NULL,
   convert_smd_to_or = FALSE,
   baseline_risk = NULL,
   threshold_label = NULL,
@@ -78,6 +79,13 @@ outcome name in the \code{"bmj"} layout, e.g.
 \item{unit}{(v0.5.1) Optional unit for the Difference column of the
 \code{"bmj"} layout with continuous outcomes, e.g. \code{"days"}. Defaults to
 \code{grade$unit} on the same terms as \code{follow_up}.}
+
+\item{sof_notes}{(v0.5.1) Optional character vector of extra footnote lines
+for the bundled \code{sof_table.docx}, appended by
+\code{\link{sof_add_notes}} after the table's own footnotes and rendered
+into \code{analysis.R}. For annotations pmatools cannot derive — a host
+application's rare-event alert or scope caveat, a registration number.
+Applies to \code{sof_table.docx} only, not to the certainty appendix.}
 
 \item{convert_smd_to_or}{Logical. Passed to \code{\link{sof_table}} for
 continuous-outcome dichotomisation.}

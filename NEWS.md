@@ -21,6 +21,17 @@
   `grade_table()` reads them off the rated objects, and so does the generated
   script.
 
+* New exported `sof_add_notes(x, notes)`: appends caller footnote lines to a
+  `sof_table()` / `grade_table()` flextable, styled like the footnotes those
+  functions write themselves. Both `export_bundle()` methods take the matching
+  `sof_notes` argument — appended to `sof_table.docx` and to
+  `summary_of_findings.docx` respectively, and rendered into `analysis.R` as a
+  `sof_add_notes()` call, so the script still reproduces the table that was
+  exported. This is the last thing that forced a host application to write the
+  SoF .docx outside `export_bundle()`: an annotation pmatools cannot derive (a
+  rare-event alert, a scope caveat, a registration number) can now be handed to
+  the bundler. `sof_notes` does not reach the certainty appendix.
+
 ## Behaviour changes
 
 * The default `style` of the single-outcome bundle changed from GRADEpro to

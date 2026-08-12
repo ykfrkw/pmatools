@@ -37,6 +37,10 @@
 #'   Same default as the single-outcome \code{\link{export_bundle.meta}}.
 #'   Per-outcome `follow_up` / `unit` need no argument here: `grade_table()`
 #'   reads them off the rated objects, as does the generated script.
+#' @param sof_notes (v0.5.1) Optional character vector of extra footnote lines
+#'   for `summary_of_findings.docx`, appended by \code{\link{sof_add_notes}}
+#'   after the table's own footnotes and rendered into `analysis.R`. See
+#'   \code{\link{export_bundle.meta}}.
 #' @param per Denominator for SoF rate columns. Default 1000.
 #' @param prediction Show 95 percent prediction interval in the Effect column.
 #' @param rob Optional per-study Risk-of-Bias labels for the RoB-stratified
@@ -65,6 +69,7 @@ export_bundle.pmatools_set <- function(x,
                                                        "indirectness",
                                                        "readme"),
                                        style       = c("bmj", "gradepro"),
+                                       sof_notes   = NULL,
                                        per         = 1000,
                                        prediction  = FALSE,
                                        rob         = NULL,
@@ -77,6 +82,7 @@ export_bundle.pmatools_set <- function(x,
   set   <- x
   style <- match.arg(style)
   include <- match.arg(include, several.ok = TRUE)
+  sof_notes <- .usable_notes(sof_notes)
 
   if (length(set$order) == 0L) {
     rlang::abort("export_bundle: the pmatools_set holds no outcomes.")
@@ -100,6 +106,7 @@ export_bundle.pmatools_set <- function(x,
     ft <- grade_table(set, style = style, per = per, prediction = prediction,
                       label_intervention = label_intervention,
                       label_control      = label_control)
+    ft <- sof_add_notes(ft, sof_notes)
     .save_landscape_docx(ft, file.path(work_dir, "summary_of_findings.docx"))
     add("summary_of_findings.docx")
 
@@ -127,7 +134,7 @@ export_bundle.pmatools_set <- function(x,
   if ("script" %in% include) {
     ok <- tryCatch({
       .render_analysis_script_multi(set, per = per, prediction = prediction,
-                                    style = style,
+                                    style = style, sof_notes = sof_notes,
                                     out_path = file.path(work_dir, "analysis.R"))
       TRUE
     }, error = function(e) {
@@ -439,7 +446,7 @@ export_bundle.pmatools_set <- function(x,
 # aborts, and export_bundle() then ships the bundle without a script instead of
 # shipping one that reproduces something else.
 .render_analysis_script_multi <- function(set, per, prediction, style,
-                                          out_path) {
+                                          out_path, sof_notes = NULL) {
   if (is.null(set$grade_args)) {
     rlang::abort(paste0(
       "This pmatools_set carries no record of the grade_meta() arguments it ",
@@ -490,7 +497,8 @@ export_bundle.pmatools_set <- function(x,
     dir_names_arg    = .multi_arg_lit(.outcome_dir_names(set$order)),
     style            = style,
     per              = format(per),
-    sof_prediction   = if (isTRUE(prediction)) "TRUE" else "FALSE"
+    sof_prediction   = if (isTRUE(prediction)) "TRUE" else "FALSE",
+    sof_notes_block  = .sof_notes_block(sof_notes, "sof")
   )
 
   rendered <- glue::glue_data(values, tpl, .open = "{{", .close = "}}",

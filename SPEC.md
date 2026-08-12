@@ -724,6 +724,7 @@ export_bundle(
   prediction   = FALSE,
   follow_up    = NULL,                     # v0.5.1: time frame, BMJ style
   unit         = NULL,                     # v0.5.1: unit of a continuous difference
+  sof_notes    = NULL,                     # v0.5.1: extra footnotes for sof_table.docx
   convert_smd_to_or = FALSE,
   baseline_risk     = NULL,
   threshold_label   = NULL,
@@ -744,6 +745,8 @@ export_bundle(
 ```
 
 Note the shape change from v0.2: display arguments are passed as the named lists `forest_display` / `forest_display_rob`, not as `forest_args` / `funnel_args`.
+
+**`sof_notes` (v0.5.1).** Extra footnote lines for the bundled Summary of Findings table, appended by the exported `sof_add_notes(x, notes)` after the table's own footnotes and in the same 8pt grey styling, then rendered into `analysis.R` as a `sof_add_notes()` call so the script reproduces the annotated table. `NULL`, `NA` and empty entries are dropped, and a bundle with no usable note renders no call at all. The `pmatools_set` method takes the same argument for `summary_of_findings.docx`. Neither applies it to the certainty appendix (`grade_report()` has no notes hook). Its purpose is annotations pmatools cannot derive — a host application's rare-event alert, a scope caveat, a registration number — which previously forced such callers to write the .docx themselves outside the bundler.
 
 **`style` (v0.5.1).** Forwarded to `sof_table()` for `sof_table.docx` and to `grade_report()` for the certainty appendix — one layout per ZIP — and rendered into the generated `analysis.R`, so re-running the script reproduces the layout that was exported rather than the `sof_table()` default. `follow_up` / `unit` are the BMJ layout's presentation arguments (§4.6); each falls back to the field of the same name on the rated object, which is where `grade_meta_multi()` stores it. The default is `"bmj"`, matching §4.8.3: **both bundle methods** default to the Core GRADE layout, while `sof_table()` and `grade_table()` themselves keep `"gradepro"`. Before v0.5.1 this method had no `style` and always wrote GRADEpro.
 
