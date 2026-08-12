@@ -797,3 +797,224 @@ pma_wizard_nav <- function(current_step, max_step = 4,
     } else htmltools::div()
   )
 }
+
+# ==========================================================================
+# Summary of Findings presentation (Core GRADE 6)
+# ==========================================================================
+#
+# Core GRADE 6 (Guyatt G, Yao L, Murad MH, et al. BMJ 2025;389:e083866)
+# presents an eight-column summary of findings table. pmatools 0.5 ships that
+# layout as style = "bmj"; the package default, "gradepro", is a six-column
+# layout that omits follow-up, study design, the difference between arms, the
+# rate-down reason and the plain language summary.
+#
+# The app renders the Core GRADE 6 layout everywhere and does NOT offer the
+# GRADEpro layout as an alternative. Two reasons:
+#   1. Every other output in the wizard is written against the Core GRADE
+#      series, so a second layout would be a second, unsourced standard.
+#   2. The on-screen table, the exported sof_table.docx and the combined
+#      table are all built from this one constant, so they cannot disagree.
+# The Evidence Profile is a different table (nine columns, Core GRADE's
+# evidence-profile format) and is unaffected.
+PMA_SOF_STYLE   <- "bmj"
+PMA_SOF_PALETTE <- "pastel"
+
+# Percentage with enough resolution to distinguish the two rare-event bands.
+pma_fmt_pct <- function(p, digits = 2) {
+  if (is.null(p) || length(p) != 1L || !is.finite(p)) return("not estimable")
+  paste0(formatC(100 * p, format = "f", digits = digits), "%")
+}
+
+# Free-text follow-up as it is printed under the outcome name. Core GRADE 6
+# writes the cell as "Follow-up: ...", so the prefix is supplied here when the
+# user did not type one.
+pma_sof_follow_up <- function(x) {
+  if (is.null(x) || length(x) != 1L || is.na(x)) return(NULL)
+  x <- trimws(as.character(x))
+  if (!nzchar(x)) return(NULL)
+  if (grepl("^follow[ -]?up", x, ignore.case = TRUE)) x else paste0("Follow-up: ", x)
+}
+
+# Unit for the Difference column of a continuous outcome.
+#
+# The unit the reviewer typed describes the measurement scale, so it is the
+# right label for a mean difference. A standardized mean difference is not on
+# that scale, so its difference is labelled in standard deviation units
+# whatever the reviewer typed; a ratio measure has no unit at all (the
+# difference is printed "per 1000") and gets NULL.
+pma_sof_unit <- function(g, unit = NULL) {
+  sm <- as.character((g$meta$sm %||% "")[1])
+  if (identical(sm, "SMD")) return("standard deviation units")
+  if (!identical(sm, "MD")) return(NULL)
+  if (is.null(unit) || length(unit) != 1L || is.na(unit)) return(NULL)
+  unit <- trimws(as.character(unit))
+  if (nzchar(unit)) unit else NULL
+}
+
+# Crude arm-level and pooled event rates, straight off the metabin arms.
+# Returns NULL for anything that is not a binary meta-analysis.
+pma_sof_event_rates <- function(meta_obj) {
+  if (is.null(meta_obj)) return(NULL)
+  ee <- meta_obj$event.e; ne <- meta_obj$n.e
+  ec <- meta_obj$event.c; nc <- meta_obj$n.c
+  if (is.null(ee) || is.null(ne) || is.null(ec) || is.null(nc)) return(NULL)
+  if (length(ee) != length(ne) || length(ec) != length(nc)) return(NULL)
+  keep_e <- is.finite(ee) & is.finite(ne) & ne > 0
+  keep_c <- is.finite(ec) & is.finite(nc) & nc > 0
+  if (!any(keep_e) && !any(keep_c)) return(NULL)
+  ev_e <- sum(ee[keep_e]); n_e <- sum(ne[keep_e])
+  ev_c <- sum(ec[keep_c]); n_c <- sum(nc[keep_c])
+  n_tot <- n_e + n_c
+  if (!is.finite(n_tot) || n_tot <= 0) return(NULL)
+  list(
+    intervention = if (n_e > 0) ev_e / n_e else NA_real_,
+    control      = if (n_c > 0) ev_c / n_c else NA_real_,
+    overall      = (ev_e + ev_c) / n_tot,
+    events       = ev_e + ev_c,
+    n            = n_tot
+  )
+}
+
+# Core GRADE 6's rare-event trap.
+#
+# The Difference column and the "With intervention" column are both computed
+# by applying the pooled relative effect to a baseline risk. Core GRADE 6
+# warns that this misleads when the outcome is rare, naming two bands --
+# "event rates <2% and most problematic <1%" -- and recommends that review
+# authors generally conduct meta-analyses of risk differences instead.
+#
+# `g`             a pmatools object.
+# `baseline_risk` the risk the table is actually drawn against when it is not
+#                 the object's own (the responder proportion of a Chinn
+#                 dichotomisation).
+#
+# Returns NULL when nothing is rare, otherwise a list with the band, the
+# computed rates, a one-line headline and the full note. The note is the same
+# text on screen and in the exported docx.
+PMA_RARE_BAND_1 <- 0.01
+PMA_RARE_BAND_2 <- 0.02
+
+pma_rare_event_alert <- function(g, baseline_risk = NULL, label = NULL) {
+  if (is.null(g)) return(NULL)
+  rates <- pma_sof_event_rates(g$meta)
+  br    <- baseline_risk
+  if (is.null(br)) br <- g$baseline_risk
+  if (!is.numeric(br) || length(br) != 1L || !is.finite(br)) br <- NA_real_
+
+  # Every rate the absolute-effect columns rest on: the two observed arm
+  # rates, the pooled rate, and the baseline risk the table is drawn against
+  # (which the reviewer may have set by hand).
+  cand <- c(rates$overall, rates$control, rates$intervention, br)
+  cand <- cand[is.finite(cand) & cand > 0]
+  if (length(cand) == 0) return(NULL)
+  lowest <- min(cand)
+  if (lowest >= PMA_RARE_BAND_2) return(NULL)
+
+  band <- if (lowest < PMA_RARE_BAND_1) "below 1%" else "below 2%"
+
+  observed <- if (is.null(rates)) {
+    ""
+  } else {
+    sprintf(paste0(
+      "Observed event rates: %s overall (%s of %s participants), %s in the ",
+      "control arm, %s in the intervention arm. "),
+      pma_fmt_pct(rates$overall),
+      format(rates$events, big.mark = ",", scientific = FALSE, trim = TRUE),
+      format(rates$n,      big.mark = ",", scientific = FALSE, trim = TRUE),
+      pma_fmt_pct(rates$control), pma_fmt_pct(rates$intervention))
+  }
+  baseline_txt <- if (is.finite(br)) {
+    sprintf("Baseline risk used for the absolute columns: %s. ", pma_fmt_pct(br))
+  } else ""
+
+  headline <- sprintf("Rare outcome%s - lowest event rate %s (%s).",
+                      if (is.null(label)) "" else paste0(" (", label, ")"),
+                      pma_fmt_pct(lowest), band)
+
+  detail <- paste0(
+    observed, baseline_txt,
+    "Core GRADE 6 warns that applying a relative effect to a baseline risk is ",
+    "misleading for rare outcomes, at \"event rates <2% and most problematic ",
+    "<1%\", and recommends that review authors generally conduct ",
+    "meta-analyses of risk differences instead ",
+    "(Guyatt et al. BMJ 2025;389:e083866). ",
+    "The Difference column and the \"With intervention\" column are still ",
+    "computed from the baseline risk and the pooled relative effect, and are ",
+    "shown unchanged; read them with that warning in mind, and consider ",
+    "reporting the risk difference from Step 2's rare-events workflow instead."
+  )
+  note <- paste0("Rare-event caution (Core GRADE 6). ", headline, " ", detail)
+
+  list(band = band, lowest = lowest, rates = rates, baseline_risk = br,
+       headline = headline, detail = detail, note = note, label = label)
+}
+
+# Amber banner for a rare-event alert. NULL-safe so callers can drop the
+# result straight into a tagList.
+pma_rare_event_banner <- function(alert) {
+  if (is.null(alert)) return(NULL)
+  htmltools::div(
+    style = paste0(
+      "padding: 0.75rem 1rem; margin-bottom: 1rem; ",
+      "background: ", PMA_ALERT_BG, "; border-left: 4px solid ", PMA_ALERT_FG,
+      "; border-radius: 4px; font-size: 0.9rem;"),
+    htmltools::strong(paste0("Rare events. ", alert$headline, " ")),
+    alert$detail
+  )
+}
+
+# Three Core GRADE 6 features neither pmatools layout implements. Stated in
+# the table footer and again under the table, so a reader cannot take the
+# table for a complete Core GRADE 6 summary of findings.
+PMA_SOF_LIMITATIONS_NOTE <- paste0(
+  "Not implemented in this table (Core GRADE 6 features pmatools does not yet ",
+  "produce). (1) Arm-level values for continuous outcomes: Core GRADE 6's ",
+  "preferred approach reports the control-group value, the intervention-group ",
+  "value and the difference; only the difference is shown here. ",
+  "(2) \"Not reported\" rows: outcomes the evidence base did not measure are ",
+  "absent from this table, so it is not the full list of outcomes important to ",
+  "patients. (3) Per-domain footnotes: the certainty cell names the domains ",
+  "that were rated down but not why. The reasons are recorded in the Evidence ",
+  "Profile and in each domain's notes; they are not reproduced here."
+)
+
+pma_sof_limitations_ui <- function() {
+  htmltools::div(
+    style = paste0(
+      "margin-top: 0.75rem; padding: 0.6rem 0.85rem; border-radius: 4px; ",
+      "border: 1px solid hsl(var(--border)); ",
+      "font-size: 0.82rem; color: hsl(var(--muted-foreground));"),
+    htmltools::strong("Not implemented in this table. "),
+    "Core GRADE 6 also asks for arm-level values for continuous outcomes (the ",
+    "control-group value, the intervention-group value and the difference; ",
+    "only the difference is shown here), \"Not reported\" rows for outcomes ",
+    "the evidence base did not measure, and per-domain footnotes stating why ",
+    "each domain was rated down (the certainty cell names the domains but not ",
+    "the reasons, which stay in the Evidence Profile). The same statement is ",
+    "printed in the table footer, so it travels with the exported document."
+  )
+}
+
+# Append free-text footer lines to a Summary of Findings flextable, keeping
+# the footer styling the vendored builders apply. Used for the rare-event
+# caution and the limitations statement, so both reach the exported .docx.
+pma_sof_add_notes <- function(ft, notes) {
+  if (is.null(ft)) return(ft)
+  notes <- notes[!vapply(notes, function(z) is.null(z) || is.na(z) ||
+                           !nzchar(z), logical(1))]
+  if (length(notes) == 0) return(ft)
+  for (nt in notes) {
+    ft <- flextable::add_footer_lines(ft, values = as.character(nt))
+  }
+  ft <- flextable::fontsize(ft, size = 8, part = "footer")
+  ft <- flextable::color(ft, color = "#555555", part = "footer")
+  ft
+}
+
+# The Core GRADE 6 layout is wider than the GRADEpro one (eight fixed-width
+# columns totalling ~10.3 in against ~8.3 in), so every on-screen SoF table is
+# wrapped in a horizontal scroller rather than being allowed to stretch the
+# card. Colours, fonts and the dark header are unchanged.
+pma_sof_scroller <- function(...) {
+  htmltools::div(style = "overflow-x: auto; margin-top: 0.5rem;", ...)
+}

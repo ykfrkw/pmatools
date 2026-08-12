@@ -132,6 +132,17 @@ step4_server <- function(input, output, session, state) {
     )
   }
 
+  # One rare-event alert per saved outcome (Core GRADE 6). NULL entries are
+  # dropped, so an empty list means nothing in the table is rare.
+  combined_rare_alerts <- shiny::reactive({
+    outs <- saved_outcomes()
+    if (length(outs) == 0) return(list())
+    alerts <- lapply(names(outs), function(nm) {
+      pma_rare_event_alert(outs[[nm]], label = nm)
+    })
+    alerts[!vapply(alerts, is.null, logical(1))]
+  })
+
   combined_sof <- shiny::reactive({
     outs <- saved_outcomes()
     if (length(outs) == 0) return(NULL)
@@ -139,15 +150,27 @@ step4_server <- function(input, output, session, state) {
     primary <- primary[primary %in% names(outs)]
     if (length(primary) == 0) primary <- NULL
     arms <- .arm_labels()
-    tryCatch(
-      grade_table(
+    tryCatch({
+      ft <- grade_table(
         outs,
         primary            = primary,
+        # Same Core GRADE 6 layout as the Step 3 preview and the exported
+        # single-outcome table (PMA_SOF_STYLE, ui_helpers.R).
+        style              = PMA_SOF_STYLE,
+        palette            = PMA_SOF_PALETTE,
         per                = state$display$per        %||% 1000,
         prediction         = isTRUE(state$display$prediction),
+        # follow_up / unit are deliberately NOT passed: grade_table() reads
+        # them off each saved object (.display_arg_from_outcomes), which is
+        # what lets two rows carry different follow-up times.
         label_intervention = arms$intervention,
         label_control      = arms$control
-      ),
+      )
+      notes <- c(vapply(combined_rare_alerts(), function(a) a$note,
+                        character(1)),
+                 PMA_SOF_LIMITATIONS_NOTE)
+      pma_sof_add_notes(ft, notes)
+    },
       error = function(e) {
         structure(list(message = conditionMessage(e)), class = "pma_sof_error")
       }
@@ -193,7 +216,9 @@ step4_server <- function(input, output, session, state) {
                                     conditionMessage(e))))
     }
     htmltools::tagList(
-      htmltools::div(style = "margin-top: 1rem; overflow-x: auto;", body),
+      lapply(combined_rare_alerts(), pma_rare_event_banner),
+      pma_sof_scroller(body),
+      pma_sof_limitations_ui(),
       pma_saved_outcomes_ui(outs, delete_input_id = "outcome_delete",
                             signature = current_signature())
     )
@@ -237,6 +262,62 @@ step4_server <- function(input, output, session, state) {
     }, error = function(e) {
       shiny::showNotification(
         paste("Combined SoF table could not be added to the ZIP:",
+              conditionMessage(e)),
+        type = "warning", duration = 8)
+      FALSE
+    })
+    invisible(ok)
+  }
+
+  # Core GRADE Evidence Profile + single-outcome Summary of Findings.
+  #
+  # Built here rather than inside export_bundle(): the vendored bundler calls
+  # sof_table() without a style argument, so it can only ever write the
+  # six-column GRADEpro layout, and R/_pmatools/ must not be edited. The
+  # download handler therefore withholds "grade_table" from the include vector
+  # it passes to export_bundle() and writes the same two file names here -
+  # grade_table.docx from the same evidence_profile() call the bundler makes,
+  # and sof_table.docx in the Core GRADE 6 layout shown on screen, carrying
+  # the same rare-event and not-implemented footnotes.
+  .append_grade_docx <- function(zip_path) {
+    g <- state$grade
+    if (is.null(g)) return(invisible(FALSE))
+    dir <- tempfile("pmatools_grade_docx_")
+    on.exit(unlink(dir, recursive = TRUE), add = TRUE)
+    dir.create(dir)
+    ok <- tryCatch({
+      ep_ft <- evidence_profile(
+        g,
+        other_text      = state$display$other_text,
+        other_downgrade = state$display$other_downgrade %||% 0L)
+      .save_landscape_docx(ep_ft, file.path(dir, "grade_table.docx"))
+
+      convert <- isTRUE(state$display$convert)
+      sof_ft <- sof_table(
+        g,
+        style             = PMA_SOF_STYLE,
+        palette           = PMA_SOF_PALETTE,
+        per               = state$display$per %||% 1000,
+        prediction        = isTRUE(state$display$prediction),
+        follow_up         = state$display$follow_up,
+        unit              = state$display$unit,
+        convert_smd_to_or = convert,
+        baseline_risk     = state$display$baseline_risk,
+        threshold_label   = state$display$threshold_label,
+        chinn_invert      = isTRUE(state$display$chinn_invert))
+      alert <- pma_rare_event_alert(
+        g, baseline_risk = if (convert) state$display$baseline_risk else NULL)
+      sof_ft <- pma_sof_add_notes(
+        sof_ft, c(alert$note, PMA_SOF_LIMITATIONS_NOTE))
+      .save_landscape_docx(sof_ft, file.path(dir, "sof_table.docx"))
+
+      zip::zip_append(zipfile = zip_path,
+                      files   = c("grade_table.docx", "sof_table.docx"),
+                      root    = dir)
+      TRUE
+    }, error = function(e) {
+      shiny::showNotification(
+        paste("Evidence Profile / SoF docx could not be added to the ZIP:",
               conditionMessage(e)),
         type = "warning", duration = 8)
       FALSE
@@ -388,7 +469,10 @@ step4_server <- function(input, output, session, state) {
           grade        = state$grade,
           output_dir   = tmp_dir,
           bundle_name  = input$bundle_name %||% "pmatools_results",
-          include      = include,
+          # "grade_table" is withheld and handled by .append_grade_docx()
+          # below, so the exported sof_table.docx is the Core GRADE 6 layout
+          # the app renders rather than the bundler's GRADEpro one.
+          include      = setdiff(include, "grade_table"),
           per          = state$display$per             %||% 1000,
           prediction   = state$display$prediction      %||% FALSE,
           convert_smd_to_or = state$display$convert    %||% FALSE,
@@ -406,6 +490,11 @@ step4_server <- function(input, output, session, state) {
           pubias_missing_df  = state$pubias_missing
         )
         shiny::incProgress(0.75, detail = "Packaging ZIP...")
+        if ("grade_table" %in% include) {
+          shiny::incProgress(0.02,
+                             detail = "Adding Evidence Profile and SoF table...")
+          .append_grade_docx(out)
+        }
         # Multi-outcome SoF: added to the archive after export_bundle() has
         # built it. Additive - the single-outcome Evidence Profile and SoF
         # docx above are untouched.
