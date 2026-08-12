@@ -25,8 +25,8 @@ for (f in list.files("R/_pmatools", pattern = "\\.R$", full.names = TRUE)) {
 
 # Tell pmatools which version it is. Because the sources above are sourced
 # and not installed, utils::packageVersion("pmatools") always errors here;
-# R/_pmatools/VERSION (written by update_vendor.R) is the only record of what
-# was vendored. A missing, unreadable or blank file leaves the option unset,
+# R/_pmatools/VERSION (written by stage_bundle.R) is the only record of what
+# was staged. A missing, unreadable or blank file leaves the option unset,
 # and callers fall back to "(vendored; version unknown)".
 local({
   vfile <- "R/_pmatools/VERSION"
@@ -37,6 +37,13 @@ local({
     options(pmatools.version_stamp = ver)
   }
 })
+
+# The staged templates and sample data are addressed relative to the app
+# directory -- getOption("pmatools.vendored_root") defaults to "." and
+# R/step1_data.R reads _pmatools_inst/extdata/ the same way. Pin the directory
+# at startup so a later setwd() (ours, Shiny's, or a package's) cannot move
+# the target out from under them.
+options(pmatools.vendored_root = normalizePath(getwd(), winslash = "/"))
 
 # Source local Shiny modules
 local_files <- c(

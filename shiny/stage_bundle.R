@@ -1,4 +1,18 @@
-# update_vendor.R - refresh vendored pmatools sources from the local checkout
+# stage_bundle.R - stage the pmatools sources this app deploys with
+#
+# The app SOURCES pmatools rather than installing it: a stale GITHUB_PAT cached
+# on the shinyapps.io account makes install_github(ykfrkw/pmatools) return HTTP
+# 401 on the build server. So the deploy bundle has to carry the package
+# sources inside appDir, and this script puts them there -- copying ../R and
+# ../inst into R/_pmatools/ and _pmatools_inst/.
+#
+# It reads from the repository it lives in. There is no second checkout to
+# point at, no version skew to guard against, and no re-vendoring step anyone
+# can forget: the sources one directory up ARE the sources that ship.
+#
+# Its output is generated and gitignored. Never hand-edit R/_pmatools/ or
+# _pmatools_inst/ -- the next run deletes both and regenerates them. Fix the
+# package sources in ../R instead.
 #
 # =============================================================================
 # !! DEPENDENCY LIFELINE - READ BEFORE TOUCHING DESCRIPTION !!
@@ -32,29 +46,19 @@
 # far enough that the patch missed it -- and warns loudly with file:line.
 #
 # Both checks run standalone, without touching any vendored file, via:
-#   Rscript update_vendor.R --check-only
+#   Rscript shiny/stage_bundle.R --check-only
 #
-# !! THE VENDOR SOURCE IS OVERRIDABLE - AND A DIRTY SOURCE IS REFUSED !!
+# !! STAGING FROM A DIRTY TREE IS NORMAL - THE DEPLOY IS WHERE IT IS CHECKED !!
 #
-# PMATOOLS_SRC below defaults to the shared checkout at ~/Developer/pmatools,
-# but the environment variable of the same name overrides it:
-#   PMATOOLS_SRC=~/Developer/pmatools-wt/my-branch Rscript update_vendor.R
-# The value is expanded and normalized, and the run aborts before writing
-# anything if the directory is missing or lacks DESCRIPTION / R / inst, so a
-# typo cannot leave a half-vendored tree behind.
+# This script used to refuse a dirty source, because it read from a separate
+# checkout that a parallel session might have left mid-edit. Reading from its
+# own repository, that reversed: you stage precisely to try out the change you
+# just made in ../R, so refusing would break the ordinary case.
 #
-# Before any file is touched, the source checkout's git state is read. A
-# DIRTY source is a hard stop: whatever a parallel session happens to have
-# left sitting in that working tree would be copied into R/_pmatools/ and
-# shipped from there. The fix is to cut a worktree on the pmatools side and
-# point PMATOOLS_SRC at it -- not to bypass the guard. When bypassing really
-# is the right call, PMATOOLS_ALLOW_DIRTY=1 demotes the stop to a warning
-# and the stamp below records that it happened. A source git cannot describe
-# at all (git absent, not a repository) only warns: unverifiable is not the
-# same as known-bad.
-#
-# --check-only never stops on a dirty source. It writes nothing, so it has
-# nothing to protect; it just reports the state it found.
+# The clean-tree requirement did not disappear, it moved to where it belongs.
+# deploy.R refuses to ship a dirty tree, because a deploy from one puts bytes
+# in production that no commit describes. The git state is still read here,
+# but only to record provenance on line 2 of VERSION.
 #
 # !! R/_pmatools/VERSION IS GENERATED - DO NOT HAND-EDIT !!
 #
@@ -66,56 +70,57 @@
 #
 # Line 1 is the version string and nothing else -- app.R reads exactly one
 # line -- so line 2 carries the provenance a bare version cannot:
-#   source: <branch>@<sha>          (clean source)
-#   source: <branch>@<sha>-dirty    (vendored under PMATOOLS_ALLOW_DIRTY=1)
+#   source: <branch>@<sha>          (clean tree)
+#   source: <branch>@<sha>-dirty    (staged from uncommitted work)
 #   source: unknown                 (no readable git state)
 # Anything added later goes on line 3 or below; line 1 stays load-bearing.
+#
+# Since the version now comes from the same DESCRIPTION that defines the
+# package version, VERSION line 1 and ../DESCRIPTION cannot disagree.
 # =============================================================================
 #
-# Run after pulling new pmatools commits in ~/Developer/pmatools/.
-# Idempotent: the vendored tree is regenerated from the source checkout on
-# every run, and the template-path rewrite leaves behind text that no longer
-# matches its own pattern, so re-running is a no-op.
+# Idempotent: the staged tree is regenerated from ../R on every run, and the
+# template-path rewrite leaves behind text that no longer matches its own
+# pattern, so re-running is a no-op.
 
-# Where the vendored sources are read from. The default is the shared
-# checkout; PMATOOLS_SRC overrides it so a session can vendor from its own
-# pmatools worktree instead of whatever the shared tree happens to hold.
-# mustWork = FALSE keeps a bad path resolvable so require_valid_src() below
-# can report it verbatim rather than dying inside normalizePath().
-resolve_pmatools_src <- function(
-    default = "/Users/furukawayuonore/Developer/pmatools") {
-  raw <- trimws(Sys.getenv("PMATOOLS_SRC", unset = ""))
-  if (!nzchar(raw)) raw <- default
-  normalizePath(path.expand(raw), mustWork = FALSE)
+# Self-locating, so `Rscript shiny/stage_bundle.R` works from anywhere in the
+# repo and deploy.R can source() it. Under source() the --file= argument is
+# deploy.R's, but both live in this directory, so dirname() still lands here.
+.script_dir <- function() {
+  f <- grep("^--file=", commandArgs(FALSE), value = TRUE)
+  if (length(f) == 0L) return(normalizePath("."))   # interactive fallback
+  normalizePath(dirname(sub("^--file=", "", f[1L])))
 }
 
-PMATOOLS_SRC <- resolve_pmatools_src()
-APP_DIR      <- normalizePath(".")
-VENDORED_R   <- file.path(APP_DIR, "R", "_pmatools")
+APP_DIR    <- .script_dir()
+PKG_ROOT   <- normalizePath(file.path(APP_DIR, ".."))
+VENDORED_R <- file.path(APP_DIR, "R", "_pmatools")
+
+# Every path below this line is app-relative, as are app.R's source() calls and
+# the "." default of getOption("pmatools.vendored_root").
+setwd(APP_DIR)
 
 # Dev-only packages in pmatools Suggests that the deployed app never needs.
 # Everything else in pmatools Imports/Suggests is assumed runtime-relevant.
 DEV_ONLY_PKGS <- c("testthat", "rmarkdown", "here", "knitr", "covr",
                    "devtools", "usethis", "roxygen2")
 
-# --- Vendor source validation ------------------------------------------------
-# Runs before anything is read from or written to the source, in both the
-# vendor path and --check-only. DESCRIPTION / R / inst are exactly the three
-# entries the steps below consume, so checking them here turns "PMATOOLS_SRC
-# points somewhere useless" into one clear message instead of a
-# read.dcf()/file.copy() failure halfway through a wiped R/_pmatools/.
-require_valid_src <- function(src = PMATOOLS_SRC) {
-  hint <- paste0("Set PMATOOLS_SRC to a pmatools checkout, e.g.\n",
-                 "  PMATOOLS_SRC=~/Developer/pmatools ",
-                 "Rscript update_vendor.R")
+# --- Package-root validation -------------------------------------------------
+# DESCRIPTION / R / inst are exactly the three entries the steps below consume.
+# Checking them turns "this script was moved, or the repo was restructured"
+# into one clear message instead of a read.dcf()/file.copy() failure halfway
+# through a wiped R/_pmatools/.
+require_valid_src <- function(src = PKG_ROOT) {
+  hint <- paste0("stage_bundle.R expects to sit one level below the pmatools ",
+                 "package root\n(pmatools/shiny/stage_bundle.R). If the ",
+                 "layout moved, update PKG_ROOT.")
   if (!dir.exists(src)) {
-    stop("pmatools source directory not found: ", src, "\n", hint,
-         call. = FALSE)
+    stop("pmatools package root not found: ", src, "\n", hint, call. = FALSE)
   }
   needed <- c("DESCRIPTION", "R", "inst")
   absent <- needed[!file.exists(file.path(src, needed))]
   if (length(absent) > 0L) {
-    stop("Not a pmatools checkout (missing ",
+    stop("Not a pmatools package root (missing ",
          paste(absent, collapse = ", "), "): ", src, "\n", hint,
          call. = FALSE)
   }
@@ -139,10 +144,11 @@ git_field <- function(src, args) {
   as.character(out)
 }
 
-# Reads branch / short SHA / porcelain status of the source checkout. Returns
+# Reads branch / short SHA / porcelain status of the repo. Returns
 # known = FALSE (never an error) when git cannot answer, because an
-# undescribable source is unverifiable rather than known-bad.
-pmatools_src_meta <- function(src = PMATOOLS_SRC) {
+# undescribable source is unverifiable rather than known-bad. Used for the
+# VERSION provenance line only -- deploy.R owns the clean-tree requirement.
+pmatools_src_meta <- function(src = PKG_ROOT) {
   unknown <- list(known = FALSE, branch = NA_character_, sha = NA_character_,
                   dirty = NA, dirty_files = character(0))
 
@@ -172,37 +178,6 @@ src_label <- function(meta) {
   paste0(meta$branch, "@", meta$sha, if (isTRUE(meta$dirty)) "-dirty" else "")
 }
 
-# The guard proper. Called from the vendor path only, before the first
-# unlink()/file.copy(), so a refusal leaves the vendored tree untouched.
-# --check-only deliberately does not call this: it writes nothing.
-guard_source_state <- function(meta, src = PMATOOLS_SRC) {
-  if (!isTRUE(meta$known)) {
-    warning("Cannot read git state of ", src, " (git missing, or not a ",
-            "repository). Vendoring anyway; R/_pmatools/VERSION will record ",
-            "'source: unknown'.", call. = FALSE)
-    return(invisible(FALSE))
-  }
-  if (!isTRUE(meta$dirty)) return(invisible(TRUE))
-
-  msg <- paste0(
-    "pmatools source checkout is DIRTY: ", src, "\n",
-    "  ", length(meta$dirty_files), " uncommitted change(s), e.g. ",
-    paste(utils::head(meta$dirty_files, 3L), collapse = " | "), "\n",
-    "Vendoring from it would bake another session's in-progress work into\n",
-    "R/_pmatools/ and ship it. Cut a worktree on the pmatools side and\n",
-    "point this script at it instead:\n",
-    "  git -C ", src, " worktree add ../pmatools-wt/<branch> <branch>\n",
-    "  PMATOOLS_SRC=../pmatools-wt/<branch> Rscript update_vendor.R\n",
-    "Set PMATOOLS_ALLOW_DIRTY=1 to override (the version stamp is then\n",
-    "marked '-dirty').")
-
-  if (identical(trimws(Sys.getenv("PMATOOLS_ALLOW_DIRTY", "")), "1")) {
-    warning(msg, call. = FALSE)
-    return(invisible(FALSE))
-  }
-  stop(msg, call. = FALSE)
-}
-
 # --- Dependency-sync check ---------------------------------------------------
 # Parses the source pmatools DESCRIPTION and compares its Imports + Suggests
 # against the app DESCRIPTION's Imports. Prints a loud warning listing any
@@ -210,7 +185,7 @@ guard_source_state <- function(meta, src = PMATOOLS_SRC) {
 # Non-fatal (warning, not stop): some Suggests are genuinely optional, but
 # every miss must be a conscious decision -- string-referenced backends
 # (metafor, mmeta, BiasedUrn) are invisible to rsconnect's scanner.
-check_app_dependencies <- function(pmatools_src = PMATOOLS_SRC,
+check_app_dependencies <- function(pmatools_src = PKG_ROOT,
                                    app_dir = APP_DIR,
                                    dev_only = DEV_ONLY_PKGS) {
   parse_deps <- function(desc_path, fields) {
@@ -367,7 +342,7 @@ check_vendored_template_paths <- function(target_dir = VENDORED_R) {
     for (s in survivors) cat("!!   ", s, "\n", sep = "")
     cat("!! pmatools is SOURCED here, never installed, so that call returns",
         "\"\" and\n!! the template will NOT be found at runtime. Widen",
-        "TPL_LOOKUP_PAT in\n!! update_vendor.R to cover the new call shape.\n")
+        "TPL_LOOKUP_PAT in\n!! shiny/stage_bundle.R to cover the new call shape.\n")
     cat(banner, "\n\n", sep = "")
     warning("Vendored pmatools still resolves templates via system.file(): ",
             paste(survivors, collapse = ", "), call. = FALSE)
@@ -375,47 +350,35 @@ check_vendored_template_paths <- function(target_dir = VENDORED_R) {
   invisible(survivors)
 }
 
-# Resolve and validate the source before either mode proceeds: --check-only
-# reads the source DESCRIPTION too, so a bad PMATOOLS_SRC has to fail there
-# just as loudly. Reading the git state is likewise a pure read, safe on both
-# paths; only guard_source_state() below can stop the run, and it is reached
-# from the vendor path alone.
+# Validate the package root before either mode proceeds: --check-only reads
+# ../DESCRIPTION too, so a broken layout has to fail there just as loudly.
 require_valid_src()
 src_meta <- pmatools_src_meta()
 
-# Standalone mode: `Rscript update_vendor.R --check-only` runs both read-only
-# checks without touching any vendored files. One flag rather than a sibling
-# --check-templates: both answer the same question ("is the vendored tree
-# deployable as it stands?"), both are pure reads, and a single entry point
-# means a check added later cannot be forgotten by whoever runs it.
+# Standalone mode: `Rscript shiny/stage_bundle.R --check-only` runs both
+# read-only checks without touching any staged file. One flag rather than a
+# sibling --check-templates: both answer the same question ("is the staged
+# tree deployable as it stands?"), both are pure reads, and a single entry
+# point means a check added later cannot be forgotten by whoever runs it.
 if ("--check-only" %in% commandArgs(trailingOnly = TRUE)) {
-  cat("Checking vendored pmatools against ", PMATOOLS_SRC, "\n", sep = "")
+  cat("Checking the staged pmatools against ", PKG_ROOT, "\n", sep = "")
   cat("  source state: ", src_label(src_meta), "\n", sep = "")
-  if (isTRUE(src_meta$dirty)) {
-    cat("  (source has ", length(src_meta$dirty_files),
-        " uncommitted change(s); a vendor run would refuse it unless ",
-        "PMATOOLS_ALLOW_DIRTY=1)\n", sep = "")
-  }
   check_app_dependencies()
   check_vendored_template_paths()
   quit(save = "no", status = 0)
 }
 
-cat("Refreshing vendored pmatools from ", PMATOOLS_SRC, "\n", sep = "")
+cat("Staging pmatools from ", PKG_ROOT, "\n", sep = "")
 cat("  source state: ", src_label(src_meta), "\n", sep = "")
-
-# 0. Dirty-source guard. Must stay ABOVE the unlink()/file.copy() below: a
-#    refusal has to leave the existing vendored tree exactly as it was.
-guard_source_state(src_meta)
 
 # 1. R sources (skip data.R which is just lazy-data roxygen)
 target_r <- VENDORED_R
 unlink(target_r, recursive = TRUE)
-dir.create(target_r, recursive = TRUE)
-src_r <- list.files(file.path(PMATOOLS_SRC, "R"), pattern = "\\.R$",
+invisible(dir.create(target_r, recursive = TRUE))
+src_r <- list.files(file.path(PKG_ROOT, "R"), pattern = "\\.R$",
                     full.names = TRUE)
 src_r <- src_r[basename(src_r) != "data.R"]
-file.copy(src_r, target_r)
+invisible(file.copy(src_r, target_r))
 cat("  R/_pmatools/: ", length(src_r), " files\n", sep = "")
 
 # 1b. Version stamp. The app SOURCES these files instead of installing the
@@ -426,11 +389,11 @@ cat("  R/_pmatools/: ", length(src_r), " files\n", sep = "")
 #     because that step unlink()s and recreates the whole directory.
 #
 #     Line 1 stays the bare version string: app.R does readLines(n = 1L) and
-#     must keep seeing exactly that. Line 2 records which source checkout the
-#     version came from ("source: <branch>@<sha>", "-dirty" when vendored
-#     under PMATOOLS_ALLOW_DIRTY=1, "unknown" when git could not say), which
-#     is what actually pins the bytes down -- two builds can share a Version
-#     field and differ.
+#     must keep seeing exactly that. Line 2 records which commit the version
+#     came from ("source: <branch>@<sha>", "-dirty" when staged from
+#     uncommitted work, "unknown" when git could not say), which is what
+#     actually pins the bytes down -- two builds can share a Version field
+#     and differ.
 stamp_vendored_version <- function(src_desc, target_dir, meta = src_meta) {
   if (!file.exists(src_desc)) {
     warning("Version stamp NOT written: DESCRIPTION not found at ", src_desc,
@@ -453,7 +416,7 @@ stamp_vendored_version <- function(src_desc, target_dir, meta = src_meta) {
 }
 
 stamped_version <- stamp_vendored_version(
-  file.path(PMATOOLS_SRC, "DESCRIPTION"), target_r, src_meta)
+  file.path(PKG_ROOT, "DESCRIPTION"), target_r, src_meta)
 cat("  R/_pmatools/VERSION: ",
     if (is.na(stamped_version)) "NOT WRITTEN (see warning)" else
       paste0(stamped_version, " (source: ", src_label(src_meta), ")"),
@@ -462,8 +425,8 @@ cat("  R/_pmatools/VERSION: ",
 # 2. inst assets
 target_inst <- file.path(APP_DIR, "_pmatools_inst")
 unlink(target_inst, recursive = TRUE)
-file.copy(file.path(PMATOOLS_SRC, "inst"), APP_DIR, recursive = TRUE)
-file.rename(file.path(APP_DIR, "inst"), target_inst)
+invisible(file.copy(file.path(PKG_ROOT, "inst"), APP_DIR, recursive = TRUE))
+invisible(file.rename(file.path(APP_DIR, "inst"), target_inst))
 cat("  _pmatools_inst/: copied\n")
 
 # 3. Patch template paths across the whole vendored tree: replace every

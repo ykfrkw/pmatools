@@ -4,16 +4,22 @@
 # library() or load_all(). tests/testthat/helper-app.R sources the app's own R
 # files instead, so the tests below exercise exactly the code the app runs.
 #
-# Run either of (from the app root):
-#   Rscript -e 'testthat::test_dir("tests/testthat")'
-#   Rscript tests/testthat.R
+# Run any of (from anywhere in the repo):
+#   Rscript shiny/tests/testthat.R
+#   Rscript -e 'testthat::test_dir("shiny/tests/testthat")'
 local({
-  # Walk up from the working directory to the app root, so the entry point
-  # works whether it is invoked from the app root or from tests/.
-  d <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
+  # Start the walk at this script, not at getwd(). The app is a subdirectory
+  # of the pmatools package repo now, so walking up from the working directory
+  # only finds app.R when you happen to have cd'd into shiny/ first -- and
+  # from the repo root it walks past the app entirely and off the top.
+  start <- {
+    f <- grep("^--file=", commandArgs(FALSE), value = TRUE)
+    if (length(f) > 0L) dirname(sub("^--file=", "", f[1L])) else getwd()
+  }
+  d <- normalizePath(start, winslash = "/", mustWork = TRUE)
   while (!file.exists(file.path(d, "app.R"))) {
     up <- dirname(d)
-    if (identical(up, d)) stop("could not find app.R above ", getwd())
+    if (identical(up, d)) stop("could not find app.R above ", start)
     d <- up
   }
   testthat::test_dir(file.path(d, "tests", "testthat"))

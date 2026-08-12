@@ -19,3 +19,9 @@ secrets*
 
 # Claude Code session artifacts
 .claude/
+
+# Staged by stage_bundle.R from ../R and ../inst. Never commit and never
+# hand-edit: the sources are one directory up, and a committed copy is a copy
+# that can drift from them. deploy.R regenerates both before every deploy.
+/R/_pmatools/
+/_pmatools_inst/

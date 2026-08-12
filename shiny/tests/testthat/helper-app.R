@@ -8,6 +8,11 @@
 # whose bodies need `input` / `output` / `session` / `state`, and testing those
 # would need a Shiny test harness this app does not have.
 
+# testthat::test_dir() sets the working directory to tests/testthat before
+# sourcing helpers, so walking up from getwd() lands on the app root -- which
+# is shiny/ now that the app is a subdirectory of the package repo, not the
+# repo root. tests/testthat.R starts its own walk from the script path
+# instead, because it runs before test_dir() has set anything.
 PMA_APP_ROOT <- local({
   d <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
   while (!file.exists(file.path(d, "app.R"))) {

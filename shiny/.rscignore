@@ -9,7 +9,8 @@ Core GRADE papers
 rsconnect
 .deploy_excluded
 deploy.R
-update_vendor.R
+stage_bundle.R
+tests
 *.tar.gz
 .gitignore
 .claude
