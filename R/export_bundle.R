@@ -498,6 +498,32 @@ export_bundle.meta <- function(x,
 # --------------------------------------------------------------------------
 # Results text
 # --------------------------------------------------------------------------
+
+# Two meta objects describe the same analysis set when they pool the same
+# studies; the refit rebuilds the object, so identical() is too strict.
+.same_analysis_set <- function(a, b) {
+  if (is.null(a) || is.null(b)) return(FALSE)
+  identical(as.integer(a$k %||% NA_integer_), as.integer(b$k %||% NA_integer_)) &&
+    identical(as.character(a$studlab), as.character(b$studlab))
+}
+
+# Which analysis set `ma` is, phrased for a results.txt heading (longer than
+# .analysis_set_label(), which labels a table cell). Only called when a low-RoB
+# refit happened, so both `grade$meta` and `grade$meta_full` are populated and
+# describe different sets of studies.
+.results_txt_set_label <- function(ma, grade) {
+  k_low  <- grade$meta$k
+  k_full <- grade$meta_full$k
+  if (.same_analysis_set(ma, grade$meta)) {
+    sprintf("low risk of bias studies only (%d of %d studies; rated below)",
+            k_low, k_full)
+  } else if (.same_analysis_set(ma, grade$meta_full)) {
+    sprintf("all studies (%d studies; NOT the analysis rated below)", k_full)
+  } else {
+    "analysis as supplied (NOT the analysis rated below)"
+  }
+}
+
 .write_results_txt <- function(ma, grade, path) {
   con <- file(path, "w")
   on.exit(close(con), add = TRUE)
@@ -510,10 +536,29 @@ export_bundle.meta <- function(x,
     ""
   ), con)
 
-  writeLines("[ Meta-analysis summary ]", con)
+  # After a Core GRADE 4 Fig 2 low-RoB refit the rated analysis is a subset of
+  # the full one, so an unqualified "[ Meta-analysis summary ]" would let a
+  # reader scanning the top of the file take a pooled estimate that the
+  # certainty assessment below was not computed on. Name the analysis set in
+  # the heading, and print the rated analysis too when `ma` is not it.
+  if (isTRUE(grade$rob_refit)) {
+    writeLines(sprintf("[ Meta-analysis summary - %s ]",
+                       .results_txt_set_label(ma, grade)), con)
+  } else {
+    writeLines("[ Meta-analysis summary ]", con)
+  }
   ma_summary <- utils::capture.output(summary(ma))
   writeLines(ma_summary, con)
   writeLines("", con)
+
+  if (isTRUE(grade$rob_refit) && !.same_analysis_set(ma, grade$meta)) {
+    writeLines(sprintf(
+      "[ Meta-analysis summary - low risk of bias studies only (%d of %d studies; rated below) ]",
+      grade$meta$k, grade$meta_full$k
+    ), con)
+    writeLines(utils::capture.output(summary(grade$meta)), con)
+    writeLines("", con)
+  }
 
   writeLines("================================================================", con)
   writeLines("[ Certainty assessment (Core GRADE series) ]", con)
