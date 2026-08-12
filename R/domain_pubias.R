@@ -20,7 +20,7 @@
 #
 #   [After Q1] pubias_registry_complete == "yes"
 #         -> "no" (a pmatools convenience input, NOT a node of Fig 5; see the
-#            note text). It is evaluated AFTER Q1 (v0.5.1) so that a body of
+#            note text). It is evaluated AFTER Q1 (v0.5) so that a body of
 #            small industry-sponsored trials still rates down even when the
 #            user asserts complete registry coverage.
 #
@@ -41,7 +41,7 @@
 #       whether asymmetry "strongly suggests publication bias" -- a qualitative
 #       judgment with no significance threshold. p < 0.05 is a pmatools
 #       operational convention and is labelled as such in the domain notes.
-#       The former p < 0.01 -> "serious" (-2) tier was removed in v0.5.1: Core
+#       The former p < 0.01 -> "serious" (-2) tier was removed in v0.5: Core
 #       GRADE 4 never describes a two-level publication-bias downgrade.
 #
 #   Q4 (k < 10):

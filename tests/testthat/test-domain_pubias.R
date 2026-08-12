@@ -46,7 +46,7 @@ make_small_meta <- function() {
 }
 
 # --- Registry rule-out, evaluated after Q1 ----------------------------------
-# Updated (v0.5.1): Core GRADE 4 Fig 5 has no structural rule-out node, so
+# Updated (v0.5): Core GRADE 4 Fig 5 has no structural rule-out node, so
 # pubias_registry_complete is now consumed AFTER Q1 and can no longer suppress
 # the small-and-industry-sponsored downgrade.
 test_that("pubias_registry_complete = 'yes' short-circuits the Fig 5 nodes after Q1", {
@@ -89,7 +89,7 @@ test_that("Q1: pubias_small_industry = 'yes' -> some_concerns", {
 })
 
 # --- Q3 (k >= 10): single-tier auto Egger -----------------------------------
-# Updated (v0.5.1): the p < 0.01 -> serious (-2) tier was removed. Core GRADE 4
+# Updated (v0.5): the p < 0.01 -> serious (-2) tier was removed. Core GRADE 4
 # never describes a two-level publication-bias downgrade, and Fig 5's asymmetry
 # node is qualitative ("strongly suggests") with no p-value cut-off.
 test_that("Q3 auto: very small Egger p still rates down only one level", {

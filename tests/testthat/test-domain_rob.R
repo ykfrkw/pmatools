@@ -122,7 +122,7 @@ test_that("Rule 4: 'trivial' -> 'above' zone change -> some_concerns", {
 })
 
 # --- Rule 5: zone change with sign flip --------------------------------------
-# Updated (v0.5.1): rule 5 now caps at -1. Core GRADE 4 describes no automatic
+# Updated (v0.5): rule 5 now caps at -1. Core GRADE 4 describes no automatic
 # two-level risk-of-bias downgrade (every Fig 2 leaf is "rate down" / "do not
 # rate down"); -2 requires the scalar rob override.
 test_that("Rule 5: 'above' <-> 'below' sign flip -> some_concerns (capped at -1)", {
@@ -149,7 +149,7 @@ test_that("Rule 5 can still reach -2 through the scalar rob override", {
 })
 
 # --- Fallback: Threshold not supplied ---------------------------------------
-# Updated (v0.5.1): same -1 cap as above.
+# Updated (v0.5): same -1 cap as above.
 test_that("Fallback: Threshold not supplied + sign flip -> some_concerns (rule 5)", {
   m <- make_mock_dominated(te_all = 1.0, te_low_only = -0.5)
   g <- grade_meta(m, rob = c("serious", "no", "no"),
@@ -270,7 +270,7 @@ test_that("weight_note reports both count % and weight %", {
 })
 
 test_that("All studies high-RoB -> some_concerns (1 level down, no comparator pool)", {
-  # Updated (v0.5.1): this used to rate down 2 levels. Core GRADE 4 supports no
+  # Updated (v0.5): this used to rate down 2 levels. Core GRADE 4 supports no
   # automatic two-level risk-of-bias downgrade, so the automated judgment is
   # capped at -1; -2 requires rob = "serious" + rob_rationale.
   m <- make_mock_dominated(te_all = 0.30, te_low_only = 0.30)

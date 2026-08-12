@@ -24,7 +24,7 @@ test_that("chinn_smd_to_or handles NULL CI inputs", {
   expect_true(is.na(r$or_upper))
 })
 
-# Updated (v0.5.1): binary outcomes lead with the absolute candidate; the OR
+# Updated (v0.5): binary outcomes lead with the absolute candidate; the OR
 # ratio value moved to $threshold_ratio. Every default now carries $source, and
 # only SMD 0.20 is sourced to Core GRADE 6.
 test_that("suggest_threshold returns expected defaults", {

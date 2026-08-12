@@ -57,7 +57,7 @@ test_that("opposite_sides + subgroup explained -> 'no'", {
   expect_equal(row$judgment, "no")
 })
 
-# Updated (v0.5.1): Core GRADE 3 declines to endorse a two-level inconsistency
+# Updated (v0.5): Core GRADE 3 declines to endorse a two-level inconsistency
 # downgrade, so every automated / flowchart path caps at -1.
 test_that("opposite_sides + no subgroup -> 'some_concerns' (capped at -1)", {
   m <- make_mock_meta(c(-0.5, 0.5, -0.5), i2 = 0.7)
@@ -83,7 +83,7 @@ test_that("the scalar override is the only route to -2 for inconsistency", {
 
 # ---- Auto path: I^2 only (no Q-test) ----
 
-# Cut-off updated 25% -> 30% (v0.5.1). Reason: 30% is the only numeric value
+# Cut-off updated 25% -> 30% (v0.5). Reason: 30% is the only numeric value
 # Core GRADE 3 puts on paper ("one will seldom see serious inconsistency with
 # I2 values <30%"); 25% had no source. I^2 = 0.28 is the new pass case and
 # would have rated down under the old cut-off.
@@ -97,7 +97,7 @@ test_that("auto Step 1: I^2 <= 30% -> 'no' regardless of Q p", {
 })
 
 test_that("I^2 between the old 25% and the new 30% cut-off no longer rates down", {
-  # Opposite-sided TEs: under the pre-v0.5.1 cut-off this reached Step 2 and
+  # Opposite-sided TEs: under the pre-v0.5 cut-off this reached Step 2 and
   # returned 'some_concerns'. It now stops at Step 1.
   m <- make_mock_meta(c(-0.5, 0.5, -0.5), i2 = 0.28)
   g <- grade_meta(m, threshold_type = "null")
@@ -118,7 +118,7 @@ test_that("auto Step 1: I^2 > 30% triggers Step 2", {
   m <- make_mock_meta(c(-0.5, 0.5, -0.5), i2 = 0.60)
   g <- grade_meta(m, threshold_type = "null")
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  # opposite-sided TEs -> rate down, capped at one level (v0.5.1)
+  # opposite-sided TEs -> rate down, capped at one level (v0.5)
   expect_equal(row$judgment, "some_concerns")
 })
 
@@ -149,7 +149,7 @@ test_that("auto Step 2 with Threshold: zone tally distinguishes opposite from ma
 test_that("inconsistency and imprecision use the SAME chosen threshold", {
   # threshold_type = "null" with a point estimate beyond the MID resolves the
   # rating target to non_null_effect, whose chosen threshold is the null.
-  # Before v0.5.1 Inconsistency still received the raw MID here.
+  # Before v0.5 Inconsistency still received the raw MID here.
   m <- make_mock_meta(c(0.30, -0.30, 0.0), i2 = 0.70)
   m$TE.random <- 0.60   # |TE| > log(1.2) -> non_null_effect
   g <- grade_meta(m, threshold = 1.20, threshold_scale = "ratio",

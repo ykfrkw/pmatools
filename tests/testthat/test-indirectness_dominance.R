@@ -1,4 +1,4 @@
-# test-indirectness_dominance.R — v0.5.1
+# test-indirectness_dominance.R — v0.5
 #
 # Per-study indirectness vectors / column names are aggregated by WEIGHT SHARE,
 # not worst case. Core GRADE 5 (p2-3), verbatim:
@@ -31,7 +31,7 @@ ind_row <- function(g) {
 mk_20 <- function() mk_w(c(5, rep(95 / 19, 19)))
 
 test_that("1 indirect study of 20 carrying 5% of the weight does not rate down", {
-  # Pre-v0.5.1 this returned "serious" via the worst-case fold.
+  # Pre-v0.5 this returned "serious" via the worst-case fold.
   g <- suppressWarnings(grade_meta(
     mk_20(),
     indirectness   = c("serious", rep("no", 19)),

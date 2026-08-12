@@ -78,7 +78,7 @@
 #     Rule 4: za != zl, no sign flip across null       -> "some_concerns"  (-1)
 #     Rule 5: za != zl, sign flip (above <-> below)    -> "some_concerns"  (-1)
 #
-#   Rate down at most ONE level (v0.5.1). Core GRADE 4 describes no two-level
+#   Rate down at most ONE level (v0.5). Core GRADE 4 describes no two-level
 #   risk-of-bias downgrade: the only "two levels" in the paper is about rating
 #   UP observational evidence, and every leaf of Fig 2 reads "rate down" /
 #   "do not rate down". Rule 5 (sign flip) and the all-studies-high-RoB case
@@ -111,7 +111,7 @@
 #                                     (use low risk of bias studies only)
 #     substantial difference = No  -> analysis_set = "all"
 #
-#   "Substantial difference" is judged on MAGNITUDE ONLY (v0.5.1): a zone
+#   "Substantial difference" is judged on MAGNITUDE ONLY (v0.5): a zone
 #   change, or |relative change| > `rob_inflation_threshold` in either
 #   direction. Core GRADE 4 (p6) verbatim:
 #     "In contrast, when appreciable evidence from low risk of bias studies
@@ -143,8 +143,8 @@
 #
 # Edge case: when every study is high-RoB (n_low == 0) the weight share is
 # 100%, so the dominated branch is taken; there is no low/some-RoB comparator
-# pool, and the domain is rated "some_concerns" (rate down 1 level). Before
-# v0.5.1 this returned "serious" (-2); Core GRADE 4 supports no automatic
+# pool, and the domain is rated "some_concerns" (rate down 1 level). Up to
+# v0.4.0 this returned "serious" (-2); Core GRADE 4 supports no automatic
 # two-level risk-of-bias downgrade, so a reviewer who judges -2 appropriate
 # must say so with rob = "serious" + rob_rationale.
 #
@@ -628,7 +628,7 @@ assess_rob <- function(rob, meta_obj,
   # ---- Node 2b: not dominated -> appreciable low-RoB evidence? substantial
   # difference between the high- and low-RoB estimates? Neither answer rates
   # the domain down; only the recommended analysis set changes.
-  # v0.5.1: the "substantially different magnitudes of effect" node of Core
+  # v0.5: the "substantially different magnitudes of effect" node of Core
   # GRADE 4 Fig 2 is symmetric, so this branch judges magnitude only -- the
   # `small_values` direction gate (dir$direction_ok, which gates rule 3) is
   # deliberately NOT consulted here. Without that, a body of evidence whose

@@ -118,7 +118,7 @@ test_that("inconsistency domain is auto-computed", {
 })
 
 test_that("high I2 (opposite-sided TEs) rates down one level (auto)", {
-  # Updated (v0.5.1): the auto opposite-sides path used to return "serious"
+  # Updated (v0.5): the auto opposite-sides path used to return "serious"
   # (-2). Core GRADE 3 declines to endorse a two-level inconsistency downgrade,
   # so automated judgments are capped at -1.
   m <- make_metabin_high_i2()
@@ -147,7 +147,7 @@ test_that("inconsistency flowchart: ci_diff = no → do not rate down", {
 })
 
 test_that("inconsistency flowchart: opposite_sides + no subgroup → rate down 1", {
-  # Updated (v0.5.1): capped at -1 per Core GRADE 3 (see above).
+  # Updated (v0.5): capped at -1 per Core GRADE 3 (see above).
   m <- make_metabin()
   g <- grade_meta(m,
     inconsistency_ci_diff            = "yes",
