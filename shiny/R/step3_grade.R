@@ -114,12 +114,8 @@ step3_ui <- function() {
       style = "margin-top: 0.5rem;",
       htmltools::tags$summary("Forest plot display"),
       htmltools::div(
-        style = paste(
-          "display: grid;",
-          "grid-template-columns: repeat(4, minmax(140px, 1fr));",
-          "gap: 0.75rem 1rem;",
-          "padding: 0.75rem 0.25rem 0.25rem;"),
-        htmltools::div(style = "grid-column: span 4;",
+        class = "pma-display-grid",
+        htmltools::div(class = "pma-span-4",
           shiny::textInput(paste0(prefix, "_title"), "Title", value = "", width = "100%")),
         shiny::textInput(paste0(prefix, "_label_e"),  "Intervention label", value = "", width = "100%"),
         shiny::textInput(paste0(prefix, "_label_c"),  "Control label",      value = "", width = "100%"),
@@ -127,36 +123,32 @@ step3_ui <- function() {
         shiny::textInput(paste0(prefix, "_favors_right"), "Favors (right)", placeholder = "e.g., Favors CBT-I",   width = "100%"),
         shiny::numericInput(paste0(prefix, "_xlim_lo"), "x-min", value = NA, width = "100%"),
         shiny::numericInput(paste0(prefix, "_xlim_hi"), "x-max", value = NA, width = "100%"),
-        # Blank-row spinners: only relevant once the N / per-arm columns are
-        # hidden, since that is when the heterogeneity footer can collide with
-        # the x-axis. conditionalPanel only toggles display, so a value typed
-        # while visible stays bound and keeps being applied when the panel is
-        # hidden again - intentional. Each numeric needs its own panel, or the
-        # two would share a single cell of the 4-column grid. The ids are
-        # dynamic, hence the JS bracket notation.
-        shiny::conditionalPanel(
-          sprintf("!input['%s_show_n'] && !input['%s_show_events']", prefix, prefix),
-          style = "grid-column: span 4;",
-          htmltools::p(class = "pma-card-subtitle",
-            paste0("Columns hidden: if the heterogeneity text overlaps the ",
-                   "x-axis, use these to move it up or down. ",
-                   "Blank = automatic."))),
-        shiny::conditionalPanel(
-          sprintf("!input['%s_show_n'] && !input['%s_show_events']", prefix, prefix),
-          shiny::numericInput(paste0(prefix, "_addrows_above"),
-                              "Blank rows above pooled result",
-                              value = NA, min = 0, step = 1, width = "100%")),
-        shiny::conditionalPanel(
-          sprintf("!input['%s_show_n'] && !input['%s_show_events']", prefix, prefix),
-          shiny::numericInput(paste0(prefix, "_addrows_below"),
-                              "Blank rows below pooled result",
-                              value = NA, min = 0, step = 1, width = "100%")),
-        htmltools::div(style = "grid-column: span 2;",
-          shiny::checkboxInput(paste0(prefix, "_show_n"), "Show N columns (Intervention / Control)", TRUE)),
-        htmltools::div(style = "grid-column: span 2;",
-          shiny::checkboxInput(paste0(prefix, "_show_events"),
+        # Blank rows around the pooled result. Always visible (they used to be
+        # wrapped in conditionalPanels that only revealed them when both column
+        # checkboxes were off, which conditionalPanel implemented as a display
+        # toggle anyway). Defaults mirror the Step 2 panel and are asymmetric
+        # on purpose: above = 1 is the blank row meta::forest() draws by
+        # default, while a blank "below" keeps plot_forest()'s automatic
+        # derivation that holds the heterogeneity line clear of the x-axis.
+        htmltools::p(class = "pma-card-subtitle pma-span-4",
+          paste0("Blank rows around the pooled result. If the heterogeneity ",
+                 "text overlaps the x-axis - most likely once the per-arm ",
+                 "columns are hidden - use these to move it up or down. ",
+                 "Above: 0 removes the blank row before the pooled result. ",
+                 "Below: blank = automatic.")),
+        shiny::numericInput(paste0(prefix, "_addrows_above"),
+                            "Blank rows above pooled result",
+                            value = 1, min = 0, step = 1, width = "100%"),
+        shiny::numericInput(paste0(prefix, "_addrows_below"),
+                            "Blank rows below pooled result",
+                            value = NA, min = 0, step = 1, width = "100%"),
+        # One checkbox for both per-arm column groups: plot_forest() keeps
+        # show_n and show_events separate (correct for a library), but no user
+        # wants the N columns without the event / mean-and-SD columns.
+        htmltools::div(class = "pma-span-4",
+          shiny::checkboxInput(paste0(prefix, "_show_arm_columns"),
                                paste0("Show per-arm data columns ",
-                                      "(events for binary, mean & SD for continuous)"),
+                                      "(events or mean & SD, and N)"),
                                TRUE))
       )
     )
@@ -906,11 +898,8 @@ step3_server <- function(input, output, session, state) {
         shiny::conditionalPanel(
           "input.threshold_mode == 'relative'",
           shiny::numericInput("threshold_ratio",
-            htmltools::HTML(paste0(
-              '<span style="white-space:nowrap">',
-              EDU_COPY$threshold_labels[[sm]] %||%
-                "Threshold for clinical importance",
-              '</span>')),
+            EDU_COPY$threshold_labels[[sm]] %||%
+              "Threshold for clinical importance",
             value = shiny::isolate({
               v <- threshold_state()
               if (is.na(v)) NA else v
@@ -924,11 +913,8 @@ step3_server <- function(input, output, session, state) {
     } else {
       htmltools::tagList(
         shiny::numericInput("threshold_cont",
-          htmltools::HTML(paste0(
-            '<span style="white-space:nowrap">',
-            EDU_COPY$threshold_labels[[sm]] %||%
-              "Threshold for clinical importance",
-            '</span>')),
+          EDU_COPY$threshold_labels[[sm]] %||%
+            "Threshold for clinical importance",
           value = shiny::isolate({
             v <- threshold_state()
             if (is.na(v)) NA else v
@@ -1537,9 +1523,10 @@ step3_server <- function(input, output, session, state) {
       favors_right = pick_text(paste0(prefix, "_favors_right")),
       xlim         = xlim,
       # An absent checkbox means the tab has not been rendered yet; fall back
-      # to the UI default (TRUE) rather than to isTRUE(NULL).
-      show_n       = isTRUE(input[[paste0(prefix, "_show_n")]] %||% TRUE),
-      show_events  = isTRUE(input[[paste0(prefix, "_show_events")]] %||% TRUE),
+      # to the UI default (TRUE) rather than to isTRUE(NULL). One checkbox
+      # feeds both keys - plot_forest()'s two arguments are kept as they are.
+      show_n       = isTRUE(input[[paste0(prefix, "_show_arm_columns")]] %||% TRUE),
+      show_events  = isTRUE(input[[paste0(prefix, "_show_arm_columns")]] %||% TRUE),
       addrow_above = pma_addrow_above(input[[addrow_ids[["above"]]]]),
       addrow_below = pma_addrow_below(input[[addrow_ids[["below"]]]])
     )
