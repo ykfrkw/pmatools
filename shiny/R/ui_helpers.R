@@ -81,7 +81,7 @@ pma_pmatools_version <- function() {
 # Named after the keys of the state$domain_confirmed logical vector set in
 # step3_server(); used by both Step 3 (banner/badge) and Step 4 (export gate).
 PMA_DOMAIN_LABELS <- c(
-  threshold     = "Decision threshold",
+  threshold     = "Configuration",
   rob           = "Risk of Bias",
   inconsistency = "Inconsistency",
   indirectness  = "Indirectness",

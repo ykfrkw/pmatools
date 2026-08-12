@@ -1,7 +1,7 @@
 # step3_grade.R - Step 3: GRADE 5-domain assessment + Final certainty (sub-tabs)
 
 # Map a suggest_threshold() return onto the two threshold reactiveVals used by
-# the Decision threshold tab.
+# the Configuration tab.
 #
 # pmatools >= 0.5 leads with the ABSOLUTE candidate for binary ratio measures
 # (OR/RR/HR): the top level is threshold_user 0.05 / threshold_scale "ard", and
@@ -39,6 +39,152 @@ step3_threshold_suggestions <- function(s) {
     }
   }
   out
+}
+
+# Does this analysis have an absolute (event-rate) scale at all?
+#
+# BUG FIX: the Configuration panel used to branch on `sm %in% c("OR", "RR")`,
+# so a binary outcome analysed as ARD, RD or HR fell through to the
+# continuous branch and lost the absolute-scale interface entirely - even
+# though its control-arm event data is exactly what that interface needs.
+# The question is about the outcome, not about the summary measure, so the
+# class of the meta object decides: metabin always carries event.c / n.c,
+# metacont never does. `outcome_type` (the Step 2 radio, mirrored into
+# input$outcome_type) is only the fallback for the pre-analysis state.
+step3_is_binary_outcome <- function(obj, outcome_type = NULL) {
+  if (!is.null(obj)) {
+    if (inherits(obj, "metabin")) return(TRUE)
+    if (inherits(obj, "metacont")) return(FALSE)
+    # Rare-event engines return objects that are not metabin but still carry
+    # arm-level counts; those are binary too.
+    if (!is.null(obj$event.c) && !is.null(obj$n.c) &&
+        length(obj$event.c) > 0 && length(obj$n.c) > 0) {
+      return(TRUE)
+    }
+  }
+  identical(outcome_type, "binary")
+}
+
+# Pooled control-group risk, with the fallback made visible.
+#
+# The number the reviewer sees is a meta::metaprop random-effects pooled
+# proportion (GLMM, logit link, back-transformed) via the vendored
+# .compute_control_risk(). That function falls back to the crude
+# sum(event.c) / sum(n.c) with a warning when the GLMM fails; the warning is
+# captured here rather than swallowed, so the UI can say which of the two it
+# is actually showing. A crude ratio must never be presented as pooled.
+#
+# The input is sanitised to complete (event.c, n.c) pairs first. Not
+# cosmetic: .compute_control_risk() drops NA events but not the matching
+# denominators, so an event.c with an NA (common - a study that reported the
+# continuous outcome only) leaves the two vectors at different lengths and
+# metaprop() errors out on every such dataset. Sanitising here restores the
+# metaprop path without touching vendored code (R/_pmatools/ is generated).
+#
+# Known limitation, stated not fixed: .compute_control_risk() returns a bare
+# scalar and discards metaprop's confidence interval, so the uncertainty in
+# the pooled control risk cannot be shown alongside it.
+step3_control_risk <- function(meta_obj) {
+  out <- list(value = NA_real_, method = "none", crude = NA_real_,
+              k_used = 0L, k_dropped = 0L)
+  if (is.null(meta_obj)) return(out)
+  ec <- meta_obj$event.c
+  nc <- meta_obj$n.c
+  if (is.null(ec) || is.null(nc) || length(ec) != length(nc) ||
+      length(nc) == 0) {
+    return(out)
+  }
+  keep <- !is.na(ec) & !is.na(nc) & nc > 0
+  if (!any(keep)) return(out)
+  clean <- meta_obj
+  clean$event.c <- ec[keep]
+  clean$n.c     <- nc[keep]
+  out$k_used    <- sum(keep)
+  out$k_dropped <- sum(!keep)
+  out$crude     <- sum(clean$event.c) / sum(clean$n.c)
+
+  fell_back <- FALSE
+  val <- withCallingHandlers(
+    tryCatch(.compute_control_risk(clean, method = "metaprop"),
+             error = function(e) NULL),
+    warning = function(w) {
+      if (grepl("metaprop", conditionMessage(w), fixed = TRUE)) {
+        fell_back <<- TRUE
+      }
+      invokeRestart("muffleWarning")
+    }
+  )
+  if (is.null(val) || length(val) != 1L || !is.finite(val) ||
+      val <= 0 || val >= 1) {
+    return(out)
+  }
+  out$value  <- val
+  out$method <- if (fell_back) "simple_fallback" else "metaprop"
+  out
+}
+
+# Both directions of the absolute threshold, plus what the algorithm
+# actually uses on the decrease side.
+#
+# The rating algorithm works on the log scale with a symmetric
+# +/- threshold_internal, so the decrease side it applies is the ratio
+# 1 / T where T is the increase-side ratio. That is NOT the ratio implied by
+# p0 - ard: e.g. RR with p0 = 0.18 and ard = 0.05 gives T = 0.23 / 0.18 =
+# 1.278 on the increase side, whose mirror 1 / 1.278 = 0.782 implies
+# p1 = 0.141, an absolute difference of -0.039 rather than -0.050. The gap is
+# larger for OR. Showing p0 - ard is a presentational convenience; the
+# mirrored values returned here are what the algorithm sees.
+#
+# Returns NULL unless p0 and the threshold are usable. `down_ok` is FALSE
+# when p0 - ard would leave the (0, 1) interval, in which case only the
+# increase side and the mirror are meaningful.
+step3_ard_equivalence <- function(sm, abs1000, base1000) {
+  if (is.null(abs1000) || is.null(base1000)) return(NULL)
+  if (length(abs1000) != 1L || length(base1000) != 1L) return(NULL)
+  if (is.na(abs1000) || is.na(base1000)) return(NULL)
+  if (!is.finite(abs1000) || !is.finite(base1000)) return(NULL)
+  p0  <- base1000 / 1000
+  ard <- abs1000 / 1000
+  if (p0 <= 0 || p0 >= 1 || ard <= 0) return(NULL)
+  p1_up <- p0 + ard
+  if (p1_up >= 1) return(NULL)
+  p1_dn <- p0 - ard
+
+  .ratio <- function(p1) {
+    if (identical(sm, "OR")) (p1 / (1 - p1)) / (p0 / (1 - p0)) else p1 / p0
+  }
+  # Invert a ratio back to an event rate at the same p0 (the algorithm's
+  # decrease side).
+  .invert <- function(ratio) {
+    if (identical(sm, "OR")) {
+      odds <- (p0 / (1 - p0)) * ratio
+      odds / (1 + odds)
+    } else {
+      p0 * ratio
+    }
+  }
+
+  ratio_up     <- .ratio(p1_up)
+  mirror_ratio <- 1 / ratio_up
+  mirror_p1    <- .invert(mirror_ratio)
+
+  list(
+    sm            = sm,
+    p0            = p0,
+    ard           = ard,
+    p1_up         = p1_up,
+    ratio_up      = ratio_up,
+    down_ok       = p1_dn > 0,
+    p1_dn         = p1_dn,
+    ratio_dn      = if (p1_dn > 0) .ratio(p1_dn) else NA_real_,
+    mirror_ratio  = mirror_ratio,
+    mirror_p1     = mirror_p1,
+    mirror_ard    = mirror_p1 - p0,
+    # RR / OR equivalents of the increase side, shown side by side so the
+    # reader can see how much the choice of summary measure matters.
+    rr_up         = p1_up / p0,
+    or_up         = (p1_up / (1 - p1_up)) / (p0 / (1 - p0))
+  )
 }
 
 # Sub-tab navigation inside Step 3. File scope rather than local to
@@ -174,20 +320,28 @@ step3_ui <- function() {
       shiny::tabsetPanel(
         id = "grade_tabs",
 
-        # --- Decision threshold (cross-cutting; set once, used by RoB /
-        #     Inconsistency / Imprecision) ---
-        shiny::tabPanel("Decision threshold",
-          htmltools::h4("Decision threshold",
+        # --- Configuration (cross-cutting; everything the five domains
+        #     depend on is established and confirmed here, in the order a
+        #     reviewer needs to decide it: control-group risk, then the
+        #     threshold, then how the effect is presented) ---
+        shiny::tabPanel("Configuration",
+          htmltools::h4("Configuration",
                         style = "margin: 0 0 0.5rem; font-size: 1.1rem;"),
           htmltools::p(class = "pma-card-subtitle",
-            EDU_COPY$threshold_tab$intro),
+            EDU_COPY$config_tab$intro),
           shiny::uiOutput("threshold_panel"),
+          shiny::uiOutput("config_status"),
           .confirm_checkbox("threshold_confirm",
-            paste0("I have reviewed and confirm this decision threshold ",
-                   "(required before export; the default value is fine ",
-                   "if you agree with it)")),
-          .grade_nav("grade_back_thresh", "Back: Meta-analysis",
-                     "grade_next_thresh", "Next: Risk of Bias")
+            paste0("I have reviewed and confirm this configuration ",
+                   "(required before export; the default values are fine ",
+                   "if you agree with them)")),
+          # Unlike every other sub-tab, this Next IS gated. The threshold
+          # drives Risk of Bias, Inconsistency and Imprecision, so it has to
+          # be settled before the reviewer works through them; letting them
+          # walk the domains against a provisional threshold would mean
+          # re-doing the work. Rendered as its own output so the gate can
+          # flip without rebuilding the tab. See also output$grade_nav_final.
+          shiny::uiOutput("grade_nav_config")
         ),
 
         # --- Risk of Bias ---
@@ -319,7 +473,7 @@ step3_ui <- function() {
             .override_rationale("rob_override", "rob_override_rationale")
           ),
           .confirm_checkbox("rob_confirm_na"),
-          .grade_nav("grade_back_rob", "Back: Decision threshold",
+          .grade_nav("grade_back_rob", "Back: Configuration",
                      "grade_next_rob", "Next: Inconsistency")
         ),
 
@@ -684,27 +838,18 @@ step3_ui <- function() {
                             "Yes, by 1 level (-1)" = "-1",
                             "Yes, by 2 levels (-2)" = "-2"),
                 selected = "0", inline = TRUE)),
-            shiny::conditionalPanel(
-              "input.outcome_type == 'continuous' && (input.sm_cont == 'SMD' || input.sm_cont == 'MD')",
-              htmltools::div(style = "grid-column: span 2;",
-                shiny::checkboxInput("convert_smd_to_or",
-                  "Show as dichotomous outcome (Chinn's formula)", FALSE)),
-              shiny::conditionalPanel(
-                "input.convert_smd_to_or",
-                shiny::numericInput("baseline_risk_chinn",
-                  "Control event rate (proportion responding)",
-                  value = 0.30, min = 0.01, max = 0.99, step = 0.01),
-                shiny::textInput("threshold_label",
-                  "Threshold definition (free text)",
-                  placeholder = "e.g., >=50 percent reduction in PHQ-9"),
-                htmltools::div(style = "grid-column: span 2;",
-                  shiny::checkboxInput("chinn_invert",
-                    paste0("Invert OR direction (use this if a negative SMD ",
-                           "represents the desirable / 'response' direction, ",
-                           "so OR > 1 = treatment better)"),
-                    value = FALSE))
-              )
-            )
+            # The responder-conversion controls (convert_smd_to_or,
+            # baseline_risk_chinn, threshold_label) used to live here. They
+            # moved to the Configuration tab: the control-group responder
+            # proportion and the definition of the threshold of clinical
+            # interest are not display preferences, they are inputs the
+            # rating is read against, and they belong with the threshold
+            # they mirror. The input IDs are unchanged, so app.R's display
+            # observer and Step 4's export still read them. chinn_invert
+            # lost its checkbox entirely - it is now derived from the Step 2
+            # direction answer (see chinn_invert_derived()).
+            htmltools::div(style = "grid-column: span 2;",
+              shiny::uiOutput("display_options_config_note"))
           ),
           htmltools::hr(),
 
@@ -733,7 +878,7 @@ step3_ui <- function() {
 step3_server <- function(input, output, session, state) {
 
   grade_tab_sequence <- c(
-    "Decision threshold",
+    "Configuration",
     "Risk of Bias",
     "Inconsistency",
     "Indirectness",
@@ -784,7 +929,7 @@ step3_server <- function(input, output, session, state) {
   }
 
   shiny::observeEvent(input$grade_back_thresh, {
-    retreat_grade_tab("Decision threshold")
+    retreat_grade_tab("Configuration")
   }, ignoreInit = TRUE)
   shiny::observeEvent(input$grade_back_rob, {
     retreat_grade_tab("Risk of Bias")
@@ -805,7 +950,7 @@ step3_server <- function(input, output, session, state) {
     retreat_grade_tab("Final certainty")
   }, ignoreInit = TRUE)
   shiny::observeEvent(input$grade_next_thresh, {
-    advance_grade_tab("Decision threshold")
+    advance_grade_tab("Configuration")
   }, ignoreInit = TRUE)
   shiny::observeEvent(input$grade_next_rob, {
     advance_grade_tab("Risk of Bias")
@@ -825,7 +970,7 @@ step3_server <- function(input, output, session, state) {
   shiny::observeEvent(input$grade_next_final, {
     advance_grade_tab("Final certainty")
   }, ignoreInit = TRUE)
-  # ----- Threshold state (single source of truth: Decision threshold tab;
+  # ----- Threshold state (single source of truth: Configuration tab;
   # independent of UI render so Final certainty doesn't flip as the user
   # clicks tabs) -----------------------------------------------------------
   # threshold_state          : relative (ratio) or te-scale value
@@ -841,67 +986,147 @@ step3_server <- function(input, output, session, state) {
   # state$ma is available. These observers live outside renderUI on purpose:
   # renderUI is suspended while the tab is hidden, so grade_obj() would
   # otherwise see NA thresholds until the user first opened the tab.
-  shiny::observe({
+  # observeEvent on state$ma, with the threshold reactiveVals read under
+  # isolate(): a plain observe() also depended on them, so clearing the
+  # threshold field immediately re-seeded it from suggest_threshold() and the
+  # "no threshold" state was unreachable. Seed once per analysis instead.
+  # Which analysis the current thresholds were seeded for. A threshold is
+  # only meaningful on one scale, so when the summary measure changes (OR ->
+  # SMD, say) the old value is discarded and the new suggestion applied;
+  # otherwise an OR of 1.25 would silently become an SMD threshold of 1.25.
+  threshold_seed_key <- shiny::reactiveVal(NA_character_)
+
+  shiny::observeEvent(state$ma, {
     obj <- state$ma
     if (is.null(obj)) return()
-    if (!is.na(threshold_state()) && !is.na(threshold_abs_state())) return()
+    key <- paste(class(obj)[1], obj$sm %||% "", sep = "/")
+    fresh <- !identical(key, shiny::isolate(threshold_seed_key()))
+    if (fresh) {
+      threshold_seed_key(key)
+      threshold_state(NA_real_)
+      threshold_abs_state(NA_real_)
+      threshold_baseline_state(NA_real_)
+    }
     s <- tryCatch(suggest_threshold(obj), error = function(e) NULL)
     sug <- step3_threshold_suggestions(s)
     # Only ever prefill a reactiveVal that is still NA: a value the user typed
     # must never be overwritten.
-    if (is.na(threshold_state()) && !is.na(sug$relative)) {
+    if (is.na(shiny::isolate(threshold_state())) && !is.na(sug$relative)) {
       threshold_state(round(sug$relative, 4))
     }
-    if (is.na(threshold_abs_state()) && !is.na(sug$absolute1000)) {
+    if (is.na(shiny::isolate(threshold_abs_state())) &&
+        !is.na(sug$absolute1000)) {
       threshold_abs_state(round(sug$absolute1000, 1))
     }
+  }, ignoreNULL = TRUE)
+  # Pooled control-group risk. One computation, cached in a reactive, feeding
+  # BOTH the Configuration threshold baseline and the Imprecision OIS p0, so
+  # the two can no longer disagree. Previously each site recomputed a crude
+  # sum(event.c) / sum(n.c) of its own while the on-screen copy claimed the
+  # number was pooled.
+  control_risk <- shiny::reactive({
+    step3_control_risk(state$ma)
   })
+
   shiny::observe({
-    obj <- state$ma
-    if (is.null(obj)) return()
-    if (is.na(threshold_baseline_state())) {
-      ec <- obj$event.c; nc <- obj$n.c
-      if (!is.null(ec) && !is.null(nc) && sum(nc, na.rm = TRUE) > 0) {
-        cer <- sum(ec, na.rm = TRUE) / sum(nc, na.rm = TRUE)
-        if (is.finite(cer) && cer > 0 && cer < 1) {
-          threshold_baseline_state(round(1000 * cer, 1))
-        }
-      }
+    cr <- control_risk()
+    if (is.na(threshold_baseline_state()) && is.finite(cr$value)) {
+      threshold_baseline_state(round(1000 * cr$value, 1))
     }
   })
 
-  # Mirror Decision-threshold-tab inputs into the reactiveVals.
+  # The auto (pooled) value in events per 1,000, or NA. Used to decide
+  # whether the reviewer has overridden it - and therefore owes a rationale.
+  control_risk_auto1000 <- shiny::reactive({
+    cr <- control_risk()
+    if (is.finite(cr$value)) round(1000 * cr$value, 1) else NA_real_
+  })
+
+  baseline_overridden <- shiny::reactive({
+    auto <- control_risk_auto1000()
+    cur  <- threshold_baseline_state()
+    if (!is.finite(auto)) return(FALSE)
+    if (!is.finite(cur)) return(TRUE)
+    !isTRUE(all.equal(auto, cur, tolerance = 1e-8))
+  })
+
+  baseline_rationale_ok <- shiny::reactive({
+    if (!baseline_overridden()) return(TRUE)
+    nzchar(trimws(input$threshold_baseline_rationale %||% ""))
+  })
+
+  # Mirror Configuration-tab inputs into the reactiveVals.
   shiny::observeEvent(input$threshold_mode, {
     if (nzchar(input$threshold_mode %||% "")) {
       threshold_mode_state(input$threshold_mode)
     }
   }, ignoreInit = TRUE)
+  # An emptied threshold field now clears the state rather than silently
+  # leaving the previous value in force: the reviewer sees an empty box, so
+  # the app must not keep rating against a number they removed. NULL (the
+  # widget does not exist, e.g. on the continuous branch) is left alone.
   shiny::observeEvent(input$threshold_abs, {
     v <- input$threshold_abs
-    if (!is.null(v) && length(v) == 1 && !is.na(v)) threshold_abs_state(v)
-  }, ignoreInit = TRUE)
+    if (is.null(v) || length(v) != 1) return()
+    threshold_abs_state(if (is.na(v)) NA_real_ else v)
+  }, ignoreInit = TRUE, ignoreNULL = FALSE)
   shiny::observeEvent(input$threshold_baseline_input, {
     v <- input$threshold_baseline_input
     if (!is.null(v) && length(v) == 1 && !is.na(v)) threshold_baseline_state(v)
   }, ignoreInit = TRUE)
   shiny::observeEvent(input$threshold_ratio, {
     v <- input$threshold_ratio
-    if (!is.null(v) && length(v) == 1 && !is.na(v)) threshold_state(v)
-  }, ignoreInit = TRUE)
+    if (is.null(v) || length(v) != 1) return()
+    threshold_state(if (is.na(v)) NA_real_ else v)
+  }, ignoreInit = TRUE, ignoreNULL = FALSE)
   shiny::observeEvent(input$threshold_cont, {
     v <- input$threshold_cont
-    if (!is.null(v) && length(v) == 1 && !is.na(v)) threshold_state(v)
-  }, ignoreInit = TRUE)
+    if (is.null(v) || length(v) != 1) return()
+    threshold_state(if (is.na(v)) NA_real_ else v)
+  }, ignoreInit = TRUE, ignoreNULL = FALSE)
 
-  # Equivalent ratio for an absolute (per 1,000) threshold at a given
-  # baseline risk (mirrors vendored .ard_threshold_to_ratio maths).
-  .ard_equiv_ratio <- function(sm, abs1000, base1000) {
-    if (!is.finite(abs1000) || !is.finite(base1000)) return(NULL)
-    p0 <- base1000 / 1000
-    p1 <- p0 + abs1000 / 1000
-    if (p0 <= 0 || p0 >= 1 || p1 >= 1 || abs1000 <= 0) return(NULL)
-    if (identical(sm, "OR")) (p1 / (1 - p1)) / (p0 / (1 - p0)) else p1 / p0
-  }
+  # Responder-conversion state (continuous outcomes). The control-group
+  # proportion has no auto value: Core GRADE 6 says only that the rate is
+  # "chosen from the context", and nothing in pmatools proposes a default.
+  # 20 percent is therefore an app convention and is labelled as one until
+  # the reviewer confirms or replaces it.
+  RESPONDER_P0_DEFAULT <- 0.20
+
+  responder_p0 <- shiny::reactive({
+    v <- input$baseline_risk_chinn
+    if (is.null(v) || length(v) != 1L || is.na(v)) return(NA_real_)
+    v
+  })
+  responder_p0_valid <- shiny::reactive({
+    v <- responder_p0()
+    is.finite(v) && v > 0 && v < 1
+  })
+  responder_p0_overridden <- shiny::reactive({
+    v <- responder_p0()
+    if (!is.finite(v)) return(TRUE)
+    !isTRUE(all.equal(v, RESPONDER_P0_DEFAULT, tolerance = 1e-8))
+  })
+  # Confirmed = the reviewer either ticked the confirmation box, or replaced
+  # the app-convention default and said why. An unconfirmed default is an
+  # assumption nobody has looked at, so it gates this tab's Next.
+  responder_p0_confirmed <- shiny::reactive({
+    if (!responder_p0_valid()) return(FALSE)
+    if (responder_p0_overridden()) {
+      return(nzchar(trimws(input$responder_p0_rationale %||% "")))
+    }
+    isTRUE(input$responder_p0_confirm)
+  })
+
+  # chinn_invert is DERIVED from the Step 2 direction answer rather than
+  # asked again. Chinn's formula gives OR = exp(SMD * pi / sqrt(3)), so a
+  # symptom scale where smaller is better produces a negative SMD for an
+  # effective treatment and an OR below 1 - the wrong side. Flipping the sign
+  # puts the intervention above 1. Verified empirically on the bundled
+  # CBT-I data (pooled SMD -0.49, control 200 per 1,000): invert = TRUE
+  # gives 377 per 1,000 for the intervention, invert = FALSE gives 94.
+  chinn_invert_derived <- shiny::reactive({
+    identical(state$small_values, "desirable")
+  })
 
   .mic_note <- function() {
     htmltools::p(
@@ -917,147 +1142,423 @@ step3_server <- function(input, output, session, state) {
     )
   }
 
-  # ----- Decision threshold tab: centralized input panel -----------------
+  # Section heading + note helpers, so the Configuration blocks look alike.
+  .config_section <- function(title, ...) {
+    htmltools::div(
+      style = paste(
+        "border: 1px solid hsl(var(--border)); border-radius: 8px;",
+        "padding: 0.75rem 1rem; margin-bottom: 1rem;"),
+      htmltools::h5(title, style = "margin: 0 0 0.5rem; font-size: 1rem;"),
+      ...
+    )
+  }
+  .config_note <- function(...) {
+    htmltools::p(class = "pma-card-subtitle", style = "margin-bottom: 0.5rem;",
+                 ...)
+  }
+  .warn_badge <- function(text) {
+    htmltools::span(
+      class = "pma-badge",
+      style = sprintf(paste0("background: %s; color: %s; border: 1px solid %s;",
+                             " white-space: nowrap; margin-left: 0.4rem;"),
+                      PMA_ALERT_BG, PMA_ALERT_FG, PMA_ALERT_FG),
+      text)
+  }
+  .ok_badge <- function(text) {
+    htmltools::span(
+      class = "pma-badge",
+      style = paste0("background: hsl(var(--muted)); ",
+                     "color: hsl(var(--muted-foreground)); ",
+                     "white-space: nowrap; margin-left: 0.4rem;"),
+      text)
+  }
+
+  # suggest_threshold() carries a $source telling the reader whether the
+  # prefilled number comes from Core GRADE 6 itself or is only a pmatools
+  # convention. Never present a package convention as a Core GRADE number.
+  threshold_suggestion <- shiny::reactive({
+    obj <- state$ma
+    if (is.null(obj)) return(NULL)
+    tryCatch(suggest_threshold(obj), error = function(e) NULL)
+  })
+  .source_badge <- function(src) {
+    if (identical(src, "core_grade_6")) {
+      return(.ok_badge("source: Core GRADE 6"))
+    }
+    .warn_badge("source: pmatools convention, not Core GRADE")
+  }
+
+  # ----- Configuration tab: control-group risk block (binary) ------------
+  # First on the tab. The absolute threshold is only interpretable against a
+  # control-group risk, and the same number is the Optimal Information Size
+  # baseline in Imprecision, so it is settled before anything else.
+  .control_risk_block <- function() {
+    cr   <- control_risk()
+    auto <- control_risk_auto1000()
+    cond <- if (is.finite(auto)) {
+      sprintf("input.threshold_baseline_input != %s",
+              format(auto, scientific = FALSE))
+    } else {
+      "true"
+    }
+    provenance <- if (identical(cr$method, "metaprop")) {
+      htmltools::tagList(
+        .ok_badge("pooled (random-effects metaprop)"),
+        .config_note(sprintf(paste0(
+          "Prefilled from a random-effects pooled proportion of the ",
+          "control arms (meta::metaprop, GLMM with a logit link, ",
+          "back-transformed), over %d stud%s%s. The crude ratio of total ",
+          "events to total control participants is %.1f per 1,000; the ",
+          "pooled value shown is %.1f per 1,000."),
+          cr$k_used, if (cr$k_used == 1L) "y" else "ies",
+          if (cr$k_dropped > 0L) {
+            sprintf(" (%d study with no control-arm count excluded)",
+                    cr$k_dropped)
+          } else "",
+          1000 * cr$crude, auto))
+      )
+    } else if (identical(cr$method, "simple_fallback")) {
+      htmltools::tagList(
+        .warn_badge("not pooled: crude event rate"),
+        .config_note(sprintf(paste0(
+          "The random-effects pooled proportion (metaprop, GLMM) did not ",
+          "converge on these data, so this is the crude ratio of total ",
+          "control events to total control participants (%.1f per 1,000) ",
+          "over %d stud%s. It is not a pooled estimate; treat it as a rough ",
+          "summary and replace it if you have a better one."),
+          1000 * cr$crude, cr$k_used,
+          if (cr$k_used == 1L) "y" else "ies"))
+      )
+    } else {
+      .warn_badge("no control-arm data")
+    }
+
+    .config_section(
+      htmltools::tagList("Control-group risk", provenance),
+      shiny::numericInput("threshold_baseline_input",
+        "Control-group risk (events per 1,000 patients)",
+        # Fall back to the pooled value directly: this render and the
+        # observer that seeds threshold_baseline_state() both hang off
+        # control_risk(), and their order is not guaranteed.
+        value = {
+          v <- shiny::isolate(threshold_baseline_state())
+          if (is.finite(v)) v else auto
+        },
+        min = 0, max = 1000, step = 5),
+      .config_note(
+        "Used to convert an absolute threshold to the analysis scale, and ",
+        "as the Optimal Information Size baseline in Imprecision. Replace ",
+        "it with a better estimate for your target population if you have ",
+        "one."),
+      # Same pattern as the domain-tab overrides: replacing an automated
+      # value requires a written justification (Core GRADE transparency).
+      shiny::conditionalPanel(
+        cond,
+        shiny::textAreaInput("threshold_baseline_rationale",
+          "Rationale (required when the pooled value is replaced)",
+          rows = 2, width = "100%",
+          placeholder = paste0(
+            "e.g., rounded to 175 per 1,000; taken from the untreated arm ",
+            "of the Smith 2021 cohort; adjusted downwards for a primary ",
+            "care population with milder disease."))
+      )
+    )
+  }
+
+  # ----- Configuration tab: responder conversion block (continuous) ------
+  # Core GRADE 6 ranks three presentations of a continuous outcome and
+  # recommends the mean difference and the responder proportion together.
+  # This app implements the responder proportion only; the departure is
+  # stated on screen rather than left implicit, and so is the fact that the
+  # conversion used is Chinn's formula, not Core GRADE 6's own procedure.
+  .responder_block <- function(sm) {
+    convertible <- sm %in% c("SMD", "MD")
+    if (!convertible) {
+      return(.config_section(
+        "Presentation of this outcome",
+        .config_note(EDU_COPY$config_tab$continuous_intro),
+        .config_note(EDU_COPY$config_tab$continuous_departure),
+        htmltools::p(
+          class = "pma-card-subtitle", style = "font-style: italic;",
+          sprintf(paste0(
+            "The responder conversion is unavailable for %s: it is defined ",
+            "on the standardized mean difference (and on the mean ",
+            "difference via the pooled SD) only. The Summary of Findings ",
+            "table will report the %s itself."), sm, sm))
+      ))
+    }
+    # The badge is its own output on purpose: if this renderUI depended on
+    # the confirmation state, ticking the box (or typing a rationale) would
+    # rebuild the panel and reset the very widget being used.
+    .config_section(
+      htmltools::tagList(
+        "Proportion of control patients meeting the threshold",
+        shiny::uiOutput("responder_p0_badge", inline = TRUE)),
+      .config_note(EDU_COPY$config_tab$continuous_intro),
+      .config_note(EDU_COPY$config_tab$continuous_departure),
+      .config_note(EDU_COPY$config_tab$chinn_caveat),
+      shiny::checkboxInput("convert_smd_to_or",
+        paste0("Present this outcome as a proportion of responders ",
+               "(recommended; Core GRADE 6 option 2)"),
+        value = TRUE),
+      shiny::conditionalPanel(
+        "input.convert_smd_to_or",
+        shiny::numericInput("baseline_risk_chinn",
+          paste0("Proportion of control patients meeting the threshold of ",
+                 "clinical interest"),
+          value = RESPONDER_P0_DEFAULT, min = 0.01, max = 0.99, step = 0.01),
+        .config_note(EDU_COPY$config_tab$responder_default),
+        # This is not a risk and Core GRADE has no notion of baseline risk
+        # for a continuous outcome, so it does not reuse the binary label.
+        shiny::conditionalPanel(
+          sprintf("input.baseline_risk_chinn != %s", RESPONDER_P0_DEFAULT),
+          shiny::textAreaInput("responder_p0_rationale",
+            "Rationale (required when the default is replaced)",
+            rows = 2, width = "100%",
+            placeholder = paste0(
+              "e.g., 31 percent of control participants met the 50 percent ",
+              "reduction criterion in the three trials that reported it; ",
+              "taken from the placebo arm of Jones 2019."))
+        ),
+        shiny::conditionalPanel(
+          sprintf("input.baseline_risk_chinn == %s", RESPONDER_P0_DEFAULT),
+          shiny::checkboxInput("responder_p0_confirm",
+            paste0("I have considered this rate and accept 20 percent ",
+                   "(200 per 1,000) for this outcome"),
+            value = FALSE)
+        ),
+        shiny::textInput("threshold_label",
+          "Definition of the threshold of clinical interest (free text)",
+          placeholder = "e.g., >=50 percent reduction in PHQ-9 from baseline"),
+        shiny::uiOutput("chinn_direction_echo")
+      )
+    )
+  }
+
+  output$responder_p0_badge <- shiny::renderUI({
+    if (responder_p0_confirmed()) {
+      .ok_badge("confirmed")
+    } else {
+      .warn_badge("unconfirmed assumption")
+    }
+  })
+  shiny::outputOptions(output, "responder_p0_badge",
+                       suspendWhenHidden = FALSE)
+
+  # ----- Configuration tab: centralized input panel -----------------
   output$threshold_panel <- shiny::renderUI({
     obj <- state$ma
-    ot  <- input$outcome_type
     if (is.null(obj)) {
       return(htmltools::p("Run the analysis in Step 2 first."))
     }
     sm <- obj$sm %||% "OR"
+    # Gate on the OUTCOME, not on the summary measure: a binary outcome
+    # analysed as ARD, RD or HR used to fall through to the continuous
+    # branch and lose the absolute-scale interface entirely.
+    is_binary <- step3_is_binary_outcome(obj, input$outcome_type)
+    sug_obj <- threshold_suggestion()
+    src <- sug_obj$source
+    # Same ordering caveat as the control-group risk above: fall back to the
+    # suggestion when the seeding observer has not run yet.
+    sug <- step3_threshold_suggestions(sug_obj)
+    .abs_value <- function() {
+      v <- shiny::isolate(threshold_abs_state())
+      if (is.finite(v)) v else round(sug$absolute1000, 1)
+    }
+    .rel_value <- function() {
+      v <- shiny::isolate(threshold_state())
+      if (is.finite(v)) v else round(sug$relative, 4)
+    }
 
-    if (identical(ot, "binary") && sm %in% c("OR", "RR")) {
+    if (is_binary) {
       htmltools::tagList(
-        shiny::radioButtons("threshold_mode", "Threshold scale",
-          choices = c(
-            "Absolute (per 1,000 patients) - recommended" = "absolute",
-            "Relative (ratio)"                            = "relative"),
-          selected = shiny::isolate(threshold_mode_state())),
-        shiny::conditionalPanel(
-          "input.threshold_mode == 'absolute'",
-          htmltools::p(class = "pma-card-subtitle",
-            paste0(
+        .control_risk_block(),
+        shiny::uiOutput("direction_echo"),
+        .config_section(
+          htmltools::tagList("Decision threshold", .source_badge(src)),
+          shiny::radioButtons("threshold_mode", "Threshold scale",
+            choices = c(
+              "Absolute (per 1,000 patients) - recommended" = "absolute",
+              "Relative (ratio)"                            = "relative"),
+            selected = shiny::isolate(threshold_mode_state())),
+          shiny::conditionalPanel(
+            "input.threshold_mode == 'absolute'",
+            .config_note(
               "Core GRADE recommends expressing the threshold on the ",
               "absolute scale: the smallest difference in events per 1,000 ",
               "patients that would matter for a decision. It is converted ",
-              "to the ", sm, " scale at the baseline risk below.")),
-          shiny::numericInput("threshold_abs",
-            "Threshold (events per 1,000 patients)",
-            value = shiny::isolate(threshold_abs_state()),
-            min = 0, step = 5),
-          shiny::numericInput("threshold_baseline_input",
-            "Baseline (control-group) risk (per 1,000 patients)",
-            value = shiny::isolate(threshold_baseline_state()),
-            min = 0, max = 1000, step = 5),
-          htmltools::p(class = "pma-card-subtitle",
-            "Baseline risk is prefilled from the pooled control-group ",
-            "event rate of your data; replace it with a better estimate ",
-            "for your target population if you have one."),
-          shiny::uiOutput("threshold_equiv")
-        ),
-        shiny::conditionalPanel(
-          "input.threshold_mode == 'relative'",
-          shiny::numericInput("threshold_ratio",
-            EDU_COPY$threshold_labels[[sm]] %||%
-              "Threshold for clinical importance",
-            value = shiny::isolate({
-              v <- threshold_state()
-              if (is.na(v)) NA else v
-            }),
-            min = 0, step = 0.01),
-          htmltools::p(class = "pma-card-subtitle",
-                       EDU_COPY$threshold_help[[sm]] %||% "")
-        ),
-        .mic_note()
+              "to the ", sm, " scale at the control-group risk above."),
+            shiny::numericInput("threshold_abs",
+              "Threshold (events per 1,000 patients)",
+              value = .abs_value(), min = 0, step = 5),
+            shiny::uiOutput("threshold_equiv")
+          ),
+          shiny::conditionalPanel(
+            "input.threshold_mode == 'relative'",
+            shiny::numericInput("threshold_ratio",
+              EDU_COPY$threshold_labels[[sm]] %||%
+                "Threshold for clinical importance",
+              value = .rel_value(), min = 0, step = 0.01),
+            .config_note(EDU_COPY$threshold_help[[sm]] %||% "")
+          ),
+          .mic_note()
+        )
       )
     } else {
       htmltools::tagList(
-        shiny::numericInput("threshold_cont",
-          EDU_COPY$threshold_labels[[sm]] %||%
-            "Threshold for clinical importance",
-          value = shiny::isolate({
-            v <- threshold_state()
-            if (is.na(v)) NA else v
-          }),
-          min = 0, step = 0.01),
-        htmltools::p(class = "pma-card-subtitle",
-                     EDU_COPY$threshold_help[[sm]] %||% ""),
-        .mic_note()
+        .responder_block(sm),
+        shiny::uiOutput("direction_echo"),
+        .config_section(
+          htmltools::tagList("Decision threshold", .source_badge(src)),
+          shiny::numericInput("threshold_cont",
+            EDU_COPY$threshold_labels[[sm]] %||%
+              "Threshold for clinical importance",
+            value = .rel_value(), min = 0, step = 0.01),
+          .config_note(EDU_COPY$threshold_help[[sm]] %||% ""),
+          if (identical(sm, "SMD")) {
+            htmltools::p(
+              class = "pma-card-subtitle", style = "font-style: italic;",
+              paste0(
+                "Core GRADE 6 describes a standardized mean difference of ",
+                "0.2 as the threshold for a small and important effect, and ",
+                "immediately qualifies it: clinicians may be appropriately ",
+                "sceptical of this threshold, which is limited by large ",
+                "variability in the methods investigators use to calculate ",
+                "the standardized mean difference."))
+          } else {
+            .config_note(
+              "This prefill is a pmatools convention (",
+              if (identical(sm, "MD")) "0.20 x the pooled SD" else "1.10",
+              "), not a value taken from Core GRADE. Replace it with a ",
+              "published threshold for this instrument whenever one exists.")
+          },
+          .mic_note()
+        )
       )
     }
   })
   shiny::outputOptions(output, "threshold_panel", suspendWhenHidden = FALSE)
 
-  # Live equivalent-ratio display for the absolute mode.
+  # Live equivalent-effect display for the absolute mode. Shows BOTH
+  # directions, and states plainly that the decrease side is a
+  # presentational convenience: the algorithm is symmetric on the log scale,
+  # so the decrease side it applies is 1 / T, not the ratio implied by
+  # p0 - threshold. Same wording as threshold_summary_text() below - these
+  # two are the app's copies; a third, near-identical sentence lives in the
+  # vendored utils.R and lands in the domain notes and is left alone.
+  .equiv_lines <- function(eq) {
+    sm <- eq$sm
+    up <- sprintf("Increase: %.0f -> %.0f per 1,000, equivalent %s %.3f",
+                  1000 * eq$p0, 1000 * eq$p1_up, sm, eq$ratio_up)
+    dn <- if (isTRUE(eq$down_ok)) {
+      sprintf("Decrease: %.0f -> %.0f per 1,000, equivalent %s %.3f",
+              1000 * eq$p0, 1000 * eq$p1_dn, sm, eq$ratio_dn)
+    } else {
+      "Decrease: not shown - the threshold exceeds the control-group risk."
+    }
+    alg <- sprintf(
+      paste0("What the algorithm uses: a symmetric +/- log(%.3f) band, so ",
+             "its decrease side is %s %.3f, which at this control-group ",
+             "risk implies %.0f per 1,000 - an absolute difference of ",
+             "%+.0f per 1,000, not %+.0f."),
+      eq$ratio_up, sm, eq$mirror_ratio, 1000 * eq$mirror_p1,
+      1000 * eq$mirror_ard, -1000 * eq$ard)
+    list(up = up, dn = dn, alg = alg)
+  }
+
   output$threshold_equiv <- shiny::renderUI({
     obj <- state$ma
     if (is.null(obj)) return(NULL)
     sm <- obj$sm %||% "OR"
-    ta <- input$threshold_abs           %||% threshold_abs_state()
+    ta <- input$threshold_abs            %||% threshold_abs_state()
     tb <- input$threshold_baseline_input %||% threshold_baseline_state()
-    eq <- .ard_equiv_ratio(sm, ta, tb)
+    eq <- step3_ard_equivalence(sm, ta, tb)
     if (is.null(eq)) {
       return(htmltools::p(
         class = "pma-card-subtitle", style = "font-style: italic;",
-        "Enter a positive threshold and a baseline risk between 0 and ",
-        "1,000 (threshold + baseline must stay below 1,000) to see the ",
-        "equivalent relative effect."))
+        "Enter a positive threshold and a control-group risk between 0 and ",
+        "1,000 (threshold + control-group risk must stay below 1,000) to ",
+        "see the equivalent relative effect."))
     }
-    p0 <- tb / 1000; p1 <- p0 + ta / 1000
-    or_eq <- (p1 / (1 - p1)) / (p0 / (1 - p0))
-    rr_eq <- p1 / p0
+    ln <- .equiv_lines(eq)
     htmltools::div(
       style = paste0(
         "padding: 0.5rem 0.75rem; background: #f5f5f5; ",
         "border-left: 4px solid #0f172a; margin: 0.5rem 0; ",
         "font-size: 0.85rem;"),
-      htmltools::strong(sprintf("Equivalent %s = %.2f", sm, eq)),
-      htmltools::span(sprintf(
-        " (at baseline %g per 1,000: RR %.2f, OR %.2f)", tb, rr_eq, or_eq))
+      htmltools::div(htmltools::strong(ln$up)),
+      htmltools::div(ln$dn),
+      htmltools::div(
+        style = "margin-top: 0.35rem;",
+        sprintf("On other scales, the increase side is RR %.3f / OR %.3f.",
+                eq$rr_up, eq$or_up)),
+      htmltools::div(
+        style = paste0("margin-top: 0.35rem; font-style: italic; ",
+                       "color: hsl(var(--muted-foreground));"),
+        ln$alg)
     )
   })
   shiny::outputOptions(output, "threshold_equiv", suspendWhenHidden = FALSE)
 
   # Human-readable summary of the active threshold (for read-only blocks).
-  threshold_summary_text <- shiny::reactive({
+  # Returns a list so the read-only block can show the same two-direction
+  # wording as output$threshold_equiv rather than a third variant.
+  threshold_summary <- shiny::reactive({
     obj <- state$ma
-    if (is.null(obj)) return("No threshold set - run the analysis first.")
+    if (is.null(obj)) {
+      return(list(head = "No threshold set - run the analysis first.",
+                  lines = character()))
+    }
     sm <- obj$sm %||% "OR"
-    if (identical(input$outcome_type, "binary") && sm %in% c("OR", "RR") &&
+    if (step3_is_binary_outcome(obj, input$outcome_type) &&
         identical(threshold_mode_state(), "absolute")) {
       ta <- threshold_abs_state()
       tb <- threshold_baseline_state()
       if (!is.finite(ta) || ta <= 0) {
-        return("Absolute threshold not set yet.")
+        return(list(head = "Absolute threshold not set yet.",
+                    lines = character()))
       }
-      eq <- .ard_equiv_ratio(sm, ta, tb)
+      eq <- step3_ard_equivalence(sm, ta, tb)
       if (is.null(eq)) {
-        return(sprintf(
-          "Absolute threshold: %g per 1,000 (baseline risk missing/invalid)",
-          ta))
+        return(list(head = sprintf(paste0(
+          "Absolute threshold: %g per 1,000 (control-group risk missing ",
+          "or invalid)"), ta), lines = character()))
       }
-      return(sprintf(
-        "Absolute threshold: %g per 1,000 at baseline %g per 1,000 (equivalent %s %.2f)",
-        ta, tb, sm, eq))
+      ln <- .equiv_lines(eq)
+      return(list(
+        head = sprintf(
+          "Absolute threshold: %g per 1,000 at a control-group risk of %g per 1,000",
+          ta, tb),
+        lines = c(ln$up, ln$dn, ln$alg)))
     }
     th <- threshold_state()
-    if (!is.finite(th)) return("Threshold not set yet.")
-    sprintf("Threshold: %s = %g", sm, th)
+    if (!is.finite(th)) {
+      return(list(head = "Threshold not set yet.", lines = character()))
+    }
+    list(head = sprintf("Threshold: %s = %g", sm, th), lines = character())
   })
+  threshold_summary_text <- shiny::reactive(threshold_summary()$head)
 
   # Read-only threshold display inside RoB / Inconsistency / Imprecision.
   .render_threshold_readonly <- function() {
+    ts <- threshold_summary()
     htmltools::div(
       style = paste0(
         "padding: 0.5rem 0.75rem; background: #f9f9f9; ",
         "border: 1px solid #e5e5e5; border-radius: 6px; margin: 0.5rem 0;"),
       htmltools::p(style = "margin: 0; font-size: 0.9rem;",
-        htmltools::strong(threshold_summary_text())),
+        htmltools::strong(ts$head)),
+      if (length(ts$lines)) {
+        htmltools::div(
+          style = paste0("margin: 0.25rem 0 0; font-size: 0.85rem; ",
+                         "color: hsl(var(--muted-foreground));"),
+          lapply(ts$lines, htmltools::div))
+      },
       htmltools::p(
         class = "pma-card-subtitle",
         style = "margin: 0.25rem 0 0;",
         "This decision threshold is shared by Risk of Bias, Inconsistency, ",
-        "and Imprecision. Change it in the 'Decision threshold' tab.")
+        "and Imprecision. Change it in the Configuration tab.")
     )
   }
   output$threshold_block_rob   <- shiny::renderUI(.render_threshold_readonly())
@@ -1068,10 +1569,12 @@ step3_server <- function(input, output, session, state) {
   shiny::outputOptions(output, "threshold_block_impre", suspendWhenHidden = FALSE)
 
   # grade_meta() threshold arguments derived from the active mode.
+  # Gated on the outcome type, matching output$threshold_panel: a binary
+  # outcome analysed as something other than OR / RR still has an absolute
+  # threshold to convert.
   .threshold_grade_args <- function(obj) {
     sm <- obj$sm %||% "OR"
-    if (identical(shiny::isolate(input$outcome_type), "binary") &&
-        sm %in% c("OR", "RR") &&
+    if (step3_is_binary_outcome(obj, shiny::isolate(input$outcome_type)) &&
         identical(threshold_mode_state(), "absolute")) {
       ta <- threshold_abs_state()
       tb <- threshold_baseline_state()
@@ -1094,15 +1597,34 @@ step3_server <- function(input, output, session, state) {
   }
 
   # ----- OIS default values -----
+  # The OIS baseline is no longer a second, independently computed crude
+  # ratio: it IS the Configuration control-group risk, shown read-only, so
+  # the two cannot disagree. grade_obj() passes the same number as ois_p0.
   output$ois_p0_ui <- shiny::renderUI({
-    obj <- state$ma
-    val <- if (!is.null(obj) && !is.null(obj$event.c) && !is.null(obj$n.c) &&
-               sum(obj$n.c, na.rm = TRUE) > 0) {
-      round(sum(obj$event.c, na.rm = TRUE) / sum(obj$n.c, na.rm = TRUE), 4)
-    } else NA
-    shiny::numericInput("ois_p0",
-      "Baseline (control) event rate for OIS (auto from data)",
-      value = val, min = 0, max = 1, step = 0.01)
+    tb <- threshold_baseline_state()
+    htmltools::div(
+      style = paste0(
+        "padding: 0.5rem 0.75rem; background: #f9f9f9; ",
+        "border: 1px solid #e5e5e5; border-radius: 6px; margin: 0.5rem 0;"),
+      htmltools::p(style = "margin: 0; font-size: 0.9rem;",
+        htmltools::strong(
+          if (is.finite(tb)) {
+            sprintf("Control-group event rate for the OIS: %.4f (%g per 1,000)",
+                    tb / 1000, tb)
+          } else {
+            "Control-group event rate for the OIS: not set"
+          })),
+      htmltools::p(class = "pma-card-subtitle", style = "margin: 0.25rem 0 0;",
+        "Taken from the Configuration tab, where it is set once. Change it ",
+        "there.")
+    )
+  })
+  shiny::outputOptions(output, "ois_p0_ui", suspendWhenHidden = FALSE)
+
+  # Control-group risk as a proportion, for grade_meta(ois_p0 = ).
+  ois_p0_value <- shiny::reactive({
+    tb <- threshold_baseline_state()
+    if (is.finite(tb) && tb > 0 && tb < 1000) tb / 1000 else NULL
   })
 
   output$ois_sd_ui <- shiny::renderUI({
@@ -1216,6 +1738,20 @@ step3_server <- function(input, output, session, state) {
     obj <- state$ma
     if (is.null(obj)) return(NULL)
 
+    # The `require_threshold = FALSE` bridge added for pmatools 0.5.1 is
+    # gone. It was a temporary opt-out that let grade_meta() rate an outcome
+    # with no threshold at all, which is exactly the silent behaviour Core
+    # GRADE warns against - three of the five domains would have been judged
+    # against nothing. Deleting it alone would crash the tab, because
+    # grade_meta() aborts on a NULL threshold under the default
+    # threshold_type = "mid", and a reviewer can still clear the field. So
+    # the app never makes that call: with no threshold, grade_obj() returns
+    # NULL and threshold_missing() drives an explicit on-screen state
+    # (output$config_status, the read-only domain blocks and
+    # output$final_certainty). No error toast, and no rating computed
+    # without a threshold.
+    if (is.null(.threshold_grade_args(obj)$threshold)) return(NULL)
+
     # --- Risk of bias: per-study vector, or scalar override + rationale ---
     rob_arg <- .study_covariate(.study_labels_for_grade(obj), "rob", default = "*")
     rob_rationale <- NULL
@@ -1318,7 +1854,9 @@ step3_server <- function(input, output, session, state) {
       threshold_scale    = th_args$threshold_scale,
       threshold_baseline = th_args$threshold_baseline,
       outcome_type = if (identical(input$outcome_type, "binary")) "relative" else "absolute",
-      ois_p0       = .na_null(input$ois_p0),
+      # Same control-group risk the Configuration tab shows, not a second
+      # crude computation of its own.
+      ois_p0       = ois_p0_value(),
       ois_sd       = .na_null(input$ois_sd),
       ois_events   = .na_null(input$ois_events_override),
       ois_n        = .na_null(input$ois_n_override),
@@ -1332,19 +1870,6 @@ step3_server <- function(input, output, session, state) {
       pubias_registry_complete = if (identical(pubias_rc, "yes")) "yes" else NULL,
       outcome_name = state$outcome_name %||% "Outcome"
     )
-
-    # TEMPORARY BRIDGE (pmatools >= 0.5). grade_meta() now defaults to
-    # threshold_type = "mid" with require_threshold = TRUE, so a NULL threshold
-    # aborts the call. The app can still be in that state (no absolute
-    # threshold entered yet, or suggest_threshold() has not fired because
-    # state$ma was NULL), so opt out of the gate for exactly those cases and
-    # degrade to the pre-0.5 behaviour instead of erroring. When a threshold
-    # IS present the package default (TRUE) is left alone.
-    # Follow-up: the Configuration-tab rework makes the decision threshold a
-    # required, confirmed input; this flag is removed then.
-    if (is.null(th_args$threshold)) {
-      args$require_threshold <- FALSE
-    }
 
     g <- tryCatch(
       suppressWarnings(do.call(grade_meta, args)),
@@ -1422,6 +1947,84 @@ step3_server <- function(input, output, session, state) {
     !is.null(v) && length(v) > 0 && nzchar(v[1])
   }
 
+  # ----- Configuration gate -----------------------------------------------
+  # Everything that must be settled before the reviewer starts on the five
+  # domains, as a list of human-readable blockers. Empty means ready.
+  #
+  # Configuration is the ONE Step-3 sub-tab whose Next is gated. The recently
+  # established convention is that only the last sub-tab (Final certainty) is
+  # gated, so reviewers can move freely between domains; Configuration is a
+  # deliberate exception, because the threshold it sets drives Risk of Bias,
+  # Inconsistency and Imprecision, and walking those three against an
+  # unsettled threshold means doing them twice. No other sub-tab is gated.
+  threshold_missing <- shiny::reactive({
+    obj <- state$ma
+    if (is.null(obj)) return(TRUE)
+    is.null(.threshold_grade_args(obj)$threshold)
+  })
+
+  config_blockers <- shiny::reactive({
+    obj <- state$ma
+    if (is.null(obj)) return("run the meta-analysis in Step 2")
+    out <- character()
+    if (threshold_missing()) {
+      out <- c(out, "enter a decision threshold above zero")
+    }
+    if (step3_is_binary_outcome(obj, input$outcome_type)) {
+      if (!baseline_rationale_ok()) {
+        out <- c(out, paste0("give a rationale for replacing the pooled ",
+                             "control-group risk"))
+      }
+    } else if (isTRUE(input$convert_smd_to_or)) {
+      if (!responder_p0_valid()) {
+        out <- c(out, paste0("enter a control-group responder proportion ",
+                             "between 0 and 1"))
+      } else if (!responder_p0_confirmed()) {
+        out <- c(out, paste0("confirm the 20 percent control-group responder ",
+                             "proportion, or replace it and say why"))
+      }
+    }
+    if (!isTRUE(input$threshold_confirm)) {
+      out <- c(out, "tick the confirmation box below")
+    }
+    out
+  })
+
+  output$grade_nav_config <- shiny::renderUI({
+    .grade_nav("grade_back_thresh", "Back: Meta-analysis",
+               "grade_next_thresh", "Next: Risk of Bias",
+               next_disabled = length(config_blockers()) > 0)
+  })
+  shiny::outputOptions(output, "grade_nav_config", suspendWhenHidden = FALSE)
+
+  # Explicit on-screen state for the Configuration tab, including the
+  # "no threshold" case that used to be papered over by require_threshold.
+  output$config_status <- shiny::renderUI({
+    blockers <- config_blockers()
+    if (!length(blockers)) {
+      return(htmltools::div(
+        style = paste0(
+          "padding: 0.5rem 0.75rem; margin: 0.5rem 0; ",
+          "background: #ecfdf5; border-left: 4px solid #047857; ",
+          "border-radius: 4px; font-size: 0.9rem;"),
+        htmltools::strong("Configuration complete. "),
+        "The five certainty domains are rated against these values."))
+    }
+    htmltools::div(
+      style = paste0(
+        "padding: 0.75rem 1rem; margin: 0.5rem 0; ",
+        "background: ", PMA_ALERT_BG, "; border-left: 4px solid ",
+        PMA_ALERT_FG, "; border-radius: 4px; font-size: 0.9rem;"),
+      htmltools::strong("Configuration incomplete. "),
+      if (threshold_missing()) {
+        paste0("No decision threshold is set, so no certainty rating is ",
+               "computed: three of the five domains are judged against it. ")
+      } else "",
+      sprintf("Still to do: %s.", paste(blockers, collapse = "; "))
+    )
+  })
+  shiny::outputOptions(output, "config_status", suspendWhenHidden = FALSE)
+
   domain_confirmed <- shiny::reactive({
     rt <- state$rob_table
     rob_data <- !is.null(rt) && "rob" %in% names(rt) &&
@@ -1434,7 +2037,7 @@ step3_server <- function(input, output, session, state) {
          nzchar(trimws(input$indir_rationale %||% "")))
 
     c(
-      threshold = isTRUE(input$threshold_confirm),
+      threshold = length(config_blockers()) == 0L,
       rob = rob_data ||
         .valid_override("rob_override", "rob_override_rationale") ||
         isTRUE(input$rob_confirm_na),
@@ -2098,6 +2701,20 @@ step3_server <- function(input, output, session, state) {
   output$final_certainty <- shiny::renderUI({
     g <- grade_obj()
     if (is.null(g)) {
+      # Distinguish "no analysis yet" from "no threshold": the latter is a
+      # state the reviewer can create at any time by clearing the field, and
+      # it must say why nothing is being rated rather than fail silently.
+      if (!is.null(state$ma) && threshold_missing()) {
+        return(htmltools::div(
+          style = paste0(
+            "padding: 0.75rem 1rem; background: ", PMA_ALERT_BG,
+            "; border-left: 4px solid ", PMA_ALERT_FG,
+            "; border-radius: 4px; font-size: 0.9rem;"),
+          htmltools::strong("No certainty rating. "),
+          "The decision threshold is empty. Risk of Bias, Inconsistency and ",
+          "Imprecision are all judged against it, so no rating is computed ",
+          "until it is set on the Configuration tab."))
+      }
       return(htmltools::p("Run analysis and configure domains."))
     }
     other_dg <- suppressWarnings(as.integer(input$other_downgrade %||% "0"))
@@ -2119,26 +2736,54 @@ step3_server <- function(input, output, session, state) {
     )
   })
 
+  # Whether the SoF can safely be rendered through the responder conversion.
+  # sof_table() HARD-ABORTS when convert_smd_to_or = TRUE and baseline_risk
+  # is absent or outside (0, 1), and when meta_obj$sm is not SMD / MD
+  # (R/_pmatools/sof_table.R). All three preconditions are checked here so
+  # Step 3 never renders into that abort.
+  sof_convert_args <- shiny::reactive({
+    g <- grade_obj()
+    if (is.null(g)) return(NULL)
+    sm <- g$meta$sm %||% ""
+    if (!isTRUE(input$convert_smd_to_or)) return(NULL)
+    if (!sm %in% c("SMD", "MD")) return(NULL)
+    p0 <- responder_p0()
+    if (!responder_p0_valid()) return(NULL)
+    list(
+      convert_smd_to_or = TRUE,
+      baseline_risk     = p0,
+      threshold_label   = input$threshold_label,
+      chinn_invert      = chinn_invert_derived()
+    )
+  })
+
   output$sof_preview <- shiny::renderUI({
     g <- grade_obj()
     if (is.null(g)) return(htmltools::p("..."))
-    convert <- isTRUE(input$convert_smd_to_or)
-    args <- list(
-      x          = g,
-      per        = input$per %||% 1000,
-      prediction = isTRUE(input$prediction)
+    args <- c(
+      list(x          = g,
+           per        = input$per %||% 1000,
+           prediction = isTRUE(input$prediction)),
+      sof_convert_args() %||% list()
     )
-    if (convert) {
-      args$convert_smd_to_or <- TRUE
-      args$baseline_risk     <- input$baseline_risk_chinn
-      args$threshold_label   <- input$threshold_label
-      args$chinn_invert      <- isTRUE(input$chinn_invert)
-    }
     ft <- tryCatch(do.call(sof_table, args),
                    error = function(e) NULL)
     if (is.null(ft)) return(htmltools::p("(SoF not yet available)"))
     tryCatch(flextable::htmltools_value(ft),
              error = function(e) htmltools::p(paste("SoF render error:", conditionMessage(e))))
+  })
+
+  # The responder-conversion settings are owned by Step 3 (Configuration
+  # tab), not by app.R's display observer. Step 4's export_bundle() gets the
+  # same guarded values the Step 3 preview uses, so it cannot walk into
+  # sof_table()'s abort - which is reachable otherwise, because an
+  # input$convert_smd_to_or left TRUE from an earlier SMD run survives a
+  # switch to RoM (hiding a checkbox does not reset it).
+  shiny::observe({
+    ca <- sof_convert_args()
+    state$display$convert       <- !is.null(ca)
+    state$display$baseline_risk <- ca$baseline_risk
+    state$display$chinn_invert  <- isTRUE(ca$chinn_invert)
   })
 
   # Read-only echo of the outcome name: it is owned by Step 2, so Step 3 shows
@@ -2149,6 +2794,62 @@ step3_server <- function(input, output, session, state) {
     htmltools::p(class = "pma-card-subtitle",
       "Outcome name: ", htmltools::tags$strong(nm),
       " - set in Step 2 (Model configuration).")
+  })
+
+  # Read-only echo of the outcome direction, in the same style. small_values
+  # is set in Step 2 and was invisible in Step 3 even though it flips the
+  # direction gate in Risk of Bias (and, on the continuous path, the sign of
+  # the responder odds ratio). Shown here; editing stays in Step 2.
+  output$direction_echo <- shiny::renderUI({
+    sv <- state$small_values
+    label <- if (identical(sv, "desirable")) {
+      "Favorable - a smaller value of this outcome is better"
+    } else if (identical(sv, "undesirable")) {
+      "Unfavorable - a smaller value of this outcome is worse"
+    } else {
+      "(not set)"
+    }
+    htmltools::div(
+      style = "margin: 0 0 1rem;",
+      htmltools::p(class = "pma-card-subtitle",
+        "Outcome direction: ", htmltools::tags$strong(label),
+        " - set in Step 2 (Model configuration). It sets the bias direction ",
+        "used by the Risk-of-Bias check.")
+    )
+  })
+  shiny::outputOptions(output, "direction_echo", suspendWhenHidden = FALSE)
+
+  # How the derived direction lands in the responder conversion.
+  output$chinn_direction_echo <- shiny::renderUI({
+    inv <- chinn_invert_derived()
+    htmltools::p(class = "pma-card-subtitle",
+      "Direction of the responder odds ratio: ",
+      htmltools::tags$strong(
+        if (inv) "sign flipped" else "as analysed"),
+      if (inv) {
+        paste0(" - a smaller value of this outcome is better, so the sign of ",
+               "the standardized mean difference is flipped to put the ",
+               "intervention above 1. Derived from the Step 2 direction ",
+               "answer; not asked again here.")
+      } else {
+        paste0(" - a larger value of this outcome is better, so the ",
+               "standardized mean difference is used as analysed. Derived ",
+               "from the Step 2 direction answer; not asked again here.")
+      })
+  })
+  shiny::outputOptions(output, "chinn_direction_echo",
+                       suspendWhenHidden = FALSE)
+
+  # Pointer left where the responder-conversion controls used to be.
+  output$display_options_config_note <- shiny::renderUI({
+    obj <- state$ma
+    if (is.null(obj)) return(NULL)
+    if (step3_is_binary_outcome(obj, input$outcome_type)) return(NULL)
+    htmltools::p(class = "pma-card-subtitle",
+      "How this outcome is presented - as a proportion of responders or as ",
+      "the summary measure itself - is set on the Configuration tab, ",
+      "together with the control-group responder proportion and the ",
+      "definition of the threshold of clinical interest.")
   })
 
   # Smart defaults for the four Step 3 forest display panels. Only state$ is

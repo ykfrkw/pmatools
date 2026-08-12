@@ -133,7 +133,7 @@ EDU_COPY <- list(
           "high risk-of-bias studies do not dominate, whether the analysis ",
           "is restricted to the low risk-of-bias studies, so it governs both ",
           "rating down and restriction. ",
-          "Note: the Threshold is set once in the 'Decision threshold' tab ",
+          "Note: the Threshold is set once in the Configuration tab ",
           "and shared with Inconsistency and Imprecision; one Threshold ",
           "drives all three domains."
         )
@@ -236,8 +236,14 @@ EDU_COPY <- list(
     )
   ),
 
-  threshold_tab = list(
+  # ----- Configuration tab (formerly "Decision threshold") ----------------
+  # Everything the five certainty domains depend on is established here, in
+  # the order a reviewer needs to decide it: the control-group risk first
+  # (because the absolute threshold is only interpretable against it), then
+  # the threshold itself, then how the effect is presented.
+  config_tab = list(
     intro = paste0(
+      "This tab settles everything the five certainty domains depend on. ",
       "The decision threshold is the smallest effect that would be ",
       "clinically meaningful - the effect size at which you would change ",
       "a management decision. It plays a cross-cutting role in Core ",
@@ -245,10 +251,54 @@ EDU_COPY <- list(
       "studies moves the estimate across the threshold; Inconsistency ",
       "asks whether study estimates fall on opposite sides of it; and ",
       "Imprecision uses it as the target effect for the Optimal ",
-      "Information Size and CI judgments. Set it once here - the domain ",
-      "tabs display it read-only. For binary outcomes Core GRADE ",
-      "recommends thinking on the absolute scale (events per 1,000 ",
-      "patients), which is the default below."
+      "Information Size and confidence-interval judgments. Set it once ",
+      "here - the domain tabs display it read-only. For binary outcomes ",
+      "Core GRADE recommends thinking on the absolute scale (events per ",
+      "1,000 patients), which is the default below, so the control-group ",
+      "risk that converts it to the analysis scale is asked for first."
+    ),
+    # Core GRADE 6 ranks three presentations of a continuous outcome: (1) the
+    # mean difference read against the threshold, (2) conversion to a
+    # proportion of responders, (3) the SMD. It recommends presenting 1 and 2
+    # together. This app presents 2 only; that departure is stated on screen
+    # rather than left implicit.
+    continuous_intro = paste0(
+      "Core GRADE 6 ranks three ways of presenting a continuous outcome: ",
+      "the mean difference interpreted against the threshold; conversion ",
+      "to a proportion of patients who respond; and the standardized mean ",
+      "difference, which it calls often the least satisfactory and ",
+      "reserves for outcomes reported on multiple scales with no credible ",
+      "threshold available for any single instrument. It recommends ",
+      "presenting the first two together, so that agreement between them ",
+      "licenses strong inferences about magnitude and disagreement forces ",
+      "weaker ones."
+    ),
+    continuous_departure = paste0(
+      "Departure from the source, stated here rather than left implicit: ",
+      "this app presents the responder proportion only. The mean-difference ",
+      "presentation is not offered, so the agreement check Core GRADE 6 ",
+      "recommends cannot be performed here; inferences about the magnitude ",
+      "of effect should be correspondingly weaker."
+    ),
+    chinn_caveat = paste0(
+      "The responder conversion used here is not Core GRADE 6's option 2. ",
+      "That procedure needs a threshold for each instrument, assumes a ",
+      "normal distribution, and computes the proportion above threshold ",
+      "per study before pooling. Reviews that pool across instruments and ",
+      "across endpoint and change definitions cannot supply per-instrument ",
+      "thresholds, so the app applies Chinn's formula instead: it assumes ",
+      "a logistic latent variable, requires no threshold, and is applied ",
+      "to the pooled standardized mean difference. The two approaches do ",
+      "not generally agree, and the Summary of Findings table carries a ",
+      "footnote saying so."
+    ),
+    responder_default = paste0(
+      "Unconfirmed assumption. The 20 percent (200 per 1,000) starting ",
+      "value is an app convention, not a Core GRADE or pmatools number: ",
+      "Core GRADE 6 only says the control-group rate is chosen from the ",
+      "context. Replace it with a rate from your own data or from an ",
+      "external source, or confirm it explicitly, before the rating is ",
+      "used."
     )
   ),
 
