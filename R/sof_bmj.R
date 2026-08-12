@@ -419,7 +419,12 @@
     ft <- flextable::add_footer_lines(ft, values = paste0(
       "* Continuous outcome dichotomised via Chinn's formula ",
       "(log OR = SMD x pi / sqrt(3))", invert_str,
-      ". Control event rate user-specified.", threshold_str
+      ". Control event rate user-specified.", threshold_str,
+      " This is NOT Core GRADE 6's option 2, which assumes a normal ",
+      "distribution and computes, per study and before pooling, the ",
+      "proportion in each arm improving by more than the MID; Chinn's formula ",
+      "assumes a logistic latent variable, uses no MID and is applied to the ",
+      "pooled SMD. The two do not generally agree."
     ))
   }
 

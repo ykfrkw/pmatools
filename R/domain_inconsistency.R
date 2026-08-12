@@ -35,7 +35,27 @@
 # "some_concerns" (-1). "serious" (-2) remains reachable only through the
 # scalar `inconsistency` override, which requires a written rationale.
 #
-# Auto Step 1 proxy: I^2 > 25%  (Q-test no longer used; v0.1.0 used "I^2 > 25% OR Q p < 0.10")
+# Auto Step 1 proxy: I^2 > 30%  (v0.5.1; v0.1.0-v0.5.1 used 25%, and v0.1.0
+#   also used "OR Q p < 0.10").
+#
+#   30% is the ONLY numeric value Core GRADE 3 offers, and it offers it
+#   grudgingly. Verbatim:
+#     "It is natural that review authors desire hard and fast rules for
+#      interpreting I2. The limitations of the statistic make such rules
+#      problematic. The best we can do is suggest that one will seldom see
+#      serious inconsistency with I2 values <30%, and as I2 rises beyond that
+#      value, the possible need to rate down certainty increases."
+#   Core GRADE 3's actual Step 1 is a VISUAL judgment, not a statistic
+#   (summary points, verbatim): "To address rating down for inconsistency,
+#   Core GRADE relies on the visual inspection of forest plots for the
+#   magnitude of differences in point estimates, the overlap of confidence
+#   intervals, and the relation of study estimates to the chosen threshold of
+#   the null effect or minimal important difference."
+#   The I^2 gate here is therefore an automation SURROGATE for that visual
+#   step. Supply the manual flowchart inputs (inconsistency_ci_diff etc.)
+#   after looking at plot_forest() to follow the source faithfully. Every
+#   auto-path note states this.
+#
 # Auto Step 2 proxy:
 #   With threshold_chosen > 0:
 #     classify TE per study into 3 zones around +/-threshold_chosen;
@@ -43,10 +63,20 @@
 #   Without threshold_chosen (null threshold, or none supplied):
 #     the trivial zone collapses to {0} and the same 80% rule is applied
 #     around the null.
+#
+#   The 80% (ZONE_MAJORITY) and 20% (OPPOSITE_EACH) cut-offs are NOT from Core
+#   GRADE. Core GRADE 3 Fig 2 words the node qualitatively -- its only vocabulary
+#   is "Majority are on one side of threshold" and "Point estimates of
+#   substantial proportion of [studies on opposite sides]" -- and gives no
+#   numeric definition of "majority" or "substantial proportion". 0.80 follows
+#   CINeMA (Nikolakopoulou 2020); 0.20 is a pmatools convention. Both are
+#   stated in the domain notes.
+#
 # Auto Step 3: cannot be auto-detected -> opposite_sides leads to
 #   "some_concerns" (-1), with a note pointing at the override.
 #
-# I^2 / tau^2 / Q statistics are always shown in notes but never drive the judgment.
+# I^2 / tau^2 / Q statistics are always shown in notes but never drive the
+# judgment beyond the Step 1 gate above.
 
 # Note appended whenever an automated / flowchart path would historically have
 # rated down two levels. Core GRADE 3 does not support that, so the judgment is
@@ -57,6 +87,41 @@
   "users, so this automated judgment is capped at one level (some concerns). ",
   "If two levels are genuinely warranted, supply the scalar override ",
   "inconsistency = 'serious' with inconsistency_rationale."
+)
+
+# Step 1 cut-off for the automated path. Core GRADE 3's only number, quoted in
+# the file header; see there for why it is a surrogate rather than a rule.
+INCONSISTENCY_I2_CUT <- 30
+
+# Attached to every AUTO-path note: names the surrogate and points at the
+# faithful manual route.
+.INCONSISTENCY_I2_CAVEAT <- paste0(
+  "The I2 gate is a pmatools automation surrogate for Core GRADE 3 Step 1, ",
+  "which is a visual judgment ('Core GRADE relies on the visual inspection of ",
+  "forest plots'). Core GRADE 3 gives 30% as its only numeric hint while ",
+  "warning that 'the limitations of the statistic make such rules ",
+  "problematic'. Inspect plot_forest() and supply inconsistency_ci_diff / ",
+  "inconsistency_threshold_side to follow the source directly."
+)
+
+# Attached to every AUTO Step 2 note: names the operational cut-offs.
+.INCONSISTENCY_ZONE_CAVEAT <- paste0(
+  "Core GRADE 3 Fig 2 words this node qualitatively ('Majority are on one ",
+  "side of threshold' / 'substantial proportion') and defines no numbers; the ",
+  "80% majority share follows CINeMA (Nikolakopoulou 2020) and the 20% ",
+  "each-side share is a pmatools convention."
+)
+
+# Attached wherever the subgroup question decides the judgment.
+.INCONSISTENCY_SUBGROUP_CAVEAT <- paste0(
+  "Subgroup credibility is not auto-detectable. Core GRADE 3 keys it to the ",
+  "interaction P value, whether the comparison is within-study, and whether a ",
+  "small number of direction-specifying a priori hypotheses was made, and ",
+  "points at ICEMAN (www.iceman.help; Schandelmaier 2020, CMAJ ",
+  "2020;192:E901-6). Core GRADE 3 also states that 'a conclusion of moderate ",
+  "or high credibility warrants the creation of separate PICO questions for ",
+  "each subgroup', so a credible subgroup effect should be split into ",
+  "separate ratings rather than reported as a single pooled estimate."
 )
 
 assess_inconsistency <- function(meta_obj,
@@ -168,7 +233,8 @@ assess_inconsistency <- function(meta_obj,
         auto     = FALSE,
         notes    = paste0(
           "FLOWCHART Step 3: Opposite-sided estimates explained by credible subgroup ",
-          "-> do not rate down; present subgroup results separately. | ",
+          "-> do not rate down; present subgroup results separately. ",
+          .INCONSISTENCY_SUBGROUP_CAVEAT, " | ",
           stat_note
         )
       ))
@@ -180,7 +246,8 @@ assess_inconsistency <- function(meta_obj,
       auto     = FALSE,
       notes    = paste0(
         "FLOWCHART Step 3: Opposite-sided estimates not explained by subgroup ",
-        "-> rate down one level. ", .INCONSISTENCY_CAP_NOTE, " | ", stat_note
+        "-> rate down one level. ", .INCONSISTENCY_SUBGROUP_CAVEAT, " ",
+        .INCONSISTENCY_CAP_NOTE, " | ", stat_note
       )
     ))
   }
@@ -194,9 +261,10 @@ assess_inconsistency <- function(meta_obj,
 # --------------------------------------------------------------------------
 .auto_inconsistency <- function(meta_obj, i2_pct, stat_note, threshold_chosen = NULL) {
 
-  # Step 1 proxy: I^2 > 25%
+  # Step 1 surrogate: I^2 > 30% (see INCONSISTENCY_I2_CUT / file header)
+  cut <- INCONSISTENCY_I2_CUT
   has_i2 <- !is.na(i2_pct)
-  ci_diff_yes <- has_i2 && (i2_pct > 25)
+  ci_diff_yes <- has_i2 && (i2_pct > cut)
 
   if (!ci_diff_yes) {
     return(make_domain_row(
@@ -204,7 +272,9 @@ assess_inconsistency <- function(meta_obj,
       judgment = "no",
       auto     = TRUE,
       notes    = paste0(
-        "AUTO Step 1: No important heterogeneity (I2 <= 25%) -> do not rate down. | ",
+        sprintf(paste0("AUTO Step 1: No important heterogeneity (I2 <= %d%%) ",
+                       "-> do not rate down. "), cut),
+        .INCONSISTENCY_I2_CAVEAT, " | ",
         stat_note
       )
     ))
@@ -218,8 +288,10 @@ assess_inconsistency <- function(meta_obj,
       judgment = "some_concerns",
       auto     = TRUE,
       notes    = paste0(
-        "AUTO Step 1: I2 > 25%; AUTO Step 2 not assessable (study-level TEs unavailable); ",
-        "judgment = 'some_concerns' (conservative). | ", stat_note
+        sprintf(paste0("AUTO Step 1: I2 > %d%%; AUTO Step 2 not assessable ",
+                       "(study-level TEs unavailable); judgment = ",
+                       "'some_concerns' (conservative). "), cut),
+        .INCONSISTENCY_I2_CAVEAT, " | ", stat_note
       )
     ))
   }
@@ -233,10 +305,12 @@ assess_inconsistency <- function(meta_obj,
   #     (n_above/k >= 20% AND n_below/k >= 20%)
   #   else                                       -> "some_concerns" (-1)
   #
-  # Reference: CINeMA (Nikolakopoulou 2020) for the 80% one-side threshold;
-  # the substantial-both-directions criterion captures clinically opposite
-  # effects across studies, which corresponds to BMJ Core GRADE 3's
-  # "point estimates on opposite sides of threshold" qualitative trigger.
+  # PROVENANCE: neither number is from Core GRADE. 0.80 follows CINeMA
+  # (Nikolakopoulou 2020); 0.20 is a pmatools convention. Core GRADE 3 Fig 2
+  # says only "Majority are on one side of threshold" and "Point estimates of
+  # substantial proportion of [studies]" and never quantifies either phrase.
+  # The substantial-both-directions criterion is our operationalisation of
+  # Core GRADE 3's "point estimates on opposite sides of threshold" trigger.
   # It no longer rates down two levels: Core GRADE 3 declines to endorse a
   # two-level inconsistency downgrade (see .INCONSISTENCY_CAP_NOTE), so the
   # opposite-sides zone tally is reported in the notes but capped at -1.
@@ -296,10 +370,15 @@ assess_inconsistency <- function(meta_obj,
   }
 
   side_note <- sprintf(
-    "AUTO Step 2 (%s): zone counts (k = %d): above_threshold = %d, trivial = %d, below_threshold = %d. %s",
+    "AUTO Step 2 (%s): zone counts (k = %d): above_threshold = %d, trivial = %d, below_threshold = %d. %s %s",
     threshold_label, n_total,
     n_above, n_trivial, n_below,
-    decision_note
+    decision_note, .INCONSISTENCY_ZONE_CAVEAT
+  )
+
+  step1_note <- sprintf(
+    "AUTO Step 1: I2 > %d%% -> important heterogeneity detected. %s ",
+    cut, .INCONSISTENCY_I2_CAVEAT
   )
 
   if (judgment_auto == "no") {
@@ -308,7 +387,7 @@ assess_inconsistency <- function(meta_obj,
       judgment = "no",
       auto     = TRUE,
       notes    = paste0(
-        "AUTO Step 1: I2 > 25% -> important heterogeneity detected. ",
+        step1_note,
         side_note,
         " | ", stat_note
       )
@@ -321,10 +400,10 @@ assess_inconsistency <- function(meta_obj,
       judgment = "some_concerns",
       auto     = TRUE,
       notes    = paste0(
-        "AUTO Step 1: I2 > 25% -> important heterogeneity detected. ",
+        step1_note,
         side_note,
-        " Subgroup explanation not auto-detectable; supply ",
-        "inconsistency_subgroup_explained = 'yes' to override. ",
+        " Supply inconsistency_subgroup_explained = 'yes' to override. ",
+        .INCONSISTENCY_SUBGROUP_CAVEAT, " ",
         .INCONSISTENCY_CAP_NOTE, " | ",
         stat_note
       )
@@ -337,7 +416,7 @@ assess_inconsistency <- function(meta_obj,
     judgment = "some_concerns",
     auto     = TRUE,
     notes    = paste0(
-      "AUTO Step 1: I2 > 25% -> important heterogeneity detected. ",
+      step1_note,
       side_note, " | ", stat_note
     )
   )

@@ -175,15 +175,32 @@ GRADE certainty starts at **High** for RCTs (or **Low** for observational studie
 | Imprecision | **Yes** | CI width, null crossing, OIS |
 | Publication Bias | **Yes** (Egger's test when k ≥ 10) | meta object |
 
-### Downgrade scale
+### Downgrade scale — read this before comparing code with the papers
 
-| Judgment | Downgrade |
-|----------|-----------|
-| `"no"` | 0 |
-| `"some_concerns"` | −1 |
-| `"serious"` | −2 |
+The names pmatools uses are **not** the names the Core GRADE papers use, and
+they are off by exactly one step. Core GRADE 1:
+
+> We characterise limitations in each of these domains involved in rating down
+> certainty as **not serious; serious; very serious; or, rarely, extremely
+> serious.**
+
+| pmatools value | Core GRADE wording | Downgrade |
+|----------------|--------------------|-----------|
+| `"no"` | not serious | 0 |
+| `"some_concerns"` | **serious** | −1 |
+| `"serious"` | **very serious** | −2 |
+| *(not implemented)* | extremely serious | −3 |
+
+So `rob = "serious"` means the source's **very serious** (−2), not its
+"serious". If you are reading a Core GRADE paper with one hand and this code
+with the other, this is the single easiest place to be off by a level. The
+`$downgrade` column always carries the signed number — trust that when in
+doubt, and prefer the legacy alias `"very_serious"` when writing −2 by hand.
 
 Legacy labels are still accepted and normalized: `"some"` → `"some_concerns"` (−1), `"very_serious"` → `"serious"` (−2).
+
+`"extremely serious"` (−3) has no pmatools value; the maximum downgrade from a
+single domain is −2.
 
 ### Starting and final certainty
 
@@ -242,6 +259,17 @@ grade_meta(m, threshold = 1.25, threshold_scale = "ratio",
            rating_target = "little_to_no_difference",
            rating_target_rationale = "Panel targets an unimportant effect")
 ```
+
+**If the rating will feed a guideline recommendation, `threshold_type = "null"`
+is not an option.** Core GRADE 7:
+
+> To inform recommendations, that threshold must be the MID (the smallest
+> difference in effect that patients would consider important) rather than the
+> null. Thus, **decisions on the MID must precede certainty ratings** in the
+> evidence synthesis.
+
+A null-threshold rating is a perfectly good systematic review result; it is just
+not a usable input to a recommendation.
 
 ### 1. Risk of Bias (5-rule MECE zone-based decision; aligned with BMJ Core GRADE 4)
 
@@ -320,17 +348,52 @@ grade_meta(m,
   rob_inflation_threshold = 0.10)           # rule 3 trigger; default 10%
 ```
 
-**Threshold default: `suggest_threshold()`.** Returns a conventional clinical
-decision Threshold for the effect measure — OR 1.25, RR/HR 1.20, RoM 1.10,
-SMD 0.20, MD 0.20 × pooled SD, ARD 0.05 — as
-`list(threshold_user, threshold_scale)`, suitable for pre-filling an input
-field. Override with a published or expert-derived Threshold whenever available.
+**Threshold placeholder: `suggest_threshold()`.** Returns a value to pre-fill an
+input field with. **These are pmatools placeholders, not Core GRADE numbers** —
+each one now says which it is, in a `source` field:
+
+| `sm` | Value | `source` |
+|---|---|---|
+| OR / RR / HR | **ARD 0.05** (50 per 1,000), with the ratio value (1.25 / 1.20 / 1.20) demoted to `$threshold_ratio` | `package_convention` |
+| ARD | 0.05 | `package_convention` |
+| RoM | 1.10 | `package_convention` |
+| MD | 0.20 × pooled SD | `package_convention` |
+| SMD | 0.20 | `core_grade_6` |
 
 ```r
-suggest_threshold(ma)
-#> $threshold_user  1.25
-#> $threshold_scale "ratio"
+suggest_threshold(ma)              # binary outcome
+#> $threshold_user   0.05
+#> $threshold_scale  "ard"
+#> $source           "package_convention"
+#> $threshold_absolute  list(0.05, "ard", "package_convention")
+#> $threshold_ratio     list(1.20, "ratio", "package_convention")
 ```
+
+**Why the absolute candidate leads (v0.5.1).** Core GRADE 1, 6 and 7 contain
+**no ratio-scale MID at all**; every binary MID they discuss is absolute. Core
+GRADE 7's worked list is "MIDs associated with mortality of 1%, stroke of 2%,
+myocardial infarction of 3%, and serious gastrointestinal bleeding of 5%". A
+ratio-scale default is an extrapolation on our part. (`threshold_scale = "auto"`
+in `grade_meta()` is unchanged by this — only the suggestion helper and the
+entry-gate message reordered.)
+
+**Why you should replace whatever it gives you.** Three reasons, all from the
+source:
+
+- **The MID belongs to the outcome, not to the effect measure.** Those Core
+  GRADE 7 numbers "reflect the gradient of importance across these outcomes"
+  (mortality five times as important as bleeding). One default shared across
+  every outcome erases exactly that gradient.
+- **Core GRADE 7 works in the opposite order.** Look at the CI first, and pin
+  down a MID only where the verdict turns on it: "whether the MID for mortality
+  is 2%, 1%, or less than 1%, the CI does not cross the MID threshold ... one
+  need not specify a single particular value". Starting from a pre-filled
+  number inverts that.
+- **Even the one sourced value is hedged.** Core GRADE 6 does cite "an SMD of
+  0.2 ... for a small and important effect", then immediately adds that
+  "clinicians may be appropriately sceptical of this threshold, which is
+  limited by large variability in the methods investigators use to calculate
+  the SMD".
 
 **`small_values` parameter** (consistent with `netmetaviz`):
 
@@ -433,17 +496,61 @@ plot_forest_rob(ma, rob = rob_vec)   # rob_vec: character, length k
 
 ```
 AUTO Step 1: Is there important heterogeneity?
-  proxy: I² > 25% OR Q p < 0.10
+  surrogate: I² > 30%
 
   NO  → judgment = "no" (do not rate down)
 
-  YES → AUTO Step 2: Are most point estimates on one side of null?
+  YES → AUTO Step 2: where do the point estimates fall vs the chosen threshold?
           meta$TE is on null = 0 scale for all measures
           (log OR/RR/HR for relative; raw MD/SMD for absolute)
-          ≥ 75% on same side → "majority_one_side" → judgment = "some_concerns"
-          < 75% on same side → "opposite_sides"    → judgment = "some_concerns"
-          (subgroup explanation cannot be checked automatically)
+          three zones around ±threshold; largest single-zone share
+            ≥ 80%                          → "majority_one_side"      → "no"
+          ≥ 20% of studies on each side    → "opposite_substantial"   → "some_concerns"
+          otherwise                        → "heterogeneous"          → "some_concerns"
+          (subgroup credibility cannot be checked automatically)
 ```
+
+**The numbers in that box are automation surrogates, not Core GRADE rules.**
+
+| Value | Where it comes from |
+|---|---|
+| **I² > 30%** (Step 1) | The only number Core GRADE 3 puts on paper: "one will seldom see serious inconsistency with I² values <30%". *(v0.5.1: was 25%, which had no source.)* |
+| **80%** one-zone share | CINeMA (Nikolakopoulou 2020). Core GRADE 3 Fig 2 says only "Majority are on one side of threshold" and never quantifies it. |
+| **20%** each-side share | A pmatools convention. Core GRADE 3's phrase is "substantial proportion", with no number attached. |
+
+And Core GRADE 3 is emphatic that Step 1 is **not** a statistic at all:
+
+> To address rating down for inconsistency, Core GRADE relies on the **visual
+> inspection of forest plots** for the magnitude of differences in point
+> estimates, the overlap of confidence intervals, and the relation of study
+> estimates to the chosen threshold of the null effect or minimal important
+> difference
+
+and, about I² specifically:
+
+> It is natural that review authors desire hard and fast rules for interpreting
+> I². **The limitations of the statistic make such rules problematic.**
+
+So the automated path is a stand-in for a judgment you are meant to make with
+your eyes. Run `plot_forest(m)`, look at it, and pass the manual flowchart
+arguments below if the picture and the I² disagree. Every auto-path domain note
+says all of this.
+
+**Judging a subgroup effect credible** is likewise not automatable.
+`inconsistency_subgroup_explained = "yes"` should mean at least *moderate*
+credibility on Core GRADE 3's three criteria — the P value from a test of
+interaction, whether the comparison is within-study rather than between-study,
+and whether a small number of direction-specifying a priori hypotheses was made
+— assessed with **ICEMAN** ([www.iceman.help](https://www.iceman.help);
+Schandelmaier et al. *CMAJ* 2020;192:E901-6). Note that pmatools is more
+permissive here than the source: passing `"yes"` lets the **pooled** estimate
+through with no downgrade, whereas Core GRADE 3 says "a conclusion of moderate
+or high credibility warrants the creation of separate PICO questions for each
+subgroup, separate presentation of results for each subgroup, separate ratings
+of certainty considering all five domains of rating down, and separate
+conclusions". The faithful move is to split the analysis and rate each subgroup
+in its own right (see `grade_meta_multi()`), not to keep reporting one pooled
+number.
 
 **The chosen threshold is shared with Imprecision (v0.5.1).** Core GRADE 3
 Fig 2 node 2 reads "Evaluate point estimates of studies **in relation to
@@ -502,6 +609,72 @@ grade_meta(m, indirectness = "no")                  # scalar
 grade_meta(m, indirectness = indirectness_vec)       # per-study vector
 ```
 
+**Scope: this is PICO indirectness, not indirect comparison.** Core GRADE 5
+Fig 1 splits indirectness in two — indirect comparisons (A vs B inferred from
+A vs C and B vs C) and indirectness related to PICO issues — and marks only the
+second with "Focus of this Core GRADE guidance". pmatools is pairwise-only, so
+its scope matches: indirect comparison is a network meta-analysis concept and
+is out of scope here.
+
+**How much this domain matters depends on what you are writing.** Core GRADE 5:
+
+> When researchers conduct systematic reviews independently from health
+> technology assessments or guidelines, they can establish eligibility criteria
+> that closely fit their target PICO and restrict their inclusion criteria
+> accordingly. **As a result, indirectness is not often a major concern in such
+> reviews.**
+
+A standalone systematic review writes its own PICO and then only admits studies
+that fit it, so indirectness is usually "no". Guideline panels and health
+technology assessment teams are handed the question instead — they "must
+therefore identify and summarise the current best evidence to address those
+questions" — and routinely have to fall back on evidence that does not match.
+If you are rating for a guideline or an HTA, expect this domain to do real work;
+if you are rating your own review, a downgrade here often means the review's
+eligibility criteria and the target PICO have drifted apart.
+
+**Indirectness or inconsistency? The test is whether you have both sides.**
+Core GRADE 5 draws the line cleanly. If evidence exists on *both* sides of the
+variable — elderly *and* young, low dose *and* high dose, long *and* short
+follow-up — you can test whether effects differ across it, and that is
+**inconsistency**:
+
+> If we have evidence from both elderly people and younger people, low dose and
+> high dose, or long follow-up and short follow-up, we can test whether effects
+> differ across these variables. We label such situations as potential
+> inconsistency
+
+If the evidence sits only on one side, there is nothing to test, and that is
+**indirectness**:
+
+> However, if Core GRADE users are interested in effects in elderly people but
+> all or almost all evidence comes from younger people ... they lack the data to
+> test whether effects differ across these variables.
+
+Use one domain or the other for a given variable, never both — double-counting
+the same concern is the commonest way to end up two levels lower than the
+evidence deserves.
+
+**Where you met the indirect evidence matters too.** Core GRADE 5 distinguishes
+two search scenarios: "in the search for direct evidence (which typically does
+not warrant rating down for indirectness)" versus "in the deliberate search for
+indirect evidence (which typically warrants considering the issue of
+indirectness)". Population differences turned up by an ordinary search — age,
+ethnicity, comorbidity mix — usually do *not* justify a downgrade, because
+"true subgroup effects related to such characteristics are uncommon". But the
+paper names three exceptions that do, even on a direct search: **non-adherence
+to interventions**, **surrogate rather than patient-important outcomes**, and
+**problematic comparators**.
+
+**Rating down two levels is mostly a surrogate-outcome move.** Core GRADE 5:
+"Although one might consider rating down more than one level for indirectness
+for any PICO element, this possibility is typically more salient for surrogate
+outcomes", and "the decision to rate down one or two levels depends on one's
+understanding of the likelihood that change in the patient important outcome
+will follow change in the surrogate". A distant surrogate (calcium/phosphate
+metabolism for fractures) warrants −2; a closer one (bone density for
+fractures) warrants −1.
+
 **Per-study input is aggregated by weight share, not worst case (v0.5.1).**
 Indirectness is a judgment about the *body* of evidence, and Core GRADE 5
 frames it that way: "if Core GRADE users are interested in effects in elderly
@@ -519,19 +692,27 @@ otherwise                                     → "no"
 
 where `w_serious` / `w_any` are the inverse-variance weight shares carried by
 the `"serious"` studies and by the `"some_concerns"` + `"serious"` studies (the
-count share is used, and flagged, when weights are unavailable). **The
-threshold has no basis in Core GRADE 5**, which gives no numeric
-operationalisation of "all or almost all"; the `0.55` default is a pmatools
-convention aligned with `rob_dominant_threshold`, and every aggregated domain
-note says so. The `indirectness_subdomains` table below keeps its worst-case
-fold — subdomains are facets of one judgment, not units of evidence.
+count share is used, and flagged, when weights are unavailable — that fallback
+is a pmatools convention too, with no basis in the source).
+
+**The `0.55` threshold has no basis in Core GRADE 5.** The paper speaks about
+the body of evidence only qualitatively — its phrase is "**all or almost all**
+evidence comes from ..." — and never turns that into a number, nor into a
+per-study aggregation rule of any kind: the judgment it describes is made about
+the body of evidence as a whole. `indirectness_dominant_threshold = 0.55` is a
+pmatools convention, chosen to line up with `rob_dominant_threshold` (whose
+value *is* sourced, from Core GRADE 4 Fig 2). Every aggregated domain note says
+so. If your reading of "all or almost all" is stricter, raise it.
+
+The `indirectness_subdomains` table below keeps its worst-case fold —
+subdomains are facets of one judgment, not units of evidence.
 
 #### PICO subdomains (v0.5): `indirectness_subdomains`
 
 Core GRADE 5 asks the indirectness question **separately for each element of the
-PICO**, on a 4-point scale, rather than as one global judgment. Pass a data frame
-with the columns `subdomain`, `target`, `evidence` and `judgment`, one row per
-PICO element:
+PICO**. pmatools implements that as a subdomain table with a 4-point answer
+scale. Pass a data frame with the columns `subdomain`, `target`, `evidence` and
+`judgment`, one row per PICO element:
 
 ```r
 ind_sub <- data.frame(
@@ -574,6 +755,33 @@ the worst case across the four subdomains** — in the example above
 `probably_no` for Comparison drives the whole domain to `some_concerns` (−1),
 even though the other three subdomains raise no concern.
 
+> **Attribution — the 4-point scale is ours, not Core GRADE's.** Asking the
+> question per PICO element comes from Core GRADE 5. The answer scale
+> (`yes` / `probably_yes` / `probably_no` / `no`) and the wording *"Is the
+> evidence sufficiently direct?"* are **pmatools conventions** and appear
+> nowhere in the article body. Core GRADE 5 does not pose a yes/no directness
+> question at all: it asks how likely it is that the effect differs
+> substantially between the target PICO and the available evidence, and its
+> Table 2 grades that answer as *Low / Intermediate / Substantial / High
+> likelihood* of rating down.
+>
+> **Core GRADE 5 also weighs the four elements unequally, and this table does
+> not.** Table 2, "Likelihood of rating down":
+>
+> | PICO element | Likelihood of rating down (Core GRADE 5 Table 2) |
+> |---|---|
+> | Population | "Low likelihood because relative effects are typically similar across populations" |
+> | Intervention | "Intermediate likelihood depending on underlying biology and on magnitude of issues such as non-adherence and frequency of switching" |
+> | Comparison | "Substantial likelihood in trials of new agents when an effective treatment already exists, particularly more than one effective treatment" |
+> | Outcome | "High likelihood because of frequent disappointing results in randomised controlled trials examining patient important outcomes" |
+>
+> The worst-case fold is symmetric, so a `probably_no` recorded against
+> Population weighs exactly as much as one against Outcome. In the example
+> above, a `probably_no` on **Comparison** carries the domain — which is a
+> plausible reading of Table 2 — but the same input on Population would be
+> harder to defend. Read the table before accepting the default, and override
+> with `indirectness` + `indirectness_rationale` where the gradient matters.
+
 The normalized table comes back on the object as `$indirectness_subdomains`;
 `$domain_assessments` keeps its one-row-per-domain schema, so nothing downstream
 has to change.
@@ -595,19 +803,28 @@ grade_meta(m_response, indirectness_subdomains = ind_sub,
            threshold = 1.25, threshold_scale = "ratio")
 ```
 
-#### `indirectness_table()` — BMJ Core GRADE 5 judgment table
+#### `indirectness_table()` — PICO subdomain judgment table
 
 ```r
 indirectness_table(g_ind)                       # flextable, renders in the RStudio Viewer
 flextable::save_as_docx(indirectness_table(g_ind), path = "indirectness.docx")
 ```
 
-Renders `$indirectness_subdomains` in the publication format used by Core GRADE
-5: the target question, the evidence found, a colour-graded 4-option judgment row
-with the recorded answer ticked, and a merged "Judgment across subdomains" row
-carrying the overall judgment. It aborts (with a message telling you how to
-record subdomains) when the object has none. `export_bundle()` writes it as
-`indirectness_table.docx` for every outcome that recorded subdomains.
+Renders `$indirectness_subdomains`: the target question, the evidence found, a
+colour-graded 4-option judgment row with the recorded answer ticked, and a
+merged "Judgment across subdomains" row carrying the overall judgment. It aborts
+(with a message telling you how to record subdomains) when the object has none.
+`export_bundle()` writes it as `indirectness_table.docx` for every outcome that
+recorded subdomains.
+
+**This is a pmatools table, not a Core GRADE 5 publication table.** The article
+body carries exactly two tables — Table 1 (an adaptation of a summary of
+findings table) and Table 2 ("Summary of indirectness issues": PICO element /
+Reason for rating down / Examples / Likelihood of rating down) — and neither has
+this shape. The layout implements Core GRADE 5's per-PICO reasoning; the table
+itself, the 4-point scale and the header wording are ours. (The online
+supplementary appendices have not been checked.) The rendered table repeats this
+caveat, and the Table 2 likelihood gradient, in its footer.
 
 ---
 
@@ -811,7 +1028,7 @@ g$domain_assessments
 #   domain           judgment  auto  downgrade notes
 #   Risk of bias     no        FALSE         0 "Not dominated: 38% weight..."
 #   Indirectness     no        FALSE         0 NA
-#   Inconsistency    some_concerns TRUE     -1 "AUTO Step 1: I²=36% > 25%..."
+#   Inconsistency    some_concerns TRUE     -1 "AUTO Step 1: I²=36% > 30%..."
 #   Imprecision      no        TRUE          0 "CI does not cross null; OIS = 311..."
 #   Publication bias no        TRUE          0 "Egger p = 0.93"
 ```
@@ -878,7 +1095,7 @@ g_response <- grade_meta(
 |--------|----------|-----------|--------|
 | **Risk of Bias** | no | High-RoB weight ≈ 38% < 60% → NOT dominated | auto flowchart |
 | **Indirectness** | no | Directly applicable PICO | manual |
-| **Inconsistency** | some_concerns | I² ≈ 36% > 25%; all 17 estimates favour CBT-I, but no single zone around ±MID holds ≥ 80% → magnitude genuinely heterogeneous | auto |
+| **Inconsistency** | some_concerns | I² ≈ 36% > 30%; all 17 estimates favour CBT-I, but no single zone around ±MID holds ≥ 80% → magnitude genuinely heterogeneous | auto |
 | **Imprecision** | no | OR 2.33, CI [1.66, 3.26] lies entirely beyond the MID; OIS met (1,222 / 97 events) | auto |
 | **Publication Bias** | no | Egger p ≈ 0.93; k = 17 ≥ 10 | auto |
 
@@ -903,6 +1120,30 @@ sof_table(g, per = 100)               # per 100 patients
 sof_table(g, prediction = TRUE)        # add 95% PI to Effect column
 flextable::save_as_docx(sof_table(g), path = "sof.docx")
 ```
+
+#### Continuous outcomes: which summary to present
+
+Core GRADE 6 ranks the three ways of presenting a continuous outcome, and the
+most familiar one comes last:
+
+> We suggest presenting the mean difference and interpreting these differences
+> in relation to the MID (option 1), as well as the binary outcome approach
+> (option 2).
+
+> Although the SMD (option 3) remains the most used summary statistic, for the
+> reasons we have noted, **it is often the least satisfactory.**
+
+So: **run the meta-analysis in natural units (`sm = "MD"`) and set the MID in
+those units whenever an instrument with a credible MID is available.** Reach for
+the SMD only "when the outcome is reported using multiple scales and no
+instrument measuring the construct has a credible MID available". If options 1
+and 2 agree, Core GRADE 6 says "review authors may make strong inferences about
+the apparent magnitude of effect"; if they disagree, "inferences about magnitude
+must be weaker".
+
+`convert_smd_to_or = TRUE` gives you *a* binary presentation, but **not Core
+GRADE 6's option 2** — see the footnote caveat under
+[`style = "bmj"`](#style--bmj--bmj-core-grade-summary-of-findings-layout-v05).
 
 ### `grade_table()` — multi-outcome SoF table
 
@@ -986,11 +1227,43 @@ The BMJ layout differs from GRADEpro in what each column carries:
 | Certainty of evidence (quality of evidence) | `Moderate` / `Due to serious inconsistency` — the domains that pulled it down |
 | Plain language summary | `Treatment likely has an important benefit` (see below) |
 
-**Plain language summaries** are the statements from **Core GRADE 2, Table 1**,
-carried verbatim. Which one is used follows from the certainty level,
-`threshold_type` and the derived `rating_target` — pmatools does not paraphrase
-them. Objects created before the Core GRADE 2 entry gate (no `$rating_target`)
-simply omit the column rather than guessing.
+**Plain language summaries** are the statements from **Core GRADE 6, Box 1**
+("Writing standardised GRADE plain language summaries in summary of findings
+tables"), carried verbatim. Box 1 supersedes the earlier Core GRADE 2 Table 1
+guidance — it "summarises this guidance as well as additional guidance related
+to the null and MID thresholds that are the focus of Core GRADE", and unlike
+Table 1 it names the **direction** of the effect on the outcome rather than
+fixing the wording to "benefit". Which statement is used therefore follows from
+**four** inputs: the certainty level, `threshold_type`, the derived
+`rating_target`, and the **sign of the pooled point estimate** (`increases` vs
+`reduces`). pmatools does not paraphrase them. Objects created before the Core
+GRADE 2 entry gate (no `$rating_target`) simply omit the column rather than
+guessing, and so does any object whose pooled estimate gives no usable
+direction — Box 1 has no direction-free wording.
+
+**Chinn's formula is not Core GRADE 6's option 2.** When
+`convert_smd_to_or = TRUE` dichotomises a continuous outcome, the footnote says
+which method was used, because the two are genuinely different:
+
+| | Core GRADE 6 option 2 | `chinn_smd_to_or()` |
+|---|---|---|
+| Latent distribution | normal | logistic |
+| Needs an MID? | yes, per instrument | no |
+| Applied | per study, **before** pooling, then the proportions are pooled | to the **pooled** SMD, after pooling |
+
+Core GRADE 6 states option 2 verbatim as: "assume a normal distribution of
+results, they can calculate the proportion of people who experience an
+improvement larger than the MID within each arm ... They can then pool these
+proportions across studies." Option 2 is **not implemented** in pmatools; the
+two approaches will not in general give the same numbers.
+
+**What this layout does not yet produce** (all requested by Core GRADE 6): arm
+columns for continuous outcomes — the paper's "preferred approach ... to
+provide information about the outcome in the comparison group ..., the
+intervention group ..., and the difference between the two" — "not reported"
+rows, per-domain rate-down footnotes, and a warning to analyse risk differences
+directly when the outcome is rare ("event rates <2% and most problematic <1%").
+See [Limitations](#limitations-and-future-work).
 
 When the rated analysis is a low-risk-of-bias refit, the table carries a
 footnote saying so; `grade_table()` numbers the marker per row, so a table
@@ -1414,7 +1687,7 @@ and in [SPEC.md §4](SPEC.md).
 | `sof_table()` | Single-outcome Summary of Findings flextable (GRADEpro or BMJ style) |
 | `grade_table()` | Multi-outcome Summary of Findings flextable, with primary/secondary grouping |
 | `evidence_profile()` | Single-outcome Evidence Profile flextable with per-domain footnotes |
-| `indirectness_table()` | Core GRADE 5 PICO subdomain judgment table as a flextable |
+| `indirectness_table()` | Per-PICO subdomain judgment table as a flextable (pmatools layout implementing Core GRADE 5's reasoning; not a Core GRADE 5 publication table) |
 | `grade_report()` | Full certainty appendix in docx / html / pdf / md |
 | `export_bundle()` | Reproducible ZIP: data, `analysis.R`, results, plots and tables (S3 generic; flat layout for one outcome, `outcomes/NN_name/` for a `pmatools_set`) |
 | `plot_forest()` | Forest plot with automatic layout and log/linear axis selection |
@@ -1424,7 +1697,7 @@ and in [SPEC.md §4](SPEC.md).
 | `plot_trimfill_forest()` | Forest plot of the trim-and-fill imputed analysis |
 | `plot_rare_sensitivity_forest()` | Method-comparison forest for a `run_rare_ma()` result |
 | `plot_funnel()` | Contour-enhanced funnel plot, annotated with Egger's test when k ≥ 10 |
-| `suggest_threshold()` | Suggest a conventional minimal important difference for the effect measure in hand (ratio and absolute scales) |
+| `suggest_threshold()` | Placeholder MID for the effect measure in hand, with a `source` field saying whether it is a pmatools convention or a Core GRADE value (absolute candidate first for binary outcomes) |
 | `chinn_smd_to_or()` | Chinn's conversion of an SMD (and its CI) to an odds ratio |
 | `compute_pooled_sd()` | Sample-size-weighted pooled within-study SD across a `metacont` analysis, for deriving a continuous OIS or converting an MD threshold |
 
@@ -1459,7 +1732,7 @@ pmatools/
 │   ├── grade_meta.R            # main function + print/summary
 │   ├── sof_table.R             # single-outcome flextable (GRADEpro layout)
 │   ├── sof_bmj.R               # BMJ Core GRADE SoF layout
-│   ├── plain_language.R        # Core GRADE 2 Table 1 statements
+│   ├── plain_language.R        # Core GRADE 6 Box 1 statements
 │   ├── grade_table.R           # multi-outcome flextable
 │   ├── evidence_profile.R      # evidence-profile flextable
 │   ├── indirectness_table.R    # Core GRADE 5 subdomain table
@@ -1500,10 +1773,62 @@ pmatools/
 
 ## Limitations and future work
 
-1. **GRADE upgrade criteria** (large effect, dose-response, plausible confounding) are not implemented. Certainty can only be rated down; use `evidence_profile(other_text =, other_downgrade =)` to record any other consideration by hand.
-2. **GRADEpro GDT integration** (JSON import/export) planned.
-3. **No internationalization.** Every table, report and label is English only; there is no language argument anywhere in the API.
-4. **Pairwise only.** Network meta-analysis is out of scope.
+### Parts of Core GRADE that are in scope but not implemented
+
+1. **Rating up non-randomised evidence.** Core GRADE 1: Core GRADE users
+   > can rate up certainty in non-randomised studies (but not randomised controlled trials) for large effects and for evidence of a dose-response gradient
+
+   Neither criterion is implemented. Certainty can only be rated **down** here;
+   record an upgrade by hand with
+   `evidence_profile(other_text =, other_downgrade =)`.
+   Rating up for **plausible confounding** is correctly absent — Core GRADE 1
+   drops it deliberately, saying it "has proved too difficult to apply and too
+   rarely applicable to be part of Core GRADE" — so non-support there is
+   faithfulness, not a gap.
+
+2. **`extremely serious` (−3) is not implemented.** Core GRADE 1 characterises
+   domain limitations as "not serious; serious; very serious; or, rarely,
+   extremely serious". The maximum downgrade from a single domain in pmatools
+   is −2.
+
+3. **The cross-domain gestalt step is not modelled.** Core GRADE 1 asks for
+   > stepping back and taking an overall view of the threats to certainty of evidence
+
+   after the individual domains, precisely so that several *borderline* domains
+   do not compound into an unduly low rating (its worked example: inconsistency
+   and imprecision both near the not-serious/serious boundary, rated down once
+   rather than twice). pmatools sums the per-domain downgrades arithmetically,
+   so a result with two or three near-threshold domains can land **lower** than
+   a Core GRADE panel would put it. Read `$domain_assessments$notes` and
+   override the domains you judge borderline.
+
+4. **Summary of findings features Core GRADE 6 asks for, but pmatools does not
+   produce:**
+   - **Arm-level columns for continuous outcomes.** Core GRADE 6 calls this
+     "the preferred approach ... to provide information about the outcome in
+     the comparison group ..., the intervention group ..., and the difference
+     between the two". pmatools reports the difference only.
+   - **"Not reported" rows** for outcomes an included body of evidence did not
+     measure.
+   - **Per-domain rate-down footnotes** spelling out *why* each domain was
+     rated down (the reasons live in `$domain_assessments$notes` instead).
+   - **A rare-event warning.** Core GRADE 6: applying relative effects to
+     baseline risks misleads "when the outcome is rare (event rates <2% and
+     most problematic <1%)", and in that case "review authors should generally
+     conduct meta-analyses of risk differences". `run_rare_ma()` exists but
+     nothing warns you that you should be using it.
+
+5. **The Core GRADE 6 option 2 dichotomisation is not implemented.**
+   `convert_smd_to_or = TRUE` uses **Chinn's formula**, a different method —
+   see the SoF section above.
+
+### Other limitations
+
+6. **GRADEpro GDT integration** (JSON import/export) planned.
+7. **No internationalization.** Every table, report and label is English only; there is no language argument anywhere in the API.
+8. **Pairwise only.** Network meta-analysis is out of scope — which also means
+   Core GRADE 5's *other* kind of indirectness, indirect comparison, is out of
+   scope. Only PICO indirectness is rated.
 
 See [PLAN.md](PLAN.md) for the roadmap and [SPEC.md](SPEC.md) §11 for the full
 out-of-scope list.

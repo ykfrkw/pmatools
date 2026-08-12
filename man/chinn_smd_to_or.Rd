@@ -22,6 +22,25 @@ an odds ratio (OR) using Chinn's formula: \eqn{\log(OR) = SMD \times \pi /
 \sqrt{3}}. The conversion assumes a logistic latent-variable distribution
 (Cox 1970; Hasselblad & Hedges 1995; Chinn 2000).
 }
+\section{Relation to Core GRADE 6 "option 2"}{
+
+Core GRADE 6 also converts a continuous outcome to a binary one, but by a
+\strong{different method}, and the two must not be conflated. Core GRADE 6
+option 2 works from the MID, verbatim: "If systematic reviewers or guideline
+developers know what the MID is for each of the instruments and assume a
+normal distribution of results, they can calculate the proportion of people
+who experience an improvement larger than the MID within each arm, thereby
+obtaining a risk ratio or risk difference for each of the studies. They can
+then pool these proportions across studies." That is a
+normal-distribution-plus-MID calculation done \emph{per study, before
+pooling}.
+
+Chinn's formula instead assumes a \emph{logistic} latent variable, needs no
+MID, and is applied \emph{after} pooling, to the summary SMD. It answers a
+different question and will not in general reproduce the option 2 numbers.
+Core GRADE 6's option 2 is not implemented in pmatools.
+}
+
 \examples{
 chinn_smd_to_or(-0.5)
 chinn_smd_to_or(-0.5, ci_lower = -0.7, ci_upper = -0.3)

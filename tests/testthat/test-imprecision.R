@@ -68,7 +68,7 @@ test_that("events between 30% and 100% of OIS gives some_concerns", {
   expect_match(row$notes, "observed 105 / target 200 events", fixed = TRUE)
 })
 
-test_that("continuous: large effect, CI clear of the threshold, N <= 30% of OIS -> serious", {
+test_that("continuous: large effect, CI clear of the threshold, N < 30% of OIS -> serious", {
   m <- metacont(
     n.e = c(20, 25), mean.e = c(5, 6), sd.e = c(2, 2),
     n.c = c(20, 25), mean.c = c(7, 8), sd.c = c(2, 2),
@@ -78,7 +78,9 @@ test_that("continuous: large effect, CI clear of the threshold, N <= 30% of OIS 
   g <- suppressWarnings(grade_meta(m, outcome_type = "absolute", ois_n = 1000, threshold_type = "null"))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_equal(row$judgment, "serious")
-  expect_match(row$notes, "<= 30%", fixed = TRUE)
+  # Display fixed (v0.5.1): the note used to read "<= 30%" while the decision
+  # used a strict "<". Fig 4's node is "N<30% of OIS".
+  expect_match(row$notes, "< 30%", fixed = TRUE)
 })
 
 # --------------------------------------------------------------------------

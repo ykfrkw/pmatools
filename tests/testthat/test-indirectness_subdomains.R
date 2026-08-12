@@ -17,7 +17,10 @@ make_metabin_ind <- function() {
   )
 }
 
-# BMJ Core GRADE 5 worked example (heparin in advanced cancer)
+# Illustrative fixture: heparin in advanced cancer, written by pmatools to
+# exercise the subdomain table. It is NOT a Core GRADE 5 worked example -- the
+# article body contains no such table and never mentions heparin or venous
+# thromboembolism (verified against the published PDF).
 bmj_subdomains <- function(outcome_judgment = "probably_no") {
   data.frame(
     subdomain = c("Population", "Intervention", "Comparison", "Outcome"),
@@ -58,7 +61,9 @@ test_that("all-yes subdomains give no downgrade", {
   row <- indir_row(g)
   expect_equal(row$judgment, "no")
   expect_equal(row$downgrade, 0)
-  expect_match(row$notes, "Overall \\(worst case\\): no\\.")
+  # Domain notes now render the Core GRADE 1 wording ("not serious" /
+  # "serious" / "very serious") instead of the internal level names.
+  expect_match(row$notes, "Overall \\(worst case\\): not serious indirectness\\.")
 })
 
 test_that("probably_yes still gives no downgrade", {
@@ -72,7 +77,7 @@ test_that("one probably_no subdomain gives some_concerns (worst case)", {
   expect_equal(row$judgment, "some_concerns")
   expect_equal(row$downgrade, -1)
   expect_match(row$notes, "Outcome: probably no")
-  expect_match(row$notes, "Overall \\(worst case\\): some concerns\\.")
+  expect_match(row$notes, "Overall \\(worst case\\): serious indirectness\\.")
 })
 
 test_that("one 'no' subdomain gives serious (worst case, -2)", {
@@ -152,7 +157,7 @@ test_that("override differing from the worst case requires a rationale", {
   )
 })
 
-test_that("BMJ worked example reproduces Serious Indirectness via override", {
+test_that("the illustrative fixture reaches very serious indirectness via override", {
   g <- grade_with_subdomains(
     bmj_subdomains(),
     indirectness          = "serious",
@@ -165,7 +170,7 @@ test_that("BMJ worked example reproduces Serious Indirectness via override", {
   expect_equal(row$judgment, "serious")
   expect_equal(row$downgrade, -2)
   expect_match(row$notes, "Manual override \\(serious\\): The evidence is directly relevant")
-  expect_match(row$notes, "Worst-case default \\(some concerns\\) replaced")
+  expect_match(row$notes, "Worst-case default \\(serious indirectness\\) replaced")
   # Subdomain judgments are preserved alongside the override
   expect_equal(g$indirectness_subdomains$judgment,
                c("yes", "yes", "yes", "probably_no"))
@@ -194,7 +199,7 @@ test_that("the override error tells the user how to keep the worst case", {
   )
   expect_error(
     grade_with_subdomains(bmj_subdomains(), indirectness = "serious"),
-    regexp = "worst-case subdomain judgment \\(some concerns\\)"
+    regexp = "worst-case subdomain judgment \\(serious indirectness\\)"
   )
 })
 
@@ -212,7 +217,7 @@ test_that("do.call() with indirectness = NULL keeps the subdomain worst case", {
   )
   g <- suppressWarnings(do.call(grade_meta, args))
   expect_equal(indir_row(g)$judgment, "some_concerns")
-  expect_match(indir_row(g)$notes, "Overall \\(worst case\\): some concerns\\.")
+  expect_match(indir_row(g)$notes, "Overall \\(worst case\\): serious indirectness\\.")
   expect_false(grepl("Manual override", indir_row(g)$notes))
 })
 
@@ -231,7 +236,7 @@ test_that("do.call() forwarding an explicit 'no' is still an override", {
   args$indirectness_rationale <- "Panel judged the outcome definition adequate"
   g <- suppressWarnings(do.call(grade_meta, args))
   expect_equal(indir_row(g)$judgment, "no")
-  expect_match(indir_row(g)$notes, "Worst-case default \\(some concerns\\) replaced")
+  expect_match(indir_row(g)$notes, "Worst-case default \\(serious indirectness\\) replaced")
 })
 
 test_that("do.call() without subdomains is unchanged by the NULL default", {

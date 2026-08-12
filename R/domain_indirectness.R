@@ -41,11 +41,49 @@
 # The subdomain table (d) keeps its worst-case fold: subdomains are facets of
 # one judgment, not units of evidence, so weighting them is meaningless.
 #
-# (d) Subdomain judgments (Core GRADE 5, BMJ publication format)
+# (d) Subdomain judgments — a pmatools implementation of Core GRADE 5's
+#     per-PICO reasoning (NOT a Core GRADE 5 publication format)
 # ---------------------------------------------------------------------------
+# ATTRIBUTION. Core GRADE 5 asks the indirectness question separately for each
+# PICO element, and pmatools implements that as a per-subdomain table. The
+# TABLE ITSELF, the 4-point answer scale and the question wording "Is the
+# evidence sufficiently direct?" are pmatools conventions: the published
+# article body carries only Table 1 (an adapted summary of findings table) and
+# Table 2 ("Summary of indirectness issues"), and contains none of the strings
+# "sufficiently direct", "probably yes" or "probably no". (The online
+# supplementary appendices have not been checked.)
+#
+# HOW CORE GRADE 5 ACTUALLY POSES THE QUESTION. It does not ask a yes/no
+# directness question; it asks how likely it is that the effect differs
+# substantially between the target PICO and the available evidence, and Table 2
+# grades that likelihood per PICO element (verbatim column header: "Likelihood
+# of rating down"), asymmetrically:
+#
+#   Population   -> "Low likelihood because relative effects are typically
+#                    similar across populations"
+#   Intervention -> "Intermediate likelihood depending on underlying biology
+#                    and on magnitude of issues such as non-adherence and
+#                    frequency of switching"
+#   Comparison   -> "Substantial likelihood in trials of new agents when an
+#                    effective treatment already exists, particularly more
+#                    than one effective treatment"
+#   Outcome      -> "High likelihood because of frequent disappointing results
+#                    in randomised controlled trials examining patient
+#                    important outcomes"
+#
+# The worst-case fold below is SYMMETRIC across the four elements and therefore
+# does not reproduce that gradient; users must weigh it themselves.
+#
+# Rating down two levels: Core GRADE 5 (verbatim) — "Although one might
+# consider rating down more than one level for indirectness for any PICO
+# element, this possibility is typically more salient for surrogate outcomes"
+# and "the decision to rate down one or two levels depends on one's
+# understanding of the likelihood that change in the patient important outcome
+# will follow change in the surrogate".
+#
 # Each subdomain (typically Population / Intervention / Comparison / Outcome,
-# but any set is accepted) answers "Is the evidence sufficiently direct?" on a
-# 4-point scale. Each answer maps to a GRADE level:
+# but any set is accepted) answers the pmatools 4-point scale. Each answer maps
+# to a GRADE level:
 #
 #   answer          | meaning                          | GRADE level
 #   ----------------|----------------------------------|---------------
@@ -53,6 +91,16 @@
 #   probably_yes    | minor, unimportant differences   | no
 #   probably_no     | important differences            | some_concerns  (-1)
 #   no              | evidence is not applicable       | serious        (-2)
+#
+# NOTE ON VOCABULARY. The internal level names are shared with Risk of bias and
+# do NOT match the Core GRADE wording for this domain. Core GRADE 1 (verbatim)
+# characterises limitations as "not serious; serious; very serious; or, rarely,
+# extremely serious", so:
+#   internal "no"            = Core GRADE "not serious"   (0 levels)
+#   internal "some_concerns" = Core GRADE "serious"       (-1)
+#   internal "serious"       = Core GRADE "very serious"  (-2)
+# Domain notes render the Core GRADE wording via .indirectness_level_label();
+# the stored level names are unchanged.
 #
 # The overall domain judgment defaults to the WORST case across subdomains
 # (unlike the per-study aggregation above, which is weight-share based: a
@@ -84,6 +132,20 @@ INDIRECTNESS_ANSWER_LABELS <- c(
   probably_no  = "Probably no",
   no           = "No"
 )
+
+# Internal GRADE level -> Core GRADE wording for THIS domain (Core GRADE 1:
+# "not serious; serious; very serious"). Used for display in the domain notes
+# only; the stored level names stay "no" / "some_concerns" / "serious".
+INDIRECTNESS_LEVEL_LABELS <- c(
+  no            = "not serious",
+  some_concerns = "serious",
+  serious       = "very serious"
+)
+
+.indirectness_level_label <- function(level) {
+  out <- unname(INDIRECTNESS_LEVEL_LABELS[level])
+  ifelse(is.na(out), gsub("_", " ", level), out)
+}
 
 # Overall-judgment labels for the subdomain table footer row
 INDIRECTNESS_OVERALL_LABELS <- c(
@@ -252,7 +314,11 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
     basis      <- "count"
     basis_note <- paste0(
       "Study weights could not be computed, so the shares below are COUNT ",
-      "shares rather than inverse-variance weight shares."
+      "shares rather than inverse-variance weight shares. The count-share ",
+      "fallback is a pmatools convention with no basis in Core GRADE 5, ",
+      "which frames the body of evidence qualitatively; a count share can ",
+      "differ substantially from the weight share when study sizes are ",
+      "uneven."
     )
   } else {
     basis      <- "weight"
@@ -262,16 +328,18 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
   if (share_serious >= dominant_threshold) {
     judgment <- "serious"
     decision <- sprintf(
-      paste0("Studies rated 'serious' carry %.0f%% of the %s >= %.0f%% ",
-             "-> the body of evidence is dominated by evidence that is not ",
-             "applicable; rate down 2 levels."),
+      paste0("Studies with a per-study rating of 'serious' carry %.0f%% of ",
+             "the %s >= %.0f%% -> the body of evidence is dominated by ",
+             "evidence that is not applicable; very serious indirectness, ",
+             "rate down 2 levels."),
       100 * share_serious, basis, 100 * dominant_threshold
     )
   } else if (share_any >= dominant_threshold) {
     judgment <- "some_concerns"
     decision <- sprintf(
-      paste0("Indirect studies ('some concerns' or 'serious') carry %.0f%% of ",
-             "the %s >= %.0f%% -> rate down 1 level."),
+      paste0("Indirect studies (per-study rating 'some concerns' or ",
+             "'serious') carry %.0f%% of the %s >= %.0f%% -> serious ",
+             "indirectness; rate down 1 level."),
       100 * share_any, basis, 100 * dominant_threshold
     )
   } else {
@@ -452,7 +520,8 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
   parts <- paste0(sub_tbl$subdomain, ": ",
                   tolower(unname(INDIRECTNESS_ANSWER_LABELS[sub_tbl$judgment])))
   paste0("Subdomains - ", paste(parts, collapse = "; "),
-         ". Overall (worst case): ", gsub("_", " ", worst), ".")
+         ". Overall (worst case): ", .indirectness_level_label(worst),
+         " indirectness.")
 }
 
 # Core GRADE 5 subdomain assessment, with optional scalar override.
@@ -511,15 +580,16 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
     hint = paste0(
       "If no override was intended, omit `indirectness` or pass ",
       "`indirectness = NULL` so the worst-case subdomain judgment (",
-      gsub("_", " ", worst), ") is used."
+      .indirectness_level_label(worst), " indirectness) is used."
     )
   )
   make_domain_row(
     domain    = "Indirectness",
     judgment  = ind_norm,
     auto      = FALSE,
-    notes     = paste0(notes, " Worst-case default (", gsub("_", " ", worst),
-                       ") replaced by user judgment."),
+    notes     = paste0(notes, " Worst-case default (",
+                       .indirectness_level_label(worst),
+                       " indirectness) replaced by user judgment."),
     rationale = rationale
   )
 }

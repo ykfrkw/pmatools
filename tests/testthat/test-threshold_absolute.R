@@ -184,13 +184,20 @@ test_that("explicit ois_p0/ois_p1 take precedence over ARD derivation", {
 # suggest_threshold(): absolute suggestion
 # --------------------------------------------------------------------------
 
-test_that("suggest_threshold keeps ratio default and adds absolute suggestion", {
+# Updated (v0.5.1): for binary outcomes the ABSOLUTE suggestion is now the
+# first candidate and the ratio value moved to $threshold_ratio. Reason: the
+# Core GRADE series contains no ratio-scale MID, and every binary MID it
+# discusses is absolute (per 1000 / percent).
+test_that("suggest_threshold leads with the absolute candidate for binary outcomes", {
   m <- make_metabin_ard()
   s <- suggest_threshold(m)
-  expect_equal(s$threshold_user, 1.20)
-  expect_equal(s$threshold_scale, "ratio")
+  expect_equal(s$threshold_user, 0.05)
+  expect_equal(s$threshold_scale, "ard")
+  expect_equal(s$source, "package_convention")
   expect_equal(s$threshold_absolute$threshold_user, 0.05)
   expect_equal(s$threshold_absolute$threshold_scale, "ard")
+  expect_equal(s$threshold_ratio$threshold_user, 1.20)
+  expect_equal(s$threshold_ratio$threshold_scale, "ratio")
 })
 
 # --------------------------------------------------------------------------

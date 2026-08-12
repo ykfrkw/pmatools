@@ -8,7 +8,8 @@
 #'   presentation: outcome and follow-up, participants and design, relative
 #'   effect, a spanning "Absolute effects (95% CI)" block (control /
 #'   intervention / difference), certainty with its rate-down reason, and a
-#'   plain language summary (Core GRADE 2 Table 1).
+#'   plain language summary (Core GRADE 6 Box 1, which supersedes the earlier
+#'   Core GRADE 2 Table 1 guidance).
 #' @param follow_up (v0.5) Optional free-text time frame shown under the
 #'   outcome name in the \code{"bmj"} style, e.g.
 #'   \code{"Follow-up: longest, range 7.7-60 months"}. \code{NULL} (default)
@@ -241,6 +242,11 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
       "* Continuous outcome dichotomised via Chinn's formula ",
       "(log OR = SMD x pi / sqrt(3))", invert_str,
       ". Control event rate user-specified.", threshold_str,
+      " This is NOT Core GRADE 6's option 2, which assumes a normal ",
+      "distribution and computes, per study and before pooling, the ",
+      "proportion in each arm improving by more than the MID; Chinn's formula ",
+      "assumes a logistic latent variable, uses no MID and is applied to the ",
+      "pooled SMD. The two do not generally agree.",
       " Recommended reading: ",
       "Chinn S. Stat Med 2000;19:3127-3131. ",
       "doi:10.1002/1097-0258(20001130)19:22<3127::aid-sim784>3.0.co;2-m. ",
