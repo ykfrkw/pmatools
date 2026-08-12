@@ -1,6 +1,6 @@
 # test-sof_bmj.R — v0.5 (Phase D):
 # BMJ Core GRADE presentation of the Summary of Findings table
-# (style = "bmj"), the Core GRADE 2 Table 1 plain language statements, and
+# (style = "bmj"), the Core GRADE 6 Box 1 plain language statements, and
 # the propagation of the Core GRADE 4 analysis-set note into grade_table() /
 # grade_report().
 
@@ -334,99 +334,122 @@ test_that("no baseline risk falls back to '-' in the Difference column", {
   expect_identical(.format_difference(g$meta, NULL, 1000), "-")
 })
 
-# --- D-3: Core GRADE 2 Table 1, verbatim -----------------------------------
+# --- D-3: Core GRADE 6 Box 1, verbatim -------------------------------------
+#
+# Expectations updated for the Core GRADE 6 Box 1 rewrite: the statements used
+# to come from Core GRADE 2 Table 1, whose "benefit" wording inverted the
+# meaning of harm outcomes. Box 1 names the direction of the effect instead, so
+# every statement now needs a direction and an outcome. The exhaustive Box 1
+# transcription lives in test-plain_language.R; what is kept here is the
+# integration with the bmj table.
 
-test_that("plain language matches Core GRADE 2 Table 1 for all 8 cells", {
+test_that("plain language matches Core GRADE 6 Box 1 for all 8 cells", {
   # Null effect as threshold
   expect_identical(
-    .plain_language("High", "null", "non_null_effect"),
-    "Treatment has a benefit")
+    .plain_language("High", "null", "non_null_effect", direction = "increase"),
+    "Treatment increases the outcome")
   expect_identical(
-    .plain_language("Moderate", "null", "non_null_effect"),
-    "Treatment likely has a benefit")
+    .plain_language("Moderate", "null", "non_null_effect",
+                    direction = "increase"),
+    "Treatment probably (likely) increases the outcome")
   expect_identical(
-    .plain_language("Low", "null", "non_null_effect"),
-    "Treatment may have a benefit")
+    .plain_language("Low", "null", "non_null_effect", direction = "increase"),
+    "Treatment may (possibly) increase the outcome")
   expect_identical(
-    .plain_language("Very Low", "null", "non_null_effect"),
-    "We are very uncertain about whether treatment has a benefit")
+    .plain_language("Very Low", "null", "non_null_effect",
+                    direction = "increase"),
+    "We are very uncertain about the effect of treatment on the outcome")
 
   # MID as threshold
   expect_identical(
-    .plain_language("High", "mid", "important_effect"),
-    "Treatment has an important benefit")
+    .plain_language("High", "mid", "important_effect", direction = "increase"),
+    "Treatment results in an important increase in the outcome")
   expect_identical(
-    .plain_language("Moderate", "mid", "important_effect"),
-    "Treatment likely has an important benefit")
+    .plain_language("Moderate", "mid", "important_effect",
+                    direction = "increase"),
+    "Treatment probably (likely) results in an important increase in the outcome")
   expect_identical(
-    .plain_language("Low", "mid", "important_effect"),
-    "Treatment may have an important benefit")
-  expect_identical(
-    .plain_language("Very Low", "mid", "important_effect"),
-    "We are very uncertain about whether treatment has a benefit")
-})
-
-test_that("the little-to-no target selects the other Table 1 alternative", {
-  expect_identical(
-    .plain_language("High", "mid", "little_to_no_difference"),
-    "Treatment has little to no benefit")
-  expect_identical(
-    .plain_language("Moderate", "mid", "little_to_no_difference"),
-    "Treatment likely has little to no benefit")
-  expect_identical(
-    .plain_language("Low", "mid", "little_to_no_difference"),
-    "Treatment may have little to no benefit")
-  # Table 1 has no null-column little-to-no wording; the MID wording is used.
-  expect_identical(
-    .plain_language("Low", "null", "little_to_no_difference"),
-    "Treatment may have little to no benefit")
-})
-
-test_that("the outcome-specific null wording substitutes for 'outcome X'", {
-  expect_identical(
-    .plain_language("High", "null", "non_null_effect",
-                    outcome_label = "sleep quality"),
-    "Treatment improves sleep quality")
-  expect_identical(
-    .plain_language("Moderate", "null", "non_null_effect",
-                    outcome_label = "sleep quality"),
-    "Treatment likely improves sleep quality")
-  expect_identical(
-    .plain_language("Low", "null", "non_null_effect",
-                    outcome_label = "sleep quality"),
-    "Treatment may improve sleep quality")
-})
-
-test_that("the intervention label replaces the Table 1 placeholder", {
-  expect_identical(
-    .plain_language("High", "mid", "important_effect",
-                    intervention_label = "CBT-I"),
-    "CBT-I has an important benefit")
+    .plain_language("Low", "mid", "important_effect", direction = "increase"),
+    "Treatment may (possibly) result in an important increase in the outcome")
   expect_identical(
     .plain_language("Very Low", "mid", "important_effect",
-                    intervention_label = "CBT-I"),
-    "We are very uncertain about whether CBT-I has a benefit")
+                    direction = "increase"),
+    "We are very uncertain about the effect of treatment on the outcome")
+})
+
+test_that("the little-to-no target selects the Box 1 no-direction wording", {
+  expect_identical(
+    .plain_language("High", "mid", "little_to_no_difference"),
+    "Treatment has little to no important effect on the outcome")
+  expect_identical(
+    .plain_language("Moderate", "mid", "little_to_no_difference"),
+    "Treatment probably has little to no important effect on the outcome")
+  expect_identical(
+    .plain_language("Low", "mid", "little_to_no_difference"),
+    "Treatment may (possibly) have little to no important effect on the outcome")
+  # The null column has its own wording in Box 1 ("has little to no effect"),
+  # so it no longer borrows the MID column's "important" phrasing.
+  expect_identical(
+    .plain_language("Low", "null", "little_to_no_difference"),
+    "Treatment may (possibly) have little to no effect on the outcome")
+})
+
+test_that("the outcome label is named in the statement", {
+  expect_identical(
+    .plain_language("High", "null", "non_null_effect", direction = "decrease",
+                    outcome_label = "sleep quality"),
+    "Treatment reduces sleep quality")
+  expect_identical(
+    .plain_language("Moderate", "null", "non_null_effect",
+                    direction = "increase", outcome_label = "sleep quality"),
+    "Treatment probably (likely) increases sleep quality")
+  expect_identical(
+    .plain_language("Low", "null", "non_null_effect", direction = "increase",
+                    outcome_label = "sleep quality"),
+    "Treatment may (possibly) increase sleep quality")
+})
+
+test_that("the intervention label opens the Box 1 statement", {
+  expect_identical(
+    .plain_language("High", "mid", "important_effect", direction = "increase",
+                    intervention_label = "CBT-I",
+                    outcome_label = "sleep quality"),
+    "CBT-I results in an important increase in sleep quality")
+  expect_identical(
+    .plain_language("Very Low", "mid", "important_effect",
+                    intervention_label = "CBT-I",
+                    outcome_label = "sleep quality"),
+    "We are very uncertain about the effect of CBT-I on sleep quality")
 })
 
 test_that("the bmj table carries the plain language column and its footnote", {
   g  <- make_binary()
   ft <- sof_table(g, style = "bmj")
-  expect_identical(.body_col(ft, 8), "Treatment has a benefit")
-  expect_match(.footer_text(ft), "Core GRADE 2 table 1", fixed = TRUE)
+  # make_binary() pools RR < 1 on "Mortality": Box 1 wording is directional.
+  expect_identical(.body_col(ft, 8), "Treatment reduces mortality")
+  expect_match(.footer_text(ft), "Core GRADE 6 box 1", fixed = TRUE)
   expect_match(.footer_text(ft),
-               "Benefit was chosen here for illustration.", fixed = TRUE)
+               "does not say whether that effect is a benefit or a harm",
+               fixed = TRUE)
+
+  # The harm direction of the same fixture must not read as a benefit.
+  h  <- make_binary(benefit = FALSE)
+  fh <- sof_table(h, style = "bmj")
+  expect_identical(.body_col(fh, 8), "Treatment increases mortality")
+  expect_no_match(.body_col(fh, 8), "benefit", fixed = TRUE)
 })
 
 test_that("an object without a rating target drops the column, without error", {
   g <- make_binary()
   g$rating_target <- NULL
   expect_null(g$rating_target)
-  expect_null(.plain_language(g$certainty, g$threshold_type, g$rating_target))
+  expect_null(.plain_language(g$certainty, g$threshold_type, g$rating_target,
+                              direction = "decrease"))
 
   ft <- expect_no_error(sof_table(g, style = "bmj"))
   expect_equal(ncol(ft$body$dataset), 7L)
   expect_false("Plain language summary" %in% names(ft$body$dataset))
-  expect_no_match(.footer_text(ft), "Core GRADE 2 table 1", fixed = TRUE)
+  expect_no_match(.footer_text(ft), "Core GRADE 6 box 1", fixed = TRUE)
   # The spanning header still lines up over the three absolute-effect columns.
   top <- as.character(unlist(ft$header$dataset[1, ]))
   expect_equal(sum(top == "Absolute effects (95% CI)"), 3L)

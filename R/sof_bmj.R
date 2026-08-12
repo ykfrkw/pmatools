@@ -1,10 +1,10 @@
 # sof_bmj.R — BMJ Core GRADE presentation of the Summary of Findings table
 #
 # References:
-#   Guyatt G, Zeng L, Brignardello-Petersen R, et al.
-#     Core GRADE 2: choosing the target of certainty rating and assessing
-#     imprecision. BMJ. 2025;389:e081904. -- Table 1 (plain language).
-#   Core GRADE 6 (summary of findings tables) -- column layout reproduced here:
+#   Guyatt G, Yao L, Murad MH, et al.
+#     Core GRADE 6: presenting the evidence in summary of findings tables.
+#     BMJ. 2025;389:e083866. -- Box 1 (plain language summaries) and the
+#     column layout reproduced here:
 #
 #     Outcome and     | No of participants | Relative | Absolute effects (95% CI) | Certainty  | Plain
 #     follow-up       | (No of studies     | effect   |---------------------------| of         | language
@@ -255,7 +255,7 @@
     paste0(g$certainty, "\n", reason)
   }
 
-  # Table 1's placeholder is "Treatment"; a caller-supplied arm label replaces
+  # Box 1's placeholder is "Treatment"; a caller-supplied arm label replaces
   # it, but the package default ("intervention") is not a sentence subject.
   pl_tx <- if (identical(label_intervention, "intervention")) {
     "Treatment"
@@ -342,7 +342,7 @@
 
 .bmj_plain_language_note <- function() {
   paste0(
-    "Plain language summaries follow Core GRADE 2 table 1. ",
+    "Plain language summaries follow Core GRADE 6 box 1. ",
     PLAIN_LANGUAGE_TABLE_NOTE
   )
 }
