@@ -86,6 +86,23 @@ A \code{flextable} object suitable for printing, Word export, etc.
 \description{
 Generate a Summary of Findings (SoF) table as a flextable
 }
+\section{Plain language summaries -- one adverb per certainty level}{
+
+The \code{"bmj"} style adds a plain language summary column built from the
+Core GRADE 6 Box 1 statements. Box 1's qualifier list gives two adverbs per
+certainty level ("Moderate certainty: probably (likely) reduces, increases,
+or has little to no effect"; "Low certainty: may (possibly) reduce, ..."),
+but no summary of findings table in Core GRADE 6 prints both: Table 1 uses
+"may decrease mortality", Table 3 uses "possibly increases", and the Box 1
+MID example uses "probably has little to no important effect". pmatools
+therefore emits the \strong{first} word of each pair -- \code{"probably"}
+for Moderate and \code{"may"} for Low -- giving cells such as "Treatment
+probably results in an important increase in serious adverse events" and
+"Treatment may reduce mortality". This single-adverb rendering is a pmatools
+choice, not a quotation of the qualifier list; High and Very low certainty
+carry no qualifier and are unchanged.
+}
+
 \examples{
 \dontrun{
 g <- grade_meta(m, study_design = "RCT", rob = "some",

@@ -334,7 +334,7 @@ test_that("no baseline risk falls back to '-' in the Difference column", {
   expect_identical(.format_difference(g$meta, NULL, 1000), "-")
 })
 
-# --- D-3: Core GRADE 6 Box 1, verbatim -------------------------------------
+# --- D-3: Core GRADE 6 Box 1 -----------------------------------------------
 #
 # Expectations updated for the Core GRADE 6 Box 1 rewrite: the statements used
 # to come from Core GRADE 2 Table 1, whose "benefit" wording inverted the
@@ -342,6 +342,13 @@ test_that("no baseline risk falls back to '-' in the Difference column", {
 # every statement now needs a direction and an outcome. The exhaustive Box 1
 # transcription lives in test-plain_language.R; what is kept here is the
 # integration with the bmj table.
+#
+# Updated again in v0.5.0 for the single-adverb rule: Box 1's qualifier list
+# prints two adverbs per certainty level ("probably (likely)", "may
+# (possibly)") but none of CG6's own summary of findings tables prints both, so
+# pmatools emits the first word of each pair. The Moderate expectations below
+# therefore read "probably" and the Low ones "may". Rationale and the verbatim
+# Box 1 record are in R/plain_language.R.
 
 test_that("plain language matches Core GRADE 6 Box 1 for all 8 cells", {
   # Null effect as threshold
@@ -351,10 +358,10 @@ test_that("plain language matches Core GRADE 6 Box 1 for all 8 cells", {
   expect_identical(
     .plain_language("Moderate", "null", "non_null_effect",
                     direction = "increase"),
-    "Treatment probably (likely) increases the outcome")
+    "Treatment probably increases the outcome")
   expect_identical(
     .plain_language("Low", "null", "non_null_effect", direction = "increase"),
-    "Treatment may (possibly) increase the outcome")
+    "Treatment may increase the outcome")
   expect_identical(
     .plain_language("Very Low", "null", "non_null_effect",
                     direction = "increase"),
@@ -367,10 +374,10 @@ test_that("plain language matches Core GRADE 6 Box 1 for all 8 cells", {
   expect_identical(
     .plain_language("Moderate", "mid", "important_effect",
                     direction = "increase"),
-    "Treatment probably (likely) results in an important increase in the outcome")
+    "Treatment probably results in an important increase in the outcome")
   expect_identical(
     .plain_language("Low", "mid", "important_effect", direction = "increase"),
-    "Treatment may (possibly) result in an important increase in the outcome")
+    "Treatment may result in an important increase in the outcome")
   expect_identical(
     .plain_language("Very Low", "mid", "important_effect",
                     direction = "increase"),
@@ -386,12 +393,12 @@ test_that("the little-to-no target selects the Box 1 no-direction wording", {
     "Treatment probably has little to no important effect on the outcome")
   expect_identical(
     .plain_language("Low", "mid", "little_to_no_difference"),
-    "Treatment may (possibly) have little to no important effect on the outcome")
+    "Treatment may have little to no important effect on the outcome")
   # The null column has its own wording in Box 1 ("has little to no effect"),
   # so it no longer borrows the MID column's "important" phrasing.
   expect_identical(
     .plain_language("Low", "null", "little_to_no_difference"),
-    "Treatment may (possibly) have little to no effect on the outcome")
+    "Treatment may have little to no effect on the outcome")
 })
 
 test_that("the outcome label is named in the statement", {
@@ -402,11 +409,11 @@ test_that("the outcome label is named in the statement", {
   expect_identical(
     .plain_language("Moderate", "null", "non_null_effect",
                     direction = "increase", outcome_label = "sleep quality"),
-    "Treatment probably (likely) increases sleep quality")
+    "Treatment probably increases sleep quality")
   expect_identical(
     .plain_language("Low", "null", "non_null_effect", direction = "increase",
                     outcome_label = "sleep quality"),
-    "Treatment may (possibly) increase sleep quality")
+    "Treatment may increase sleep quality")
 })
 
 test_that("the intervention label opens the Box 1 statement", {

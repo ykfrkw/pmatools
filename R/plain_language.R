@@ -62,6 +62,43 @@
 #
 #   GRADE=Grading of Recommendations Assessment, Development and Evaluation.
 #
+# --- One adverb per certainty level, not two ---------------------------------
+#
+# The Box 1 qualifier list transcribed above prints two adverbs per level,
+# "probably (likely)" and "may (possibly)". Read literally it produces a
+# double-barrelled sentence in every Moderate and Low cell:
+#
+#   "Treatment probably (likely) results in an important increase in serious
+#    adverse events"
+#   "Treatment may (possibly) reduce mortality"
+#
+# CG6 itself never prints a summary of findings cell that way. Its own worked
+# tables pick one word of each pair and drop the other:
+#
+#   Table 1 (p 2): "... may decrease mortality"      -- "may", no "(possibly)"
+#   Table 3 (p 5): "... possibly increases ..."      -- "possibly", no "may"
+#   Box 1 (p 3):   "knee arthroscopy probably has little to no important
+#                   effect on function"             -- "probably", no "(likely)"
+#
+# The parenthesis in the qualifier list is therefore an editorial "either of
+# these words will do", not wording to be emitted. pmatools takes the FIRST
+# word of each pair, uniformly:
+#
+#   Moderate -> "probably"   (not "probably (likely)", not "likely")
+#   Low      -> "may"        (not "may (possibly)",    not "possibly")
+#
+# Rationale for the first word rather than the second: it is the one the two
+# CG6 sources that are not the qualifier list agree on -- Table 1's "may" and
+# the Box 1 MID example's "probably". (CG6 Table 3's "possibly" is the second
+# word of its pair; no single choice matches every CG6 table, which is itself
+# the evidence that the pair is interchangeable.) High and Very low carry no
+# qualifier and are untouched.
+#
+# This is a pmatools decision, not a quotation. The verbatim transcription of
+# Box 1 above is deliberately left with both words so the source record stays
+# intact, and the per-cell tags below mark which frames stopped being verbatim
+# because of it (see "[Box 1, single adverb]").
+
 # --- Very low: the wording actually used in a table -------------------------
 #
 # Box 1 gives the Very low form as "the effect of knee arthroscopy on function
@@ -92,11 +129,24 @@
 # --- Box 1 statement frames -------------------------------------------------
 
 # Each frame is the predicate that follows the intervention label; "%s" is the
-# outcome. Cells marked [Box 1] / [Table 3] are transcribed verbatim from the
-# cited example; cells marked [composed] have no worked example in CG6 and are
-# assembled from the Box 1 qualifier list ("The following qualifiers then
-# inform the direction of the effect") applied to the frame of the verbatim
-# example in the same column. Nothing here is paraphrased.
+# outcome. Tags record the provenance of every cell:
+#
+#   [Box 1] / [Table 3]        transcribed verbatim from the cited example.
+#   [Box 1 qualifier list]     the qualifier list itself, quoted.
+#   [composed]                 no worked example in CG6; assembled from the
+#                              Box 1 qualifier list ("The following qualifiers
+#                              then inform the direction of the effect")
+#                              applied to the frame of the verbatim example in
+#                              the same column.
+#   [... single adverb]        the cited source prints two adverbs
+#                              ("probably (likely)" / "may (possibly)") and
+#                              pmatools emits only the first. Such a cell is
+#                              NO LONGER VERBATIM: it is the cited frame minus
+#                              the parenthesised alternative. See the "One
+#                              adverb per certainty level" note above.
+#
+# Nothing here is paraphrased; the only edit pmatools makes to CG6 wording is
+# the dropped parenthesis flagged by "single adverb".
 PLAIN_LANGUAGE_FRAMES <- list(
   # "When focusing on the target of certainty in relation to the null"
   null = list(
@@ -109,20 +159,25 @@ PLAIN_LANGUAGE_FRAMES <- list(
       little   = "has little to no effect on %s"
     ),
     "Moderate" = list(
-      # [Box 1] "knee arthroscopy probably (likely) increases function"
-      increase = "probably (likely) increases %s",
-      # [Box 1 qualifier list] "Moderate certainty: probably (likely) reduces, ..."
-      decrease = "probably (likely) reduces %s",
-      # [composed] qualifier list + "on %s"
-      little   = "probably (likely) has little to no effect on %s"
+      # [Box 1, single adverb] "knee arthroscopy probably (likely) increases
+      # function" minus "(likely)"
+      increase = "probably increases %s",
+      # [Box 1 qualifier list, single adverb] "Moderate certainty: probably
+      # (likely) reduces, ..."
+      decrease = "probably reduces %s",
+      # [composed, single adverb] qualifier list + "on %s"
+      little   = "probably has little to no effect on %s"
     ),
     "Low" = list(
-      # [Box 1] "knee arthroscopy may (possibly) increase function"
-      increase = "may (possibly) increase %s",
-      # [Box 1 qualifier list] "Low certainty: may (possibly) reduce, ..."
-      decrease = "may (possibly) reduce %s",
-      # [composed] qualifier list + "on %s"
-      little   = "may (possibly) have little to no effect on %s"
+      # [Box 1, single adverb] "knee arthroscopy may (possibly) increase
+      # function" minus "(possibly)"
+      increase = "may increase %s",
+      # [Box 1 qualifier list, single adverb] "Low certainty: may (possibly)
+      # reduce, ..." -- and CG6 Table 1 prints exactly this: "may decrease
+      # mortality"
+      decrease = "may reduce %s",
+      # [composed, single adverb] qualifier list + "on %s"
+      little   = "may have little to no effect on %s"
     )
   ),
   # "When focusing on the minimal important difference"
@@ -136,23 +191,25 @@ PLAIN_LANGUAGE_FRAMES <- list(
       little   = "has little to no important effect on %s"
     ),
     "Moderate" = list(
-      # [composed] Box 1 qualifier "probably (likely)" + the High frame
-      increase = "probably (likely) results in an important increase in %s",
-      decrease = "probably (likely) results in an important reduction in %s",
+      # [composed, single adverb] Box 1 qualifier "probably (likely)" reduced
+      # to "probably" + the High frame
+      increase = "probably results in an important increase in %s",
+      decrease = "probably results in an important reduction in %s",
       # [Box 1] "knee arthroscopy probably has little to no important effect on
-      # function" -- Box 1 drops "(likely)" in this one example; it is kept as
-      # printed rather than harmonised with the qualifier list.
+      # function" -- still verbatim: Box 1 writes this one example with a
+      # single "probably" already, which is the precedent the whole
+      # single-adverb rule follows.
       little   = "probably has little to no important effect on %s"
     ),
     "Low" = list(
-      # [Box 1] "knee arthroscopy may (possibly) result in an important
-      # increase in function"
-      increase = "may (possibly) result in an important increase in %s",
-      # [Table 3] reduction mirror of the same frame
-      decrease = "may (possibly) result in an important reduction in %s",
-      # [composed] Box 1 qualifier "may (possibly) ... have little to no
-      # effect" + the MID object "important effect on %s"
-      little   = "may (possibly) have little to no important effect on %s"
+      # [Box 1, single adverb] "knee arthroscopy may (possibly) result in an
+      # important increase in function" minus "(possibly)"
+      increase = "may result in an important increase in %s",
+      # [Table 3, single adverb] reduction mirror of the same frame
+      decrease = "may result in an important reduction in %s",
+      # [composed, single adverb] Box 1 qualifier "may (possibly) ... have
+      # little to no effect" + the MID object "important effect on %s"
+      little   = "may have little to no important effect on %s"
     )
   )
 )
@@ -292,6 +349,21 @@ PLAIN_LANGUAGE_TABLE_NOTE <- paste0(
 #' Internal assembly of the Box 1 statements: an intervention label, a
 #' certainty qualifier, a direction word taken from the pooled point estimate,
 #' and the outcome.
+#'
+#' @section One adverb per certainty level:
+#' Box 1's qualifier list offers two adverbs per level, \code{"probably
+#' (likely)"} for Moderate and \code{"may (possibly)"} for Low. pmatools emits
+#' only the \strong{first} word of each pair -- \code{"probably"} and
+#' \code{"may"} -- so a cell reads "Treatment probably results in an important
+#' increase in serious adverse events" rather than "Treatment probably (likely)
+#' results in ...". The parenthesis is an editorial "either word will do": CG6's
+#' own summary of findings tables never print both, and each picks one (Table 1
+#' "may decrease mortality"; Table 3 "possibly increases"; the Box 1 MID example
+#' "probably has little to no important effect"). Choosing the first word is a
+#' \strong{pmatools decision}, not a quotation; the verbatim Box 1 transcription
+#' is kept in the source of \code{R/plain_language.R}, and the per-frame tags
+#' there mark every cell that is no longer verbatim as a result. High and Very
+#' low carry no qualifier and are unaffected.
 #'
 #' @param certainty Certainty label (\code{"High"}, \code{"Moderate"},
 #'   \code{"Low"}, \code{"Very Low"}).

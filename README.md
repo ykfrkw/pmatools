@@ -1225,21 +1225,37 @@ The BMJ layout differs from GRADEpro in what each column carries:
 | Relative effect (95% CI) | `Odds ratio 2.33 (1.66 to 3.26)` — the measure is spelled out, not just "OR" |
 | **Absolute effects (95% CI)** | A spanning block over three columns: *With control* `250 per 1000`, *With intervention* `437 per 1000 (356 to 521)`, and a new **Difference** column `187 more per 1000 (106 more to 271 more)`. `unit` labels the difference for continuous outcomes |
 | Certainty of evidence (quality of evidence) | `Moderate` / `Due to serious inconsistency` — the domains that pulled it down |
-| Plain language summary | `Treatment likely has an important benefit` (see below) |
+| Plain language summary | `Treatment probably results in an important increase in depression response` (see below) |
 
 **Plain language summaries** are the statements from **Core GRADE 6, Box 1**
 ("Writing standardised GRADE plain language summaries in summary of findings
-tables"), carried verbatim. Box 1 supersedes the earlier Core GRADE 2 Table 1
-guidance — it "summarises this guidance as well as additional guidance related
-to the null and MID thresholds that are the focus of Core GRADE", and unlike
-Table 1 it names the **direction** of the effect on the outcome rather than
-fixing the wording to "benefit". Which statement is used therefore follows from
-**four** inputs: the certainty level, `threshold_type`, the derived
-`rating_target`, and the **sign of the pooled point estimate** (`increases` vs
-`reduces`). pmatools does not paraphrase them. Objects created before the Core
-GRADE 2 entry gate (no `$rating_target`) simply omit the column rather than
-guessing, and so does any object whose pooled estimate gives no usable
-direction — Box 1 has no direction-free wording.
+tables"). Box 1 supersedes the earlier Core GRADE 2 Table 1 guidance — it
+"summarises this guidance as well as additional guidance related to the null
+and MID thresholds that are the focus of Core GRADE", and unlike Table 1 it
+names the **direction** of the effect on the outcome rather than fixing the
+wording to "benefit". Which statement is used therefore follows from **four**
+inputs: the certainty level, `threshold_type`, the derived `rating_target`, and
+the **sign of the pooled point estimate** (`increases` vs `reduces`). pmatools
+does not paraphrase them. Objects created before the Core GRADE 2 entry gate
+(no `$rating_target`) simply omit the column rather than guessing, and so does
+any object whose pooled estimate gives no usable direction — Box 1 has no
+direction-free wording.
+
+**One adverb, not two.** Box 1's qualifier list prints two adverbs per
+certainty level — "Moderate certainty: probably (likely) reduces, increases, or
+has little to no effect"; "Low certainty: may (possibly) reduce, increase, or
+have little to no effect". Emitted literally that gives a double-barrelled
+table cell ("Treatment probably (likely) results in …"), and **no summary of
+findings table in Core GRADE 6 is written that way**: Table 1 has "may decrease
+mortality", Table 3 has "possibly increases", and Box 1's own MID example has
+"probably has little to no important effect". The parenthesis is an editorial
+"either word will do", so pmatools emits the **first word of each pair** —
+`probably` for Moderate, `may` for Low. High and Very low carry no qualifier
+and are unaffected. This is a pmatools choice rather than a quotation: the
+verbatim Box 1 transcription is kept in the source of `R/plain_language.R`, and
+each statement frame there is tagged with its provenance (quoted from Box 1 or
+Table 3, composed from the qualifier list, or quoted minus the parenthesised
+alternative).
 
 **Chinn's formula is not Core GRADE 6's option 2.** When
 `convert_smd_to_or = TRUE` dichotomises a continuous outcome, the footnote says
