@@ -142,8 +142,18 @@ validate_grade_level <- function(x, arg = "argument") {
   if (is.null(ec) || is.null(nc) || length(nc) == 0 || sum(nc, na.rm = TRUE) == 0) {
     return(NULL)
   }
-  ec <- ec[!is.na(ec) & !is.na(nc)]
-  nc <- nc[!is.na(nc)]
+  if (length(ec) != length(nc)) return(NULL)
+
+  # Both vectors must be filtered on the same studies. A study that reports a
+  # denominator but no event count (eg it contributed a continuous outcome
+  # only) otherwise drops out of `ec` while staying in `nc`, which inflates the
+  # crude denominator and hands metaprop() two vectors of different lengths --
+  # the latter error was swallowed below and returned the crude proportion
+  # under the guise of a random-effects pooled estimate.
+  keep <- !is.na(ec) & !is.na(nc) & nc > 0
+  if (!any(keep)) return(NULL)
+  ec <- ec[keep]
+  nc <- nc[keep]
 
   if (method == "simple") {
     return(sum(ec) / sum(nc))
@@ -373,6 +383,9 @@ suggest_threshold <- function(meta_obj) {
     "HR"  = binary_ratio(1.20),
     "RoM" = list(threshold_user = 1.10, threshold_scale = "ratio",
                  source = "package_convention"),
+    # "RD" is what metabin() emits for a risk difference; "ARD" is the internal
+    # scale name, accepted here so a hand-built list is not silently rejected.
+    "RD"  = ard_suggest,
     "ARD" = ard_suggest,
     "SMD" = list(threshold_user = 0.20, threshold_scale = "te_scale",
                  source = "core_grade_6"),
@@ -518,6 +531,7 @@ threshold_to_te_scale <- function(threshold, threshold_scale = "auto", sm = NULL
       "RR"  = "ratio",
       "HR"  = "ratio",
       "RoM" = "ratio",
+      "RD"  = "ard",
       "ARD" = "ard",
       "SMD" = "te_scale",
       "MD"  = "te_scale",
