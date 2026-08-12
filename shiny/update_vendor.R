@@ -14,8 +14,47 @@
 #
 # After every vendor refresh, the dependency-sync check below compares the
 # source pmatools DESCRIPTION against the app DESCRIPTION and warns loudly
-# about anything missing. Run it standalone with:
+# about anything missing.
+#
+# !! TEMPLATE PATHS ARE REWRITTEN ON EVERY REFRESH !!
+#
+# Upstream pmatools locates its script templates with
+#   system.file("templates", <name>, package = "pmatools")
+# which always returns "" here: the app SOURCES R/_pmatools/*.R instead of
+# installing the package, so there is no installed inst/ to look in. Step 3
+# scans EVERY vendored R file for that call shape and rewrites each hit to
+# read from _pmatools_inst/templates/ instead. It is a scan, not a filename
+# list, so a template added upstream later is picked up with no edit here
+# (upstream currently has two: export_bundle.R and export_bundle_multi.R).
+#
+# Step 5 then greps the whole vendored tree for any system.file() call that
+# still carries package = "pmatools" -- i.e. a lookup whose shape drifted
+# far enough that the patch missed it -- and warns loudly with file:line.
+#
+# Both checks run standalone, without touching any vendored file, via:
 #   Rscript update_vendor.R --check-only
+#
+# !! THE VENDOR SOURCE IS OVERRIDABLE - AND A DIRTY SOURCE IS REFUSED !!
+#
+# PMATOOLS_SRC below defaults to the shared checkout at ~/Developer/pmatools,
+# but the environment variable of the same name overrides it:
+#   PMATOOLS_SRC=~/Developer/pmatools-wt/my-branch Rscript update_vendor.R
+# The value is expanded and normalized, and the run aborts before writing
+# anything if the directory is missing or lacks DESCRIPTION / R / inst, so a
+# typo cannot leave a half-vendored tree behind.
+#
+# Before any file is touched, the source checkout's git state is read. A
+# DIRTY source is a hard stop: whatever a parallel session happens to have
+# left sitting in that working tree would be copied into R/_pmatools/ and
+# shipped from there. The fix is to cut a worktree on the pmatools side and
+# point PMATOOLS_SRC at it -- not to bypass the guard. When bypassing really
+# is the right call, PMATOOLS_ALLOW_DIRTY=1 demotes the stop to a warning
+# and the stamp below records that it happened. A source git cannot describe
+# at all (git absent, not a repository) only warns: unverifiable is not the
+# same as known-bad.
+#
+# --check-only never stops on a dirty source. It writes nothing, so it has
+# nothing to protect; it just reports the state it found.
 #
 # !! R/_pmatools/VERSION IS GENERATED - DO NOT HAND-EDIT !!
 #
@@ -24,19 +63,145 @@
 # options(pmatools.version_stamp = ...) so the app can report which pmatools
 # it actually vendors. Editing that file by hand is pointless: the next
 # vendor refresh deletes R/_pmatools/ and regenerates the stamp.
+#
+# Line 1 is the version string and nothing else -- app.R reads exactly one
+# line -- so line 2 carries the provenance a bare version cannot:
+#   source: <branch>@<sha>          (clean source)
+#   source: <branch>@<sha>-dirty    (vendored under PMATOOLS_ALLOW_DIRTY=1)
+#   source: unknown                 (no readable git state)
+# Anything added later goes on line 3 or below; line 1 stays load-bearing.
 # =============================================================================
 #
 # Run after pulling new pmatools commits in ~/Developer/pmatools/.
-# Idempotent: re-patches the template path so the vendored copy looks in
-# _pmatools_inst/ before falling back to system.file().
+# Idempotent: the vendored tree is regenerated from the source checkout on
+# every run, and the template-path rewrite leaves behind text that no longer
+# matches its own pattern, so re-running is a no-op.
 
-PMATOOLS_SRC <- "/Users/furukawayuonore/Developer/pmatools"
+# Where the vendored sources are read from. The default is the shared
+# checkout; PMATOOLS_SRC overrides it so a session can vendor from its own
+# pmatools worktree instead of whatever the shared tree happens to hold.
+# mustWork = FALSE keeps a bad path resolvable so require_valid_src() below
+# can report it verbatim rather than dying inside normalizePath().
+resolve_pmatools_src <- function(
+    default = "/Users/furukawayuonore/Developer/pmatools") {
+  raw <- trimws(Sys.getenv("PMATOOLS_SRC", unset = ""))
+  if (!nzchar(raw)) raw <- default
+  normalizePath(path.expand(raw), mustWork = FALSE)
+}
+
+PMATOOLS_SRC <- resolve_pmatools_src()
 APP_DIR      <- normalizePath(".")
+VENDORED_R   <- file.path(APP_DIR, "R", "_pmatools")
 
 # Dev-only packages in pmatools Suggests that the deployed app never needs.
 # Everything else in pmatools Imports/Suggests is assumed runtime-relevant.
 DEV_ONLY_PKGS <- c("testthat", "rmarkdown", "here", "knitr", "covr",
                    "devtools", "usethis", "roxygen2")
+
+# --- Vendor source validation ------------------------------------------------
+# Runs before anything is read from or written to the source, in both the
+# vendor path and --check-only. DESCRIPTION / R / inst are exactly the three
+# entries the steps below consume, so checking them here turns "PMATOOLS_SRC
+# points somewhere useless" into one clear message instead of a
+# read.dcf()/file.copy() failure halfway through a wiped R/_pmatools/.
+require_valid_src <- function(src = PMATOOLS_SRC) {
+  hint <- paste0("Set PMATOOLS_SRC to a pmatools checkout, e.g.\n",
+                 "  PMATOOLS_SRC=~/Developer/pmatools ",
+                 "Rscript update_vendor.R")
+  if (!dir.exists(src)) {
+    stop("pmatools source directory not found: ", src, "\n", hint,
+         call. = FALSE)
+  }
+  needed <- c("DESCRIPTION", "R", "inst")
+  absent <- needed[!file.exists(file.path(src, needed))]
+  if (length(absent) > 0L) {
+    stop("Not a pmatools checkout (missing ",
+         paste(absent, collapse = ", "), "): ", src, "\n", hint,
+         call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
+# --- Vendor source git state -------------------------------------------------
+# One git invocation, captured rather than inherited so a missing git binary
+# or a non-repository source degrades to "unknown" instead of spraying stderr
+# and aborting. stderr is folded into stdout only so it cannot leak to the
+# console; the output is used exclusively when the exit status is 0.
+git_field <- function(src, args) {
+  out <- tryCatch(
+    suppressWarnings(system2("git", c("-C", shQuote(src), args),
+                             stdout = TRUE, stderr = TRUE)),
+    error = function(e) NULL,
+    warning = function(w) NULL)
+  if (is.null(out)) return(NULL)
+  status <- attr(out, "status")
+  if (!is.null(status) && !identical(as.integer(status), 0L)) return(NULL)
+  as.character(out)
+}
+
+# Reads branch / short SHA / porcelain status of the source checkout. Returns
+# known = FALSE (never an error) when git cannot answer, because an
+# undescribable source is unverifiable rather than known-bad.
+pmatools_src_meta <- function(src = PMATOOLS_SRC) {
+  unknown <- list(known = FALSE, branch = NA_character_, sha = NA_character_,
+                  dirty = NA, dirty_files = character(0))
+
+  sha    <- git_field(src, c("rev-parse", "--short", "HEAD"))
+  branch <- git_field(src, c("rev-parse", "--abbrev-ref", "HEAD"))
+  porc   <- git_field(src, c("status", "--porcelain"))
+
+  # porc is legitimately character(0) on a clean tree, so only sha and branch
+  # are required to be non-empty.
+  if (is.null(sha) || is.null(branch) || is.null(porc) ||
+      length(sha) == 0L || length(branch) == 0L) {
+    return(unknown)
+  }
+
+  dirty_files <- porc[nzchar(trimws(porc))]
+  list(known = TRUE,
+       branch = trimws(branch[1L]),
+       sha = trimws(sha[1L]),
+       dirty = length(dirty_files) > 0L,
+       dirty_files = dirty_files)
+}
+
+# The `source:` line written to R/_pmatools/VERSION, and the same string used
+# in the progress output so the stamp and the console agree.
+src_label <- function(meta) {
+  if (!isTRUE(meta$known)) return("unknown")
+  paste0(meta$branch, "@", meta$sha, if (isTRUE(meta$dirty)) "-dirty" else "")
+}
+
+# The guard proper. Called from the vendor path only, before the first
+# unlink()/file.copy(), so a refusal leaves the vendored tree untouched.
+# --check-only deliberately does not call this: it writes nothing.
+guard_source_state <- function(meta, src = PMATOOLS_SRC) {
+  if (!isTRUE(meta$known)) {
+    warning("Cannot read git state of ", src, " (git missing, or not a ",
+            "repository). Vendoring anyway; R/_pmatools/VERSION will record ",
+            "'source: unknown'.", call. = FALSE)
+    return(invisible(FALSE))
+  }
+  if (!isTRUE(meta$dirty)) return(invisible(TRUE))
+
+  msg <- paste0(
+    "pmatools source checkout is DIRTY: ", src, "\n",
+    "  ", length(meta$dirty_files), " uncommitted change(s), e.g. ",
+    paste(utils::head(meta$dirty_files, 3L), collapse = " | "), "\n",
+    "Vendoring from it would bake another session's in-progress work into\n",
+    "R/_pmatools/ and ship it. Cut a worktree on the pmatools side and\n",
+    "point this script at it instead:\n",
+    "  git -C ", src, " worktree add ../pmatools-wt/<branch> <branch>\n",
+    "  PMATOOLS_SRC=../pmatools-wt/<branch> Rscript update_vendor.R\n",
+    "Set PMATOOLS_ALLOW_DIRTY=1 to override (the version stamp is then\n",
+    "marked '-dirty').")
+
+  if (identical(trimws(Sys.getenv("PMATOOLS_ALLOW_DIRTY", "")), "1")) {
+    warning(msg, call. = FALSE)
+    return(invisible(FALSE))
+  }
+  stop(msg, call. = FALSE)
+}
 
 # --- Dependency-sync check ---------------------------------------------------
 # Parses the source pmatools DESCRIPTION and compares its Imports + Suggests
@@ -93,17 +258,158 @@ check_app_dependencies <- function(pmatools_src = PMATOOLS_SRC,
   invisible(missing)
 }
 
-# Standalone mode: `Rscript update_vendor.R --check-only` runs only the
-# dependency-sync check without touching any vendored files.
+# --- Template-path rewrite ---------------------------------------------------
+# Matches the whole upstream lookup, capturing the template basename so each
+# call site keeps asking for the file it actually wants (analysis_script.R.tpl
+# vs analysis_script_multi.R.tpl vs whatever lands next). Deliberately blind to
+# the assignment target: what matters is the system.file() expression, not the
+# variable it feeds.
+TPL_LOOKUP_PAT <- paste0(
+  "system\\.file\\(\\s*\"templates\",\\s*\"([^\"]+)\",\\s*",
+  "package\\s*=\\s*\"pmatools\"\\s*\\)"
+)
+
+# Rewrites every such lookup in the vendored tree to read from
+# _pmatools_inst/templates/. Driven off a directory scan, not a filename list:
+# upstream grew a second call site (export_bundle_multi.R) after this script
+# was first written, and the single hardcoded filename meant nobody noticed.
+# Idempotent by construction -- the replacement text contains no system.file()
+# call, so a second pass matches nothing.
+patch_template_paths <- function(target_dir = VENDORED_R) {
+  files <- list.files(target_dir, pattern = "\\.R$", full.names = TRUE)
+  n_files <- 0L
+  n_sites <- 0L
+
+  for (f in files) {
+    txt <- paste(readLines(f, warn = FALSE), collapse = "\n")
+    m <- gregexpr(TPL_LOOKUP_PAT, txt, perl = TRUE)[[1L]]
+    if (m[1L] == -1L) next
+
+    hits <- regmatches(txt, list(m))[[1L]]
+    starts <- as.integer(m)
+    tpl_names <- sub(TPL_LOOKUP_PAT, "\\1", hits, perl = TRUE)
+    reps <- character(length(hits))
+
+    for (i in seq_along(hits)) {
+      # Continuation lines are indented to where the arguments of the call we
+      # are replacing already sat, so the patched source keeps the upstream
+      # visual shape and the diff stays confined to the path itself.
+      before <- substr(txt, 1L, starts[i] - 1L)
+      nl <- gregexpr("\n", before, fixed = TRUE)[[1L]]
+      last_nl <- if (nl[1L] == -1L) 0L else max(nl)
+      indent <- strrep(" ", starts[i] - last_nl - 1L + nchar("system.file("))
+      reps[i] <- paste0(
+        'file.path(getOption("pmatools.vendored_root", "."),\n',
+        indent, '"_pmatools_inst", "templates",\n',
+        indent, '"', tpl_names[i], '")'
+      )
+    }
+
+    regmatches(txt, list(m)) <- list(reps)
+    writeLines(txt, f)
+    n_files <- n_files + 1L
+    n_sites <- n_sites + length(hits)
+    cat("  ", basename(f), ": ", length(hits), " template path(s) patched (",
+        paste(tpl_names, collapse = ", "), ")\n", sep = "")
+  }
+
+  if (n_files == 0L) {
+    # Not fatal on its own: either upstream stopped using system.file() for
+    # templates, or the call shape drifted. The verification below decides.
+    cat("  no system.file() template lookup matched -- see verification\n")
+  }
+  invisible(c(files = n_files, sites = n_sites))
+}
+
+# --- Vendored template-path verification -------------------------------------
+# Safety net for the rewrite above: greps the whole vendored tree for any
+# system.file() call still carrying package = "pmatools". In the app that call
+# can only ever return "", so a survivor is a template the vendored code will
+# fail to find at runtime. Non-fatal (warning, not stop), matching
+# check_app_dependencies(): the refresh itself is still worth completing.
+check_vendored_template_paths <- function(target_dir = VENDORED_R) {
+  cat("\n--- Vendored template-path check (system.file -> _pmatools_inst) ---\n")
+
+  if (!dir.exists(target_dir)) {
+    warning("Vendored directory not found: ", target_dir, call. = FALSE)
+    return(invisible(character(0)))
+  }
+
+  # `[^()]` spans newlines, so this catches the call whether or not the
+  # package argument sits on a continuation line. The inner alternative allows
+  # one level of nested parens (e.g. a paste0() argument) before giving up.
+  pat <- "system\\.file\\((?:[^()]|\\([^()]*\\))*package\\s*=\\s*\"pmatools\""
+
+  files <- list.files(target_dir, pattern = "\\.R$", full.names = TRUE)
+  survivors <- character(0)
+  for (f in files) {
+    txt <- paste(readLines(f, warn = FALSE), collapse = "\n")
+    m <- gregexpr(pat, txt, perl = TRUE)[[1L]]
+    if (m[1L] == -1L) next
+    for (s in as.integer(m)) {
+      before <- substr(txt, 1L, s - 1L)
+      nl <- gregexpr("\n", before, fixed = TRUE)[[1L]]
+      line_no <- if (nl[1L] == -1L) 1L else length(nl) + 1L
+      survivors <- c(survivors,
+                     paste0("R/_pmatools/", basename(f), ":", line_no))
+    }
+  }
+
+  cat("  scanned: ", length(files), " vendored R files\n", sep = "")
+
+  if (length(survivors) == 0L) {
+    cat("  OK: no system.file(..., package = \"pmatools\") lookups remain.\n")
+  } else {
+    banner <- paste(rep("!", 72), collapse = "")
+    cat("\n", banner, "\n", sep = "")
+    cat("!! WARNING: vendored code still calls system.file(package =",
+        "\"pmatools\"):\n")
+    for (s in survivors) cat("!!   ", s, "\n", sep = "")
+    cat("!! pmatools is SOURCED here, never installed, so that call returns",
+        "\"\" and\n!! the template will NOT be found at runtime. Widen",
+        "TPL_LOOKUP_PAT in\n!! update_vendor.R to cover the new call shape.\n")
+    cat(banner, "\n\n", sep = "")
+    warning("Vendored pmatools still resolves templates via system.file(): ",
+            paste(survivors, collapse = ", "), call. = FALSE)
+  }
+  invisible(survivors)
+}
+
+# Resolve and validate the source before either mode proceeds: --check-only
+# reads the source DESCRIPTION too, so a bad PMATOOLS_SRC has to fail there
+# just as loudly. Reading the git state is likewise a pure read, safe on both
+# paths; only guard_source_state() below can stop the run, and it is reached
+# from the vendor path alone.
+require_valid_src()
+src_meta <- pmatools_src_meta()
+
+# Standalone mode: `Rscript update_vendor.R --check-only` runs both read-only
+# checks without touching any vendored files. One flag rather than a sibling
+# --check-templates: both answer the same question ("is the vendored tree
+# deployable as it stands?"), both are pure reads, and a single entry point
+# means a check added later cannot be forgotten by whoever runs it.
 if ("--check-only" %in% commandArgs(trailingOnly = TRUE)) {
+  cat("Checking vendored pmatools against ", PMATOOLS_SRC, "\n", sep = "")
+  cat("  source state: ", src_label(src_meta), "\n", sep = "")
+  if (isTRUE(src_meta$dirty)) {
+    cat("  (source has ", length(src_meta$dirty_files),
+        " uncommitted change(s); a vendor run would refuse it unless ",
+        "PMATOOLS_ALLOW_DIRTY=1)\n", sep = "")
+  }
   check_app_dependencies()
+  check_vendored_template_paths()
   quit(save = "no", status = 0)
 }
 
 cat("Refreshing vendored pmatools from ", PMATOOLS_SRC, "\n", sep = "")
+cat("  source state: ", src_label(src_meta), "\n", sep = "")
+
+# 0. Dirty-source guard. Must stay ABOVE the unlink()/file.copy() below: a
+#    refusal has to leave the existing vendored tree exactly as it was.
+guard_source_state(src_meta)
 
 # 1. R sources (skip data.R which is just lazy-data roxygen)
-target_r <- file.path(APP_DIR, "R", "_pmatools")
+target_r <- VENDORED_R
 unlink(target_r, recursive = TRUE)
 dir.create(target_r, recursive = TRUE)
 src_r <- list.files(file.path(PMATOOLS_SRC, "R"), pattern = "\\.R$",
@@ -118,7 +424,14 @@ cat("  R/_pmatools/: ", length(src_r), " files\n", sep = "")
 #     source DESCRIPTION Version in R/_pmatools/VERSION; app.R reads it into
 #     options(pmatools.version_stamp = ...). Written AFTER the copy step
 #     because that step unlink()s and recreates the whole directory.
-stamp_vendored_version <- function(src_desc, target_dir) {
+#
+#     Line 1 stays the bare version string: app.R does readLines(n = 1L) and
+#     must keep seeing exactly that. Line 2 records which source checkout the
+#     version came from ("source: <branch>@<sha>", "-dirty" when vendored
+#     under PMATOOLS_ALLOW_DIRTY=1, "unknown" when git could not say), which
+#     is what actually pins the bytes down -- two builds can share a Version
+#     field and differ.
+stamp_vendored_version <- function(src_desc, target_dir, meta = src_meta) {
   if (!file.exists(src_desc)) {
     warning("Version stamp NOT written: DESCRIPTION not found at ", src_desc,
             call. = FALSE)
@@ -134,14 +447,16 @@ stamp_vendored_version <- function(src_desc, target_dir) {
     return(NA_character_)
   }
   ver <- trimws(ver)
-  writeLines(ver, file.path(target_dir, "VERSION"))
+  writeLines(c(ver, paste0("source: ", src_label(meta))),
+             file.path(target_dir, "VERSION"))
   ver
 }
 
 stamped_version <- stamp_vendored_version(
-  file.path(PMATOOLS_SRC, "DESCRIPTION"), target_r)
+  file.path(PMATOOLS_SRC, "DESCRIPTION"), target_r, src_meta)
 cat("  R/_pmatools/VERSION: ",
-    if (is.na(stamped_version)) "NOT WRITTEN (see warning)" else stamped_version,
+    if (is.na(stamped_version)) "NOT WRITTEN (see warning)" else
+      paste0(stamped_version, " (source: ", src_label(src_meta), ")"),
     "\n", sep = "")
 
 # 2. inst assets
@@ -151,31 +466,16 @@ file.copy(file.path(PMATOOLS_SRC, "inst"), APP_DIR, recursive = TRUE)
 file.rename(file.path(APP_DIR, "inst"), target_inst)
 cat("  _pmatools_inst/: copied\n")
 
-# 3. Patch template path in vendored export_bundle.R: replace
-#    `system.file("templates", ..., package = "pmatools")` with a path
-#    that first looks in _pmatools_inst/ (where the vendored template lives).
-ebpath <- file.path(target_r, "export_bundle.R")
-if (file.exists(ebpath)) {
-  txt <- paste(readLines(ebpath, warn = FALSE), collapse = "\n")
-  # Match the multi-line literal regardless of indentation.
-  pat <- "tpl_path <- system.file\\(\"templates\", \"analysis_script\\.R\\.tpl\",[^\n]*\n[ \t]+package = \"pmatools\"\\)"
-  replacement <- paste0(
-    'tpl_path <- file.path(getOption("pmatools.vendored_root", "."),\n',
-    '                          "_pmatools_inst", "templates",\n',
-    '                          "analysis_script.R.tpl")'
-  )
-  new_txt <- sub(pat, replacement, txt, perl = TRUE)
-  if (!identical(new_txt, txt)) {
-    writeLines(new_txt, ebpath)
-    cat("  export_bundle.R: template path patched.\n")
-  } else {
-    warning("export_bundle.R: template-path pattern not matched; ",
-            "patch manually if you see 'system.file(..., package=\"pmatools\")'.")
-  }
-}
+# 3. Patch template paths across the whole vendored tree: replace every
+#    `system.file("templates", <name>, package = "pmatools")` with a path into
+#    _pmatools_inst/ (where the vendored templates live).
+patch_template_paths(target_r)
 
 # 4. Dependency-sync check: did upstream pmatools grow a dependency the app
 #    DESCRIPTION does not install on shinyapps.io?
 check_app_dependencies()
+
+# 5. Verification: did any template lookup escape step 3?
+check_vendored_template_paths(target_r)
 
 cat("\nDone. Restart the Shiny app to pick up changes.\n")
