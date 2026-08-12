@@ -3,8 +3,39 @@
 # 3-level system (v0.3+): -1 = "some_concerns", -2 = "serious".
 # Legacy names ("some", "very_serious") are accepted via .normalize_grade_level()
 # below for backward compatibility.
+#
+# ==========================================================================
+# INTERNAL NAME  <->  CORE GRADE WORDING.  READ THIS BEFORE TOUCHING SIGNS.
+# ==========================================================================
+# The internal names do NOT match the Core GRADE vocabulary, and the mismatch
+# is off by exactly one step, so it is easy to read a domain judgment one level
+# too mild or too severe. Core GRADE 1, verbatim: "We characterise limitations
+# in each of these domains involved in rating down certainty as not serious;
+# serious; very serious; or, rarely, extremely serious."
+#
+#   internal name    | Core GRADE wording  | levels down
+#   -----------------|---------------------|-------------
+#   "no"             | not serious         |  0
+#   "some_concerns"  | serious             | -1
+#   "serious"        | very serious        | -2
+#   (not implemented)| extremely serious   | -3
+#
+# In particular the internal "serious" is the source's VERY SERIOUS (-2), not
+# its "serious" (-1). "extremely serious" (-3) has no internal name because
+# pmatools does not implement it; the maximum downgrade from any single domain
+# is -2.
+#
+# Legacy aliases: "some" -> "some_concerns", "very_serious" -> "serious"
+# ("very_serious" is the honest name for that level and is still accepted).
 GRADE_LEVELS <- c("no", "some_concerns", "serious")
 GRADE_DOWNGRADE <- c(no = 0, some_concerns = -1, serious = -2)
+
+# Internal level -> Core GRADE wording, for user-facing display.
+GRADE_LEVEL_SOURCE_WORDING <- c(
+  no            = "not serious",
+  some_concerns = "serious",
+  serious       = "very serious"
+)
 
 # Map legacy / synonym labels to canonical ones.
 .normalize_grade_level <- function(x) {
@@ -166,18 +197,23 @@ make_domain_row <- function(domain, judgment, auto, notes = NA_character_,
 # GRADE transparency gate for manual overrides (v0.4.0, breaking change).
 # Overriding an automated domain judgment requires a written justification.
 # Aborts unless `rationale` is a single non-NA, non-empty, non-whitespace
-# string. Returns the rationale invisibly on success.
-.check_override_rationale <- function(rationale, arg, domain_label) {
+# string. Returns the rationale invisibly on success. `hint` appends a
+# call-site-specific sentence telling the user how to avoid the override
+# altogether (used by the Indirectness subdomain path).
+.check_override_rationale <- function(rationale, arg, domain_label,
+                                      hint = NULL) {
   ok <- is.character(rationale) && length(rationale) == 1L &&
         !is.na(rationale) && nzchar(trimws(rationale))
   if (!ok) {
-    rlang::abort(sprintf(
+    msg <- sprintf(
       paste0(
         "Overriding the %s judgment requires %s: state why the automated ",
         "assessment was replaced (Core GRADE transparency principle)."
       ),
       domain_label, arg
-    ))
+    )
+    if (!is.null(hint)) msg <- paste(msg, hint)
+    rlang::abort(msg)
   }
   invisible(rationale)
 }
@@ -192,6 +228,23 @@ make_domain_row <- function(domain, judgment, auto, notes = NA_character_,
 #' an odds ratio (OR) using Chinn's formula: \eqn{\log(OR) = SMD \times \pi /
 #' \sqrt{3}}. The conversion assumes a logistic latent-variable distribution
 #' (Cox 1970; Hasselblad & Hedges 1995; Chinn 2000).
+#'
+#' @section Relation to Core GRADE 6 "option 2":
+#' Core GRADE 6 also converts a continuous outcome to a binary one, but by a
+#' \strong{different method}, and the two must not be conflated. Core GRADE 6
+#' option 2 works from the MID, verbatim: "If systematic reviewers or guideline
+#' developers know what the MID is for each of the instruments and assume a
+#' normal distribution of results, they can calculate the proportion of people
+#' who experience an improvement larger than the MID within each arm, thereby
+#' obtaining a risk ratio or risk difference for each of the studies. They can
+#' then pool these proportions across studies." That is a
+#' normal-distribution-plus-MID calculation done \emph{per study, before
+#' pooling}.
+#'
+#' Chinn's formula instead assumes a \emph{logistic} latent variable, needs no
+#' MID, and is applied \emph{after} pooling, to the summary SMD. It answers a
+#' different question and will not in general reproduce the option 2 numbers.
+#' Core GRADE 6's option 2 is not implemented in pmatools.
 #'
 #' @param smd Numeric. Standardized mean difference (effect size).
 #' @param ci_lower,ci_upper Optional numeric CI bounds on the SMD scale.
@@ -223,35 +276,75 @@ chinn_smd_to_or <- function(smd, ci_lower = NULL, ci_upper = NULL) {
 # Threshold auto-default per effect measure
 # --------------------------------------------------------------------------
 
-#' Suggest a conventional default Threshold based on the effect measure
+#' Suggest a placeholder Threshold based on the effect measure
 #'
-#' Returns a conventional clinical decision Threshold (a minimally important
+#' Returns a placeholder clinical decision Threshold (a minimally important
 #' effect on the analysis scale) suitable for pre-filling the input field in
-#' interactive UIs. Users should override with a published or expert-derived
-#' Threshold whenever available.
+#' interactive UIs. \strong{These are pmatools conventions, not Core GRADE
+#' values}, with one partial exception (SMD; see below). Replace them with a
+#' published or expert-derived MID for the outcome in hand before reporting
+#' anything.
 #'
 #' @param meta_obj A meta object (from \code{\link[meta]{metabin}} or
 #'   \code{\link[meta]{metacont}}).
 #'
-#' @return A list with \code{threshold_user} (user-facing value) and
+#' @return A list with \code{threshold_user} (user-facing value),
 #'   \code{threshold_scale} (one of \code{"ratio"}, \code{"te_scale"},
-#'   \code{"ard"}). For binary ratio measures (OR / RR / HR) the list
-#'   additionally contains \code{threshold_absolute}, a nested list with
-#'   \code{threshold_user} and \code{threshold_scale = "ard"} suggesting a
-#'   conventional absolute risk difference threshold (0.05, ie 50 per 1,000)
-#'   for use with \code{threshold_scale = "ard"} in
-#'   \code{\link{grade_meta}}. Returns \code{NULL} if the effect measure is
-#'   unrecognized.
+#'   \code{"ard"}) and \code{source} (\code{"core_grade_6"} or
+#'   \code{"package_convention"} — where the number comes from).
 #'
-#' @details
-#' Defaults:
+#'   For binary ratio measures (OR / RR / HR) the \strong{first candidate is
+#'   the absolute one}: \code{threshold_user} / \code{threshold_scale} describe
+#'   an absolute risk difference of 0.05 (50 per 1,000), the same list is
+#'   repeated under \code{threshold_absolute}, and the ratio-scale fallback is
+#'   available under \code{threshold_ratio}. This ordering follows the source:
+#'   Core GRADE 1, 6 and 7 contain no ratio-scale MID at all, and every binary
+#'   MID they discuss is on the absolute scale (e.g. Core GRADE 7 lists MIDs
+#'   "associated with mortality of 1\%, stroke of 2\%, myocardial infarction of
+#'   3\%, and serious gastrointestinal bleeding of 5\%"; Core GRADE 2 discusses
+#'   "an MID of 5 deaths per" 1000).
+#'
+#'   Returns \code{NULL} if the effect measure is unrecognized.
+#'
+#' @section Where these numbers come from:
+#' \describe{
+#'   \item{SMD 0.20 (\code{source = "core_grade_6"})}{The only default with a
+#'     source. Core GRADE 6 does cite it — "an SMD of 0.2 is the threshold for
+#'     a small and important effect" — but immediately qualifies it, verbatim:
+#'     "clinicians may be appropriately sceptical of this threshold, which is
+#'     limited by large variability in the methods investigators use to
+#'     calculate the SMD".}
+#'   \item{Everything else (\code{source = "package_convention"})}{OR 1.25,
+#'     RR 1.20, HR 1.20, RoM 1.10, MD 0.20 \eqn{\times} pooled SD and ARD 0.05
+#'     have \strong{no basis in the Core GRADE series}. They exist only so that
+#'     an input field can be pre-filled.}
+#' }
+#'
+#' @section Why a single default conflicts with Core GRADE:
 #' \itemize{
-#'   \item OR / RR / HR: 1.20–1.25 on the ratio scale
-#'     (plus an absolute suggestion of ARD 0.05 in \code{threshold_absolute})
-#'   \item RoM: 1.10 (10 percent ratio of means)
-#'   \item SMD: 0.20 (Cohen's small)
-#'   \item MD: 0.20 \eqn{\times} pooled SD (Cohen's small in raw units)
-#'   \item ARD: 0.05 (5 percent absolute risk difference)
+#'   \item \strong{No ratio-scale MIDs exist in the source.} Core GRADE 1, 6
+#'     and 7 give no example of a MID on a ratio scale; binary MIDs are always
+#'     absolute (per 1000 or percent). A ratio-scale default is therefore an
+#'     extrapolation by pmatools.
+#'   \item \strong{The MID belongs to the outcome, not to the effect measure.}
+#'     Core GRADE 7, verbatim: "MIDs associated with mortality of 1\%, stroke of
+#'     2\%, myocardial infarction of 3\%, and serious gastrointestinal bleeding
+#'     of 5\% reflect the gradient of importance across these outcomes." One
+#'     default shared by every outcome erases exactly that gradient.
+#'   \item \strong{The procedure runs the other way round.} Core GRADE 7 has
+#'     users look at the CI first and establish a MID only where the answer
+#'     depends on it ("whether the MID for mortality is 2\%, 1\%, or less than
+#'     1\%, the CI does not cross the MID threshold ... one need not specify a
+#'     single particular value"). Starting from a pre-filled default inverts
+#'     that order.
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' s <- suggest_threshold(m)
+#' s$threshold_user   # absolute risk difference for binary outcomes
+#' s$source           # "package_convention" -> replace it
+#' s$threshold_ratio  # ratio-scale fallback, binary outcomes only
 #' }
 #'
 #' @export
@@ -259,24 +352,37 @@ suggest_threshold <- function(meta_obj) {
   sm <- meta_obj$sm
   if (is.null(sm)) return(NULL)
 
-  ard_suggest <- list(threshold_user = 0.05, threshold_scale = "ard")
+  ard_suggest <- list(threshold_user = 0.05, threshold_scale = "ard",
+                      source = "package_convention")
+
+  # Binary ratio measures: the absolute suggestion leads (see @return), with
+  # the ratio-scale value kept as a secondary candidate.
+  binary_ratio <- function(ratio_value) {
+    c(ard_suggest,
+      list(
+        threshold_absolute = ard_suggest,
+        threshold_ratio    = list(threshold_user  = ratio_value,
+                                  threshold_scale = "ratio",
+                                  source          = "package_convention")
+      ))
+  }
 
   switch(sm,
-    "OR"  = list(threshold_user = 1.25,  threshold_scale = "ratio",
-                 threshold_absolute = ard_suggest),
-    "RR"  = list(threshold_user = 1.20,  threshold_scale = "ratio",
-                 threshold_absolute = ard_suggest),
-    "HR"  = list(threshold_user = 1.20,  threshold_scale = "ratio",
-                 threshold_absolute = ard_suggest),
-    "RoM" = list(threshold_user = 1.10,  threshold_scale = "ratio"),
-    "ARD" = list(threshold_user = 0.05,  threshold_scale = "ard"),
-    "SMD" = list(threshold_user = 0.20,  threshold_scale = "te_scale"),
+    "OR"  = binary_ratio(1.25),
+    "RR"  = binary_ratio(1.20),
+    "HR"  = binary_ratio(1.20),
+    "RoM" = list(threshold_user = 1.10, threshold_scale = "ratio",
+                 source = "package_convention"),
+    "ARD" = ard_suggest,
+    "SMD" = list(threshold_user = 0.20, threshold_scale = "te_scale",
+                 source = "core_grade_6"),
     "MD"  = {
       sd_pooled <- compute_pooled_sd(meta_obj)
       if (is.null(sd_pooled) || is.na(sd_pooled) || sd_pooled <= 0) {
         return(NULL)
       }
-      list(threshold_user = 0.20 * sd_pooled, threshold_scale = "te_scale")
+      list(threshold_user = 0.20 * sd_pooled, threshold_scale = "te_scale",
+           source = "package_convention")
     },
     NULL
   )
@@ -525,4 +631,45 @@ threshold_to_te_scale <- function(threshold, threshold_scale = "auto", sm = NULL
     threshold_note     = note,
     threshold_baseline = p0
   )
+}
+
+# ==========================================================================
+# VERSION STAMP FOR PROVENANCE LINES IN EXPORTED ARTIFACTS
+# ==========================================================================
+# A host that vendors the pmatools sources (source()s R/*.R instead of
+# installing the package) has no installed DESCRIPTION, so
+# utils::packageVersion("pmatools") always errors there. Such a host sets
+#   options(pmatools.version_stamp = "0.5.1")
+# so the exported bundles report the version of the sources it vendored.
+# The option is ignored whenever the package is genuinely installed.
+
+#' Version stamp used when pmatools is not installed
+#'
+#' Returns `getOption("pmatools.version_stamp")` suffixed with
+#' `" (vendored)"` when it is a single non-empty string. Anything else
+#' (unset, `NULL`, non-character, length != 1, `NA`, blank) yields
+#' `"(vendored; version unknown)"`.
+#'
+#' @param stamp The option value. Exposed as an argument so that the
+#'   validation can be tested without touching the session options.
+#' @return Character scalar.
+#' @keywords internal
+#' @noRd
+.vendored_version_stamp <- function(stamp = getOption("pmatools.version_stamp")) {
+  ok <- is.character(stamp) && length(stamp) == 1L &&
+    !is.na(stamp) && nzchar(trimws(stamp))
+  if (ok) paste0(trimws(stamp), " (vendored)") else "(vendored; version unknown)"
+}
+
+#' Resolve the pmatools version for provenance stamps
+#'
+#' Precedence: the installed package version, then the
+#' `pmatools.version_stamp` option, then `"(vendored; version unknown)"`.
+#'
+#' @return Character scalar.
+#' @keywords internal
+#' @noRd
+.pmatools_version <- function() {
+  tryCatch(as.character(utils::packageVersion("pmatools")),
+           error = function(e) .vendored_version_stamp())
 }

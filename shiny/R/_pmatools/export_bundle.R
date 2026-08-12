@@ -1,4 +1,9 @@
 # export_bundle.R - Pack analysis artifacts into a reproducible ZIP
+#
+# export_bundle() is an S3 generic dispatching on its first argument:
+#   meta          -> the single-outcome flat bundle in this file
+#   pmatools      -> convenience wrapper for the same (grade object first)
+#   pmatools_set  -> the multi-outcome layout in export_bundle_multi.R
 
 #' Export a reproducible analysis bundle as a ZIP
 #'
@@ -9,7 +14,13 @@
 #' bundled `analysis.R` runs
 #' standalone with `library(pmatools)` and the bundled CSV.
 #'
-#' @param ma A `meta` object from \code{\link{run_ma}}.
+#' Passing a \code{pmatools_set} from \code{\link{grade_meta_multi}} instead
+#' produces the multi-outcome layout: the summary tables at the top level and
+#' one numbered `outcomes/NN_name/` sub-directory per outcome. See
+#' \code{\link{export_bundle.pmatools_set}}.
+#'
+#' @param x A `meta` object from \code{\link{run_ma}} (the single-outcome
+#'   entry point), a `pmatools` object, or a `pmatools_set`.
 #' @param grade A `pmatools` object from \code{\link{grade_meta}}.
 #' @param output_dir Directory where the ZIP is created.
 #' @param bundle_name Bundle base name (no extension).
@@ -37,7 +48,9 @@
 #'   NULL, the function attempts to reconstruct from `ma$data`.
 #' @param grade_args Optional named list of `grade_meta()` argument
 #'   specifications with `value`/`origin`/`col` slots, used to render
-#'   `analysis.R` faithfully. See SPEC.md.
+#'   `analysis.R` faithfully. `origin` must be one of `"null"`, `"column"`,
+#'   `"scalar"`, or `"vector"`; any other value aborts rather than rendering
+#'   the argument as `NULL`. See SPEC.md.
 #' @param ma_args Optional named list of `run_ma()` argument specifications.
 #' @param forest_display Optional named list of arguments forwarded to
 #'   \code{\link{plot_forest}} when rendering the bundled forest plot.
@@ -60,10 +73,71 @@
 #'   \code{\link{plot_forest_pubias_subgroup}} when
 #'   `"pubias_missing_forest"` is in `include` (rendered only when k >= 10).
 #'
+#' @param ... Passed to the method.
+#'
+#' @section Legacy `ma =` calls:
+#' Before version 0.5.0 `export_bundle()` was a plain function whose first
+#' argument was named `ma`. It is now an S3 generic whose first argument is
+#' `x`. Named calls of the form `export_bundle(ma = m, grade = g, ...)` are
+#' still honoured, with a deprecation warning issued once per session; they
+#' are dispatched as if `ma` had been passed as `x`. Update such calls to
+#' pass the meta object positionally (or as `x =`).
+#'
+#' @section Version stamp for vendored sources:
+#' The bundle records the pmatools version in `results.txt` and in the header
+#' of the generated `analysis.R`. That version normally comes from the
+#' installed package. A host application that *vendors* the pmatools sources
+#' (i.e. `source()`s the `R/*.R` files instead of installing the package) has
+#' no installed DESCRIPTION to read, so it should set
+#' `options(pmatools.version_stamp = "0.5.0")` to the version of the sources
+#' it vendored; the bundle then reports `0.5.0 (vendored)`. The option must be
+#' a single non-empty string; anything else, or leaving it unset, makes the
+#' bundle report `(vendored; version unknown)`. The option is ignored whenever
+#' pmatools is genuinely installed.
+#'
 #' @return Character. Absolute path to the created ZIP file.
 #'
 #' @export
-export_bundle <- function(ma,
+export_bundle <- function(x, ...) {
+  if (missing(x)) {
+    args <- list(...)
+    if (!is.null(args$ma)) {
+      # v0.5.0 renamed the first formal from 'ma' to 'x' when export_bundle()
+      # became an S3 generic. Keep legacy named calls working for now.
+      rlang::warn(
+        paste0(
+          "export_bundle(ma = ) is deprecated as of pmatools 0.5.0.\n",
+          "export_bundle() is now an S3 generic; its first argument is 'x'.\n",
+          "Pass the meta object positionally, e.g. export_bundle(m, grade = g)."
+        ),
+        .frequency    = "once",
+        .frequency_id = "export_bundle_ma_arg"
+      )
+      x <- args$ma
+      args$ma <- NULL
+      return(do.call(export_bundle, c(list(x), args)))
+    }
+  }
+  UseMethod("export_bundle")
+}
+
+#' @rdname export_bundle
+#' @export
+export_bundle.default <- function(x, ...) {
+  rlang::abort("export_bundle: 'ma' must be a meta object.")
+}
+
+#' @rdname export_bundle
+#' @export
+export_bundle.pmatools <- function(x, ...) {
+  # Convenience: the grade object knows the meta object it rated (the low-RoB
+  # refit, when one happened), so export_bundle(g) is unambiguous.
+  export_bundle.meta(x$meta, grade = x, ...)
+}
+
+#' @rdname export_bundle
+#' @export
+export_bundle.meta <- function(x,
                           grade,
                           output_dir   = ".",
                           bundle_name  = "pmatools_results",
@@ -88,7 +162,9 @@ export_bundle <- function(ma,
                           forest_display_rob = NULL,
                           rare               = NULL,
                           rare_forest_display = NULL,
-                          pubias_missing_df  = NULL) {
+                          pubias_missing_df  = NULL,
+                          ...) {
+  ma <- x
   if (!inherits(ma, "meta")) {
     rlang::abort("export_bundle: 'ma' must be a meta object.")
   }
@@ -276,17 +352,6 @@ export_bundle <- function(ma,
     files_in_zip <- c(files_in_zip, pdf_path, png_path)
   }
 
-  # Helper: write a flextable into a landscape-orientation .docx using
-  # officer directly. Avoids flextable::save_as_docx(pr_section = ...),
-  # whose argument is not present in older flextable versions.
-  .save_landscape_docx <- function(ft, path) {
-    doc <- officer::read_docx()
-    doc <- flextable::body_add_flextable(doc, ft)
-    doc <- officer::body_end_section_landscape(doc, w = 11, h = 8.5)
-    print(doc, target = path)
-    invisible(path)
-  }
-
   # 6a. grade_table.docx — Evidence Profile (Core GRADE series)
   if ("grade_table" %in% include) {
     ep_ft <- evidence_profile(grade,
@@ -343,6 +408,21 @@ export_bundle <- function(ma,
   }
 
   normalizePath(zip_path)
+}
+
+# --------------------------------------------------------------------------
+# Shared writers
+# --------------------------------------------------------------------------
+
+# Write a flextable into a landscape-orientation .docx using officer directly.
+# Avoids flextable::save_as_docx(pr_section = ...), whose argument is not
+# present in older flextable versions.
+.save_landscape_docx <- function(ft, path) {
+  doc <- officer::read_docx()
+  doc <- flextable::body_add_flextable(doc, ft)
+  doc <- officer::body_end_section_landscape(doc, w = 11, h = 8.5)
+  print(doc, target = path)
+  invisible(path)
 }
 
 # --------------------------------------------------------------------------
@@ -458,7 +538,7 @@ export_bundle <- function(ma,
   writeLines("================================================================", con)
   writeLines("[ Software versions ]", con)
   writeLines("================================================================", con)
-  writeLines(sprintf("pmatools : %s", .safe_ver("pmatools", "0.3.4 (vendored)")), con)
+  writeLines(sprintf("pmatools : %s", .pmatools_version()), con)
   writeLines(sprintf("meta     : %s", .safe_ver("meta")), con)
   writeLines(sprintf("R        : %s", paste(R.version$major, R.version$minor, sep = ".")), con)
 
@@ -493,10 +573,7 @@ export_bundle <- function(ma,
 
   values <- list(
     timestamp        = format(Sys.time()),
-    pmatools_version = tryCatch(
-      as.character(utils::packageVersion("pmatools")),
-      error = function(e) "0.3.4 (vendored)"
-    ),
+    pmatools_version = .pmatools_version(),
     outcome_type     = outcome_type_ma,
     sm               = sm,
     method_arg       = .arg_lit(ma_args$method,     fallback = if (outcome_type_ma == "binary")
@@ -514,12 +591,40 @@ export_bundle <- function(ma,
     study_design     = grade$study_design,
     rob_arg          = .arg_lit(grade_args$rob,                    fallback = "NULL"),
     rob_rationale_arg = .arg_lit(grade_args$rob_rationale,         fallback = "NULL"),
-    rob_dom_threshold= grade_args$rob_dominant_threshold$value     %||% 0.60,
+    rob_some_concerns = grade_args$rob_some_concerns$value          %||% "low",
+    rob_overrides_arg = .named_chr_lit(grade_args$rob_overrides),
+    rob_override_rationale_arg = .named_chr_lit(grade_args$rob_override_rationale),
+    rob_dom_threshold= grade_args$rob_dominant_threshold$value     %||% 0.55,
+    # rob_refit: fall back to what the stored object actually did, so the
+    # bundled script reproduces the analysis set that produced these numbers.
+    rob_refit_arg    = .arg_lit(
+      grade_args$rob_refit,
+      fallback = if (identical(grade$rob_analysis_set, "low_only") &&
+                     !isTRUE(grade$rob_refit)) "FALSE" else "TRUE"
+    ),
     rob_inf_threshold= grade_args$rob_inflation_threshold$value    %||% 0.10,
     small_values_arg = .arg_lit(grade_args$small_values,           fallback = "NULL"),
-    indirectness_arg = .arg_lit(grade_args$indirectness,           fallback = shQuote("no")),
-    indirectness_rationale_arg =
-      .arg_lit(grade_args$indirectness_rationale,           fallback = "NULL"),
+    # Indirectness: with a Core GRADE 5 subdomain table the scalar argument and
+    # its rationale are derived from the recorded judgment, so the bundled
+    # script reproduces (or omits) the override exactly.
+    indirectness_arg = if (!is.null(grade$indirectness_subdomains)) {
+      .indirectness_arg_lit(grade)
+    } else {
+      # Fall back to NULL, grade_meta()'s documented default, rather than to a
+      # literal "no": a hardcoded scalar would read as a manual override if the
+      # regenerated script were later given an indirectness_subdomains table.
+      .arg_lit(grade_args$indirectness, fallback = "NULL")
+    },
+    indirectness_dom_threshold =
+      grade_args$indirectness_dominant_threshold$value %||% 0.55,
+    indirectness_rationale_arg = if (!is.null(grade$indirectness_subdomains)) {
+      .indirectness_rationale_lit(grade)
+    } else {
+      .arg_lit(grade_args$indirectness_rationale, fallback = "NULL")
+    },
+    indirectness_subdomains_arg = .indirectness_subdomains_lit(
+      grade_args$indirectness_subdomains %||% grade$indirectness_subdomains
+    ),
     inconsistency_arg= .arg_lit(grade_args$inconsistency,          fallback = "NULL"),
     inconsistency_rationale_arg =
       .arg_lit(grade_args$inconsistency_rationale,          fallback = "NULL"),
@@ -534,6 +639,26 @@ export_bundle <- function(ma,
       .arg_lit(grade_args$imprecision_rationale,            fallback = "NULL"),
     threshold_arg    = .arg_lit(grade_args$threshold,              fallback = if (!is.null(grade$threshold)) format(grade$threshold) else "NULL"),
     threshold_scale  = grade_args$threshold_scale$value             %||% (grade$threshold_scale %||% "auto"),
+    threshold_type   = grade_args$threshold_type$value              %||% (grade$threshold_type %||% "mid"),
+    # require_threshold: the bundled script must reproduce the original call
+    # even when it deliberately ran without a MID.
+    require_threshold_arg = .arg_lit(
+      grade_args$require_threshold,
+      fallback = if (identical(grade$threshold_type, "mid") &&
+                     is.null(grade$threshold)) "FALSE" else "TRUE"
+    ),
+    rating_target_arg = .arg_lit(
+      grade_args$rating_target,
+      fallback = if (isFALSE(grade$rating_target_auto) &&
+                     !is.null(grade$rating_target)) {
+        shQuote(grade$rating_target)
+      } else {
+        "NULL"
+      }
+    ),
+    rating_target_rationale_arg =
+      .arg_lit(grade_args$rating_target_rationale,
+               fallback = .rating_target_rationale_lit(grade)),
     ois_outcome_type = grade$outcome_type,
     ois_events_arg   = .arg_lit(grade_args$ois_events,             fallback = "NULL"),
     ois_n_arg        = .arg_lit(grade_args$ois_n,                  fallback = "NULL"),
@@ -541,6 +666,7 @@ export_bundle <- function(ma,
     ois_beta_arg     = .arg_lit(grade_args$ois_beta,               fallback = "0.2"),
     ois_p0_arg       = .arg_lit(grade_args$ois_p0,                 fallback = "NULL"),
     ois_p1_arg       = .arg_lit(grade_args$ois_p1,                 fallback = "NULL"),
+    ois_rrr_arg      = .arg_lit(grade_args$ois_rrr,                fallback = "0.2"),
     ois_delta_arg    = .arg_lit(grade_args$ois_delta,              fallback = "NULL"),
     ois_sd_arg       = .arg_lit(grade_args$ois_sd,                 fallback = "NULL"),
     baseline_risk_arg = .arg_lit(
@@ -571,8 +697,30 @@ export_bundle <- function(ma,
                                 else ""
                               })
 
+  # Safety net: a literalisation helper that emits malformed R would otherwise
+  # ship a bundle whose analysis.R cannot even be sourced. Fail here instead.
+  .check_script_parses(rendered)
+
   writeLines(rendered, out_path)
   invisible(out_path)
+}
+
+# Abort when the rendered analysis.R is not syntactically valid R, quoting the
+# parser message (which carries the offending line) so the faulty literal is
+# findable.
+.check_script_parses <- function(rendered) {
+  txt <- paste(as.character(rendered), collapse = "\n")
+  err <- tryCatch({
+    parse(text = txt)
+    NULL
+  }, error = function(e) conditionMessage(e))
+  if (is.null(err)) return(invisible(TRUE))
+
+  rlang::abort(paste0(
+    "The generated analysis.R is not syntactically valid R and would not be ",
+    "reproducible. This is a bug in pmatools' script rendering. Parser said: ",
+    err
+  ))
 }
 
 .rare_script_block <- function(rare) {
@@ -606,19 +754,118 @@ export_bundle <- function(ma,
 }
 
 # Convert a {value, origin, col} spec (or plain value) to an R literal string
+# Recover the rating-target rationale from the stored note so the bundled
+# script reproduces a manual target override (grade_meta() requires the
+# rationale whenever rating_target is supplied). The note is written by
+# .resolve_rating_target() as "... | Manual override (<target>): <rationale>
+# | Auto-derived target would have been: <target>."
+.rating_target_rationale_lit <- function(grade) {
+  if (isTRUE(grade$rating_target_auto) || is.null(grade$rating_target)) {
+    return("NULL")
+  }
+  note <- grade$rating_target_note
+  if (is.null(note) || is.na(note)) return("NULL")
+  m <- regmatches(note, regexec("Manual override \\([^)]*\\): (.*?) \\| Auto-derived",
+                                note))[[1]]
+  if (length(m) < 2L || !nzchar(m[2])) return("NULL")
+  deparse(m[2])
+}
+
+# --------------------------------------------------------------------------
+# Indirectness subdomains (Core GRADE 5) -> analysis.R literals
+# --------------------------------------------------------------------------
+
+# Scalar `indirectness` literal for the bundled script: NULL when the recorded
+# judgment is the worst-case subdomain default, the recorded level otherwise
+# (which grade_meta() then treats as a manual override).
+.indirectness_arg_lit <- function(grade) {
+  sub <- grade$indirectness_subdomains
+  if (is.null(sub) || !nrow(sub)) return(shQuote("no"))
+  worst  <- .indirectness_worst_case(sub)
+  actual <- .indirectness_domain_judgment(grade)
+  if (identical(worst, actual)) "NULL" else shQuote(actual)
+}
+
+# Recover the override rationale from the domain notes so the regenerated call
+# passes grade_meta()'s transparency gate.
+.indirectness_rationale_lit <- function(grade) {
+  if (is.null(grade$indirectness_subdomains)) return("NULL")
+  r <- .indirectness_override_rationale(grade)
+  if (is.null(r)) return("NULL")
+  paste(deparse(r, width.cutoff = 500L), collapse = "")
+}
+
+# Literalise the subdomain table as a data.frame() call. Accepts a plain
+# data.frame or a {value, ...} spec.
+.indirectness_subdomains_lit <- function(spec) {
+  df <- if (is.data.frame(spec)) {
+    spec
+  } else if (is.list(spec) && is.data.frame(spec$value)) {
+    spec$value
+  } else {
+    NULL
+  }
+  if (is.null(df) || nrow(df) == 0) return("NULL")
+
+  cols <- intersect(c("subdomain", "target", "evidence", "judgment"), names(df))
+  if (length(cols) == 0) return("NULL")
+
+  vec_lit <- function(v) {
+    paste(deparse(as.character(v), width.cutoff = 500L), collapse = "")
+  }
+  lines <- paste0("    ", format(cols), " = ",
+                  vapply(cols, function(cl) vec_lit(df[[cl]]), character(1)))
+  paste0("data.frame(\n", paste(lines, collapse = ",\n"),
+         ",\n    stringsAsFactors = FALSE\n  )")
+}
+
+# Render a *named* character vector as an R literal, e.g.
+#   c('Smith 2020' = 'high', 'Jones 2019' = 'low')
+# .arg_lit()'s "vector" origin drops names, which would silently break
+# rob_overrides / rob_override_rationale (both keyed on studlab) in the
+# bundled script. Names are quoted rather than backticked so labels with
+# spaces round-trip.
+.named_chr_lit <- function(spec, fallback = "NULL") {
+  v <- if (is.list(spec) && !is.null(spec$origin)) spec$value else spec
+  if (is.list(v)) v <- unlist(v)
+  if (is.null(v) || length(v) == 0L) return(fallback)
+  nms <- names(v)
+  if (is.null(nms) || any(is.na(nms)) || any(!nzchar(nms))) return(fallback)
+  paste0("c(",
+         paste(sprintf("%s = %s", shQuote(nms), shQuote(as.character(v))),
+               collapse = ", "),
+         ")")
+}
+
+# Origins understood by .arg_lit(). Anything else is a caller bug: silently
+# falling through would emit `NULL` for that argument and the "reproducible"
+# script would then reproduce a different analysis.
+ARG_LIT_ORIGINS <- c("null", "column", "scalar", "vector")
+
 .arg_lit <- function(spec, fallback = "NULL") {
   if (is.null(spec)) return(fallback)
   if (is.list(spec) && !is.null(spec$origin)) {
-    if (spec$origin == "null") return("NULL")
-    if (spec$origin == "column") return(paste0("data$", spec$col))
-    if (spec$origin == "scalar") {
+    origin <- spec$origin
+    if (length(origin) != 1L || !is.character(origin) ||
+        !origin %in% ARG_LIT_ORIGINS) {
+      rlang::abort(paste0(
+        "Unknown argument spec origin: ",
+        paste(deparse(origin, width.cutoff = 500L), collapse = ""),
+        ". Accepted origins are: ", paste(ARG_LIT_ORIGINS, collapse = ", "),
+        ". An unrecognised origin would silently render this argument as NULL ",
+        "in the bundled analysis.R and break reproducibility."
+      ))
+    }
+    if (origin == "null") return("NULL")
+    if (origin == "column") return(paste0("data$", spec$col))
+    if (origin == "scalar") {
       v <- spec$value
       if (is.null(v)) return("NULL")
       if (is.character(v)) return(shQuote(v))
       if (is.logical(v))   return(as.character(v))
       if (is.numeric(v))   return(format(v))
     }
-    if (spec$origin == "vector") {
+    if (origin == "vector") {
       v <- spec$value
       return(paste0("c(", paste(if (is.character(v)) shQuote(v) else v,
                                 collapse = ", "), ")"))

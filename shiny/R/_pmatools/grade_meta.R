@@ -32,15 +32,74 @@
 #'   \code{\link{export_bundle}} outputs (Core GRADE transparency principle).
 #'   Not used for per-study vectors or column-name input (automated
 #'   assessment). Default \code{NULL}.
-#' @param rob_dominant_threshold Deprecated (v0.3.1+; accepted but ignored).
-#'   The Risk-of-Bias flowchart no longer uses a weight-share dominance gate;
-#'   the direction-and-magnitude check is now run whenever at least one
-#'   high-RoB study is present.
+#' @param rob_some_concerns (v0.5) How studies rated \code{"some concerns"}
+#'   are folded into the binary low/high classification that Core GRADE 4
+#'   Fig 2 operates on. \code{"low"} (default, previous behaviour) or
+#'   \code{"high"}. Changing it changes which studies count toward the
+#'   high-RoB weight share and therefore the dominance gate. Only used when
+#'   \code{rob} is a vector or column name.
+#'
+#'   \strong{Core GRADE 4 does not define this fold.} The phrase "some
+#'   concerns" never appears in the article; it comes from three-level tools
+#'   such as RoB 2. Core GRADE 4 asks only for a binary verdict per study —
+#'   verbatim, "For simplicity, however, Core GRADE users can assess the
+#'   overall risk of bias in individual studies as low or high" — and the
+#'   examples it gives set the low/high boundary by \emph{counting high-risk
+#'   items}, not by mapping an intermediate category: one review took a trial
+#'   as high risk "if at least one item was rated as high risk of bias",
+#'   another "required two or more of the seven items ... rated as high risk of
+#'   bias", a third counted a study high "only if three or more of the eight
+#'   items were assessed as high risk of bias". Core GRADE 4 then declines to
+#'   settle the question: "The choice of threshold--high risk of bias in only
+#'   one or more than one item or category--may be an issue that will be
+#'   impossible to resolve". Whichever value you pass here is your own
+#'   operational choice, and it is worth recording it alongside the item-count
+#'   rule your review actually used.
+#' @param rob_overrides (v0.5) Optional named character vector of study-level
+#'   Risk-of-Bias overrides keyed on \code{meta_obj$studlab}, e.g.
+#'   \code{c("Smith 2020" = "high")}. Values accept the same vocabulary as
+#'   \code{rob}. Keys that match no study label abort (a typo must never be
+#'   silently ignored). Every override is recorded in the domain notes as
+#'   \code{"Study-level override: <studlab> <from> -> <to> (<rationale>)"}.
+#' @param rob_override_rationale (v0.5) Named character vector of
+#'   justifications, one per \code{rob_overrides} key. A missing rationale
+#'   aborts (Core GRADE transparency principle). Default \code{NULL}.
+#' @param rob_dominant_threshold (v0.5, reinstated) Weight share at or above
+#'   which the body of evidence counts as \emph{dominated} by high-RoB studies
+#'   in BMJ Core GRADE 4 Fig 2 (first decision node). The footnote to that
+#'   figure offers two candidate values — "\code{>65\%} weight or
+#'   \code{>=55\%} weight = possibly dominating" — and pmatools defaults to
+#'   the conservative one, \code{0.55}, with a \code{>=} comparison so that
+#'   exactly 55 percent counts as dominated. Pass \code{0.65} for the stricter
+#'   reading.
+#'   The share is computed from the inverse-variance study weights; when those
+#'   are unavailable the count share is used instead and the domain note says
+#'   so. When neither is computable, dominance is assumed (conservative).
+#'   \strong{This argument was deprecated and ignored in v0.3.1-v0.4.0}; the
+#'   retirement is retracted because the gate is the entry node of Fig 2.
+#'   Only used when \code{rob} is a vector or column name.
+#' @param rob_refit (v0.5) Logical, default \code{TRUE}. When the flowchart
+#'   reaches the "use low risk of bias studies only" leaf (not dominated, but
+#'   a substantial difference between the high- and low-RoB estimates), refit
+#'   the meta-analysis on the low-RoB subset so that every downstream domain,
+#'   the rating target, the baseline risk and the SoF table use the restricted
+#'   estimate. Set to \code{FALSE} to keep the full analysis and receive the
+#'   recommendation only (\code{$rob_analysis_set} is still
+#'   \code{"low_only"}). A refit is skipped, with a warning, when fewer than
+#'   two low-RoB studies remain or when \code{update()} fails.
 #' @param rob_inflation_threshold (v0.2) Threshold for the relative change of
 #'   the pooled estimate when high-RoB studies are excluded, computed on the
 #'   absolute analysis scale: \eqn{(|TE_{all}| - |TE_{low}|) / |TE_{low}|},
 #'   where \eqn{TE_{low}} is the inverse-variance weighted mean of the
 #'   low/some-concerns RoB studies. Default \code{0.10} (10 percent).
+#'   \strong{\eqn{TE_{low}} is always a fixed-effect estimate}
+#'   (\eqn{\sum w \cdot TE / \sum w} with \eqn{w = 1/se^2}), even when the
+#'   parent meta-analysis is a random-effects model. Part of any observed shift
+#'   can therefore come from the estimator difference rather than from risk of
+#'   bias, and the gap widens with heterogeneity. Core GRADE 4 does not specify
+#'   how to recompute the restricted estimate; \code{rob_refit = TRUE} refits
+#'   the model on the low-RoB subset and keeps both estimates on the same
+#'   footing.
 #'   A downgrade under this criterion requires BOTH (a) the relative change to
 #'   be *strictly* greater than the threshold (\code{>}; a change exactly at
 #'   the threshold does not rate down) AND (b) the shift to be in the
@@ -61,15 +120,75 @@
 #'   when dominated. Only used when \code{rob} is a vector or column name.
 #'   (Consistent with \code{netmetaviz} \code{small_values} parameter.)
 #' @param indirectness Indirectness judgment. Same format as \code{rob} (scalar/vector/column).
-#'   Default \code{"no"}.
-#'   \strong{Breaking change (v0.4.0)}: a scalar value other than the default
+#'   Default \code{NULL}, which is treated as \code{"no"} (no downgrade). Pass
+#'   \code{NULL} — rather than \code{"no"} — whenever no manual judgment is
+#'   intended, so that programmatic callers (\code{do.call()}, Shiny UIs) that
+#'   always supply every argument are not mistaken for manual overrides of an
+#'   \code{indirectness_subdomains} table.
+#'   \strong{Breaking change (v0.4.0)}: a scalar value other than
 #'   \code{"no"} is a manual override and requires
 #'   \code{indirectness_rationale}. \code{"no"} (no downgrade) never requires
 #'   a rationale, so default calls are unaffected.
+#' @param indirectness_dominant_threshold (v0.5) Weight share at or above
+#'   which per-study indirectness dominates the body of evidence. Only used
+#'   when \code{indirectness} is a per-study vector or a column name (the
+#'   \code{indirectness_subdomains} table keeps its worst-case fold). Studies
+#'   rated \code{"serious"} are pooled first: if their share reaches the
+#'   threshold the domain is \code{"serious"}; otherwise, if the combined
+#'   share of \code{"some_concerns"} and \code{"serious"} studies reaches it,
+#'   the domain is \code{"some_concerns"}; otherwise \code{"no"}. Default
+#'   \code{0.55}.
+#'   \strong{The threshold has no basis in Core GRADE 5}, which operationalizes
+#'   indirectness of the body of evidence only qualitatively ("all or almost
+#'   all evidence comes from ..."); \code{0.55} is a pmatools convention
+#'   aligned with \code{rob_dominant_threshold}, and every aggregated domain
+#'   note says so. Shares come from the inverse-variance study weights; when
+#'   those are unavailable the count share is used and the note says so.
+#'   \strong{Behaviour change (v0.5)}: per-study vectors were previously
+#'   folded worst-case, so a single indirect study out of many rated the whole
+#'   body of evidence down.
 #' @param indirectness_rationale Free-text justification, required whenever
 #'   \code{indirectness} is supplied as a scalar GRADE level other than
 #'   \code{"no"}. See \code{rob_rationale} for how it is recorded.
 #'   Default \code{NULL}.
+#' @param indirectness_subdomains (v0.5) Optional per-PICO subdomain judgment
+#'   table.
+#'   \strong{Attribution}: asking the indirectness question separately for each
+#'   PICO element is Core GRADE 5's; the table, the 4-point answer scale
+#'   (\code{"yes"} / \code{"probably_yes"} / \code{"probably_no"} /
+#'   \code{"no"}) and the wording "Is the evidence sufficiently direct?" are
+#'   \strong{pmatools conventions} and do not appear in the Core GRADE 5
+#'   article body. Core GRADE 5 instead asks how likely it is that the effect
+#'   differs substantially from the target PICO, and grades that likelihood per
+#'   element in its Table 2 ("Likelihood of rating down"): Population = "Low
+#'   likelihood", Intervention = "Intermediate", Comparison = "Substantial",
+#'   Outcome = "High likelihood". The worst-case fold below is symmetric and
+#'   does not reproduce that gradient.
+#'   A data.frame / tibble (or an equivalent list) with:
+#'   \describe{
+#'     \item{subdomain}{Required. Subdomain label, typically
+#'       \code{"Population"}, \code{"Intervention"}, \code{"Comparison"},
+#'       \code{"Outcome"}. Any order, subset, or extra subdomain is accepted;
+#'       duplicate labels abort.}
+#'     \item{target}{Optional. The target question for that subdomain (display
+#'       only).}
+#'     \item{evidence}{Optional. The evidence found (display only).}
+#'     \item{judgment}{Required. One of \code{"yes"}, \code{"probably_yes"},
+#'       \code{"probably_no"}, \code{"no"} — the answer to "Is the evidence
+#'       sufficiently direct?". Case and separator variants
+#'       (\code{"Probably No"}, \code{"probably-no"}) are accepted.}
+#'   }
+#'   \code{yes} / \code{probably_yes} contribute \code{"no"},
+#'   \code{probably_no} contributes \code{"some_concerns"} and \code{no}
+#'   contributes \code{"serious"}; the domain judgment defaults to the worst
+#'   case across subdomains. Supplying \code{indirectness} as a non-\code{NULL}
+#'   scalar alongside overrides that default and then requires
+#'   \code{indirectness_rationale} (a restatement of the default value needs
+#'   none); leave \code{indirectness} at its \code{NULL} default to accept the
+#'   worst case. Cannot be combined with per-study vector or column-name
+#'   \code{indirectness} input. The normalised table is returned as
+#'   \code{indirectness_subdomains} on the result object and rendered by
+#'   \code{\link{indirectness_table}}. Default \code{NULL}.
 #' @param inconsistency Overall inconsistency scalar judgment. One of
 #'   \code{"no"}, \code{"some"}, \code{"serious"}, \code{"very_serious"}.
 #'   If provided, flowchart parameters are ignored.
@@ -88,7 +207,75 @@
 #'   side of the clinical threshold, or spread across both sides?
 #' @param inconsistency_subgroup_explained Required when
 #'   \code{inconsistency_threshold_side = "opposite_sides"}.
-#'   \code{"yes"} / \code{"no"}: is the inconsistency explained by a credible subgroup?
+#'   \code{"yes"} / \code{"no"}: is the inconsistency explained by a credible
+#'   subgroup?
+#'
+#'   \strong{How to decide.} pmatools cannot assess credibility; Core GRADE 3
+#'   points at a formal instrument and three key criteria. Verbatim (Core
+#'   GRADE 3 summary points): "Key criteria for determining the credibility of
+#'   a subgroup analysis include the P value associated with a test of
+#'   interaction, consistency with a priori hypotheses that include direction
+#'   of effect, and whether the subgroup effect is based on within study
+#'   comparisons". The instrument is ICEMAN
+#'   (\url{https://www.iceman.help}; Schandelmaier S, Briel M, Varadhan R,
+#'   et al. CMAJ 2020;192:E901-6. doi:10.1503/cmaj.200077).
+#'
+#'   \strong{This implementation is more permissive than Core GRADE 3.}
+#'   Passing \code{"yes"} lets the pooled estimate through without rating down.
+#'   Core GRADE 3 instead says (verbatim) that "a conclusion of moderate or
+#'   high credibility warrants the creation of separate PICO questions for each
+#'   subgroup, separate presentation of results for each subgroup, separate
+#'   ratings of certainty considering all five domains of rating down, and
+#'   separate conclusions in keeping with each estimate of effect". So
+#'   \code{"yes"} should be reserved for credibility that is at least moderate,
+#'   and the faithful next step is to split the analysis and rate each subgroup
+#'   separately (see \code{\link{grade_meta_multi}}), not to keep reporting the
+#'   pooled estimate.
+#' @param threshold_type (v0.5) Which threshold the certainty rating is
+#'   anchored to (Core GRADE 2 Fig 2, step 1). One of:
+#'   \itemize{
+#'     \item \code{"mid"} (default): "Are you interested in whether there is
+#'       an important effect or not?" — requires a minimal important
+#'       difference (\code{threshold}).
+#'     \item \code{"null"}: "Are you interested in whether there is a true
+#'       underlying effect, benefit or harm?" — the null is the threshold and
+#'       a MID is optional.
+#'   }
+#'   With \code{threshold_type = "mid"} and no \code{threshold}, the call
+#'   aborts unless \code{require_threshold = FALSE}.
+#'
+#'   \strong{Guideline use forces \code{"mid"}.} Core GRADE 7, verbatim: "To
+#'   inform recommendations, that threshold must be the MID (the smallest
+#'   difference in effect that patients would consider important) rather than
+#'   the null. Thus, decisions on the MID must precede certainty ratings in the
+#'   evidence synthesis." A rating produced with \code{threshold_type = "null"}
+#'   is therefore not a suitable input to a recommendation, however defensible
+#'   it is as a systematic review result.
+#' @param require_threshold (v0.5) Gate for the above. \code{TRUE} (default)
+#'   makes a MID mandatory when \code{threshold_type = "mid"}. Set to
+#'   \code{FALSE} to run without a MID (backward-compatible escape hatch); the
+#'   rating target then falls back to a non-null effect and imprecision is
+#'   judged against the null.
+#' @param rating_target (v0.5) Target of the certainty rating (Core GRADE 2
+#'   Fig 2). \code{NULL} (default) derives it automatically from the pooled
+#'   point estimate:
+#'   \tabular{llll}{
+#'     \strong{threshold_type} \tab \strong{point estimate} \tab
+#'       \strong{target} \tab \strong{imprecision threshold} \cr
+#'     \code{"mid"}  \tab \eqn{|TE| >} MID    \tab \code{"important_effect"}        \tab \eqn{\pm}MID \cr
+#'     \code{"mid"}  \tab \eqn{|TE| \le} MID  \tab \code{"little_to_no_difference"} \tab \eqn{\pm}MID \cr
+#'     \code{"null"} \tab very near null      \tab \code{"little_to_no_difference"} \tab \eqn{\pm}MID \cr
+#'     \code{"null"} \tab not near null       \tab \code{"non_null_effect"}         \tab null (0) \cr
+#'   }
+#'   "Very near null" is operationalized as \eqn{|TE| \le} MID; with no MID
+#'   supplied, nearness cannot be judged and the target falls back to
+#'   \code{"non_null_effect"} (recorded in \code{rating_target_note}).
+#'   Supplying a value overrides the automatic derivation and requires
+#'   \code{rating_target_rationale}.
+#' @param rating_target_rationale Free-text justification, required whenever
+#'   \code{rating_target} is supplied (manual override of the Core GRADE 2
+#'   Fig 2 derivation). See \code{rob_rationale} for how it is recorded.
+#'   Default \code{NULL}.
 #' @param threshold (v0.2) Numeric clinical decision Threshold (a minimally
 #'   important effect). This is a cross-cutting parameter shared by the three
 #'   Threshold-aware domains — it is not a Risk-of-Bias-specific setting:
@@ -152,7 +339,21 @@
 #' @param ois_beta Type II error rate for OIS calculation (default 0.20, ie 80 percent power).
 #' @param ois_p0 For binary outcomes: baseline (control) event rate for OIS calculation.
 #'   Used with \code{ois_p1} to auto-compute target events.
-#' @param ois_p1 For binary outcomes: experimental arm event rate for OIS calculation.
+#' @param ois_p1 For binary outcomes: experimental arm event rate for OIS
+#'   calculation. When supplied it takes precedence over \code{ois_rrr}.
+#' @param ois_rrr (v0.5) For binary outcomes: the "modest relative risk
+#'   reduction" the OIS is powered to detect, used to derive \code{ois_p1}
+#'   from \code{ois_p0} as \eqn{p_1 = p_0 (1 - ois\_rrr)}. Default \code{0.20}.
+#'   Core GRADE 2 specifies exactly this input for binary outcomes: "For binary
+#'   outcomes, these involve specifying the acceptable error rates: alpha
+#'   (typically 0.05) and beta (typically 0.20), the control group event rate
+#'   (chosen from the context), and a modest relative risk reduction, typically
+#'   20 percent or 25 percent." Pass \code{0.25} for the other value the paper
+#'   names. Ignored when \code{ois_p1}, \code{ois_events} or \code{ois_n} is
+#'   supplied, and ignored for continuous outcomes, where the same paragraph
+#'   directs users to the MID instead (\code{ois_delta}).
+#'   \strong{Behaviour change (v0.5)}: \code{ois_p1} was previously derived
+#'   from the MID for binary outcomes too.
 #' @param ois_delta For continuous outcomes: minimally important difference for OIS
 #'   calculation. Used with \code{ois_sd}.
 #' @param ois_sd For continuous outcomes: pooled SD for OIS calculation.
@@ -195,6 +396,51 @@
 #'   trials can be accounted for. \code{"yes"} short-circuits the publication
 #'   bias domain to "no" regardless of Egger's test or k. Default \code{NULL}.
 #'
+#' @section Internal level names vs Core GRADE wording:
+#' The domain judgment vocabulary used by every \code{*} argument and by
+#' \code{$domain_assessments$judgment} does \strong{not} match the Core GRADE
+#' wording, and the mismatch is off by exactly one step. Core GRADE 1,
+#' verbatim: "We characterise limitations in each of these domains involved in
+#' rating down certainty as not serious; serious; very serious; or, rarely,
+#' extremely serious."
+#'
+#' \tabular{lll}{
+#'   \strong{pmatools value} \tab \strong{Core GRADE wording} \tab \strong{levels down} \cr
+#'   \code{"no"}            \tab not serious        \tab  0 \cr
+#'   \code{"some_concerns"} \tab serious            \tab -1 \cr
+#'   \code{"serious"}       \tab very serious       \tab -2 \cr
+#'   (not implemented)      \tab extremely serious  \tab -3 \cr
+#' }
+#'
+#' So \code{rob = "serious"} means \emph{very serious} risk of bias (\eqn{-2}),
+#' not the source's "serious" (\eqn{-1}). The legacy alias
+#' \code{"very_serious"} is still accepted for that level and is the less
+#' ambiguous spelling. \code{$downgrade} always carries the signed number, so
+#' read that when in doubt.
+#'
+#' @section Parts of Core GRADE not implemented:
+#' \itemize{
+#'   \item \strong{Rating up} non-randomised evidence. Core GRADE 1, verbatim:
+#'     Core GRADE users "can rate up certainty in non-randomised studies (but
+#'     not randomised controlled trials) for large effects and for evidence of
+#'     a dose-response gradient". Certainty can only be rated down here; record
+#'     an upgrade by hand with
+#'     \code{evidence_profile(other_text =, other_downgrade =)}. Rating up for
+#'     plausible confounding is correctly absent: Core GRADE 1 drops it
+#'     explicitly, saying it "has proved too difficult to apply and too rarely
+#'     applicable to be part of Core GRADE".
+#'   \item \strong{"Extremely serious" (\eqn{-3})} — see the vocabulary table
+#'     above. The maximum downgrade from one domain is \eqn{-2}.
+#'   \item \strong{The cross-domain gestalt step.} Core GRADE 1 asks for
+#'     "stepping back and taking an overall view of the threats to certainty of
+#'     evidence" after the individual domains, precisely so that several
+#'     borderline domains do not add up to an unduly low rating. pmatools sums
+#'     the per-domain downgrades arithmetically, so a result with two or three
+#'     near-threshold domains can land lower than a Core GRADE panel would put
+#'     it. Inspect \code{$domain_assessments$notes} and override the domains
+#'     you judge borderline.
+#' }
+#'
 #' @return An S3 object of class \code{pmatools} containing:
 #'   \describe{
 #'     \item{domain_assessments}{A tibble with one row per GRADE domain.}
@@ -202,18 +448,39 @@
 #'     \item{certainty_score}{Numeric score (1–4).}
 #'     \item{starting_quality}{Starting certainty label.}
 #'     \item{outcome_name}{Outcome label.}
-#'     \item{meta}{The original meta object.}
+#'     \item{threshold_type}{\code{"mid"} or \code{"null"} (Core GRADE 2 Fig 2).}
+#'     \item{rating_target}{Target of the certainty rating.}
+#'     \item{rating_target_note}{How the target was derived (or overridden).}
+#'     \item{rating_target_auto}{\code{TRUE} when the target was derived
+#'       automatically rather than supplied by the user.}
+#'     \item{indirectness_subdomains}{The normalised Core GRADE 5 subdomain
+#'       tibble (\code{subdomain}, \code{target}, \code{evidence},
+#'       \code{judgment}, \code{grade_level}), or \code{NULL} when none was
+#'       supplied. Render it with \code{\link{indirectness_table}}.}
+#'     \item{meta}{The meta object every domain was assessed on: the refitted
+#'       low-RoB analysis when one was performed, otherwise the original.}
+#'     \item{meta_full}{The original (all-studies) meta object.}
+#'     \item{rob_analysis_set}{\code{"all"} or \code{"low_only"} — the analysis
+#'       set BMJ Core GRADE 4 Fig 2 recommends.}
+#'     \item{rob_refit}{\code{TRUE} when the low-RoB refit was actually
+#'       performed.}
 #'   }
 #'
 #' @examples
 #' \dontrun{
 #' library(meta)
 #' m <- metabin(Ee, Ne, Ec, Nc, studlab = study, data = Olkin1995, sm = "RR")
+#' # threshold_type defaults to "mid", which requires a threshold (MID).
 #' g <- grade_meta(m, study_design = "RCT", rob = "some",
 #'                 rob_rationale = "RoB2 consensus: some concerns from missing outcome data",
+#'                 threshold = 1.2, threshold_scale = "ratio",
 #'                 outcome_name = "Mortality")
 #' print(g)
+#' print(g$rating_target)
 #' sof_table(g)
+#'
+#' # Rating certainty in a true underlying effect instead (null threshold).
+#' g_null <- grade_meta(m, threshold_type = "null", outcome_name = "Mortality")
 #' }
 #'
 #' @export
@@ -221,11 +488,17 @@ grade_meta <- function(meta_obj,
                        study_design                     = c("RCT", "obs"),
                        rob                              = NULL,
                        rob_rationale                    = NULL,
-                       rob_dominant_threshold           = 0.60,
+                       rob_some_concerns                = c("low", "high"),
+                       rob_overrides                    = NULL,
+                       rob_override_rationale           = NULL,
+                       rob_dominant_threshold           = 0.55,
+                       rob_refit                        = TRUE,
                        rob_inflation_threshold          = 0.10,
                        small_values                     = NULL,
-                       indirectness                     = "no",
+                       indirectness                     = NULL,
+                       indirectness_dominant_threshold  = 0.55,
                        indirectness_rationale           = NULL,
+                       indirectness_subdomains          = NULL,
                        inconsistency                    = NULL,
                        inconsistency_rationale          = NULL,
                        inconsistency_ci_diff            = NULL,
@@ -233,9 +506,13 @@ grade_meta <- function(meta_obj,
                        inconsistency_subgroup_explained = NULL,
                        imprecision                      = NULL,
                        imprecision_rationale            = NULL,
+                       threshold_type                   = c("mid", "null"),
                        threshold                        = NULL,
                        threshold_scale                  = "auto",
                        threshold_baseline               = NULL,
+                       rating_target                    = NULL,
+                       rating_target_rationale          = NULL,
+                       require_threshold                = TRUE,
                        outcome_name                     = NULL,
                        outcome_type                     = c("relative", "absolute"),
                        ois_events                       = NULL,
@@ -244,6 +521,7 @@ grade_meta <- function(meta_obj,
                        ois_beta                         = 0.20,
                        ois_p0                           = NULL,
                        ois_p1                           = NULL,
+                       ois_rrr                          = 0.20,
                        ois_delta                        = NULL,
                        ois_sd                           = NULL,
                        baseline_risk                    = NULL,
@@ -257,14 +535,39 @@ grade_meta <- function(meta_obj,
   if (!inherits(meta_obj, "meta")) {
     rlang::abort("meta_obj must be an object of class 'meta' (from the {meta} package).")
   }
-  study_design <- match.arg(study_design)
-  outcome_type <- match.arg(outcome_type)
+  study_design      <- match.arg(study_design)
+  outcome_type      <- match.arg(outcome_type)
+  threshold_type    <- match.arg(threshold_type)
+  # Validated by .check_rob_some_concerns() rather than match.arg() so that a
+  # bad value gets the message explaining what the setting does.
+  rob_some_concerns <- .check_rob_some_concerns(
+    if (length(rob_some_concerns) > 1L) rob_some_concerns[1] else rob_some_concerns
+  )
+
+  # --- Core GRADE 5 Indirectness subdomains (PICO) ---
+  # With a subdomain table the domain judgment defaults to the worst case, and
+  # `indirectness` becomes an optional manual override. "No judgment supplied"
+  # is therefore encoded as NULL rather than detected with missing(): callers
+  # that always pass every argument (do.call(), the Shiny UI) would otherwise
+  # have their pass-through of the old "no" default read as an override.
+  # assess_indirectness() maps NULL back to "no" when no subdomains are given,
+  # so behaviour without a subdomain table is unchanged.
+  indirectness_sub_tbl <-
+    .normalize_indirectness_subdomains(indirectness_subdomains)
+
+  # --- Core GRADE 2 Fig 2 step 1: the chosen threshold must be explicit ---
+  # "mid" means importance is being judged, which is impossible without a MID.
+  .check_threshold_type_gate(meta_obj, threshold_type, threshold,
+                             require_threshold)
 
   # --- starting certainty ---
   start_score     <- if (study_design == "RCT") 4L else 2L
   starting_quality <- score_to_certainty(start_score)
 
   # --- resolve Threshold to TE scale (used by RoB, Inconsistency, Imprecision) ---
+  # `meta_full` is the all-studies analysis; `meta_obj` is rebound below to
+  # the refitted low-RoB analysis when Core GRADE 4 Fig 2 calls for one.
+  meta_full          <- meta_obj
   threshold_resolved <- threshold_to_te_scale(
     threshold, threshold_scale, meta_obj$sm,
     threshold_baseline = threshold_baseline,
@@ -276,24 +579,100 @@ grade_meta <- function(meta_obj,
   threshold_note     <- threshold_resolved$threshold_note
   threshold_p0       <- threshold_resolved$threshold_baseline
 
-  # --- domain assessments ---
+  # --- Risk of bias first (Core GRADE 4 Fig 2) ---
+  # RoB is assessed on the full analysis and may hand back the recommendation
+  # to restrict the evidence to low-RoB studies. Everything downstream (rating
+  # target, the other domains, baseline risk, SoF) then works from the
+  # restricted analysis, so RoB has to run before them.
   d_rob   <- assess_rob(rob, meta_obj,
+                        rob_some_concerns       = rob_some_concerns,
+                        rob_overrides           = rob_overrides,
+                        rob_override_rationale  = rob_override_rationale,
                         rob_dominant_threshold  = rob_dominant_threshold,
                         rob_inflation_threshold = rob_inflation_threshold,
                         small_values            = small_values,
                         threshold_internal      = threshold_internal,
                         rationale               = rob_rationale)
+  rob_analysis_set <- attr(d_rob, "analysis_set") %||% "all"
+  rob_high_idx     <- attr(d_rob, "high_idx")
 
-  d_indir <- assess_indirectness(indirectness, meta_obj,
-                                 rationale = indirectness_rationale)
+  # The RoB domain note is written against the full analysis, so it keeps the
+  # threshold note that was resolved above even if an ARD threshold is
+  # re-resolved after the refit.
+  if (!is.null(threshold_note)) {
+    d_rob <- .append_domain_note(d_rob, threshold_note)
+  }
 
+  # --- act on the "use low risk of bias studies only" leaf ---
+  refit_done <- FALSE
+  if (identical(rob_analysis_set, "low_only") && isTRUE(rob_refit)) {
+    refit_res  <- .refit_low_rob(meta_obj, rob_high_idx)
+    meta_obj   <- refit_res$meta
+    refit_done <- isTRUE(refit_res$refit)
+    d_rob      <- .append_domain_note(d_rob, refit_res$note)
+
+    # An absolute (ARD) threshold is anchored to the pooled control-arm risk,
+    # which the restricted analysis changes; re-resolve it so the downstream
+    # domains judge against the right equivalent ratio.
+    if (refit_done && identical(threshold_kind, "ard")) {
+      threshold_resolved <- threshold_to_te_scale(
+        threshold, threshold_scale, meta_obj$sm,
+        threshold_baseline = threshold_baseline,
+        meta_obj           = meta_obj
+      )
+      threshold_internal <- threshold_resolved$threshold_internal
+      threshold_kind     <- threshold_resolved$threshold_kind
+      threshold_ard      <- threshold_resolved$threshold_ard
+      threshold_note     <- threshold_resolved$threshold_note
+      threshold_p0       <- threshold_resolved$threshold_baseline
+      d_rob <- .append_domain_note(d_rob, paste0(
+        "Absolute (ARD) threshold re-resolved on the restricted analysis ",
+        "because the pooled baseline risk changed."
+      ))
+    }
+  } else if (identical(rob_analysis_set, "low_only")) {
+    d_rob <- .append_domain_note(d_rob, paste0(
+      "rob_refit = FALSE: the recommendation to use low risk of bias studies ",
+      "only is reported but not applied; the pooled estimate still includes ",
+      "all studies."
+    ))
+  }
+
+  # --- Core GRADE 2 Fig 2 steps 2-3: target of the certainty rating ---
+  # Derived from the point estimate of the analysis actually being rated, so
+  # this must sit after the refit and before the Imprecision domain (which
+  # consumes target_info$threshold_for_imprecision).
+  auto_target <- .derive_rating_target(
+    te_point           = .pooled_te(meta_obj),
+    threshold_internal = threshold_internal,
+    threshold_type     = threshold_type,
+    sm                 = meta_obj$sm,
+    threshold_kind     = threshold_kind
+  )
+  target_info <- .resolve_rating_target(rating_target, rating_target_rationale,
+                                        auto_target, threshold_internal)
+
+  # --- remaining domain assessments (on the possibly refitted analysis) ---
+  d_indir <- assess_indirectness(
+    indirectness,
+    meta_obj,
+    rationale          = indirectness_rationale,
+    subdomains         = indirectness_sub_tbl,
+    dominant_threshold = indirectness_dominant_threshold
+  )
+
+  # Inconsistency evaluates point estimates "in relation to chosen threshold"
+  # (Core GRADE 3 Fig 2), which is the same threshold the rating target
+  # resolved for Imprecision -- +/-MID, or the null when the target is a
+  # non-null effect. Passing the raw MID here instead (pre-v0.5) let the two
+  # domains judge against different boundaries.
   d_incon <- assess_inconsistency(
     meta_obj,
     inconsistency                    = inconsistency,
     inconsistency_ci_diff            = inconsistency_ci_diff,
     inconsistency_threshold_side     = inconsistency_threshold_side,
     inconsistency_subgroup_explained = inconsistency_subgroup_explained,
-    threshold_internal               = threshold_internal,
+    threshold_chosen                 = target_info$threshold_for_imprecision,
     rationale                        = inconsistency_rationale
   )
 
@@ -327,26 +706,32 @@ grade_meta <- function(meta_obj,
       ois_beta           = ois_beta,
       ois_p0             = ois_p0,
       ois_p1             = ois_p1,
+      ois_rrr            = ois_rrr,
       ois_delta          = ois_delta,
       ois_sd             = ois_sd,
       threshold_internal = threshold_internal,
       threshold_kind     = threshold_kind,
       threshold_ard      = threshold_ard,
-      threshold_p0       = threshold_p0
+      threshold_p0       = threshold_p0,
+      rating_target      = target_info$target,
+      threshold_type     = threshold_type,
+      threshold_for_imprecision = target_info$threshold_for_imprecision
     )
   }
 
+  # Record how the rating target was chosen in the Imprecision notes: the
+  # target decides which threshold Fig 4 evaluates the CI against, so the two
+  # must be auditable together (and the note then propagates to
+  # evidence_profile / grade_report / export_bundle).
+  d_impre$notes <- ifelse(is.na(d_impre$notes), target_info$note,
+                          paste0(d_impre$notes, " | ", target_info$note))
+
   # Absolute-threshold conversion note: surface it in every Threshold-aware
-  # domain so the baseline-risk assumption is auditable per domain.
+  # domain so the baseline-risk assumption is auditable per domain. (Risk of
+  # bias already carries the pre-refit note, appended above.)
   if (!is.null(threshold_note)) {
-    append_threshold_note <- function(d) {
-      d$notes <- ifelse(is.na(d$notes), threshold_note,
-                        paste0(d$notes, " | ", threshold_note))
-      d
-    }
-    d_rob   <- append_threshold_note(d_rob)
-    d_incon <- append_threshold_note(d_incon)
-    d_impre <- append_threshold_note(d_impre)
+    d_incon <- .append_domain_note(d_incon, threshold_note)
+    d_impre <- .append_domain_note(d_impre, threshold_note)
   }
 
   d_pubias <- assess_pubias(
@@ -376,16 +761,35 @@ grade_meta <- function(meta_obj,
       outcome_name       = if (is.null(outcome_name)) "Outcome" else outcome_name,
       outcome_type       = outcome_type,
       baseline_risk      = .resolve_baseline_risk(baseline_risk, meta_obj, ois_p0),
+      threshold_type     = threshold_type,
+      rating_target      = target_info$target,
+      rating_target_note = target_info$note,
+      rating_target_auto = is.null(rating_target),
       threshold          = threshold,
       threshold_scale    = threshold_scale,
       threshold_internal = threshold_internal,
       threshold_ard      = threshold_ard,
       threshold_note     = threshold_note,
       threshold_baseline = threshold_p0,
-      meta               = meta_obj
+      # Kept at the top level (not as a list-column of domain_assessments,
+      # which must stay one row per domain with atomic columns).
+      indirectness_subdomains = indirectness_sub_tbl,
+      meta               = meta_obj,
+      meta_full          = meta_full,
+      rob_analysis_set   = rob_analysis_set,
+      rob_refit          = refit_done
     ),
     class = "pmatools"
   )
+}
+
+# Append a sentence to a domain row's notes, preserving the " | " separator
+# style (and the row's attributes, which assess_rob() uses to carry the
+# analysis-set recommendation).
+.append_domain_note <- function(d, note) {
+  if (is.null(note) || !nzchar(note)) return(d)
+  d$notes <- ifelse(is.na(d$notes), note, paste0(d$notes, " | ", note))
+  d
 }
 
 #' @export
@@ -394,6 +798,20 @@ print.pmatools <- function(x, ...) {
   cat(sprintf(" Outcome      : %s\n", x$outcome_name))
   cat(sprintf(" Study design : %s  (starting quality: %s)\n",
               x$study_design, x$starting_quality))
+  if (!is.null(x$rating_target)) {
+    target_label <- unname(RATING_TARGET_LABELS[x$rating_target])
+    if (is.na(target_label)) target_label <- x$rating_target
+    cat(sprintf(" Rating target: %s  (threshold: %s%s)\n",
+                target_label,
+                x$threshold_type %||% "?",
+                if (isTRUE(x$rating_target_auto)) ", auto" else ", manual"))
+  }
+  if (isTRUE(x$rob_refit)) {
+    cat(sprintf(" Analysis set : low risk of bias studies only (%d of %d studies)\n",
+                x$meta$k, x$meta_full$k))
+  } else if (identical(x$rob_analysis_set, "low_only")) {
+    cat(" Analysis set : all studies (Core GRADE 4 Fig 2 recommends low risk of bias studies only)\n")
+  }
   cat("\n Domain assessments:\n")
 
   d <- x$domain_assessments

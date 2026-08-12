@@ -3,6 +3,20 @@
 #' Generate a Summary of Findings (SoF) table as a flextable
 #'
 #' @param x A \code{pmatools} object (from \code{\link{grade_meta}}).
+#' @param style (v0.5) Table layout. \code{"gradepro"} (default) keeps the
+#'   GRADEpro-style layout. \code{"bmj"} switches to the BMJ Core GRADE
+#'   presentation: outcome and follow-up, participants and design, relative
+#'   effect, a spanning "Absolute effects (95% CI)" block (control /
+#'   intervention / difference), certainty with its rate-down reason, and a
+#'   plain language summary (Core GRADE 6 Box 1, which supersedes the earlier
+#'   Core GRADE 2 Table 1 guidance).
+#' @param follow_up (v0.5) Optional free-text time frame shown under the
+#'   outcome name in the \code{"bmj"} style, e.g.
+#'   \code{"Follow-up: longest, range 7.7-60 months"}. \code{NULL} (default)
+#'   omits the line. Ignored by the \code{"gradepro"} style.
+#' @param unit (v0.5) Optional unit for the Difference column of the
+#'   \code{"bmj"} style with continuous outcomes, e.g. \code{"days"}.
+#'   Ignored for relative effect measures and by the \code{"gradepro"} style.
 #' @param palette Color palette for the certainty cell.
 #'   \code{"pastel"} (default) uses soft backgrounds with colored text.
 #'   \code{"classic"} uses saturated backgrounds with white text.
@@ -28,6 +42,21 @@
 #'   before applying Chinn's formula so that a negative-is-better SMD (e.g.,
 #'   symptom severity reduction) yields OR > 1 in the dichotomised rate
 #'   columns. Only relevant when \code{convert_smd_to_or = TRUE}.
+#' @section Plain language summaries -- one adverb per certainty level:
+#' The \code{"bmj"} style adds a plain language summary column built from the
+#' Core GRADE 6 Box 1 statements. Box 1's qualifier list gives two adverbs per
+#' certainty level ("Moderate certainty: probably (likely) reduces, increases,
+#' or has little to no effect"; "Low certainty: may (possibly) reduce, ..."),
+#' but no summary of findings table in Core GRADE 6 prints both: Table 1 uses
+#' "may decrease mortality", Table 3 uses "possibly increases", and the Box 1
+#' MID example uses "probably has little to no important effect". pmatools
+#' therefore emits the \strong{first} word of each pair -- \code{"probably"}
+#' for Moderate and \code{"may"} for Low -- giving cells such as "Treatment
+#' probably results in an important increase in serious adverse events" and
+#' "Treatment may reduce mortality". This single-adverb rendering is a pmatools
+#' choice, not a quotation of the qualifier list; High and Very low certainty
+#' carry no qualifier and are unchanged.
+#'
 #' @param label_intervention,label_control Arm labels used in the
 #'   "Risk with ..." column headers (GRADEpro vocabulary), e.g.
 #'   \code{label_intervention = "CBT-I"}, \code{label_control = "placebo"}.
@@ -44,12 +73,17 @@
 #' sof_table(g, per = 100)
 #' sof_table(g, prediction = TRUE)
 #' sof_table(g, palette = "classic")
+#' sof_table(g, style = "bmj",
+#'           follow_up = "Follow-up: longest, range 7.7-60 months")
 #' flextable::save_as_docx(sof_table(g), path = "sof.docx")
 #' }
 #'
 #' @export
-sof_table <- function(x, palette = c("pastel", "classic"),
+sof_table <- function(x, style = c("gradepro", "bmj"),
+                      palette = c("pastel", "classic"),
                       per = 1000, prediction = FALSE,
+                      follow_up = NULL,
+                      unit      = NULL,
                       convert_smd_to_or = FALSE,
                       baseline_risk     = NULL,
                       threshold_label   = NULL,
@@ -60,6 +94,7 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   if (!inherits(x, "pmatools")) {
     rlang::abort("x must be a pmatools object from grade_meta().")
   }
+  style   <- match.arg(style)
   palette <- match.arg(palette)
   pal     <- CERTAINTY_PALETTES[[palette]]
 
@@ -87,17 +122,39 @@ sof_table <- function(x, palette = c("pastel", "classic"),
 
   k           <- meta_obj$k
   n_total     <- .total_n(meta_obj)
-  cer_str     <- .format_cer(baseline_for_display, per)
+  # Number formatting differs by style: GRADEpro keeps "306 per 1,000" and a
+  # semicolon-separated CI, BMJ prints "306 per 1000" with a "to" separator
+  # throughout (see .bmj_number_format()).
+  nf          <- .bmj_number_format(style)
+  cer_str     <- .format_cer(baseline_for_display, per, big_mark = nf$big_mark)
   ier_str     <- if (chinn_active) {
-    .format_ier_chinn(meta_obj, baseline_risk, per, invert = isTRUE(chinn_invert))
+    .format_ier_chinn(meta_obj, baseline_risk, per, invert = isTRUE(chinn_invert),
+                      big_mark = nf$big_mark, ci_sep = nf$ci_sep)
   } else {
-    .format_ier(meta_obj, x$baseline_risk, per)
+    .format_ier(meta_obj, x$baseline_risk, per,
+                big_mark = nf$big_mark, ci_sep = nf$ci_sep)
   }
   # Asterisk-mark CER/EER when Chinn dichotomisation is active
   if (chinn_active) {
     if (cer_str != "-") cer_str <- paste0(cer_str, " *")
     if (ier_str != "-") ier_str <- paste0(ier_str, " *")
   }
+
+  # BMJ Core GRADE presentation is a different table shape entirely, so it is
+  # built by its own routine; everything below stays the GRADEpro layout.
+  if (identical(style, "bmj")) {
+    return(.sof_table_bmj(
+      x, pal = pal, per = per, prediction = prediction,
+      cer_str = cer_str, ier_str = ier_str,
+      baseline_for_display = baseline_for_display,
+      follow_up = follow_up, unit = unit,
+      chinn_active = chinn_active, chinn_invert = chinn_invert,
+      threshold_label = threshold_label,
+      label_intervention = label_intervention,
+      label_control      = label_control
+    ))
+  }
+
   effect_str  <- .format_effect(meta_obj, x$outcome_type,
                                 prediction = prediction)
 
@@ -167,6 +224,15 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   )
   ft <- flextable::add_footer_lines(ft, values = base_note)
 
+  # Risk-of-bias analysis set (Core GRADE 4 Fig 2). A refit silently changes
+  # every number in this table, so it must always be stated; the unapplied
+  # recommendation is stated too, so the reader knows the shown estimate is
+  # not the one the flowchart points at.
+  rob_set_note <- .rob_analysis_set_note(x)
+  if (!is.null(rob_set_note)) {
+    ft <- flextable::add_footer_lines(ft, values = rob_set_note)
+  }
+
   # Publication bias not formally assessed -> prominent qualitative-judgment
   # footnote (see domain_pubias.R)
   pubias_qual_note <- .pubias_qualitative_note(x)
@@ -191,6 +257,11 @@ sof_table <- function(x, palette = c("pastel", "classic"),
       "* Continuous outcome dichotomised via Chinn's formula ",
       "(log OR = SMD x pi / sqrt(3))", invert_str,
       ". Control event rate user-specified.", threshold_str,
+      " This is NOT Core GRADE 6's option 2, which assumes a normal ",
+      "distribution and computes, per study and before pooling, the ",
+      "proportion in each arm improving by more than the MID; Chinn's formula ",
+      "assumes a logistic latent variable, uses no MID and is applied to the ",
+      "pooled SMD. The two do not generally agree.",
       " Recommended reading: ",
       "Chinn S. Stat Med 2000;19:3127-3131. ",
       "doi:10.1002/1097-0258(20001130)19:22<3127::aid-sim784>3.0.co;2-m. ",
@@ -210,6 +281,26 @@ sof_table <- function(x, palette = c("pastel", "classic"),
 # --------------------------------------------------------------------------
 # Helpers (shared with grade_table.R via package namespace)
 # --------------------------------------------------------------------------
+
+# Footer sentence describing which studies the effect estimate rests on.
+# Returns NULL for the ordinary "all studies" case.
+.rob_analysis_set_note <- function(x) {
+  if (isTRUE(x$rob_refit)) {
+    k_low  <- x$meta$k
+    k_full <- x$meta_full$k %||% k_low
+    return(sprintf(paste0(
+      "Effect estimate restricted to low risk of bias studies (n = %d of %d) ",
+      "per Core GRADE 4 Fig 2."), k_low, k_full))
+  }
+  if (identical(x$rob_analysis_set, "low_only")) {
+    return(paste0(
+      "Core GRADE 4 Fig 2 recommends restricting the analysis to low risk of ",
+      "bias studies; the effect estimate shown includes all studies ",
+      "(rob_refit = FALSE)."
+    ))
+  }
+  NULL
+}
 
 # Combined "No of participants (studies)" cell, GRADEpro style:
 # "1,234 (12 RCTs)"; falls back to "(12 studies)" when the study design
@@ -279,7 +370,53 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   out
 }
 
-.format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
+#' Format a pooled effect estimate as a display string
+#'
+#' Renders the pooled estimate of a \code{meta} object the way pmatools prints
+#' it in a Summary of Findings table: the effect measure, the point estimate and
+#' its 95 percent confidence interval, back-transformed out of the log scale for
+#' ratio measures. This is the exact string \code{\link{sof_table}},
+#' \code{\link{grade_table}} and \code{\link{grade_report}} put in their Effect
+#' column.
+#'
+#' Exported so that a caller building its own view of the same analysis -- an
+#' interactive results panel, a custom table, a plot annotation -- can show the
+#' effect in the same wording and to the same precision as the pmatools tables,
+#' instead of re-deriving it and drifting out of step (choosing the wrong model
+#' when only one of random/common was fitted, or forgetting to exponentiate).
+#'
+#' Which model is read follows the object: the random-effects pool when
+#' \code{meta_obj$random} is \code{TRUE}, otherwise the common-effect pool, with
+#' a fallback to the other model when the preferred one was not fitted.
+#'
+#' @param meta_obj A \code{meta} object, e.g. from \code{\link{run_ma}} or
+#'   \code{\link[meta]{metabin}} / \code{\link[meta]{metacont}}.
+#' @param outcome_type \code{"relative"} for ratio measures (RR, OR, HR, IRR),
+#'   whose estimate and CI are exponentiated before printing, or
+#'   \code{"absolute"} for measures already on their natural scale (MD, SMD,
+#'   RD). Matches the \code{outcome_type} argument of \code{\link{grade_meta}}.
+#' @param prediction Logical. When \code{TRUE} and the meta object carries a
+#'   prediction interval, a second line \code{"PrI (lo; hi)"} is appended,
+#'   separated by a newline. Default \code{FALSE}.
+#'
+#' @return A single string such as \code{"RR 0.55 (0.38; 0.79)"}, or
+#'   \code{"NR"} when the object has no usable pooled estimate. With
+#'   \code{prediction = TRUE} the string may contain an embedded newline.
+#'
+#' @seealso \code{\link{sof_table}}, \code{\link{grade_table}}.
+#'
+#' @examples
+#' m <- meta::metabin(
+#'   event.e = c(10, 12, 8), n.e = c(50, 60, 40),
+#'   event.c = c(20, 22, 18), n.c = c(50, 60, 40),
+#'   studlab = c("Trial 1", "Trial 2", "Trial 3"),
+#'   sm = "RR", random = TRUE, prediction = TRUE
+#' )
+#' format_effect(m, outcome_type = "relative")
+#' cat(format_effect(m, outcome_type = "relative", prediction = TRUE), "\n")
+#'
+#' @export
+format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
   sm  <- meta_obj$sm
   pooled <- .pooled_estimate(meta_obj)
   est <- pooled$est
@@ -313,15 +450,33 @@ sof_table <- function(x, palette = c("pastel", "classic"),
   s
 }
 
+# Internal alias kept so existing call sites (sof_table.R, grade_table.R,
+# grade_report.R) do not move.
+.format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
+  format_effect(meta_obj, outcome_type, prediction = prediction)
+}
+
+# Denominator label for the "per N" phrasing. GRADEpro keeps the thousands
+# separator ("per 1,000"); BMJ prints it bare ("per 1000"), so callers pass
+# big_mark = FALSE. Defaults reproduce the GRADEpro output exactly.
+.per_label <- function(per, big_mark = TRUE) {
+  if (isTRUE(big_mark)) {
+    format(per, big.mark = ",", scientific = FALSE)
+  } else {
+    format(per, scientific = FALSE, trim = TRUE)
+  }
+}
+
 # Control event rate: baseline_risk displayed per 'per' units (no CI)
-.format_cer <- function(baseline_risk, per = 1000) {
+.format_cer <- function(baseline_risk, per = 1000, big_mark = TRUE) {
   if (is.null(baseline_risk)) return("-")
-  per_str <- format(per, big.mark = ",", scientific = FALSE)
+  per_str <- .per_label(per, big_mark)
   sprintf("%d per %s", round(baseline_risk * per), per_str)
 }
 
 # Experimental (intervention) event rate: derived from baseline + relative effect
-.format_ier <- function(meta_obj, baseline_risk, per = 1000) {
+.format_ier <- function(meta_obj, baseline_risk, per = 1000,
+                        big_mark = TRUE, ci_sep = "; ") {
   if (is.null(baseline_risk)) return("-")
   sm <- meta_obj$sm
   if (is.null(sm) || !sm %in% c("RR", "OR", "HR", "IRR")) return("-")
@@ -335,17 +490,18 @@ sof_table <- function(x, palette = c("pastel", "classic"),
 
   if (is.null(p1_est)) return("-")
 
-  per_str <- format(per, big.mark = ",", scientific = FALSE)
-  sprintf("%d per %s\n(%d; %d)",
+  per_str <- .per_label(per, big_mark)
+  sprintf("%d per %s\n(%d%s%d)",
           round(p1_est * per), per_str,
-          round(p1_lo  * per),
+          round(p1_lo  * per), ci_sep,
           round(p1_hi  * per))
 }
 
 # Experimental rate via Chinn (SMD/MD -> OR -> p1)
 # `invert = TRUE` flips the SMD sign before applying the formula, so a
 # negative-is-better SMD (e.g., depression severity reduction) yields OR > 1.
-.format_ier_chinn <- function(meta_obj, baseline_risk, per = 1000, invert = FALSE) {
+.format_ier_chinn <- function(meta_obj, baseline_risk, per = 1000, invert = FALSE,
+                              big_mark = TRUE, ci_sep = "; ") {
   if (is.null(baseline_risk)) return("-")
   pooled <- .pooled_estimate(meta_obj)
   est <- pooled$est
@@ -373,10 +529,10 @@ sof_table <- function(x, palette = c("pastel", "classic"),
 
   if (is.null(p1_est)) return("-")
 
-  per_str <- format(per, big.mark = ",", scientific = FALSE)
-  sprintf("%d per %s\n(%d; %d)",
+  per_str <- .per_label(per, big_mark)
+  sprintf("%d per %s\n(%d%s%d)",
           round(p1_est * per), per_str,
-          round(p1_lo  * per),
+          round(p1_lo  * per), ci_sep,
           round(p1_hi  * per))
 }
 
