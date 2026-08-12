@@ -44,8 +44,16 @@ ui <- bslib::page_fluid(
   ),
   htmltools::tags$head(
     htmltools::includeCSS("www/shadcn.css"),
+    # 埋め込み親ページ（yukifurukawa.jp/pmatools/）へ中身の高さを通知する。
+    # www/ はアプリのルートで配信されるので src はファイル名だけでよい。
+    htmltools::tags$script(src = "embed-height.js"),
+    # iframe が中身の実高まで伸びると内部にスクロール余地が無くなり
+    # window.scrollTo が事実上効かないので、埋め込み時は親にも通知する。
     htmltools::tags$script(htmltools::HTML(
-      "Shiny.addCustomMessageHandler('scroll_top', function(_msg){ window.scrollTo({top:0, behavior:'smooth'}); });
+      "Shiny.addCustomMessageHandler('scroll_top', function(_msg){
+         window.scrollTo({top:0, behavior:'smooth'});
+         if (typeof window.pmaNotifyScrollTop === 'function') { window.pmaNotifyScrollTop(); }
+       });
        Shiny.addCustomMessageHandler('copy_to_clipboard', function(text){
          if (navigator.clipboard && navigator.clipboard.writeText) {
            navigator.clipboard.writeText(text).then(function(){
