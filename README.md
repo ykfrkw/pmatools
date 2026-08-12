@@ -258,7 +258,10 @@ Studies are first folded into a binary low / high classification
 (`rob_some_concerns` decides which side "some concerns" lands on), then the
 figure's first node asks whether the high-RoB studies **dominate** the
 evidence — whether they carry at least `rob_dominant_threshold` (default
-`0.60`, compared with `>=`) of the inverse-variance weight.
+`0.55`, compared with `>=`) of the inverse-variance weight. The Fig 2 footnote
+names two candidate thresholds — ">65% weight or ≥55% weight = possibly
+dominating" — and pmatools defaults to the conservative one; pass `0.65` for
+the stricter reading.
 
 ```
 w_high >= rob_dominant_threshold ?
@@ -348,9 +351,24 @@ zone-and-magnitude comparison subsumed it. That decision is **retracted** in
 the current development version: the gate is the first decision node of Core
 GRADE 4 Fig 2, and the two branches beneath it are not interchangeable — one
 can rate down, the other only chooses the analysis set. The argument is live
-again with its original default of `0.60`. (The CI-overlap and CI-significance
+again, with a default of `0.55` — one of the two thresholds the Fig 2 footnote
+names (the earlier `0.60` matched neither). (The CI-overlap and CI-significance
 branches removed in v0.3.1 stay removed; they really are subsumed by the
 zone comparison.)
+
+**Substantial difference is judged on magnitude alone.** On the non-dominated
+branch the figure asks "whether low and high risk of bias studies suggest
+similar or **substantially different magnitudes of effect**" — a symmetric
+question. The `small_values` direction gate therefore applies only to the
+dominated branch, whose node is explicitly "check direction of bias". A body of
+evidence whose *low*-RoB studies show the larger effect is a substantial
+difference too.
+
+**No automatic two-level downgrade.** Every leaf of Fig 2 reads "rate down" /
+"do not rate down", and Core GRADE 4 describes no two-level risk-of-bias
+downgrade. The automated flowchart therefore stops at `some_concerns` (−1),
+including the sign-flip rule and the all-studies-high-RoB case. Use the scalar
+`rob = "serious"` (with `rob_rationale`) when −2 is genuinely warranted.
 
 **Study-level overrides.** A single study's classification can be corrected
 without rebuilding the vector. Both arguments are named character vectors
@@ -423,9 +441,25 @@ AUTO Step 1: Is there important heterogeneity?
           meta$TE is on null = 0 scale for all measures
           (log OR/RR/HR for relative; raw MD/SMD for absolute)
           ≥ 75% on same side → "majority_one_side" → judgment = "some_concerns"
-          < 75% on same side → "opposite_sides"    → judgment = "serious"
+          < 75% on same side → "opposite_sides"    → judgment = "some_concerns"
           (subgroup explanation cannot be checked automatically)
 ```
+
+**The chosen threshold is shared with Imprecision (v0.5.1).** Core GRADE 3
+Fig 2 node 2 reads "Evaluate point estimates of studies **in relation to
+chosen threshold**", and its Fig 4 example shows the verdict reversing with
+that choice. The zone classification therefore uses the same threshold the
+rating target resolved for Imprecision: ±MID for an important-effect or
+little-to-no-difference target, the null for a non-null-effect target. Before
+v0.5.1 this domain received the raw MID even when Imprecision was rating
+against the null.
+
+**No automated two-level downgrade (v0.5.1).** Core GRADE 3: "A final issue is
+consideration of rating down twice for inconsistency. Although this is a
+theoretical possibility, we have found compelling reason to rate down twice for
+inconsistency sufficiently unusual that it need not concern users of Core
+GRADE." Every automated and flowchart path now stops at `some_concerns` (−1);
+−2 requires the scalar override below.
 
 **Manual flowchart (for full BMJ Core GRADE 3 compliance):**
 
@@ -439,7 +473,7 @@ grade_meta(m,
   inconsistency_ci_diff            = "yes",
   inconsistency_threshold_side     = "opposite_sides",
   inconsistency_subgroup_explained = "no")
-# → judgment = "serious"
+# → judgment = "some_concerns" (−1; capped, see above)
 ```
 
 **Supplementary statistics** (always computed and noted, never the primary driver):
@@ -467,6 +501,30 @@ Cannot be automated — requires domain expertise.
 grade_meta(m, indirectness = "no")                  # scalar
 grade_meta(m, indirectness = indirectness_vec)       # per-study vector
 ```
+
+**Per-study input is aggregated by weight share, not worst case (v0.5.1).**
+Indirectness is a judgment about the *body* of evidence, and Core GRADE 5
+frames it that way: "if Core GRADE users are interested in effects in elderly
+people but **all or almost all** evidence comes from younger people ... they
+lack the data to test whether effects differ across these variables." A
+worst-case fold rated the whole body of evidence down when one study out of
+eighteen was indirect, which is the opposite of "all or almost all". A vector
+or column name is now resolved as:
+
+```
+w_serious >= indirectness_dominant_threshold  → "serious"       (-2)
+w_any     >= indirectness_dominant_threshold  → "some_concerns" (-1)
+otherwise                                     → "no"
+```
+
+where `w_serious` / `w_any` are the inverse-variance weight shares carried by
+the `"serious"` studies and by the `"some_concerns"` + `"serious"` studies (the
+count share is used, and flagged, when weights are unavailable). **The
+threshold has no basis in Core GRADE 5**, which gives no numeric
+operationalisation of "all or almost all"; the `0.55` default is a pmatools
+convention aligned with `rob_dominant_threshold`, and every aggregated domain
+note says so. The `indirectness_subdomains` table below keeps its worst-case
+fold — subdomains are facets of one judgment, not units of evidence.
 
 #### PICO subdomains (v0.5): `indirectness_subdomains`
 
@@ -562,7 +620,7 @@ Does the CI cross the chosen threshold?
   (the target of the rating decides which threshold — see §0 above)
 
 Yes -> rate down one level                                        (−1)
-       rate down two levels when the CI crosses BOTH thresholds   (−2)
+       rate down two levels when the CI crosses BOTH ±MID          (−2)
        (important benefit and important harm)
        -> sample size is NOT considered on this path
 
@@ -579,6 +637,24 @@ No  -> effect moderate       -> do not rate down                   (0)
                        N <  OIS         -> rate down one level    (−1)
 ```
 
+**The two-level branch applies on the null-threshold path too (v0.5.1).**
+Core GRADE 2: "The two considerations also apply to imprecision judgments when
+Core GRADE users choose the null as the threshold of interest. For example,
+consider a situation in which users rate their certainty in a benefit
+(threshold the null) but the CI also includes clearly important harm. The
+finding that the CI is consistent with both benefit and important harm
+motivates a plain language summary stating that the intervention 'may' result
+in a benefit, and rating down two levels for imprecision." So whenever a MID is
+available, the ±MID span is evaluated even when the −1/−0 decision is made
+against the null. Without a MID the two-level check is undecidable and the
+judgment stops at −1.
+
+**OIS is compared in participants (v0.5.1).** Fig 4 caption: "N=number of
+participants; OIS=optimal information size". The auto-computed binary OIS is a
+target sample size compared against `sum(n.e) + sum(n.c)`, not a target event
+count; the implied event count is still reported in the notes. Supplying
+`ois_events` explicitly keeps the event-based comparison.
+
 "Implausibly large" follows the paper's binary wording (relative risk
 reduction > 40% certainly, > 30% possibly). Core GRADE 2 does not define it
 for continuous outcomes; pmatools uses Cohen's convention (standardized
@@ -589,17 +665,23 @@ The domain notes always record which Fig 4 path produced the judgment.
 **OIS specification options:**
 
 ```r
-# Option 1: provide target event count directly (binary)
+# Option 1: provide target event count directly (binary; event-based comparison)
 grade_meta(m, ois_events = 400)
 
-# Option 2: provide target total N directly (continuous)
+# Option 2: provide target total N directly
 grade_meta(m, ois_n = 300)
 
 # Option 3: auto-calculate from event rates (binary)
 # Formula: n_arm = (z_α/2 + z_β)² × [p0(1−p0) + p1(1−p1)] / (p0−p1)²
 grade_meta(m, ois_p0 = 0.25, ois_p1 = 0.40, ois_alpha = 0.05, ois_beta = 0.20)
 
-# Option 4: auto-calculate from Threshold/SD (continuous)
+# Option 3b (default, binary): p1 comes from a modest relative risk reduction.
+# Core GRADE 2: "the control group event rate (chosen from the context), and a
+# modest relative risk reduction, typically 20% or 25%". p0 defaults to the
+# pooled control-arm rate; the MID is NOT used for binary OIS.
+grade_meta(m, ois_rrr = 0.25)          # ois_p1 = ois_p0 × (1 − 0.25)
+
+# Option 4: auto-calculate from Threshold/SD (continuous — the MID is used here)
 # Formula: n_arm = 2 × (z_α/2 + z_β)² × σ² / δ²
 grade_meta(m, ois_delta = 3, ois_sd = 7)
 ```
@@ -609,22 +691,21 @@ grade_meta(m, ois_delta = 3, ois_sd = 7)
 ### 5. Publication Bias (BMJ Core GRADE 4, Fig 5 flowchart)
 
 ```
-Top-level structural rule-out:
-  pubias_registry_complete = "yes"
-    → judgment = "no" (stop; pre-registration coverage rules out pub bias)
-
 Q1: Are most or all studies small AND industry-sponsored?
   pubias_small_industry = "yes"        → judgment = "some_concerns" (-1; stop)
   pubias_small_industry = "no" / NULL  → continue
+
+[After Q1] pmatools convenience input (NOT a node of Fig 5):
+  pubias_registry_complete = "yes"
+    → judgment = "no" (stop; the user asserts complete pre-registration coverage)
 
 Q2: Is statistical analysis feasible (k ≥ 10)?
   YES → Q3
   NO  → Q4
 
-Q3 (k ≥ 10): Visual asymmetry / Egger's test (2-tier)
+Q3 (k ≥ 10): Visual asymmetry / Egger's test
   pubias_funnel_asymmetry = NULL  → run Egger's test automatically
-    Egger p < 0.01           → judgment = "serious"        (-2)
-    0.01 ≤ Egger p < 0.05    → judgment = "some_concerns"  (-1)
+    Egger p < 0.05           → judgment = "some_concerns"  (-1)
     Egger p ≥ 0.05           → judgment = "no"
   pubias_funnel_asymmetry = "yes"  → judgment = "some_concerns" (-1; visual override)
   pubias_funnel_asymmetry = "no"   → judgment = "no"             (visual override)
@@ -634,11 +715,24 @@ Q4 (k < 10): Documentation of unpublished studies
   pubias_unpublished = "no" / NULL  → judgment = "no" (NULL: assumed "no" with warning)
 ```
 
+**Registry rule-out is evaluated after Q1 (v0.5.1).** Core GRADE 4 Fig 5 has
+exactly four decision nodes and no structural rule-out; its only registry node
+is Q4. Evaluating `pubias_registry_complete` first, as pmatools did up to
+v0.5.0, let a body of small industry-sponsored trials escape the Q1 downgrade.
+The domain note now states that the rule-out is the user's assertion rather
+than a figure node.
+
+**No two-level publication-bias downgrade, and no p-value in the source
+(v0.5.1).** The `p < 0.01 → serious (-2)` tier is gone. Fig 5's asymmetry node
+asks qualitatively whether the evidence "strongly suggests publication bias"
+and names no threshold; the surviving `p < 0.05` cut-off is a pmatools
+operational convention and is labelled as such in the domain notes.
+
 ```r
 grade_meta(m,
   pubias_registry_complete = "no",   # default; "yes" if all trials pre-registered
   pubias_small_industry    = "no",
-  pubias_funnel_asymmetry  = NULL,   # auto 2-tier Egger (if k ≥ 10)
+  pubias_funnel_asymmetry  = NULL,   # auto Egger (if k ≥ 10)
   pubias_unpublished       = NULL)   # assumed "no" (if k < 10)
 ```
 
@@ -648,7 +742,7 @@ the auto Egger judgment from visual inspection can pass
 `pubias_funnel_asymmetry = "yes"` or `"no"`.
 
 **Trim-and-fill diagnostics.** Trim-and-fill no longer drives the certainty
-judgment (the 2-tier Egger rule supersedes the previous sign-flip escalation),
+judgment (the Egger asymmetry check supersedes the previous sign-flip escalation),
 but the imputed studies and adjusted random-effects summary are still
 informative. They are available through `plot_trimfill_forest(g)` for display
 in the Reporting bias tab of the companion Shiny app.
@@ -759,7 +853,7 @@ g_response <- grade_meta(
   meta_obj               = m_response,
   study_design           = "RCT",
   rob                    = unname(rob_map[df$rob_d]),
-  rob_dominant_threshold = 0.60,
+  rob_dominant_threshold = 0.55,
   small_values           = "undesirable",  # large OR = more response = desirable
   indirectness           = "no",
   ## Core GRADE 2 entry gate (v0.5): threshold_type defaults to "mid", so a
@@ -1219,13 +1313,14 @@ grade_meta(
   rob_some_concerns      = "low",  # fold "some concerns" into "low" | "high"
   rob_overrides          = NULL,   # named chr, keyed on studlab
   rob_override_rationale = NULL,   # named chr, same keys
-  rob_dominant_threshold = 0.60,   # weight share at/above which evidence is "dominated"
+  rob_dominant_threshold = 0.55,   # weight share at/above which evidence is "dominated"
   rob_refit              = TRUE,   # refit on low-RoB studies when Fig 2 says so
   rob_inflation_threshold = 0.10,  # relative inflation feeding the direction check
   small_values  = NULL,            # "undesirable" | "desirable" | NULL (conservative)
 
   ## Indirectness
   indirectness  = NULL,            # scalar | vector | column name; NULL = no concern
+  indirectness_dominant_threshold = 0.55,  # weight share for vector/column aggregation
   indirectness_rationale  = NULL,  # required for a scalar override
   indirectness_subdomains = NULL,  # PICO data.frame (Core GRADE 5, v0.5)
 
@@ -1245,7 +1340,8 @@ grade_meta(
   ois_alpha     = 0.05,            # type I error
   ois_beta      = 0.20,            # type II error (1 − power)
   ois_p0        = NULL,            # control event rate (binary)
-  ois_p1        = NULL,            # experimental event rate (binary)
+  ois_p1        = NULL,            # experimental event rate (binary); wins over ois_rrr
+  ois_rrr       = 0.20,            # binary: modest RRR the OIS is powered for (Core GRADE 2)
   ois_delta     = NULL,            # Threshold (continuous)
   ois_sd        = NULL,            # pooled SD (continuous)
 
@@ -1256,7 +1352,7 @@ grade_meta(
   pubias_small_industry   = NULL,  # "yes" | "no"
   pubias_funnel_asymmetry = NULL,  # "yes" | "no" | NULL (auto Egger, k ≥ 10)
   pubias_unpublished      = NULL,  # "yes" | "no" | NULL (k < 10)
-  pubias_registry_complete = NULL, # "yes" rules the domain out structurally
+  pubias_registry_complete = NULL, # "yes": user-asserted rule-out, applied after Q1
   pubias_rationale         = NULL, # required for a scalar override
 
   ## Labels

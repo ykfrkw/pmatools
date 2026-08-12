@@ -113,8 +113,13 @@ test_that("indirectness override with rationale succeeds and notes carry it", {
 })
 
 test_that("indirectness per-study vector (aggregation path) needs no rationale", {
+  # Updated (v0.5.1): the aggregation is now weight-share based, so a single
+  # indirect study out of three no longer rates the body of evidence down.
+  # Studies B and C carry 78% of the weight here, which does.
   m <- make_metabin_or()
-  g <- suppressWarnings(grade_meta(m, indirectness = c("no", "some_concerns", "no"), threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(
+    m, indirectness = c("no", "some_concerns", "some_concerns"),
+    threshold_type = "null"))
   row <- domain_row(g, "Indirectness")
   expect_equal(row$judgment, "some_concerns")
   expect_no_match(row$notes, "Manual override")

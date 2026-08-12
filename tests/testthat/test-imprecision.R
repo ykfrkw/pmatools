@@ -140,15 +140,77 @@ test_that("CI entirely beyond +Threshold -> no rate down (regression)", {
 })
 
 # --------------------------------------------------------------------------
+# Null threshold + CI spanning both MIDs -> rate down two levels
+#
+# Core GRADE 2 (p6), verbatim:
+#   "The two considerations also apply to imprecision judgments when Core GRADE
+#    users choose the null as the threshold of interest. For example, consider
+#    a situation in which users rate their certainty in a benefit (threshold
+#    the null) but the CI also includes clearly important harm. The finding
+#    that the CI is consistent with both benefit and important harm motivates a
+#    plain language summary stating that the intervention 'may' result in a
+#    benefit, and rating down two levels for imprecision."
+# --------------------------------------------------------------------------
+
+# RR ~ 1.32 with a CI of roughly [0.76, 2.30]: the point estimate is beyond a
+# MID of 1.20 (so the null-threshold target is a non-null effect) and the CI
+# spans both -MID and +MID.
+.make_spans_both_mids <- function() {
+  meta::metagen(TE = rep(log(1.32), 2), seTE = rep(0.40, 2),
+                studlab = c("A", "B"), sm = "RR", tau.preset = 0)
+}
+
+impre_row <- function(g) {
+  g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
+}
+
+test_that("null threshold + CI spanning both MIDs -> serious (-2)", {
+  g <- suppressWarnings(grade_meta(
+    .make_spans_both_mids(),
+    threshold_type = "null", threshold = 1.20, threshold_scale = "ratio"
+  ))
+  # The point estimate is beyond the MID, so the target is a non-null effect
+  # and the -1/-0 decision is made against the null...
+  expect_equal(g$rating_target, "non_null_effect")
+  row <- impre_row(g)
+  # ...but the CI also includes clearly important harm, so two levels.
+  expect_equal(row$judgment, "serious")
+  expect_equal(row$downgrade, -2L)
+  expect_match(row$notes, "crosses BOTH Thresholds", fixed = TRUE)
+  expect_match(row$notes, "null-threshold path", fixed = TRUE)
+})
+
+test_that("null threshold without a MID cannot reach -2 (two-level check undecidable)", {
+  g <- suppressWarnings(grade_meta(.make_spans_both_mids(),
+                                   threshold_type = "null"))
+  row <- impre_row(g)
+  expect_equal(row$judgment, "some_concerns")
+  expect_equal(row$downgrade, -1L)
+  expect_match(row$notes, "the null threshold", fixed = TRUE)
+})
+
+test_that("the MID threshold reaches -2 on the same data (both routes agree)", {
+  g <- suppressWarnings(grade_meta(.make_spans_both_mids(),
+                                   threshold = 1.20, threshold_scale = "ratio"))
+  row <- impre_row(g)
+  expect_equal(row$judgment, "serious")
+})
+
+# --------------------------------------------------------------------------
 # Combined behaviour
 # --------------------------------------------------------------------------
-test_that("OR-scale Threshold derives ois_p1 via odds (not RR approximation)", {
-  # When sm = "OR" and the user supplies a ratio-scale Threshold, the OIS
-  # auto-calc must convert Threshold -> p1 via the odds formula
-  #   p1 = (p0 * OR) / (1 - p0 + p0 * OR)
-  # rather than the RR-style p1 = p0 * exp(log OR), which diverges from
-  # the truth as p0 moves away from 0.
-  m <- metabin(
+# Rewritten (v0.5.1): the binary OIS no longer derives ois_p1 from the
+# Threshold at all (the odds-vs-RR conversion this test used to exercise is
+# gone). Core GRADE 2 p6: "For binary outcomes, these involve specifying ...
+# the control group event rate (chosen from the context), and a modest relative
+# risk reduction, typically 20% or 25%."
+.ois_p1_from_notes <- function(notes) {
+  m <- regmatches(notes, regexpr("ois_p1 = [0-9.]+", notes))
+  as.numeric(sub("ois_p1 = ", "", m))
+}
+
+.make_binary_ois_meta <- function() {
+  metabin(
     event.e = c(40, 45, 50),
     n.e     = c(100, 100, 100),
     event.c = c(50, 55, 60),
@@ -156,25 +218,85 @@ test_that("OR-scale Threshold derives ois_p1 via odds (not RR approximation)", {
     studlab = c("A", "B", "C"),
     sm = "OR", method = "Inverse", random = TRUE, common = FALSE
   )
-  # Control event rate ~ 0.55 - high enough that OR != RR materially.
-  # With Threshold = 0.75 (OR scale), odds-formula ois_p1 ~= 0.478;
-  # RR approximation would give p0*0.75 ~= 0.413. Notes should reflect
-  # the odds-formula value.
+}
+
+test_that("binary ois_p1 comes from ois_rrr (default 20%), not the Threshold", {
+  m   <- .make_binary_ois_meta()
+  cer <- (50 + 55 + 60) / (3 * 100)   # control-arm pooled rate = 0.55
   g <- suppressWarnings(grade_meta(m, threshold = 0.75, threshold_scale = "ratio"))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
-  m_ois_p1 <- regmatches(row$notes,
-                          regexpr("ois_p1 = [0-9.]+", row$notes))
-  expect_match(m_ois_p1, "^ois_p1 = ")
-  ois_p1_val <- as.numeric(sub("ois_p1 = ", "", m_ois_p1))
-  # Compute expected from the OR formula directly using whatever p0 the
-  # function picked from the data (control-arm pooled rate).
+  expect_equal(.ois_p1_from_notes(row$notes), round(cer * 0.80, 4),
+               tolerance = 5e-4)
+  expect_match(row$notes, "modest relative risk reduction", fixed = TRUE)
+  # It must NOT be the old Threshold-derived (odds-formula) value.
+  odds_derived <- (cer * 0.75) / (1 - cer + cer * 0.75)
+  expect_gt(abs(.ois_p1_from_notes(row$notes) - odds_derived), 0.02)
+})
+
+test_that("ois_rrr changes the binary OIS; ois_p1 takes precedence over it", {
+  m   <- .make_binary_ois_meta()
   cer <- (50 + 55 + 60) / (3 * 100)
-  or_val <- 0.75
-  expected <- (cer * or_val) / (1 - cer + cer * or_val)
-  expect_equal(ois_p1_val, round(expected, 4), tolerance = 5e-4)
-  # Sanity: OR-derived ois_p1 must differ from naive RR approximation.
-  rr_approx <- cer * or_val
-  expect_gt(abs(ois_p1_val - rr_approx), 0.02)
+
+  g25 <- suppressWarnings(grade_meta(m, threshold = 0.75,
+                                     threshold_scale = "ratio",
+                                     ois_rrr = 0.25))
+  row25 <- g25$domain_assessments[g25$domain_assessments$domain == "Imprecision", ]
+  expect_equal(.ois_p1_from_notes(row25$notes), round(cer * 0.75, 4),
+               tolerance = 5e-4)
+
+  g20 <- suppressWarnings(grade_meta(m, threshold = 0.75,
+                                     threshold_scale = "ratio"))
+  row20 <- g20$domain_assessments[g20$domain_assessments$domain == "Imprecision", ]
+  target_of <- function(notes) {
+    as.numeric(sub("target N=", "",
+                   regmatches(notes, regexpr("target N=[0-9]+", notes))))
+  }
+  # A larger RRR is easier to detect, so the OIS shrinks.
+  expect_lt(target_of(row25$notes), target_of(row20$notes))
+
+  # Explicit ois_p1 wins over ois_rrr.
+  g_p1 <- suppressWarnings(grade_meta(m, threshold = 0.75,
+                                      threshold_scale = "ratio",
+                                      ois_p1 = 0.30, ois_rrr = 0.25))
+  row_p1 <- g_p1$domain_assessments[g_p1$domain_assessments$domain == "Imprecision", ]
+  expect_match(row_p1$notes, "p1=0.300", fixed = TRUE)
+})
+
+test_that("ois_rrr is validated", {
+  m <- .make_binary_ois_meta()
+  expect_error(
+    suppressWarnings(grade_meta(m, threshold = 0.75, threshold_scale = "ratio",
+                                ois_rrr = 0)),
+    regexp = "ois_rrr"
+  )
+  expect_error(
+    suppressWarnings(grade_meta(m, threshold = 0.75, threshold_scale = "ratio",
+                                ois_rrr = 1)),
+    regexp = "ois_rrr"
+  )
+})
+
+test_that("binary OIS is compared in participants, not events", {
+  # Core GRADE 2 Fig 4 caption: "N=number of participants; OIS=optimal
+  # information size"; body: "If the total sample size of all the studies
+  # included in a meta-analysis exceeds the OIS, one does not rate down".
+  m <- .make_binary_ois_meta()
+  g <- suppressWarnings(grade_meta(m, threshold = 0.75, threshold_scale = "ratio"))
+  row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
+  expect_match(row$notes, "target N=", fixed = TRUE)
+  expect_match(row$notes, "compares participants", fixed = TRUE)
+  # observed = sum(n.e) + sum(n.c) = 600 participants (not the 300 events).
+  expect_match(row$notes, "observed 600", fixed = TRUE)
+})
+
+test_that("explicit ois_events still drives an event-based comparison", {
+  m <- .make_binary_ois_meta()
+  g <- suppressWarnings(grade_meta(m, threshold = 0.75,
+                                   threshold_scale = "ratio",
+                                   ois_events = 1000))
+  row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
+  expect_match(row$notes, "events", fixed = TRUE)
+  expect_match(row$notes, "target 1000 events", fixed = TRUE)
 })
 
 test_that("Crosses null but not both Thresholds, OIS met (>=100%) -> some_concerns", {

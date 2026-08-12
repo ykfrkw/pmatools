@@ -122,25 +122,41 @@ test_that("Rule 4: 'trivial' -> 'above' zone change -> some_concerns", {
 })
 
 # --- Rule 5: zone change with sign flip --------------------------------------
-test_that("Rule 5: 'above' <-> 'below' sign flip -> serious", {
+# Updated (v0.5.1): rule 5 now caps at -1. Core GRADE 4 describes no automatic
+# two-level risk-of-bias downgrade (every Fig 2 leaf is "rate down" / "do not
+# rate down"); -2 requires the scalar rob override.
+test_that("Rule 5: 'above' <-> 'below' sign flip -> some_concerns (capped at -1)", {
   m <- make_mock_dominated(te_all = 0.50, te_low_only = -0.50)
   g <- grade_meta(m, rob = c("serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "serious")
+  expect_equal(rob_row$judgment, "some_concerns")
+  expect_equal(rob_row$downgrade, -1L)
   expect_match(rob_row$notes, "Rule 5")
+  expect_match(rob_row$notes, "capped at one level", fixed = TRUE)
+})
+
+test_that("Rule 5 can still reach -2 through the scalar rob override", {
+  m <- make_mock_dominated(te_all = 0.50, te_low_only = -0.50)
+  g <- grade_meta(m, rob = "serious",
+                  rob_rationale = "Sign flip when high-RoB studies are removed",
+                  threshold = 1.20, threshold_scale = "ratio")
+  rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
+  expect_equal(rob_row$judgment, "serious")
+  expect_equal(rob_row$downgrade, -2L)
 })
 
 # --- Fallback: Threshold not supplied ---------------------------------------
-test_that("Fallback: Threshold not supplied + sign flip -> serious (rule 5)", {
+# Updated (v0.5.1): same -1 cap as above.
+test_that("Fallback: Threshold not supplied + sign flip -> some_concerns (rule 5)", {
   m <- make_mock_dominated(te_all = 1.0, te_low_only = -0.5)
   g <- grade_meta(m, rob = c("serious", "no", "no"),
                   small_values = NULL,
                   rob_inflation_threshold = 0.10, threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "serious")
+  expect_equal(rob_row$judgment, "some_concerns")
   expect_match(rob_row$notes, "Threshold not supplied")
 })
 
@@ -253,19 +269,20 @@ test_that("weight_note reports both count % and weight %", {
   expect_match(rob_row$notes, "by weight")
 })
 
-test_that("All studies high-RoB -> serious (2 levels down, no comparator pool)", {
-  # Every study is rated 'serious'. The zone-based check cannot run because
-  # there is no low/some-RoB comparator pool. The entire body of evidence
-  # rests on high-RoB studies, so we rate down 2 levels.
+test_that("All studies high-RoB -> some_concerns (1 level down, no comparator pool)", {
+  # Updated (v0.5.1): this used to rate down 2 levels. Core GRADE 4 supports no
+  # automatic two-level risk-of-bias downgrade, so the automated judgment is
+  # capped at -1; -2 requires rob = "serious" + rob_rationale.
   m <- make_mock_dominated(te_all = 0.30, te_low_only = 0.30)
   g <- grade_meta(m, rob = c("serious", "serious", "serious"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "serious")
-  expect_equal(rob_row$downgrade, -2L)
+  expect_equal(rob_row$judgment, "some_concerns")
+  expect_equal(rob_row$downgrade, -1L)
   expect_match(rob_row$notes, "All studies high-RoB", fixed = TRUE)
+  expect_match(rob_row$notes, "capped at one level", fixed = TRUE)
 })
 
 test_that("diff_note reports zone labels and relative inflation", {

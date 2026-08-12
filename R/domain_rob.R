@@ -19,8 +19,16 @@
 # Step 1. Dominance gate (Core GRADE 4 Fig 2, first node)
 #
 #   w_high = IV weight share carried by high-RoB studies.
-#   dominated  <=>  w_high >= rob_dominant_threshold   (default 0.60; `>=`, so
-#                   exactly 60% counts as dominated).
+#   dominated  <=>  w_high >= rob_dominant_threshold
+#
+#   Core GRADE 4 Fig 2 footnote, verbatim:
+#     "*Possible thresholds for high risk of bias 'dominating': >65% weight or
+#      >=55% weight=possibly dominating."
+#   The figure offers two candidates; pmatools defaults to the conservative
+#   one, 0.55, with a `>=` comparison so that exactly 55% counts as dominated
+#   (matching the ">=55%" wording). Set rob_dominant_threshold = 0.65 for the
+#   stricter reading.
+#
 #   If the weight share cannot be computed, the count share is used instead
 #   (stated in the notes); if neither can be computed, dominance is assumed
 #   (conservative).
@@ -40,7 +48,15 @@
 #     Rule 2: za == zl, non-trivial, inflation <= 10%  -> "no"
 #     Rule 3: za == zl, non-trivial, inflation > 10%   -> "some_concerns"  (-1)
 #     Rule 4: za != zl, no sign flip across null       -> "some_concerns"  (-1)
-#     Rule 5: za != zl, sign flip (above <-> below)    -> "serious"        (-2)
+#     Rule 5: za != zl, sign flip (above <-> below)    -> "some_concerns"  (-1)
+#
+#   Rate down at most ONE level (v0.5.1). Core GRADE 4 describes no two-level
+#   risk-of-bias downgrade: the only "two levels" in the paper is about rating
+#   UP observational evidence, and every leaf of Fig 2 reads "rate down" /
+#   "do not rate down". Rule 5 (sign flip) and the all-studies-high-RoB case
+#   used to return "serious" (-2); both are now capped at "some_concerns".
+#   "serious" stays reachable through the scalar `rob` override, which
+#   requires rob_rationale.
 #
 #   Rules 1-2 are the figure's "bias would under-estimate an existing effect /
 #   over-estimate an absent one" branch (do not rate down); rules 3-5 are its
@@ -67,9 +83,18 @@
 #                                     (use low risk of bias studies only)
 #     substantial difference = No  -> analysis_set = "all"
 #
-#   "Substantial difference" reuses the zone machinery above: a zone change
-#   (rule 4 / 5) or a bias-favouring inflation beyond
-#   `rob_inflation_threshold` (rule 3).
+#   "Substantial difference" is judged on MAGNITUDE ONLY (v0.5.1): a zone
+#   change, or |relative change| > `rob_inflation_threshold` in either
+#   direction. Core GRADE 4 (p6) verbatim:
+#     "In contrast, when appreciable evidence from low risk of bias studies
+#      exists, with reasonable thresholds for appreciable being >=35 to >=45%
+#      of the weight in the pooled analysis, Core GRADE users should consider,
+#      for each outcome of interest, whether low and high risk of bias studies
+#      suggest similar or substantially different magnitudes of effect."
+#   That node is symmetric — it does not ask whether the difference runs in
+#   the bias-favouring direction — so the `small_values` direction gate is NOT
+#   applied here. It remains in force on the dominated branch, whose node is
+#   explicitly "Check direction of bias".
 #
 #   grade_meta() acts on `analysis_set = "low_only"` by refitting the meta
 #   object on the low-RoB subset (`rob_refit = TRUE`, the default), so every
@@ -90,8 +115,10 @@
 #
 # Edge case: when every study is high-RoB (n_low == 0) the weight share is
 # 100%, so the dominated branch is taken; there is no low/some-RoB comparator
-# pool, and the domain is rated "serious" (rate down 2 levels) — the entire
-# body of evidence rests on high-RoB studies.
+# pool, and the domain is rated "some_concerns" (rate down 1 level). Before
+# v0.5.1 this returned "serious" (-2); Core GRADE 4 supports no automatic
+# two-level risk-of-bias downgrade, so a reviewer who judges -2 appropriate
+# must say so with rob = "serious" + rob_rationale.
 #
 # small_values:
 #   "undesirable": small values are bad (e.g., response rate, OR for benefit)
@@ -99,6 +126,15 @@
 #   "desirable"  : small values are good (e.g., mortality, severity)
 #                  TE_all < TE_low indicates inflation toward favorable
 #   NULL         : direction unknown; use |TE_all| > |TE_low| (further from null)
+
+# Note appended wherever an automated risk-of-bias path used to rate down two
+# levels. Core GRADE 4 does not describe a two-level risk-of-bias downgrade.
+.ROB_CAP_NOTE <- paste0(
+  "Core GRADE 4 describes no automatic two-level downgrade for risk of bias ",
+  "(every leaf of Fig 2 is 'rate down' / 'do not rate down'), so this ",
+  "automated judgment is capped at one level. If two levels are genuinely ",
+  "warranted, supply the scalar override rob = 'serious' with rob_rationale."
+)
 
 #' Assess the Risk of Bias domain (Core GRADE series; internal)
 #'
@@ -118,7 +154,9 @@
 #'   keys as `rob_overrides`.
 #' @param rob_dominant_threshold Weight share (0, 1] at or above which the
 #'   evidence counts as dominated by high-RoB studies (Core GRADE 4 Fig 2,
-#'   first node). Default `0.60`; the comparison is `>=`.
+#'   first node). The figure's footnote offers two candidates — ">65% weight or
+#'   >=55% weight=possibly dominating" — and the default is the conservative
+#'   one, `0.55`; the comparison is `>=`, matching the ">=55%" wording.
 #' @param rob_inflation_threshold Threshold for the relative change of the
 #'   pooled estimate when high-RoB studies are excluded, computed on the
 #'   absolute analysis scale:
@@ -131,10 +169,14 @@
 #'   make the apparent effect look more favourable (over-estimation) count.
 #'   Shifts toward a smaller or less favourable effect never trigger a
 #'   downgrade under this criterion, even when their magnitude exceeds the
-#'   threshold; when that happens the domain note states it explicitly.
+#'   threshold; when that happens the domain note states it explicitly. The
+#'   direction requirement applies only to the *dominated* branch ("check
+#'   direction of bias"); on the non-dominated branch the "substantially
+#'   different magnitudes of effect" node is symmetric, so a shift of either
+#'   direction beyond the threshold counts.
 #'   When every study is high-RoB, no low/some-RoB comparator pool exists,
-#'   the check cannot run, and the domain is rated `"serious"` (rate down 2
-#'   levels) unconditionally.
+#'   the check cannot run, and the domain is rated `"some_concerns"` (rate
+#'   down 1 level).
 #' @param small_values `"desirable"`, `"undesirable"`, or `NULL`. Defines the
 #'   bias-favouring direction; when `NULL`, `|TE_all| > |TE_low|` is used and
 #'   a warning is emitted if that assumption drives a downgrade.
@@ -147,7 +189,7 @@ assess_rob <- function(rob, meta_obj,
                        rob_some_concerns       = "low",
                        rob_overrides           = NULL,
                        rob_override_rationale  = NULL,
-                       rob_dominant_threshold  = 0.60,
+                       rob_dominant_threshold  = 0.55,
                        rob_inflation_threshold = 0.10,
                        small_values            = NULL,
                        threshold_internal      = NULL,
@@ -257,11 +299,12 @@ assess_rob <- function(rob, meta_obj,
 }
 
 .check_dominant_threshold <- function(x) {
-  if (is.null(x)) return(0.60)
+  if (is.null(x)) return(0.55)
   if (!is.numeric(x) || length(x) != 1L || !is.finite(x) || x <= 0 || x > 1) {
     rlang::abort(paste0(
       "rob_dominant_threshold must be a single weight share in (0, 1] ",
-      "(e.g., 0.60 for the Core GRADE 4 Fig 2 default)."
+      "(e.g., 0.55, the Core GRADE 4 Fig 2 'possibly dominating' threshold, ",
+      "or 0.65 for the stricter 'dominating' reading)."
     ))
   }
   as.numeric(x)
@@ -356,7 +399,7 @@ assess_rob <- function(rob, meta_obj,
 # Flowchart (v0.5: BMJ Core GRADE 4 Fig 2, dominance gate reinstated)
 # --------------------------------------------------------------------------
 .flowchart_rob <- function(rob_vec, meta_obj,
-                           dominant_threshold = 0.60,
+                           dominant_threshold = 0.55,
                            inflation_threshold = 0.10, small_values = NULL,
                            threshold_internal = NULL,
                            some_concerns_as = "low",
@@ -530,9 +573,10 @@ assess_rob <- function(rob, meta_obj,
     inflation_threshold = inflation_threshold,
     sm                  = meta_obj$sm,
     threshold_internal  = threshold_internal,
-    # In the non-dominated branch nothing is rated down, so the small_values
-    # warning (which speaks of "the risk-of-bias downgrade") would be wrong;
-    # an equivalent warning about the analysis-set decision is emitted below.
+    # The non-dominated branch neither rates down nor consults the direction
+    # gate (its Fig 2 node is symmetric), so the small_values warning would be
+    # doubly wrong there; only the dominated "check direction of bias" branch
+    # can be driven by the assumption.
     warn_direction_assumption = dominated
   )
 
@@ -553,8 +597,14 @@ assess_rob <- function(rob, meta_obj,
   # ---- Node 2b: not dominated -> appreciable low-RoB evidence? substantial
   # difference between the high- and low-RoB estimates? Neither answer rates
   # the domain down; only the recommended analysis set changes.
-  assessable <- !is.na(dir$rule %||% NA_integer_)
-  substantial <- assessable && dir$rule %in% c(3L, 4L, 5L)
+  # v0.5.1: the "substantially different magnitudes of effect" node of Core
+  # GRADE 4 Fig 2 is symmetric, so this branch judges magnitude only -- the
+  # `small_values` direction gate (dir$direction_ok, which gates rule 3) is
+  # deliberately NOT consulted here. Without that, a body of evidence whose
+  # low-RoB studies show the LARGER effect used to be reported as "no
+  # substantial difference".
+  assessable  <- !is.na(dir$magnitude_substantial %||% NA)
+  substantial <- assessable && isTRUE(dir$magnitude_substantial)
 
   branch_note <- if (!assessable) {
     paste0(
@@ -565,30 +615,20 @@ assess_rob <- function(rob, meta_obj,
     )
   } else if (substantial) {
     paste0(
-      "Substantial difference between the high-RoB and low-RoB estimates ",
-      "(rule ", dir$rule, "). Per Core GRADE 4 Fig 2: do not rate down, but ",
-      "use low risk of bias studies only (analysis_set = 'low_only')."
+      "Substantially different magnitudes of effect between the high-RoB and ",
+      "low-RoB estimates (magnitude only; Core GRADE 4's node asks whether ",
+      "the two suggest 'similar or substantially different magnitudes of ",
+      "effect' and does not require the difference to run in the ",
+      "bias-favouring direction). Per Core GRADE 4 Fig 2: do not rate down, ",
+      "but use low risk of bias studies only (analysis_set = 'low_only')."
     )
   } else {
     paste0(
-      "No substantial difference between the high-RoB and low-RoB estimates ",
-      "(rule ", dir$rule, "). Per Core GRADE 4 Fig 2: do not rate down; all ",
-      "studies are used (analysis_set = 'all')."
+      "No substantial difference in magnitude between the high-RoB and ",
+      "low-RoB estimates (same zone and relative change within the ",
+      "threshold). Per Core GRADE 4 Fig 2: do not rate down; all studies are ",
+      "used (analysis_set = 'all')."
     )
-  }
-
-  # Mirror of the warning .assess_bias_direction() emits on the dominated
-  # path: with small_values unsupplied the |TE| fallback decided the
-  # restriction of the analysis set, which is just as consequential.
-  if (substantial && identical(dir$rule, 3L) && is.null(small_values)) {
-    rlang::warn(paste0(
-      "assess_rob(): small_values was not supplied, so the bias-direction ",
-      "gate assumed that a larger absolute pooled effect (|TE_all| > ",
-      "|TE_low|) indicates bias-favouring inflation. This assumption drove ",
-      "the decision to restrict the analysis to low risk of bias studies. ",
-      "Supply small_values = 'desirable' or 'undesirable' to make the ",
-      "direction of bias explicit."
-    ))
   }
 
   .rob_row(make_domain_row(
@@ -643,7 +683,7 @@ assess_rob <- function(rob, meta_obj,
   # the outcome as not assessable for the non-dominated caller.
   bail <- function(judgment, note) {
     list(judgment = judgment, rule = NA_integer_,
-         diff_note = note, note = note)
+         magnitude_substantial = NA, diff_note = note, note = note)
   }
 
   if (!is.null(small_values) && !small_values %in% c("desirable", "undesirable")) {
@@ -675,15 +715,16 @@ assess_rob <- function(rob, meta_obj,
     "Threshold not supplied; trivial zone collapsed to {0} (sign-flip rule only)"
   }
 
-  # All studies are high-RoB (no comparator pool exists) -> rate down 2 levels.
-  # Without any low/some-RoB evidence the entire body of evidence rests on
-  # high-RoB studies, which warrants the maximum RoB downgrade.
+  # All studies are high-RoB (no comparator pool exists) -> rate down 1 level.
+  # Core GRADE 4 never describes an automatic two-level risk-of-bias downgrade
+  # (every Fig 2 leaf is "rate down" / "do not rate down"), so this is capped
+  # at "some_concerns"; use rob = "serious" + rob_rationale for -2.
   if (n_low == 0 || is.null(te_vec) || is.null(se_vec)) {
     return(bail(
-      judgment = "serious",
+      judgment = "some_concerns",
       note     = paste0(
         "All studies high-RoB; no low/some-RoB comparator pool. ",
-        "Rate down 2 levels (serious). ",
+        "Rate down 1 level (some concerns). ", .ROB_CAP_NOTE, " ",
         sm_label, "(all) = ", .disp(te_all), ". ", threshold_note, "."
       )
     ))
@@ -756,6 +797,19 @@ assess_rob <- function(rob, meta_obj,
   sign_flips <- identical(za, "above") && identical(zl, "below") ||
                 identical(za, "below") && identical(zl, "above")
 
+  # Direction-free "substantially different magnitudes of effect" (Core GRADE 4
+  # p6). Used only by the non-dominated branch, whose figure node is symmetric.
+  # This is rules 3/4/5 with the `direction_ok` gate removed: a zone change, or
+  # a same-non-trivial-zone relative change beyond the threshold in EITHER
+  # direction (including the low-RoB studies showing the LARGER effect). Rule
+  # 1's exemption survives: when both estimates sit inside the trivial zone
+  # their magnitudes are not substantially different however large the
+  # percentage change between two near-null numbers looks.
+  magnitude_substantial <- !identical(za, zl) ||
+    (!identical(za, "trivial") &&
+       is.finite(inflation_ratio) &&
+       abs(inflation_ratio) > inflation_threshold)
+
   # 5-rule decision
   gate_note <- NULL
   if (identical(za, zl)) {
@@ -808,8 +862,11 @@ assess_rob <- function(rob, meta_obj,
     }
   } else {
     if (sign_flips) {
-      judgment <- "serious"; rule <- 5L
-      rule_desc <- "Rule 5: zone changes across null (benefit <-> harm) -> rate down 2 (serious)"
+      judgment <- "some_concerns"; rule <- 5L
+      rule_desc <- paste0(
+        "Rule 5: zone changes across null (benefit <-> harm) -> rate down 1 ",
+        "(some concerns). ", .ROB_CAP_NOTE
+      )
     } else {
       judgment <- "some_concerns"; rule <- 4L
       rule_desc <- "Rule 4: zone changes without sign flip -> rate down 1 (some_concerns)"
@@ -843,6 +900,7 @@ assess_rob <- function(rob, meta_obj,
   list(
     judgment        = judgment,
     rule            = rule,
+    magnitude_substantial = magnitude_substantial,
     zone_all        = za,
     zone_low        = zl,
     sign_flips      = sign_flips,

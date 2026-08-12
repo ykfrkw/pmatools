@@ -72,35 +72,49 @@ test_that("rob_some_concerns rejects anything but 'low' / 'high'", {
 
 # ---- B-2: dominance gate, inclusive boundary ------------------------------
 
-test_that("dominance gate switches at 60% with an inclusive boundary", {
-  # 59% -> not dominated; exactly 60% -> dominated; 61% -> dominated.
-  g59 <- quiet_grade(mk(c(0.8, 0.02, 0.02), c(59, 20.5, 20.5)),
+test_that("dominance gate switches at 55% with an inclusive boundary", {
+  # Updated (v0.5.1): the default moved from 0.60 to 0.55, the ">=55% weight
+  # = possibly dominating" candidate in the Core GRADE 4 Fig 2 footnote.
+  # 54% -> not dominated; exactly 55% -> dominated; 56% -> dominated.
+  # The 55% fixture uses c(11, 4.5, 4.5) rather than c(55, 22.5, 22.5): the
+  # latter round-trips through sqrt(1/w) to 0.5499999999999999, one ulp below
+  # the threshold, which is exactly the boundary this test is about.
+  g54 <- quiet_grade(mk(c(0.8, 0.02, 0.02), c(54, 23, 23)),
                      rob = c("serious", "no", "no"),
                      small_values = "undesirable",
                      threshold = 1.05, threshold_scale = "ratio",
                      rob_refit = FALSE)
-  g60 <- quiet_grade(mk(c(0.8, 0.02, 0.02), c(3, 1, 1)),
+  g55 <- quiet_grade(mk(c(0.8, 0.02, 0.02), c(11, 4.5, 4.5)),
                      rob = c("serious", "no", "no"),
                      small_values = "undesirable",
                      threshold = 1.05, threshold_scale = "ratio")
-  g61 <- quiet_grade(mk(c(0.8, 0.02, 0.02), c(61, 19.5, 19.5)),
+  g56 <- quiet_grade(mk(c(0.8, 0.02, 0.02), c(56, 22, 22)),
                      rob = c("serious", "no", "no"),
                      small_values = "undesirable",
                      threshold = 1.05, threshold_scale = "ratio")
 
-  expect_match(rob_row(g59)$notes, "dominated: no",  fixed = TRUE)
-  expect_match(rob_row(g60)$notes, "dominated: yes", fixed = TRUE)
-  expect_match(rob_row(g61)$notes, "dominated: yes", fixed = TRUE)
+  expect_match(rob_row(g54)$notes, "dominated: no",  fixed = TRUE)
+  expect_match(rob_row(g55)$notes, "dominated: yes", fixed = TRUE)
+  expect_match(rob_row(g56)$notes, "dominated: yes", fixed = TRUE)
 
-  # The 60% fixture sits exactly on the threshold: nudging the threshold above
+  # The 55% fixture sits exactly on the threshold: nudging the threshold above
   # it flips the gate, which is what makes the `>=` boundary observable.
-  g60_strict <- quiet_grade(mk(c(0.8, 0.02, 0.02), c(3, 1, 1)),
+  g55_strict <- quiet_grade(mk(c(0.8, 0.02, 0.02), c(11, 4.5, 4.5)),
                             rob = c("serious", "no", "no"),
                             small_values = "undesirable",
                             threshold = 1.05, threshold_scale = "ratio",
-                            rob_dominant_threshold = 0.6000001,
+                            rob_dominant_threshold = 0.5500001,
                             rob_refit = FALSE)
-  expect_match(rob_row(g60_strict)$notes, "dominated: no", fixed = TRUE)
+  expect_match(rob_row(g55_strict)$notes, "dominated: no", fixed = TRUE)
+
+  # The other candidate the footnote names (>65%) is still selectable.
+  g60_at_65 <- quiet_grade(mk(c(0.8, 0.02, 0.02), c(3, 1, 1)),
+                           rob = c("serious", "no", "no"),
+                           small_values = "undesirable",
+                           threshold = 1.05, threshold_scale = "ratio",
+                           rob_dominant_threshold = 0.65,
+                           rob_refit = FALSE)
+  expect_match(rob_row(g60_at_65)$notes, "dominated: no", fixed = TRUE)
 })
 
 test_that("rob_dominant_threshold is validated", {
@@ -163,6 +177,49 @@ test_that("not dominated + no substantial difference: no downgrade, all", {
   expect_false(g$rob_refit)
   expect_equal(g$meta$k, g$meta_full$k)
   expect_match(row$notes, "No substantial difference", fixed = TRUE)
+})
+
+test_that("not dominated: substantial difference is judged on magnitude alone", {
+  # v0.5.1 (Core GRADE 4 p6): "whether low and high risk of bias studies
+  # suggest similar or substantially different magnitudes of effect" -- the
+  # node is symmetric and does not ask about the direction of bias.
+  #
+  # Mirror image of the corticosteroid example: the LOW-RoB studies show the
+  # larger effect (TE_low = 0.50 vs TE_all = 0.35, a 30% relative change), so
+  # the shift is not bias-favouring under small_values = "undesirable". The
+  # direction gate used to block this and report "no substantial difference".
+  m <- mk(te = c(0.20, 0.50, 0.50, 0.50),
+          w  = c(400, 400 / 3, 400 / 3, 400 / 3))
+  g <- quiet_grade(m, rob = c("serious", "no", "no", "no"),
+                   small_values = "undesirable",
+                   threshold = 1.05, threshold_scale = "ratio")
+  row <- rob_row(g)
+  expect_equal(row$judgment, "no")           # this branch never rates down
+  expect_equal(g$rob_analysis_set, "low_only")
+  expect_true(g$rob_refit)
+  expect_equal(g$meta$k, 3L)
+  expect_match(row$notes, "Substantially different magnitudes of effect",
+               fixed = TRUE)
+  expect_match(row$notes, "magnitude only", fixed = TRUE)
+  # The direction gate itself is still reported, and still says "no".
+  expect_match(row$notes, "direction gate (bias-favouring shift): no",
+               fixed = TRUE)
+})
+
+test_that("dominated branch still applies the direction gate", {
+  # Same shape, but the high-RoB study now carries 60% of the weight, so Fig 2
+  # takes the "check direction of bias" branch. There the shift is not
+  # bias-favouring, so rule 2 applies and the domain is not rated down.
+  m <- mk(te = c(0.20, 0.50, 0.50, 0.50),
+          w  = c(600, 400 / 3, 400 / 3, 400 / 3))
+  g <- quiet_grade(m, rob = c("serious", "no", "no", "no"),
+                   small_values = "undesirable",
+                   threshold = 1.05, threshold_scale = "ratio")
+  row <- rob_row(g)
+  expect_match(row$notes, "dominated: yes", fixed = TRUE)
+  expect_equal(row$judgment, "no")
+  expect_match(row$notes, "Rule 2", fixed = TRUE)
+  expect_equal(g$rob_analysis_set, "all")
 })
 
 # ---- B-1: study-level overrides -------------------------------------------
