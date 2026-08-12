@@ -241,6 +241,10 @@
                             follow_up = NULL, unit = NULL,
                             cer_str = NULL, ier_str = NULL,
                             label_intervention = "intervention") {
+  if (.is_not_reported(g)) {
+    return(.bmj_row_values_not_reported(nm, g, follow_up))
+  }
+
   meta_obj <- g$meta
 
   outcome_cell <- if (!is.null(follow_up) && length(follow_up) == 1L &&
@@ -280,6 +284,35 @@
                                    g$outcome_type),
     certainty = cert_cell,
     plain     = .plain_language_for(g, intervention_label = pl_tx)
+  )
+}
+
+# BMJ row for an outcome nobody reported. `nm` already carries the [n] marker
+# disp() applied, if any. The caller's per-outcome follow_up still wins over
+# the one stored on the object, so the two lookups behave alike for rated and
+# not-reported outcomes.
+.bmj_row_values_not_reported <- function(nm, g, follow_up = NULL) {
+  lbl <- .not_reported_label(g)
+
+  fu <- if (!is.null(follow_up) && length(follow_up) == 1L &&
+            !is.na(follow_up) && nzchar(follow_up)) {
+    as.character(follow_up)
+  } else {
+    g$follow_up
+  }
+  outcome_cell <- if (is.null(fu)) nm else paste0(nm, "\n", fu)
+
+  list(
+    outcome   = outcome_cell,
+    n         = lbl,
+    effect    = lbl,
+    cer       = lbl,
+    ier       = lbl,
+    diff      = lbl,
+    # No rate-down reason line: nothing was rated down because nothing was
+    # rated.
+    certainty = NOT_REPORTED_CERTAINTY,
+    plain     = .not_reported_plain()
   )
 }
 
@@ -454,7 +487,7 @@
 .grade_table_bmj <- function(outcomes, nms, prim_nms, sec_nms, primary,
                              pal, per, prediction, follow_up, unit,
                              label_intervention, label_control,
-                             disp, rob_notes) {
+                             disp, row_notes) {
   row_vals <- lapply(nms, function(nm) {
     .bmj_row_values(disp(nm), outcomes[[nm]], per = per,
                     prediction = prediction,
@@ -464,9 +497,22 @@
   })
   names(row_vals) <- nms
 
-  has_plain <- any(vapply(row_vals, function(v) !is.null(v$plain), logical(1)))
+  # Rated outcomes only, for the same reason as the effect-measure header
+  # below. A not-reported row always carries a sentence, but that sentence is
+  # not a Core GRADE 6 Box 1 statement; letting it decide the column would add
+  # the whole "Plain language summary" column - and the Box 1 footer that
+  # .bmj_plain_language_note() attributes it to - to a table whose rated
+  # outcomes have no Box 1 statement at all. The column's presence is therefore
+  # decided exactly as it was before not-reported rows existed; when it does
+  # exist, a not-reported row still fills it (add_outcome() below).
+  rated_nms <- names(.rated_outcomes(outcomes[nms]))
+  has_plain <- any(vapply(row_vals[rated_nms], function(v) !is.null(v$plain),
+                          logical(1)))
 
-  sms <- unique(vapply(outcomes, function(g) as.character(g$meta$sm %||% ""),
+  # Rated outcomes only: a not-reported outcome has no effect measure, so it
+  # must not turn a single-measure header into the generic one.
+  sms <- unique(vapply(.rated_outcomes(outcomes),
+                       function(g) as.character(g$meta$sm %||% ""),
                        character(1)))
   hdrs  <- .bmj_headers(if (length(sms) == 1L) sms else NULL, has_plain,
                         label_intervention, label_control)
@@ -523,7 +569,18 @@
 
   for (ri in names(cert_rows)) {
     i <- as.integer(ri)
-    p <- pal[[outcomes[[cert_rows[[ri]]]]$certainty]]
+    g <- outcomes[[cert_rows[[ri]]]]
+    if (.is_not_reported(g)) {
+      # Neutral grey italics: the palette encodes a rating this row does not
+      # have.
+      ft <- flextable::bg(ft,    i = i, j = 7, bg = "#F5F5F5", part = "body")
+      ft <- flextable::color(ft, i = i, j = 7, color = "#666666",
+                             part = "body")
+      ft <- flextable::italic(ft, i = i, j = 7, part = "body")
+      ft <- flextable::align(ft, i = i, j = 7, align = "center", part = "body")
+      next
+    }
+    p <- pal[[g$certainty]]
     ft <- flextable::bg(ft,    i = i, j = 7, bg    = p$bg,   part = "body")
     ft <- flextable::color(ft, i = i, j = 7, color = p$text, part = "body")
     ft <- flextable::bold(ft,  i = i, j = 7,                 part = "body")
@@ -533,14 +590,22 @@
   ft <- flextable::add_footer_lines(
     ft, values = .bmj_base_note(label_intervention, prediction))
 
-  # Per-outcome risk-of-bias analysis-set notes, keyed to the [n] markers on
-  # the outcome cells (the analysis set can differ from outcome to outcome).
-  for (i in seq_along(rob_notes)) {
+  # What "Not reported" means, stated once for the table however many such rows
+  # it has.
+  if (.has_not_reported(outcomes)) {
+    ft <- flextable::add_footer_lines(ft, values = .not_reported_table_note())
+  }
+
+  # Per-row notes (risk-of-bias analysis set, not-reported reason), keyed to
+  # the [n] markers on the outcome cells (the analysis set can differ from
+  # outcome to outcome).
+  for (i in seq_along(row_notes)) {
     ft <- flextable::add_footer_lines(
-      ft, values = sprintf("[%d] %s", i, rob_notes[i]))
+      ft, values = sprintf("[%d] %s", i, row_notes[i]))
   }
 
   for (nm in nms) {
+    if (.is_not_reported(outcomes[[nm]])) next
     pubias_qual_note <- .pubias_qualitative_note(outcomes[[nm]])
     if (!is.null(pubias_qual_note)) {
       ft <- flextable::add_footer_lines(

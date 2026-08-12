@@ -24,6 +24,13 @@ evidence_profile <- function(grade,
                              study_design    = NULL,
                              other_text      = NULL,
                              other_downgrade = 0L) {
+  if (.is_not_reported(grade)) {
+    rlang::abort(paste0(
+      "evidence_profile: 'grade' must be a pmatools object; an evidence ",
+      "profile rates five domains against a body of evidence, and a ",
+      "not-reported outcome has none. It still appears in the summary of ",
+      "findings table via grade_table()."))
+  }
   if (!inherits(grade, "pmatools")) {
     rlang::abort("evidence_profile: 'grade' must be a pmatools object.")
   }

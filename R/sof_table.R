@@ -91,6 +91,12 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
                       label_intervention = "intervention",
                       label_control      = "control",
                       ...) {
+  if (.is_not_reported(x)) {
+    rlang::abort(paste0(
+      "sof_table: 'x' must be a pmatools object from grade_meta(); a ",
+      "not-reported outcome has no analysis to summarise; put it in a ",
+      "multi-outcome table with grade_table()."))
+  }
   if (!inherits(x, "pmatools")) {
     rlang::abort("x must be a pmatools object from grade_meta().")
   }
