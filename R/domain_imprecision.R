@@ -437,11 +437,49 @@ assess_imprecision <- function(meta_obj,
     two_level_manual
   )
 
+  # Structured companions to the sentence above. The Fig 4 path and the two
+  # yes/no facts exist so a caller can branch on the path WITHOUT re-parsing
+  # the prose (which is what "sub('^.*Fig 4 path: ', '', notes)" downstream
+  # amounts to); the prose stays authoritative and unchanged.
+  facts <- .facts(
+    .fact("confidence_interval", "95% confidence interval", ci_str),
+    .fact("crosses_null", "Crosses the null", if (crosses_null) "yes" else "no"),
+    if (has_mid_zone) {
+      .fact("threshold_position", "Position relative to the threshold",
+            sub("^; ", "", thresh_str))
+    } else NULL,
+    .fact(
+      "ois", "Optimal information size",
+      {
+        detail <- if (is.na(ois_pct)) {
+          "not specified"
+        } else {
+          sprintf("observed %d / target %d %s = %.0f%%",
+                  ois_info$observed, ois_info$target, ois_info$unit,
+                  100 * ois_pct)
+        }
+        # Fig 4 only consults the OIS on one branch; everywhere else the
+        # figures are informational, and ois_str says so in the notes.
+        if (isTRUE(fig4$ois_used)) {
+          detail
+        } else {
+          paste0("not applied on this Fig 4 path; ", detail)
+        }
+      },
+      ois_pct
+    ),
+    .fact("fig4_path", "Core GRADE 2 Fig 4 path",
+          sub("^Fig 4 path: ", "", fig4$path)),
+    .fact("ois_used", "OIS approach applied",
+          if (isTRUE(fig4$ois_used)) "yes" else "no")
+  )
+
   make_domain_row(
     domain   = "Imprecision",
     judgment = judgment,
     auto     = TRUE,
-    notes    = notes
+    notes    = notes,
+    facts    = facts
   )
 }
 

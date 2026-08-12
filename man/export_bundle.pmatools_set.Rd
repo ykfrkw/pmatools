@@ -71,6 +71,18 @@ The \code{\link{export_bundle}} method for a \code{pmatools_set}: the
 summary artifacts at the top level of the ZIP and one numbered
 \verb{outcomes/NN_name/} directory per outcome, in the set's order.
 }
+\details{
+An outcome added with \code{\link{add_not_reported}} keeps its numbered
+\verb{outcomes/NN_name/} directory so the numbering stays aligned with the set's
+order, but the directory holds only a \code{results.txt} saying that no included
+study reported the outcome: there is no analysis to plot, profile or
+tabulate. That file, like every other per-outcome artifact, is written only
+when \code{include} contains \code{"results"} (it does by default); an \code{include}
+without it leaves the outcome no files at all, and an empty directory never
+reaches the ZIP. It still occupies a row of \code{summary_of_findings.docx} / \code{.csv}
+(certainty \code{"Not rated"}), a paragraph of \code{evidence_profile.docx}, and an
+\code{add_not_reported()} call in the generated \code{analysis.R}.
+}
 \seealso{
 \code{\link{export_bundle}} for the single-outcome layout.
 }

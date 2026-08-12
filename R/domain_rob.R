@@ -541,6 +541,15 @@ assess_rob <- function(rob, meta_obj,
   list(rob = rob, notes = notes)
 }
 
+# Print a display-scale estimate without adding or removing precision:
+# .assess_bias_direction()'s .disp() has already rounded it (3 decimals, after
+# back-transforming a ratio measure), so a second sprintf() format here would
+# either pad zeros onto "0.74" or truncate a genuinely 3-decimal value.
+.rob_fact_num <- function(x) {
+  if (is.null(x) || length(x) != 1L || !is.finite(x)) return("NA")
+  format(x, scientific = FALSE, trim = TRUE)
+}
+
 # --------------------------------------------------------------------------
 # Flowchart (v0.5: BMJ Core GRADE 4 Fig 2, dominance gate reinstated)
 # --------------------------------------------------------------------------
@@ -613,6 +622,20 @@ assess_rob <- function(rob, meta_obj,
     some_concerns_as, some_concerns_as
   )
 
+  # Structured companion to weight_note. Recorded on every path, including the
+  # ones that do not rate down: the renderers decide what to show, the
+  # assessors only decide what is true.
+  f_high <- .fact(
+    "high_rob_studies", "High risk of bias studies",
+    if (is.finite(w_high_pct)) {
+      sprintf("%d of %d (%.0f%% by count, %.0f%% by weight)",
+              n_high, n_total, count_pct, w_high_pct)
+    } else {
+      sprintf("%d of %d (%.0f%% by count)", n_high, n_total, count_pct)
+    },
+    n_high
+  )
+
   tbl_note <- paste(
     paste0(names(table(rob_vec)), ": n=", as.integer(table(rob_vec))),
     collapse = "; "
@@ -630,7 +653,8 @@ assess_rob <- function(rob, meta_obj,
       notes    = paste0(
         "No high-RoB studies. ", weight_note, "; ", fold_note,
         ". -> Do not rate down. | ", tbl_note
-      )
+      ),
+      facts    = .facts(f_high)
     ), analysis_set = "all", high_idx = high_idx))
   }
 
@@ -666,6 +690,26 @@ assess_rob <- function(rob, meta_obj,
     sprintf(paste0("Neither the weight share nor the count share of high-RoB ",
                    "studies could be computed; dominance assumed (conservative) ",
                    "at threshold %.0f%%"), 100 * dominant_threshold)
+  )
+
+  # Structured companion to dom_note. The basis switch is mirrored so the fact
+  # never claims a weight share that was in fact a count-share fallback.
+  f_weight <- .fact(
+    "high_rob_weight_share", "Weight carried by high risk of bias studies",
+    switch(dom_basis,
+      "weight" = sprintf("%.0f%% (dominance threshold %.0f%%; dominated: %s)",
+                         100 * dom_share, 100 * dominant_threshold,
+                         if (dominated) "yes" else "no"),
+      "count"  = sprintf(paste0("not computable; judged on the count share ",
+                                "%.0f%% instead (dominance threshold %.0f%%; ",
+                                "dominated: %s)"),
+                         100 * dom_share, 100 * dominant_threshold,
+                         if (dominated) "yes" else "no"),
+      sprintf(paste0("not computable, and neither was the count share; ",
+                     "dominance assumed (dominance threshold %.0f%%; ",
+                     "dominated: yes)"), 100 * dominant_threshold)
+    ),
+    dom_share
   )
 
   # Direction-and-magnitude check (always run when at least one high-RoB
@@ -725,8 +769,42 @@ assess_rob <- function(rob, meta_obj,
     warn_direction_assumption = dominated
   )
 
+  # Structured companion to diff_note: the two pooled estimates, the zone each
+  # falls in, and the relative change between them. Omitted on the bail() paths
+  # of .assess_bias_direction(), where no comparator estimate exists.
+  f_shift <- if (!is.null(dir$te_low_disp)) {
+    change_str <- if (is.finite(dir$inflation_ratio)) {
+      sprintf("relative change %.0f%% (threshold %.0f%%)",
+              100 * dir$inflation_ratio, 100 * dir$inflation_threshold)
+    } else {
+      sprintf(paste0("relative change undefined (comparator estimate ~ 0; ",
+                     "threshold %.0f%%)"), 100 * dir$inflation_threshold)
+    }
+    .fact(
+      "estimate_shift", "Pooled estimate excluding high risk of bias studies",
+      sprintf(paste0("%s %s (all studies, zone %s) vs %s %s (excluding high ",
+                     "risk of bias, zone %s); %s"),
+              dir$sm_label, .rob_fact_num(dir$te_all_disp), dir$zone_all,
+              dir$sm_label, .rob_fact_num(dir$te_low_disp), dir$zone_low,
+              change_str),
+      dir$inflation_ratio
+    )
+  } else NULL
+
   # ---- Node 2a: dominated -> "check direction of bias" (the 5-rule check).
   if (dominated) {
+    f_branch <- .fact(
+      "fig2_branch", "Core GRADE 4 Fig 2",
+      if (!is.na(dir$rule)) {
+        sprintf("dominated by high risk of bias studies; direction-of-bias rule %d (%s)",
+                dir$rule,
+                if (identical(dir$judgment, "no")) "do not rate down" else "rate down")
+      } else {
+        paste0("dominated by high risk of bias studies; direction of bias not ",
+               "assessable (rate down)")
+      },
+      as.numeric(dir$rule)
+    )
     return(.rob_row(make_domain_row(
       domain   = "Risk of bias",
       judgment = dir$judgment,
@@ -735,7 +813,8 @@ assess_rob <- function(rob, meta_obj,
         weight_note, "; ", fold_note, ". ", dom_note, ". ",
         dir$note, " | ",
         tbl_note
-      )
+      ),
+      facts    = .facts(f_high, f_weight, f_shift, f_branch)
     ), analysis_set = "all", high_idx = high_idx))
   }
 
@@ -776,6 +855,23 @@ assess_rob <- function(rob, meta_obj,
     )
   }
 
+  # The rule number is recorded whenever the 5-rule check produced one, even
+  # though on this branch it did not decide anything: Core GRADE 4's
+  # non-dominated node asks only about magnitude.
+  f_branch <- .fact(
+    "fig2_branch", "Core GRADE 4 Fig 2",
+    if (!assessable) {
+      paste0("not dominated; high-vs-low risk of bias comparison not ",
+             "assessable -> use all studies")
+    } else if (substantial) {
+      paste0("not dominated; substantially different magnitudes of effect ",
+             "-> use low risk of bias studies only")
+    } else {
+      "not dominated; similar magnitudes of effect -> use all studies"
+    },
+    as.numeric(dir$rule)
+  )
+
   .rob_row(make_domain_row(
     domain   = "Risk of bias",
     judgment = "no",
@@ -785,7 +881,8 @@ assess_rob <- function(rob, meta_obj,
       branch_note, " ",
       dir$diff_note %||% dir$note, " | ",
       tbl_note
-    )
+    ),
+    facts    = .facts(f_high, f_weight, f_shift, f_branch)
   ), analysis_set = if (substantial) "low_only" else "all",
      high_idx = high_idx)
 }
@@ -1066,6 +1163,15 @@ assess_rob <- function(rob, meta_obj,
     inflates        = inflates,
     direction_ok    = direction_ok,
     inflation_ratio = inflation_ratio,
+    # Display-scale copies of the two estimates (back-transformed for ratio
+    # measures) plus the measure label and the threshold they were judged
+    # against. diff_note interpolates the same numbers into prose; the caller
+    # needs them as values to record the structured `estimate_shift` fact
+    # without re-deriving (and possibly re-rounding) them.
+    te_all_disp         = .disp(te_all),
+    te_low_disp         = .disp(te_low),
+    sm_label            = sm_label,
+    inflation_threshold = inflation_threshold,
     # diff_note carries the numbers only (zones, inflation, gate, threshold);
     # `note` adds the rule verdict. The non-dominated branch of the flowchart
     # uses diff_note so it can state its own (non-downgrading) verdict.

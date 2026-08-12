@@ -490,6 +490,14 @@ automated Egger's test). The informational inputs
 An S3 object of class \code{pmatools} containing:
 \describe{
 \item{domain_assessments}{A tibble with one row per GRADE domain.}
+\item{domain_facts}{A named list of tibbles (\code{key}, \code{label},
+\code{value}, \code{numeric}), one per domain that recorded the
+numbers behind its judgment: currently \code{"Risk of bias"},
+\code{"Inconsistency"} and \code{"Imprecision"}. A domain with
+nothing recorded is absent, and the list is empty when no domain
+recorded anything. The prose in \code{domain_assessments$notes}
+remains authoritative; this is its machine-readable companion. Read
+it with \code{\link{domain_facts}}.}
 \item{certainty}{Final certainty label: "High", "Moderate", "Low", or "Very Low".}
 \item{certainty_score}{Numeric score (1–4).}
 \item{starting_quality}{Starting certainty label.}

@@ -22,7 +22,11 @@ grade_table(
 \item{outcomes}{A named list of \code{pmatools} objects, one per outcome
 (names become the outcome labels), or a \code{pmatools_set} from
 \code{\link{grade_meta_multi}}, in which case its stored order and primary
-outcomes are used.}
+outcomes are used. An element may also be a \code{pmatools_not_reported} from
+\code{\link{not_reported_outcome}} — an outcome the review prespecified
+that no included study reported. Its row names the outcome and reads
+"Not reported" in every value cell, with "Not rated" for certainty
+(Core GRADE 6).}
 
 \item{primary}{Character vector of outcome names that are classified as
 primary outcomes. All others are treated as secondary.
@@ -49,8 +53,9 @@ Ignored by the \code{"bmj"} style, which has no domain columns.}
 style: a character vector named by outcome, or a single unnamed value
 applied to every outcome. \code{NULL} (default) omits the line.}
 
-\item{unit}{(v0.5) Unit for the Difference column of the \code{"bmj"} style
-with continuous outcomes; same named-vector convention as
+\item{unit}{(v0.5) Unit for the continuous-outcome cells -- the Difference
+column of the \code{"bmj"} style and the arm columns of either style (see
+\code{\link{sof_table}}); same named-vector convention as
 \code{follow_up}.}
 
 \item{label_intervention, label_control}{Arm labels used in the

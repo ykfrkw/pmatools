@@ -25,6 +25,18 @@
 #' summary artifacts at the top level of the ZIP and one numbered
 #' `outcomes/NN_name/` directory per outcome, in the set's order.
 #'
+#' @details
+#' An outcome added with \code{\link{add_not_reported}} keeps its numbered
+#' `outcomes/NN_name/` directory so the numbering stays aligned with the set's
+#' order, but the directory holds only a `results.txt` saying that no included
+#' study reported the outcome: there is no analysis to plot, profile or
+#' tabulate. That file, like every other per-outcome artifact, is written only
+#' when `include` contains `"results"` (it does by default); an `include`
+#' without it leaves the outcome no files at all, and an empty directory never
+#' reaches the ZIP. It still occupies a row of `summary_of_findings.docx` / `.csv`
+#' (certainty `"Not rated"`), a paragraph of `evidence_profile.docx`, and an
+#' `add_not_reported()` call in the generated `analysis.R`.
+#'
 #' @param x A `pmatools_set` from \code{\link{grade_meta_multi}}.
 #' @param output_dir Directory where the ZIP is created.
 #' @param bundle_name Bundle base name (no extension).
@@ -155,6 +167,22 @@ export_bundle.pmatools_set <- function(x,
     sub_dir <- file.path(work_dir, sub_rel)
     dir.create(sub_dir, recursive = TRUE, showWarnings = FALSE)
 
+    # An outcome nobody reported has no analysis, so there is nothing to plot,
+    # profile or tabulate. The directory is still created and numbered, so the
+    # outcomes/NN_slug/ numbering keeps lining up with set$order, and it gets a
+    # results.txt saying why it is otherwise empty. That file is gated on
+    # "results" like every other artifact of this loop: a caller who asked for
+    # neither results nor any per-outcome file must not get an outcomes/ tree
+    # just because one outcome is not reported. "results" is in the default
+    # `include`, so the ordinary bundle still always carries the file.
+    if (.is_not_reported(g)) {
+      if ("results" %in% include) {
+        .write_not_reported_txt(g, nm, file.path(sub_dir, "results.txt"))
+        add(file.path(sub_rel, "results.txt"))
+      }
+      next
+    }
+
     if ("forest" %in% include) {
       fd <- if (is.list(forest_display)) forest_display else list()
       if (is.null(fd$title) || !nzchar(fd$title %||% "")) fd$title <- nm
@@ -273,6 +301,31 @@ export_bundle.pmatools_set <- function(x,
   file.path(sub_rel, paste0(stem, c(".pdf", ".png")))
 }
 
+# results.txt for an outcome nobody reported: the only file its directory ever
+# gets, so it has to say by itself why the directory holds nothing else.
+.write_not_reported_txt <- function(g, nm, path) {
+  lines <- c(
+    "================================================================",
+    sprintf("pmatools analysis - generated %s", format(Sys.time())),
+    sprintf("Outcome: %s", nm),
+    "================================================================",
+    "",
+    sprintf("Status: %s", .not_reported_label(g)),
+    if (!is.null(g$follow_up)) sprintf("Follow-up: %s", g$follow_up),
+    if (!is.null(g$reason)) sprintf("Reason: %s", g$reason),
+    "",
+    "This outcome was prespecified in the review, but no included study",
+    "reported usable data for it. There is therefore no meta-analysis, no",
+    "effect estimate, no forest or funnel plot, and no certainty rating.",
+    "",
+    "It is listed here, and as a row of summary_of_findings.docx, so that the",
+    "bundle covers every patient-important outcome the review set out to",
+    "address (Core GRADE 6)."
+  )
+  writeLines(lines, path)
+  invisible(path)
+}
+
 # Long-format rows for one outcome: the set's data when it has them, otherwise
 # a best-effort reconstruction from the meta object that was rated.
 .outcome_long_data <- function(set, nm, g) {
@@ -325,6 +378,31 @@ export_bundle.pmatools_set <- function(x,
   outcomes <- .set_outcome_list(set)
   rows <- lapply(set$order, function(nm) {
     g <- outcomes[[nm]]
+
+    # Same columns in the same order for a not-reported outcome: a consumer
+    # reading this CSV must not have to special-case its shape, only its
+    # values.
+    if (.is_not_reported(g)) {
+      lbl <- .not_reported_label(g)
+      return(data.frame(
+        order            = which(set$order == nm),
+        outcome          = nm,
+        group            = if (nm %in% set$primary) "primary" else "secondary",
+        follow_up        = g$follow_up %||% NA_character_,
+        participants     = lbl,
+        effect           = lbl,
+        risk_control     = lbl,
+        risk_intervention = lbl,
+        difference       = lbl,
+        certainty        = NOT_REPORTED_CERTAINTY,
+        certainty_reason = g$reason %||% NA_character_,
+        rating_target    = NA_character_,
+        analysis_set     = "not reported",
+        plain_language   = .not_reported_plain(),
+        stringsAsFactors = FALSE
+      ))
+    }
+
     v <- .bmj_row_values(nm, g, per = per, prediction = prediction,
                          follow_up = g$follow_up, unit = g$unit,
                          label_intervention = label_intervention)
@@ -365,6 +443,22 @@ export_bundle.pmatools_set <- function(x,
     g <- outcomes[[nm]]
     tag <- if (nm %in% set$primary) " (Primary)" else ""
     doc <- officer::body_add_par(doc, paste0(nm, tag), style = "heading 2")
+
+    # Prose, not a table row: all five domain columns of an evidence profile
+    # are judgments about a body of evidence, and there is none here.
+    if (.is_not_reported(g)) {
+      parts <- c(
+        paste0(.not_reported_label(g), "."),
+        if (!is.null(g$follow_up)) paste0("Follow-up: ", g$follow_up, "."),
+        if (!is.null(g$reason)) g$reason,
+        "No included study reported this outcome; no certainty rating."
+      )
+      doc <- officer::body_add_par(doc, paste(parts, collapse = " "),
+                                   style = "Normal")
+      doc <- officer::body_add_par(doc, "", style = "Normal")
+      next
+    }
+
     note <- .rob_analysis_set_note(g)
     if (!is.null(note)) {
       doc <- officer::body_add_par(doc, paste0("Analysis set: ", note),
@@ -396,9 +490,17 @@ export_bundle.pmatools_set <- function(x,
   for (i in seq_along(set$order)) {
     nm <- set$order[i]
     g  <- outcomes[[nm]]
-    lines <- c(lines,
-      sprintf("  %s  %s%s", dir_nms[i], nm,
-              if (nm %in% set$primary) "  [primary outcome]" else ""),
+    header <- sprintf("  %s  %s%s", dir_nms[i], nm,
+                      if (nm %in% set$primary) "  [primary outcome]" else "")
+    if (.is_not_reported(g)) {
+      lines <- c(lines, header,
+                 "      certainty    : not reported",
+                 if (!is.null(g$reason)) sprintf("      reason       : %s",
+                                                 g$reason),
+                 "")
+      next
+    }
+    lines <- c(lines, header,
       sprintf("      certainty    : %s", g$certainty),
       sprintf("      rating target: %s", g$rating_target %||% "-"),
       sprintf("      analysis set : %s", .analysis_set_label(g)),
@@ -406,7 +508,10 @@ export_bundle.pmatools_set <- function(x,
       "")
   }
 
-  sets <- unique(vapply(outcomes, .analysis_set_label, character(1)))
+  # Rated outcomes only: "not reported" is not an analysis set, so it must not
+  # trigger the mixed-analysis-set note below.
+  sets <- unique(vapply(.rated_outcomes(outcomes), .analysis_set_label,
+                        character(1)))
   if (length(sets) > 1L) {
     lines <- c(lines,
       "Note: the analysis set is not the same for every outcome. Where it reads",
@@ -489,12 +594,13 @@ export_bundle.pmatools_set <- function(x,
     timestamp        = format(Sys.time()),
     pmatools_version = .pmatools_version(),
     outcomes_arg     = .multi_arg_lit(ma_args[["outcomes", exact = TRUE]] %||%
-                                        names(set$outcomes)),
+                                        names(.rated_outcomes(set$outcomes))),
     sm_arg           = .multi_arg_lit(ma_args[["sm", exact = TRUE]]),
     outcome_type_arg = .multi_arg_lit(ma_args[["outcome_type", exact = TRUE]]),
     ma_extra_args    = ma_extra,
     common_arg       = .multi_arg_lit(common_args, indent = 4L),
     per_outcome_arg  = .multi_arg_lit(po_args, indent = 4L),
+    not_reported_block = .not_reported_block(set),
     order_arg        = .multi_arg_lit(set$order),
     primary_line     = primary_line,
     dir_names_arg    = .multi_arg_lit(.outcome_dir_names(set$order)),
@@ -517,6 +623,35 @@ export_bundle.pmatools_set <- function(x,
 
   writeLines(rendered, out_path)
   invisible(out_path)
+}
+
+# One add_not_reported() call per not-reported outcome, in set$order, for the
+# generated analysis.R. They have to be emitted before reorder_outcomes(),
+# which insists on being given every outcome of the set exactly once. Returns
+# "" when the set holds none, so an ordinary bundle's script is byte-for-byte
+# what it was before.
+.not_reported_block <- function(set) {
+  nms <- set$order[vapply(set$outcomes[set$order], .is_not_reported,
+                          logical(1))]
+  if (length(nms) == 0L) return("")
+
+  lit <- function(s) paste(deparse(s, width.cutoff = 500L), collapse = "")
+  calls <- vapply(nms, function(nm) {
+    g <- set$outcomes[[nm]]
+    args <- c(
+      sprintf("set, %s", lit(nm)),
+      if (!is.null(g$follow_up)) sprintf("follow_up = %s", lit(g$follow_up)),
+      if (!is.null(g$reason))    sprintf("reason = %s",    lit(g$reason)),
+      # Only when it differs from the default, so the common call stays short.
+      if (!identical(g$label, "Not reported")) sprintf("label = %s",
+                                                       lit(g$label))
+    )
+    sprintf("set <- add_not_reported(%s)", paste(args, collapse = ", "))
+  }, character(1), USE.NAMES = FALSE)
+
+  paste0("\n# Outcomes prespecified by the review that no included study\n",
+         "# reported (Core GRADE 6).\n",
+         paste(calls, collapse = "\n"), "\n")
 }
 
 # R literal for one argument value. Argument *specs* ({value, origin, col}) are

@@ -149,6 +149,12 @@ export_bundle <- function(x, ...) {
 #' @rdname export_bundle
 #' @export
 export_bundle.default <- function(x, ...) {
+  if (.is_not_reported(x)) {
+    rlang::abort(paste0(
+      "export_bundle: a not-reported outcome has no analysis to bundle on its ",
+      "own. Add it to the set with add_not_reported() and call ",
+      "export_bundle() on the set."))
+  }
   rlang::abort("export_bundle: 'ma' must be a meta object.")
 }
 
