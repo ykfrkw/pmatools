@@ -258,6 +258,132 @@ test_that(".render_analysis_script refuses to write an unparseable script", {
   expect_false(file.exists(out_path))
 })
 
+# ---- Summary of Findings layout (style=) ------------------------------------
+# Regression: export_bundle() had no `style` argument, so a caller rendering the
+# BMJ layout on screen could only export the GRADEpro one, and the bundled
+# analysis.R hardcoded a styleless sof_table() call that reproduced GRADEpro
+# whatever the bundle held.
+
+grade_for_style <- function(...) {
+  suppressWarnings(grade_meta(make_meta_for_bundle(), study_design = "RCT",
+                              rob = "no",
+                              rob_rationale = "Consensus RoB2: all domains low risk",
+                              indirectness = "no",
+                              outcome_name = "Test", threshold_type = "null",
+                              ...))
+}
+
+# Text of every paragraph and table cell of a .docx, in document order.
+docx_text <- function(path) {
+  s <- officer::docx_summary(officer::read_docx(path))
+  paste(s$text[!is.na(s$text)], collapse = "\n")
+}
+
+# Unzip a bundle and return the extraction directory.
+unbundle <- function(zip_path) {
+  d <- tempfile(); dir.create(d)
+  zip::unzip(zip_path, exdir = d)
+  d
+}
+
+bundle_with_style <- function(g, name, ...) {
+  ma <- g$meta
+  out_dir <- tempfile(); dir.create(out_dir)
+  unbundle(export_bundle(ma, g, output_dir = out_dir, bundle_name = name,
+                         include = c("script", "grade_table"), ...))
+}
+
+test_that("export_bundle writes the SoF layout it was asked for", {
+  g <- grade_for_style()
+
+  bmj <- docx_text(file.path(bundle_with_style(g, "style_bmj", style = "bmj"),
+                             "sof_table.docx"))
+  expect_match(bmj, "Outcome and follow-up", fixed = TRUE)
+  expect_match(bmj, "Difference", fixed = TRUE)
+  expect_no_match(bmj, "Risk with control", fixed = TRUE)
+
+  gp <- docx_text(file.path(bundle_with_style(g, "style_gp", style = "gradepro"),
+                            "sof_table.docx"))
+  expect_match(gp, "Risk with control", fixed = TRUE)
+  expect_no_match(gp, "Outcome and follow-up", fixed = TRUE)
+})
+
+test_that("export_bundle defaults to the BMJ layout, as the set method does", {
+  g   <- grade_for_style()
+  dir <- bundle_with_style(g, "style_default")
+  expect_match(docx_text(file.path(dir, "sof_table.docx")),
+               "Outcome and follow-up", fixed = TRUE)
+  expect_match(paste(readLines(file.path(dir, "analysis.R"), warn = FALSE),
+                     collapse = "\n"),
+               'style = "bmj"', fixed = TRUE)
+})
+
+test_that("the bundled analysis.R carries the style that produced the bundle", {
+  g <- grade_for_style()
+  for (st in c("bmj", "gradepro")) {
+    txt <- paste(readLines(file.path(
+      bundle_with_style(g, paste0("style_script_", st), style = st),
+      "analysis.R"), warn = FALSE), collapse = "\n")
+    # Both the SoF table and the appendix report must be regenerated in the
+    # exported layout, or re-running the script yields a different bundle.
+    expect_match(txt, paste0('sof_table(g, style = "', st, '"'), fixed = TRUE)
+    expect_match(txt, paste0('style       = "', st, '"'), fixed = TRUE)
+    expect_false(is.null(tryCatch(parse(text = txt), error = function(e) NULL)))
+  }
+})
+
+test_that("follow_up and unit reach the BMJ table and the bundled script", {
+  g   <- grade_for_style()
+  dir <- bundle_with_style(g, "style_followup", style = "bmj",
+                           follow_up = "Follow-up: 12 months",
+                           unit      = "days")
+
+  expect_match(docx_text(file.path(dir, "sof_table.docx")),
+               "Follow-up: 12 months", fixed = TRUE)
+  txt <- paste(readLines(file.path(dir, "analysis.R"), warn = FALSE),
+               collapse = "\n")
+  expect_match(txt, 'follow_up = "Follow-up: 12 months"', fixed = TRUE)
+  expect_match(txt, 'unit = "days"', fixed = TRUE)
+  expect_false(is.null(tryCatch(parse(text = txt), error = function(e) NULL)))
+})
+
+test_that("follow_up and unit fall back to the rated object", {
+  # grade_meta() takes neither, but grade_meta_multi() stores both on the object
+  # it rates, so a set member exported on its own keeps its follow-up line.
+  g <- grade_for_style()
+  g$follow_up <- "Follow-up: longest reported"
+  g$unit      <- "points"
+
+  dir <- bundle_with_style(g, "style_followup_obj", style = "bmj")
+  expect_match(docx_text(file.path(dir, "sof_table.docx")),
+               "Follow-up: longest reported", fixed = TRUE)
+  expect_match(paste(readLines(file.path(dir, "analysis.R"), warn = FALSE),
+                     collapse = "\n"),
+               'follow_up = "Follow-up: longest reported"', fixed = TRUE)
+})
+
+test_that("an apostrophe in follow_up still yields a parseable analysis.R", {
+  # shQuote()'s single-quoted literal would leave this unparseable and the
+  # bundle would abort in .check_script_parses().
+  g   <- grade_for_style()
+  dir <- bundle_with_style(g, "style_apostrophe", style = "bmj",
+                           follow_up = "Follow-up: patient's last visit")
+  txt <- paste(readLines(file.path(dir, "analysis.R"), warn = FALSE),
+               collapse = "\n")
+  expect_false(is.null(tryCatch(parse(text = txt), error = function(e) NULL)))
+  expect_match(txt, "patient's last visit", fixed = TRUE)
+})
+
+test_that("export_bundle rejects an unknown style instead of silently exporting one", {
+  g <- grade_for_style()
+  out_dir <- tempfile(); dir.create(out_dir)
+  expect_error(
+    export_bundle(g$meta, g, output_dir = out_dir, bundle_name = "bad_style",
+                  include = c("script"), style = "grade_pro"),
+    regexp = "should be one of"
+  )
+})
+
 test_that("export_bundle includes rare-event artifacts when supplied", {
   d <- ingest_data(system.file("extdata", "rare_events_mock.csv", package = "pmatools"),
                    format = "long")

@@ -1,5 +1,36 @@
 # pmatools 0.5.1 (development version)
 
+## New features
+
+* `export_bundle()` takes a `style` argument on both methods, so a caller can
+  export the Summary of Findings layout it renders on screen. Previously
+  `export_bundle.meta()` had no such argument and always wrote the GRADEpro
+  layout; a host application that showed the BMJ Core GRADE table could only
+  match it by withholding `"grade_table"` from `include` and writing
+  `sof_table.docx` itself. `style` is forwarded to `sof_table()` for
+  `sof_table.docx` and to `grade_report()` for the certainty appendix, so a
+  bundle no longer mixes two layouts, and it is rendered into the generated
+  `analysis.R` — the script now regenerates the table the bundle actually
+  ships. The same fix applies to `grade_table()` in the multi-outcome script.
+* `export_bundle.meta()` also takes `follow_up` and `unit`, the two
+  presentation arguments of the BMJ layout ("Outcome and follow-up" is its
+  first column). Both fall back to `grade$follow_up` / `grade$unit`, which is
+  where `grade_meta_multi()` records them, so an outcome rated as part of a set
+  keeps its follow-up line when exported on its own; both are rendered into
+  `analysis.R`. The `pmatools_set` method needs no such argument:
+  `grade_table()` reads them off the rated objects, and so does the generated
+  script.
+
+## Behaviour changes
+
+* The default `style` of the single-outcome bundle changed from GRADEpro to
+  `"bmj"`, matching `export_bundle.pmatools_set()`, which has defaulted to the
+  BMJ layout since v0.5.0. One rule now holds for both: a bundle ships the
+  Core GRADE layout unless asked otherwise. `sof_table()` and `grade_table()`
+  are unchanged and still default to `"gradepro"`, so only the exported
+  `sof_table.docx` (and the appendix's embedded table) moves. Pass
+  `style = "gradepro"` to `export_bundle()` to keep the old layout.
+
 ## Bug fixes
 
 * `export_bundle()` read its `grade_args` and `ma_args` specifications with
