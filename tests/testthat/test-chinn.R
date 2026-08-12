@@ -24,6 +24,9 @@ test_that("chinn_smd_to_or handles NULL CI inputs", {
   expect_true(is.na(r$or_upper))
 })
 
+# Updated (v0.5.1): binary outcomes lead with the absolute candidate; the OR
+# ratio value moved to $threshold_ratio. Every default now carries $source, and
+# only SMD 0.20 is sourced to Core GRADE 6.
 test_that("suggest_threshold returns expected defaults", {
   skip_if_not_installed("meta")
   m <- suppressWarnings(meta::metabin(
@@ -32,8 +35,22 @@ test_that("suggest_threshold returns expected defaults", {
     studlab = c("A", "B"), sm = "OR"
   ))
   s <- suggest_threshold(m)
-  expect_equal(s$threshold_user, 1.25)
-  expect_equal(s$threshold_scale, "ratio")
+  expect_equal(s$threshold_user, 0.05)
+  expect_equal(s$threshold_scale, "ard")
+  expect_equal(s$source, "package_convention")
+  expect_equal(s$threshold_ratio$threshold_user, 1.25)
+})
+
+test_that("suggest_threshold marks SMD 0.20 as the only Core GRADE sourced default", {
+  skip_if_not_installed("meta")
+  m <- suppressWarnings(meta::metacont(
+    n.e = c(50, 60), mean.e = c(10, 11), sd.e = c(3, 3.5),
+    n.c = c(50, 60), mean.c = c(12, 13), sd.c = c(3, 3.5),
+    studlab = c("A", "B"), sm = "SMD"
+  ))
+  s <- suggest_threshold(m)
+  expect_equal(s$threshold_user, 0.20)
+  expect_equal(s$source, "core_grade_6")
 })
 
 test_that("compute_pooled_sd returns numeric for metacont", {

@@ -12,6 +12,26 @@
 #   rob_some_concerns = "high"           : {no}                -> low
 #                                          {some_concerns, serious} -> high
 #
+#   PROVENANCE: the binary verdict is Core GRADE 4's (verbatim: "For
+#   simplicity, however, Core GRADE users can assess the overall risk of bias
+#   in individual studies as low or high"), but the FOLD is not. The string
+#   "some concerns" does not occur anywhere in Core GRADE 4; it belongs to
+#   three-level tools such as RoB 2. Core GRADE 4 instead sets the low/high
+#   boundary by counting high-risk ITEMS, and its three worked examples use
+#   three different counts:
+#     "if at least one item was rated as high risk of bias, authors considered
+#      the trial as overall high risk of bias"
+#     "required two or more of the seven items (authors omitted one irrelevant
+#      item) rated as high risk of bias to consider the overall risk of bias as
+#      high"
+#     "considered a study at overall high risk of bias only if three or more of
+#      the eight items were assessed as high risk of bias"
+#   and it leaves the choice open: "The choice of threshold--high risk of bias
+#   in only one or more than one item or category--may be an issue that will be
+#   impossible to resolve". rob_some_concerns is therefore a pmatools
+#   convenience for callers who arrive with a three-level rating already made,
+#   not a rule taken from the source.
+#
 #   Study-level overrides (`rob_overrides`, keyed on studlab) are applied
 #   before the fold and each one requires a written rationale.
 #
@@ -32,6 +52,14 @@
 #   If the weight share cannot be computed, the count share is used instead
 #   (stated in the notes); if neither can be computed, dominance is assumed
 #   (conservative).
+#
+#   The count-share fallback has NO basis in Core GRADE 4, which speaks only of
+#   "weight in the meta-analysis" (Fig 2 footnote and the surrounding text:
+#   "thresholds of weight in the meta-analysis of >65% or >=55% of the
+#   weight"). It exists so that mock / hand-built meta objects without usable
+#   inverse-variance weights still produce a verdict, and it can differ
+#   substantially from the weight share when the studies are of uneven size.
+#   Every note produced on that path says so.
 #
 # --------------------------------------------------------------------------
 # Step 2a. dominated = Yes -> "Check direction of bias"
@@ -154,9 +182,10 @@
 #'   keys as `rob_overrides`.
 #' @param rob_dominant_threshold Weight share (0, 1] at or above which the
 #'   evidence counts as dominated by high-RoB studies (Core GRADE 4 Fig 2,
-#'   first node). The figure's footnote offers two candidates — ">65% weight or
-#'   >=55% weight=possibly dominating" — and the default is the conservative
-#'   one, `0.55`; the comparison is `>=`, matching the ">=55%" wording.
+#'   first node). The figure's footnote offers two candidates —
+#'   `">65% weight or >=55% weight=possibly dominating"` — and the default is
+#'   the conservative one, `0.55`; the comparison is `>=`, matching the
+#'   `">=55%"` wording.
 #' @param rob_inflation_threshold Threshold for the relative change of the
 #'   pooled estimate when high-RoB studies are excluded, computed on the
 #'   absolute analysis scale:
@@ -514,7 +543,9 @@ assess_rob <- function(rob, meta_obj,
     "count" = sprintf(
       paste0("Study weights could not be computed; dominance judged on the ",
              "count share instead: %.0f%% %s dominance threshold %.0f%% -> ",
-             "dominated: %s"),
+             "dominated: %s. The count-share fallback is a pmatools ",
+             "convention with no basis in Core GRADE 4, which speaks only of ",
+             "'weight in the meta-analysis'"),
       100 * dom_share, if (dominated) ">=" else "<",
       100 * dominant_threshold, if (dominated) "yes" else "no"
     ),
@@ -671,6 +702,17 @@ assess_rob <- function(rob, meta_obj,
 #   za == zl, non-trivial, bias-favouring inflation > 10%     -> "some_concerns" (rule 3)
 #   za != zl, no sign flip across null                        -> "some_concerns" (rule 4)
 #   za != zl, sign flip (above <-> below)                     -> "serious"       (rule 5)
+#
+# CAVEAT — TE_low is ALWAYS a fixed-effect (common-effect) estimate.
+#   te_low <- sum(w * TE) / sum(w) with w = 1 / seTE^2, computed over the
+#   low/some-RoB studies only. It ignores tau^2 and therefore does NOT track
+#   the parent model: when meta_obj was fitted with random = TRUE, te_all is a
+#   random-effects estimate while te_low is a fixed-effect one, so part of any
+#   observed shift can come from the estimator difference rather than from
+#   risk of bias. The gap widens with heterogeneity and with unequal study
+#   sizes. Core GRADE 4 does not specify how to recompute the restricted
+#   estimate; refitting the model on the low-RoB subset (rob_refit = TRUE) is
+#   the route that keeps both estimates on the same footing.
 # --------------------------------------------------------------------------
 .assess_bias_direction <- function(te_all, se_all, te_vec, se_vec, low_idx,
                                    small_values, inflation_threshold = 0.10,
@@ -757,6 +799,9 @@ assess_rob <- function(rob, meta_obj,
   }
 
   # TE_low: inverse-variance weighted mean of finite low/some-RoB studies.
+  # This is a FIXED-EFFECT estimate regardless of the parent model (see the
+  # caveat in the block comment above): tau^2 plays no part here, so a
+  # random-effects te_all is compared against a common-effect te_low.
   w_low  <- 1 / se_vec[low_usable]^2
   te_low <- sum(w_low * te_vec[low_usable]) / sum(w_low)
   if (!is.finite(te_low)) {

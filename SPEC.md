@@ -409,9 +409,9 @@ Downstream consumers MUST read pooled numbers from `$meta`, not `$meta_full`, so
 
 Supplying `rating_target` manually overrides the derivation and requires `rating_target_rationale`. `print()` shows the target. Objects created before v0.5.0 have no `$rating_target`; consumers must tolerate its absence (the plain language column is simply omitted).
 
-#### 4.5.3 Indirectness subdomains (Core GRADE 5)
+#### 4.5.3 Indirectness subdomains (per-PICO; Core GRADE 5 reasoning, pmatools scale)
 
-`indirectness_subdomains` is a data.frame with columns `subdomain`, `target`, `evidence`, `judgment`, one row per PICO element (Population / Intervention / Comparison / Outcome). `judgment` uses the 4-point scale:
+`indirectness_subdomains` is a data.frame with columns `subdomain`, `target`, `evidence`, `judgment`, one row per PICO element (Population / Intervention / Comparison / Outcome). Asking the question per element is Core GRADE 5's; **the 4-point scale below and the question wording "Is the evidence sufficiently direct?" are pmatools conventions** and do not appear in the article body, which instead grades the *likelihood* of rating down per element (Table 2: Low / Intermediate / Substantial / High likelihood). `judgment` uses the 4-point scale:
 
 | Judgment | Levels down |
 |---|---|
@@ -420,7 +420,7 @@ Supplying `rating_target` manually overrides the derivation and requires `rating
 | `"probably_no"` | 1 |
 | `"no"` | 2 |
 
-Aliases such as `"Probably No"` are normalised. The domain judgment defaults to the **worst case across subdomains**; a scalar `indirectness` still overrides it, and then requires `indirectness_rationale`. The normalised table is returned as `$indirectness_subdomains`; `domain_assessments` keeps its one-row-per-domain schema. `indirectness_table()` (§4.13) renders the table in the BMJ publication format.
+Aliases such as `"Probably No"` are normalised. The domain judgment defaults to the **worst case across subdomains**; a scalar `indirectness` still overrides it, and then requires `indirectness_rationale`. The normalised table is returned as `$indirectness_subdomains`; `domain_assessments` keeps its one-row-per-domain schema. `indirectness_table()` (§4.13) renders the table. The worst-case fold is symmetric across the four elements and therefore does not reproduce Core GRADE 5 Table 2's asymmetric likelihood gradient (Population lowest, Outcome highest); the rendered footer says so.
 
 **`threshold` and `threshold_scale` interaction (auto-detection table):**
 
@@ -504,67 +504,79 @@ These paths are **unchanged from v0.1.0**.
 
 **Path C — Auto (no flowchart params supplied):**
 
-The algorithm proxies each step from data:
+The algorithm proxies each step from data. **This section was rewritten in v0.5.1 to match `R/domain_inconsistency.R`;** the previous text described a `≥ 0.75` cut-off and a `pct_one_side = (n_above + n_trivial)/k` formula that the code has not used since v0.5.1.
 
 ```
-Step 1 proxy:
-  ci_diff_yes <- (I² > 25%)
-  Notes: I² is a statistical proxy for "important differences AND limited CI overlap";
-         clinical visual judgment may differ.
+Step 1 surrogate:
+  ci_diff_yes <- (I² > 30%)          # INCONSISTENCY_I2_CUT
+  Core GRADE 3 gives 30% as its only number ("one will seldom see serious
+  inconsistency with I2 values <30%") while warning that "the limitations of
+  the statistic make such rules problematic". Its actual Step 1 is visual
+  ("Core GRADE relies on the visual inspection of forest plots"), so this is
+  an automation surrogate; every auto note says so.
+  (v0.5.1: raised from 25%, which had no source.)
 
-Step 2 proxy (depends on whether threshold is provided):
+Step 2 surrogate (3-zone tally, identical shape with and without a threshold):
 
-  When threshold_internal is NULL (v0.1.0 behavior, fall-back):
-    boundary = 0 (null)
-    pct_positive <- mean(meta_obj$TE > 0)
-    if (pct_positive >= 0.75 OR pct_positive <= 0.25) → "majority_one_side"
-    else → "opposite_sides"
+  M <- threshold_chosen if finite and > 0, else 0
+       (threshold_chosen is the SAME value Imprecision rates against:
+        ±MID for important-effect / little-to-no-difference targets,
+        the null for a non-null-effect target)
 
-  When threshold_internal is provided (v0.2 enhancement):
-    Classify each study's TE into 3 zones around ±Threshold:
-      above_threshold: TE > +threshold_internal
-      trivial:         -threshold_internal ≤ TE ≤ +threshold_internal
-      below_threshold: TE < -threshold_internal
-    Compute:
-      pct_one_side <- max(
-        (n_above_threshold + n_trivial) / k,
-        (n_below_threshold + n_trivial) / k
-      )
-    if (pct_one_side >= 0.75) → "majority_one_side"
-    else → "opposite_sides"
+  n_above   <- sum(TE > +M)
+  n_below   <- sum(TE < -M)
+  n_trivial <- k - n_above - n_below          # collapses to 0 when M == 0
 
-Step 3 proxy:
-  Cannot auto-check subgroup explanation. If Step 2 is "opposite_sides", auto judgment is "serious".
-  User must override with inconsistency_subgroup_explained = "yes" to demote to "no".
+  pct_max_zone  <- max(n_above, n_trivial, n_below) / k
+  pct_each_side <- min(n_above, n_below) / k
+
+  if (pct_max_zone  >= ZONE_MAJORITY)  → "majority_one_side"    → "no"
+  else if (pct_each_side >= OPPOSITE_EACH) → "opposite_substantial" → "some_concerns"
+  else                                  → "heterogeneous"       → "some_concerns"
+
+  ZONE_MAJORITY = 0.80   # CINeMA (Nikolakopoulou 2020); Core GRADE 3 Fig 2
+                         # says only "Majority are on one side of threshold"
+  OPPOSITE_EACH = 0.20   # pmatools convention; Core GRADE 3's phrase is
+                         # "substantial proportion", with no number
+
+Step 3:
+  Subgroup credibility cannot be auto-checked. Core GRADE 3 keys it to the
+  interaction P value, within-study vs between-study comparison, and a small
+  number of direction-specifying a priori hypotheses, assessed with ICEMAN
+  (www.iceman.help; Schandelmaier 2020, CMAJ 2020;192:E901-6). Supply
+  inconsistency_subgroup_explained = "yes" to take the credible-subgroup
+  branch. NOTE: Core GRADE 3 says "a conclusion of moderate or high
+  credibility warrants the creation of separate PICO questions for each
+  subgroup", so the faithful response is to split the analysis, not to keep
+  reporting the pooled estimate that this branch lets through.
 ```
 
-**Auto judgment outputs (asymmetric vs manual; preserved from v0.1.0):**
+**Auto judgment outputs:**
 
 | Auto path outcome | Auto judgment | Manual flowchart equivalent |
 |---|---|---|
 | ci_diff_yes = FALSE | `"no"` | `"no"` (same) |
-| ci_diff_yes & majority_one_side | **`"some_concerns"`** | `"no"` (manual) |
-| ci_diff_yes & opposite_sides | `"serious"` | `"serious"` (same, modulo Step 3) |
+| ci_diff_yes & majority_one_side | `"no"` | `"no"` (same) |
+| ci_diff_yes & opposite_substantial | `"some_concerns"` | `"some_concerns"` (same, modulo Step 3) |
+| ci_diff_yes & heterogeneous | `"some_concerns"` | — (no manual counterpart) |
 
-Why the auto path returns `"some_concerns"` (instead of BMJ's `"no"`) when majority_one_side: the auto Step 1 proxy (I² > 25%) is statistical, not clinical. It cannot rule out that the heterogeneity is clinically meaningful. Returning `"some_concerns"` instead of `"no"` is a conservative acknowledgment that "we detected heterogeneity but cannot confirm it is clinically trivial without your judgment." Users who want the BMJ-faithful "no" should supply manual params.
+Every automated and flowchart path is capped at `"some_concerns"` (−1): Core GRADE 3 declines to endorse a two-level inconsistency downgrade. `"serious"` (−2) is reachable only through the scalar `inconsistency` override, which requires `inconsistency_rationale`.
 
 **Notes content (all signals shown for transparency):**
 
 ```
-Method: {{"scalar (path A)" | "manual flowchart (path B)" | "auto (path C)"}}
 {{#if path_C}}
-AUTO Step 1: I² = {{i2_pct}}% → {{"important differences detected (I² > 25%)" | "no important heterogeneity (I² ≤ 25%)"}}
-AUTO Step 2 ({{threshold_label}}):
-  {{#if threshold}}
-    Zone counts: above_threshold = {{n_above}}, trivial = {{n_trivial}}, below_threshold = {{n_below}} (k = {{k}})
-    Largest one-side proportion = {{pct_one_side}}% → {{"majority_one_side" | "opposite_sides"}}
-  {{else}}
-    {{pct_positive}}% of TE > 0 → {{"majority_one_side" | "opposite_sides"}}
-  {{/if}}
-AUTO Step 3: subgroup explanation not auto-detectable; supply inconsistency_subgroup_explained = "yes" to override
+AUTO Step 1: {{"I2 > 30% → important heterogeneity detected" | "No important heterogeneity (I2 <= 30%) → do not rate down"}}
+  + the I² surrogate caveat (visual inspection; "hard and fast rules ... problematic")
+AUTO Step 2 ({{threshold_label}}): zone counts (k = {{k}}): above_threshold = {{n_above}},
+  trivial = {{n_trivial}}, below_threshold = {{n_below}}. {{decision_note}}
+  + the zone-cut-off caveat (80% = CINeMA, 20% = pmatools convention)
+{{#if opposite_substantial}}
+  + "Supply inconsistency_subgroup_explained = 'yes' to override" + the ICEMAN caveat
+  + the −1 cap note
 {{/if}}
-Supportive context: I² = {{i2_pct}}%, τ² = {{tau2}}, Q p = {{q_p}} (supplementary only)
-Resulting judgment: {{judgment}}
+{{/if}}
+| I2 = {{i2_pct}}%, tau2 = {{tau2}}, Q p = {{q_p}} (supplementary; not the primary criterion)
 ```
 
 `{{threshold_label}}` is `"vs ±Threshold = ±{{threshold_internal}}"` when Threshold is supplied, otherwise `"vs null = 0"`.
@@ -612,7 +624,7 @@ sof_table(
 
 **`style = "bmj"` (v0.5.0).** The BMJ Core GRADE Summary of Findings layout: outcome and follow-up; participants with the study design spelled out; the relative effect with its measure spelled out; a spanning "Absolute effects (95% CI)" block holding control arm, intervention arm and a **Difference** column (e.g. "88 fewer per 1000 (129 fewer to 42 fewer)"); certainty annotated with the domains that pulled it down; and a plain language summary.
 
-**Plain language summaries** are the Core GRADE 2 Table 1 statements, carried verbatim and selected from the certainty level, `threshold_type` and `rating_target`. An object without `$rating_target` (created before v0.5.0) omits the column rather than guessing.
+**Plain language summaries** are the **Core GRADE 6 Box 1** statements ("Writing standardised GRADE plain language summaries in summary of findings tables"), carried verbatim. Box 1 supersedes the earlier Core GRADE 2 Table 1 guidance, which it "summarises ... as well as additional guidance related to the null and MID thresholds that are the focus of Core GRADE"; unlike Table 1 it names the direction of the effect on the outcome instead of fixing the wording to "benefit". The statement is selected from **four** inputs: certainty level, `threshold_type`, `rating_target`, and the **sign of the pooled point estimate** (`increases` / `reduces`). An object without `$rating_target` (created before v0.5.0) omits the column rather than guessing, as does an object with no usable direction — Box 1 has no direction-free wording.
 
 **Analysis-set footnote.** When the rated analysis is a low-RoB refit (§5.1), the table carries a footnote saying so. `grade_table()` numbers the marker per row, so a table mixing analysis sets says which rows were restricted.
 
@@ -654,7 +666,8 @@ chinn_smd_to_or(
 ### 4.7a `suggest_threshold()` [new helper, exported]
 
 ```r
-suggest_threshold(meta_obj) -> list(threshold_user, threshold_scale) | NULL
+suggest_threshold(meta_obj) -> list(threshold_user, threshold_scale, source,
+                                    [threshold_absolute], [threshold_ratio]) | NULL
 ```
 
 Returns a conventional default Threshold for the given `{meta}` object based on `meta_obj$sm`. See §5.4 for the table. Returns `NULL` when `sm` is unrecognized.
@@ -1035,7 +1048,9 @@ Exported but not specified in detail here; see the roxygen pages. They predate t
 indirectness_table(x, summary_text = NULL, ...) -> flextable
 ```
 
-Renders `x$indirectness_subdomains` (§4.5.3) in the BMJ Core GRADE 5 publication format: target question, evidence found, a colour-graded 4-option judgment row with the recorded answer ticked, and a merged "Judgment across subdomains" row carrying the overall judgment. Aborts with a message telling the caller how to record subdomains when `x` has none.
+Renders `x$indirectness_subdomains` (§4.5.3): target question, evidence found, a colour-graded 4-option judgment row with the recorded answer ticked, and a merged "Judgment across subdomains" row carrying the overall judgment. Aborts with a message telling the caller how to record subdomains when `x` has none.
+
+**Attribution.** This is a **pmatools table layout implementing Core GRADE 5's per-PICO reasoning — not a Core GRADE 5 publication table.** The article body carries exactly two tables: Table 1 (an adaptation of a summary of findings table) and Table 2 ("Summary of indirectness issues": PICO element / Reason for rating down / Examples / Likelihood of rating down). Nothing of this shape appears there, and the strings "sufficiently direct", "probably yes" and "probably no" occur nowhere in it. *(The online supplementary appendices have not been checked.)* The footer of the rendered table states this, and also reproduces the Table 2 likelihood gradient (Population "Low" → Intervention "Intermediate" → Comparison "Substantial" → Outcome "High likelihood"), which the symmetric worst-case fold does not reproduce.
 
 ---
 
@@ -1150,66 +1165,47 @@ if (!is.null(inconsistency_ci_diff)) {
            notes = "Step 3: opposite-sided estimates explained by credible subgroup; present subgroups separately."
   }
 
-  return judgment = "serious", auto = FALSE,
-         notes = "Step 3: opposite-sided estimates not explained by credible subgroup → rate down."
+  return judgment = "some_concerns", auto = FALSE,
+         notes = "Step 3: opposite-sided estimates not explained by credible subgroup → rate down one level."
 }
 
 # ---- Path C: auto-detect ----
 
-# Step 1 proxy: I² > 25%
-ci_diff_yes <- (i2_pct > 25)
+# Step 1 surrogate: I² > 30%   (INCONSISTENCY_I2_CUT; v0.5.1, was 25%)
+ci_diff_yes <- (i2_pct > 30)
 
 if (!ci_diff_yes) {
   return judgment = "no", auto = TRUE,
-         notes = "AUTO Step 1: no important heterogeneity (I² ≤ 25%)."
+         notes = "AUTO Step 1: No important heterogeneity (I2 <= 30%) → do not rate down." + I2 caveat
 }
 
-# Step 2 proxy: depends on whether threshold is provided
-if (!is.null(threshold_internal)) {
-  # Threshold-based 3-zone classification of point estimates
-  te_studies <- meta_obj$TE
-  k <- length(te_studies)
-  M <- threshold_internal
+# Step 2 surrogate: one 3-zone tally, with M = 0 when no threshold applies
+M <- if (is finite and > 0) threshold_chosen else 0
 
-  n_above   <- sum(te_studies > +M)
-  n_below   <- sum(te_studies < -M)
-  n_trivial <- k - n_above - n_below
+n_above   <- sum(TE > +M)
+n_below   <- sum(TE < -M)
+n_trivial <- k - n_above - n_below      # 0 when M == 0
 
-  pct_one_side <- max(
-    (n_above + n_trivial) / k,
-    (n_below + n_trivial) / k
-  )
+pct_max_zone  <- max(n_above, n_trivial, n_below) / k
+pct_each_side <- min(n_above, n_below)  / k
 
-  threshold_side <- if (pct_one_side >= 0.75) "majority_one_side" else "opposite_sides"
-  threshold_label <- sprintf("vs ±Threshold = ±%g", M)
+if (pct_max_zone >= 0.80) {                    # ZONE_MAJORITY (CINeMA)
+  threshold_side <- "majority_one_side";    judgment <- "no"
+} else if (pct_each_side >= 0.20) {            # OPPOSITE_EACH (pmatools)
+  threshold_side <- "opposite_substantial"; judgment <- "some_concerns"
 } else {
-  # Fall-back: null=0 boundary (v0.1.0 behavior)
-  pct_positive <- mean(meta_obj$TE > 0, na.rm = TRUE)
-  threshold_side <- if (pct_positive >= 0.75 OR pct_positive <= 0.25) "majority_one_side" else "opposite_sides"
-  threshold_label <- "vs null = 0"
+  threshold_side <- "heterogeneous";        judgment <- "some_concerns"
 }
-
-# Auto judgment: more conservative than manual
-# (auto Step 1 is statistical proxy, cannot confirm "important" clinically)
-if (threshold_side == "majority_one_side") {
-  return judgment = "some_concerns", auto = TRUE,
-         notes = sprintf("AUTO Step 1: I² > 25% → important heterogeneity detected. AUTO Step 2 (%s): majority on one side → 'some' concern (auto path is conservative; supply manual flowchart params for BMJ-faithful 'no').", threshold_label)
-}
-
-# opposite_sides — Step 3 cannot be auto-checked
-return judgment = "serious", auto = TRUE,
-       notes = sprintf("AUTO Step 1: I² > 25% → important heterogeneity detected. AUTO Step 2 (%s): opposite-sided estimates; subgroup explanation not auto-detectable. Supply inconsistency_subgroup_explained = 'yes' to override.", threshold_label)
+# Notes carry: the I² surrogate caveat, the zone-cut-off provenance caveat,
+# and (for opposite_substantial) the ICEMAN subgroup caveat and the −1 cap.
 ```
-
-**Why the auto path differs from the manual path on `majority_one_side`:**
-
-In the BMJ manual flowchart, "majority_one_side" → judgment = `"no"` because the user has clinically confirmed Step 1 ("important differences" is real heterogeneity, not just statistical noise). The auto path uses I² > 25% as a **statistical proxy** for Step 1; this proxy can flag heterogeneity that is not clinically important. Returning `"some_concerns"` instead of `"no"` is a conservative acknowledgment that the auto path cannot fully replace clinical judgment. Users who want the BMJ-faithful `"no"` should supply manual flowchart parameters.
 
 **Edge cases:**
 
 - `k < 2`: cannot assess inconsistency. Return judgment = `"no"` with note "k < 2; inconsistency not assessable."
-- I² is NA (e.g., k = 1): Step 1 proxy returns FALSE → judgment = `"no"` with note "I² unavailable; cannot detect heterogeneity."
-- All TE values equal (τ² = 0): I² will be 0 → Step 1 proxy returns FALSE → judgment = `"no"`.
+- I² is NA (e.g., k = 1): the Step 1 surrogate returns FALSE → judgment = `"no"` with note "I² unavailable; cannot detect heterogeneity."
+- All TE values equal (τ² = 0): I² will be 0 → the Step 1 surrogate returns FALSE → judgment = `"no"`.
+- Study-level TEs unavailable: Step 2 is not assessable → `"some_concerns"` (conservative).
 - Threshold supplied but `threshold_internal` cannot be derived (unknown sm): function aborts before reaching this domain.
 
 **Judgment interpretation table:**
@@ -1219,10 +1215,13 @@ In the BMJ manual flowchart, "majority_one_side" → judgment = `"no"` because t
 | Manual | ci_diff = "no" | — | — | **No** |
 | Manual | ci_diff = "yes" | majority_one_side | — | **No** |
 | Manual | ci_diff = "yes" | opposite_sides | yes | **No** + note |
-| Manual | ci_diff = "yes" | opposite_sides | no | **Serious** |
-| Auto | I² ≤ 25% | — | — | **No** |
-| Auto | I² > 25% | majority_one_side | — | **some_concerns** *(more conservative than manual)* |
-| Auto | I² > 25% | opposite_sides | n/a | **Serious** |
+| Manual | ci_diff = "yes" | opposite_sides | no | **some_concerns** *(capped at −1)* |
+| Auto | I² ≤ 30% | — | — | **No** |
+| Auto | I² > 30% | majority_one_side (max zone ≥ 80%) | — | **No** |
+| Auto | I² > 30% | opposite_substantial (≥ 20% each side) | n/a | **some_concerns** |
+| Auto | I² > 30% | heterogeneous (neither) | n/a | **some_concerns** |
+
+`"serious"` (−2) for this domain is reachable only through the scalar `inconsistency` override.
 
 ### 5.3 Chinn's formula (SMD ↔ OR)
 
@@ -1238,26 +1237,50 @@ CI bounds use the same multiplication. Document in `?chinn_smd_to_or` that the c
 
 ### 5.4 Threshold auto-default per `sm` (suggested defaults)
 
-When the Shiny app pre-fills the Threshold input, use these **conventional defaults** based on `meta_obj$sm`. The user can always override.
+When the Shiny app pre-fills the Threshold input, use these **placeholder defaults** based on `meta_obj$sm`. The user can always override — and, except for SMD, should.
+
+**Every default now carries a `source` field** naming where the number comes from, and **for binary ratio measures the absolute candidate leads** (v0.5.1). Rationale, in the source's own words:
+
+- **No ratio-scale MID exists anywhere in Core GRADE 1, 6 or 7.** Every binary MID discussed there is on the absolute scale (per 1000 or percent) — Core GRADE 7 lists MIDs "associated with mortality of 1%, stroke of 2%, myocardial infarction of 3%, and serious gastrointestinal bleeding of 5%"; Core GRADE 2 discusses "an MID of 5 deaths per [1000]". A ratio-scale default is therefore a pmatools extrapolation.
+- **The MID belongs to the outcome, not to the effect measure.** Those same Core GRADE 7 numbers "reflect the gradient of importance across these outcomes"; one default shared by every outcome erases that gradient.
+- **The procedure runs the other way round.** Core GRADE 7 has users read the CI first and pin down a MID only where the verdict turns on it ("whether the MID for mortality is 2%, 1%, or less than 1%, the CI does not cross the MID threshold ... one need not specify a single particular value"). Starting from a pre-filled default inverts that order.
+- **SMD 0.20 is the one sourced value**, and Core GRADE 6 hedges it: "an SMD of 0.2 is the threshold for a small and important effect", but "clinicians may be appropriately sceptical of this threshold, which is limited by large variability in the methods investigators use to calculate the SMD".
 
 ```r
 suggest_threshold <- function(meta_obj) {
   sm <- meta_obj$sm
+  ard <- list(threshold_user = 0.05, threshold_scale = "ard",
+              source = "package_convention")      # 50 per 1000
   switch(sm,
-    "OR"  = list(threshold_user = 1.25,  threshold_scale = "ratio"),     # log(1.25) ≈ 0.223
-    "RR"  = list(threshold_user = 1.20,  threshold_scale = "ratio"),     # log(1.20) ≈ 0.182
-    "HR"  = list(threshold_user = 1.20,  threshold_scale = "ratio"),
-    "RoM" = list(threshold_user = 1.10,  threshold_scale = "ratio"),     # 10% ratio of means
-    "ARD" = list(threshold_user = 0.05,  threshold_scale = "ard"),        # 5% absolute risk diff
-    "SMD" = list(threshold_user = 0.20,  threshold_scale = "te_scale"),   # Cohen's small
+    # Binary ratio measures: ABSOLUTE first, ratio kept as $threshold_ratio.
+    "OR"  = c(ard, list(threshold_absolute = ard,
+                        threshold_ratio = list(threshold_user = 1.25,
+                                               threshold_scale = "ratio",
+                                               source = "package_convention"))),
+    "RR"  = c(ard, list(threshold_absolute = ard,
+                        threshold_ratio = list(threshold_user = 1.20,
+                                               threshold_scale = "ratio",
+                                               source = "package_convention"))),
+    "HR"  = c(ard, list(threshold_absolute = ard,
+                        threshold_ratio = list(threshold_user = 1.20,
+                                               threshold_scale = "ratio",
+                                               source = "package_convention"))),
+    "RoM" = list(threshold_user = 1.10, threshold_scale = "ratio",
+                 source = "package_convention"),
+    "ARD" = ard,
+    "SMD" = list(threshold_user = 0.20, threshold_scale = "te_scale",
+                 source = "core_grade_6"),        # the only sourced default
     "MD"  = {
       sd_pooled <- compute_pooled_sd(meta_obj)
-      list(threshold_user = 0.20 * sd_pooled, threshold_scale = "te_scale")  # 0.2 * pooled SD
+      list(threshold_user = 0.20 * sd_pooled, threshold_scale = "te_scale",
+           source = "package_convention")
     },
     NULL  # unknown sm → no default
   )
 }
 ```
+
+`threshold_scale = "auto"` in `grade_meta()` is **unaffected** by this reordering; only the suggestion helper and the entry-gate error message changed.
 
 **`compute_pooled_sd()` (for MD only):**
 
@@ -1368,7 +1391,7 @@ Does the CI cross the chosen threshold?
 | test-run_ma.R *(new)* | binary OR/RR with method × method.tau matrix, continuous SMD/MD/RoM, hakn/prediction auto k>=3, subgroup, error on invalid sm |
 | test-export_bundle.R *(new)* | ZIP generated; all 9 files present; `analysis.R` is syntactically valid R (`parse()` succeeds); `analysis.R` reproduces same `meta::TE.random` when run via `Rscript` |
 | test-domain_rob.R *(new)* | inflation threshold 0/0.05/0.10/0.20 boundary, dominated + below-threshold = "no", dominated + above-threshold = "serious", `small_values = NULL` paths |
-| test-inconsistency_threshold.R *(new)* | manual flowchart (3 paths: ci_diff=no / majority_one_side / opposite_sides×subgroup); auto Step 1 = I² > 25% only (Q-test no longer used); auto Step 2 with Threshold (3-zone classification, ≥75% one-side share); auto Step 2 without Threshold (null=0 fallback, v0.1.0 behavior preserved); auto vs manual asymmetry on majority_one_side |
+| test-inconsistency_threshold.R *(new)* | manual flowchart (3 paths: ci_diff=no / majority_one_side / opposite_sides×subgroup); auto Step 1 = I² > 30% only (Q-test no longer used); auto Step 2 3-zone tally (≥80% max-zone share, ≥20% each-side share) with and without a Threshold; the I² / zone / ICEMAN provenance caveats appear in the notes |
 | test-threshold_scale.R *(new)* | `threshold_scale = "auto"` correctly maps OR/RR/HR/RoM → log, MD/SMD → te_scale, ARD → ard; abort on unknown sm |
 | test-suggest_threshold.R *(new)* | defaults match table for OR/RR/SMD/MD/ARD/RoM; MD default = 0.2 × pooled SD; unknown sm returns NULL |
 | test-chinn.R *(new)* | numerical accuracy of factor π/√3, NA propagation, sof_table integration with convert_smd_to_or = TRUE |
@@ -1458,7 +1481,7 @@ Does the CI cross the chosen threshold?
 **Intentional behavior changes (documented in CHANGELOG):**
 
 1. **RoB `small_values = NULL` path (§5.1):** v0.1.0 always rated down conservatively when dominated; v0.2.0 only rates down when relative inflation exceeds `rob_inflation_threshold`. Set `rob_inflation_threshold = 0` to restore v0.1.0 behavior.
-2. **Inconsistency auto Step 1 (§5.2 Path C):** v0.1.0 used `I² > 25% OR Q p < 0.10`; v0.2.0 uses `I² > 25%` only. Q-test is supplementary in notes only. This may shift edge-case judgments where I² ≤ 25% but Q p < 0.10 (small k with extreme outliers); typically rare in practice.
+2. **Inconsistency auto Step 1 (§5.2 Path C):** v0.1.0 used `I² > 25% OR Q p < 0.10`; v0.2.0 dropped the Q-test; **v0.5.1 raised the cut-off to `I² > 30%`**, the only figure Core GRADE 3 puts on paper ("one will seldom see serious inconsistency with I2 values <30%"). Q-test is supplementary in notes only. Analyses with 25% < I² ≤ 30% that previously reached Step 2 now stop at Step 1 and are not rated down.
 
 ---
 

@@ -221,13 +221,46 @@ RATING_TARGET_LABELS <- c(
   sugg <- tryCatch(suggest_threshold(meta_obj), error = function(e) NULL)
   sm   <- meta_obj$sm %||% "this"
   hint <- if (!is.null(sugg) && !is.null(sugg$threshold_user)) {
-    sprintf(
-      paste0("suggest_threshold() recommends threshold = %s with ",
-             "threshold_scale = '%s' for this %s meta-analysis."),
-      format(signif(sugg$threshold_user, 4)), sugg$threshold_scale, sm
+    src <- sugg$source %||% "package_convention"
+    provenance <- if (identical(src, "core_grade_6")) {
+      paste0(
+        "That value is cited in Core GRADE 6, which qualifies it: ",
+        "'clinicians may be appropriately sceptical of this threshold, which ",
+        "is limited by large variability in the methods investigators use to ",
+        "calculate the SMD'."
+      )
+    } else {
+      paste0(
+        "That value is a pmatools placeholder (source = 'package_convention'), ",
+        "NOT a Core GRADE number: the Core GRADE series contains no ratio-scale ",
+        "MID, and every binary MID it discusses is on the absolute scale (per ",
+        "1000 or percent)."
+      )
+    }
+    alt <- if (!is.null(sugg$threshold_ratio)) {
+      sprintf(
+        paste0(" A ratio-scale fallback is available as threshold = %s with ",
+               "threshold_scale = 'ratio'."),
+        format(signif(sugg$threshold_ratio$threshold_user, 4))
+      )
+    } else ""
+    paste0(
+      sprintf(
+        paste0("suggest_threshold() recommends threshold = %s with ",
+               "threshold_scale = '%s' for this %s meta-analysis."),
+        format(signif(sugg$threshold_user, 4)), sugg$threshold_scale, sm
+      ),
+      alt, " ", provenance,
+      " Core GRADE 7 ties the MID to the outcome, not to the effect measure ",
+      "('MIDs associated with mortality of 1%, stroke of 2%, myocardial ",
+      "infarction of 3%, and serious gastrointestinal bleeding of 5% reflect ",
+      "the gradient of importance across these outcomes'), and asks users to ",
+      "read the CI first and pin down a MID only where the verdict depends on ",
+      "it. Treat the number above as a placeholder to replace, not as a ",
+      "recommendation."
     )
   } else {
-    paste0("No conventional default is available for sm = '", sm,
+    paste0("No placeholder default is available for sm = '", sm,
            "'; supply a published or expert-derived MID.")
   }
 

@@ -29,7 +29,8 @@ GRADEpro-style layout. \code{"bmj"} switches to the BMJ Core GRADE
 presentation: outcome and follow-up, participants and design, relative
 effect, a spanning "Absolute effects (95\% CI)" block (control /
 intervention / difference), certainty with its rate-down reason, and a
-plain language summary (Core GRADE 2 Table 1).}
+plain language summary (Core GRADE 6 Box 1, which supersedes the earlier
+Core GRADE 2 Table 1 guidance).}
 
 \item{palette}{Color palette for the certainty cell.
 \code{"pastel"} (default) uses soft backgrounds with colored text.

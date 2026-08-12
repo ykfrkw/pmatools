@@ -131,6 +131,15 @@ assess_imprecision <- function(meta_obj,
                                threshold_kind     = NULL,
                                threshold_ard      = NULL,
                                threshold_p0       = NULL,
+                               # UNUSED (kept only so that grade_meta() can
+                               # forward its full argument list without a
+                               # special case). The rating target and the
+                               # threshold type reach this function ALREADY
+                               # RESOLVED, as threshold_for_imprecision: Core
+                               # GRADE 2 Fig 2 picks the threshold, and
+                               # rating_target.R hands the chosen value down.
+                               # Reading rating_target / threshold_type here
+                               # would risk a second, divergent resolution.
                                rating_target      = NULL,
                                threshold_type     = NULL,
                                threshold_for_imprecision = NULL) {
@@ -337,7 +346,8 @@ assess_imprecision <- function(meta_obj,
                                 paste0("BOTH MIDs (+/-MID) -- the CI is consistent ",
                                        "with benefit and with clearly important harm ",
                                        "(Core GRADE 2, null-threshold path)")
-                              }
+                              },
+    sm                      = sm
   )
   judgment <- fig4$judgment
 
@@ -358,8 +368,10 @@ assess_imprecision <- function(meta_obj,
   } else if (ois_met) {
     sprintf("OIS met (%.0f%%; observed %d / target %d %s)",
             100 * ois_pct, ois_info$observed, ois_info$target, ois_info$unit)
-  } else if (!is.na(ois_pct) && ois_pct <= 0.30) {
-    sprintf("OIS not met; observed %d / target %d %s = %.0f%% (<= 30%%)",
+  } else if (!is.na(ois_pct) && ois_pct < 0.30) {
+    # Fig 4's node reads "N<30% of OIS"; the decision in
+    # .classify_imprecision() uses a strict `<`, and this label must agree.
+    sprintf("OIS not met; observed %d / target %d %s = %.0f%% (< 30%%)",
             ois_info$observed, ois_info$target, ois_info$unit, 100 * ois_pct)
   } else {
     sprintf("OIS not met (observed %d / target %d %s = %.0f%%)",
@@ -389,16 +401,40 @@ assess_imprecision <- function(meta_obj,
     paste0("; beyond Threshold (definitively important effect)", mid_suffix)
   }
 
+  # Fig 4's "Yes" branch offers TWO reasons to consider rating down two
+  # levels, and pmatools automates only the first. Verbatim:
+  #   "Consider rating down two levels if:
+  #    - CI crosses two thresholds-eg, both important benefit and important
+  #      harm
+  #    - Most appropriate plain language description of results suggests more
+  #      uncertainty-eg, "may" rather than "likely" (assuming no concern
+  #      related to other 4 grade domains)"
+  # The second condition is a judgment about wording, not a computation, so it
+  # is surfaced rather than applied.
+  two_level_manual <- if (isTRUE(crosses_threshold) &&
+                          !isTRUE(crosses_both_thresholds)) {
+    paste0(
+      " [Second Fig 4 two-level condition NOT auto-assessed: Core GRADE 2 ",
+      "also says to consider rating down two levels when the 'most ",
+      "appropriate plain language description of results suggests more ",
+      "uncertainty-eg, \"may\" rather than \"likely\"'. Read the plain ",
+      "language summary in the SoF table (sof_table(style = 'bmj')) against ",
+      "the message you intend to convey, and override with imprecision = ",
+      "'serious' + imprecision_rationale if it applies.]"
+    )
+  } else ""
+
   # The rating target itself is appended by grade_meta() (it owns the Fig 2
   # derivation); here we only record which threshold Fig 4 was applied to.
   notes <- sprintf(
-    "95%% CI %s; null = %g; crosses null = %s%s; %s%s | %s",
+    "95%% CI %s; null = %g; crosses null = %s%s; %s%s | %s%s",
     ci_str, null_disp,
     if (crosses_null) "YES" else "no",
     thresh_str,
     ois_str,
     if (nchar(ois_calc_note) > 0) paste0(" (", ois_calc_note, ")") else "",
-    fig4$path
+    fig4$path,
+    two_level_manual
   )
 
   make_domain_row(
@@ -602,16 +638,37 @@ assess_imprecision <- function(meta_obj,
 }
 
 # Fig 4: relative risk CI ratio >= 3, odds ratio CI ratio >= 2.5.
-# HR / IRR / RoM は risk ratio と同じ 3 を適用する。
+#
+# CAVEAT: Core GRADE 2 names ONLY those two measures. Applying the risk-ratio
+# value of 3 to HR / IRR / RoM is a pmatools extrapolation with no support in
+# the source; it rests on nothing more than these being ratio measures read on
+# a comparable scale. The domain notes state it whenever the cut-off decides a
+# two-level downgrade.
 .ci_ratio_cut <- function(sm) {
   if (is.null(sm)) return(NA_real_)
   switch(sm, "OR" = 2.5, "RR" = 3, "HR" = 3, "IRR" = 3, "RoM" = 3, NA_real_)
 }
 
+# Which effect measures get the CI-ratio cut-off straight from Core GRADE 2.
+.CI_RATIO_SOURCED_SM <- c("OR", "RR")
+
 # 二値 (event ベース) アウトカムか。metabin 由来のイベント数があるか、
 # 効果指標が二値向けなら二値扱い。Fig 4 の連続／二値の分岐に使う
 # (grade_meta の outcome_type は OIS 計算用の "relative"/"absolute" であって
 #  連続／二値の区別ではないため、ここでは使わない)。
+#
+# NOTE — RoM. RoM is deliberately NOT listed here: a ratio of means is a
+# continuous-outcome summary, so Fig 4's continuous branch (N >= 800 rule of
+# thumb, N < 30% of OIS) is the right one and the CI-ratio branch never runs
+# for it. .is_implausibly_large() nevertheless routes RoM through the BINARY
+# "relative risk reduction > 30% / > 40%" rule, because 1 - exp(-|log RoM|) is
+# a usable magnitude proxy on a ratio scale and Core GRADE 2 offers no
+# "large effect" definition for continuous outcomes at all. The two functions
+# therefore classify RoM differently on purpose:
+#   .is_binary_outcome()      RoM -> continuous  (drives the Fig 4 branch)
+#   .is_implausibly_large()   RoM -> ratio rule  (drives the magnitude label)
+# Both paths label their reasoning in the notes; neither is claimed to be
+# Core GRADE 2's.
 .is_binary_outcome <- function(meta_obj) {
   if (!is.null(meta_obj$event.e) && length(meta_obj$event.e) > 0) return(TRUE)
   sm <- meta_obj$sm
@@ -645,7 +702,13 @@ assess_imprecision <- function(meta_obj,
                                   ci_ratio_cut,
                                   threshold_label = "the Threshold",
                                   two_level_label =
-                                    "TWO thresholds (important benefit and important harm)") {
+                                    "TWO thresholds (important benefit and important harm)",
+                                  sm = NULL) {
+  ci_ratio_src_note <- if (!is.null(sm) && !sm %in% .CI_RATIO_SOURCED_SM) {
+    sprintf(paste0(" [Core GRADE 2 Fig 4 names CI-ratio cut-offs only for ",
+                   "relative risk (3) and odds ratio (2.5); applying 3 to %s ",
+                   "is a pmatools extrapolation]"), sm)
+  } else ""
   out <- function(judgment, path, ois_used = FALSE) {
     list(judgment = judgment,
          path     = paste0("Fig 4 path: ", path),
@@ -679,7 +742,8 @@ assess_imprecision <- function(meta_obj,
     if (!is.na(ci_ratio) && !is.na(ci_ratio_cut) && ci_ratio >= ci_ratio_cut) {
       return(out("serious", sprintf(paste0(
         "%s (binary): CI ratio %.2f >= %.1f -> consider rating down two ",
-        "levels"), prefix, ci_ratio, ci_ratio_cut), ois_used = TRUE))
+        "levels%s"), prefix, ci_ratio, ci_ratio_cut, ci_ratio_src_note),
+        ois_used = TRUE))
     }
   } else {
     # Continuous rule of thumb: 400 patients per group (total sample size 800).

@@ -22,11 +22,38 @@ A \code{flextable} object suitable for printing, Word export, etc.
 }
 \description{
 Renders the Population / Intervention / Comparison / Outcome subdomain
-judgments recorded by \code{\link{grade_meta}} in the BMJ Core GRADE 5
-publication format: one row per subdomain with its target question, the
-evidence found, and the 4-point judgment ("Is the evidence sufficiently
-direct?"), plus a closing row with the overall domain judgment.
+judgments recorded by \code{\link{grade_meta}}: one row per subdomain with
+its target question, the evidence found, and the 4-point judgment ("Is the
+evidence sufficiently direct?"), plus a closing row with the overall domain
+judgment.
 }
+\section{Attribution}{
+
+This table layout is a \strong{pmatools} implementation of the per-PICO
+reasoning Core GRADE 5 describes; \strong{it is not a Core GRADE 5
+publication table}. The published article carries only two tables: Table 1
+(an adaptation of a summary of findings table) and Table 2 ("Summary of
+indirectness issues", with the columns PICO element / Reason for rating down
+/ Examples / Likelihood of rating down). No table of the shape rendered here
+appears in the article body (the online supplementary appendices have not
+been checked).
+
+The 4-point answer scale (\code{"yes"} / \code{"probably_yes"} /
+\code{"probably_no"} / \code{"no"}) and the question wording "Is the
+evidence sufficiently direct?" are likewise \strong{pmatools conventions}.
+Core GRADE 5 does not pose a yes/no directness question; it asks how likely
+it is that the effect differs substantially between the target PICO and the
+available evidence, and Table 2 grades that answer as "Low" /
+"Intermediate" / "Substantial" / "High likelihood" of rating down.
+
+Core GRADE 5 Table 2 also treats the four PICO elements
+\emph{asymmetrically}: Population carries a "Low likelihood" of rating down,
+Intervention "Intermediate", Comparison "Substantial", and Outcome "High
+likelihood". This table (and the worst-case fold behind it) treats the four
+elements symmetrically, so a "probably no" on Population weighs the same as
+one on Outcome. The table footer repeats this caveat.
+}
+
 \examples{
 \dontrun{
 g <- grade_meta(

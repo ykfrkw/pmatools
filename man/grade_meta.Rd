@@ -83,11 +83,28 @@ Not used for per-study vectors or column-name input (automated
 assessment). Default \code{NULL}.}
 
 \item{rob_some_concerns}{(v0.5) How studies rated \code{"some concerns"}
-are folded into the binary low/high classification that BMJ Core GRADE 4
+are folded into the binary low/high classification that Core GRADE 4
 Fig 2 operates on. \code{"low"} (default, previous behaviour) or
 \code{"high"}. Changing it changes which studies count toward the
 high-RoB weight share and therefore the dominance gate. Only used when
-\code{rob} is a vector or column name.}
+\code{rob} is a vector or column name.
+
+\strong{Core GRADE 4 does not define this fold.} The phrase "some
+concerns" never appears in the article; it comes from three-level tools
+such as RoB 2. Core GRADE 4 asks only for a binary verdict per study —
+verbatim, "For simplicity, however, Core GRADE users can assess the
+overall risk of bias in individual studies as low or high" — and the
+examples it gives set the low/high boundary by \emph{counting high-risk
+items}, not by mapping an intermediate category: one review took a trial
+as high risk "if at least one item was rated as high risk of bias",
+another "required two or more of the seven items ... rated as high risk of
+bias", a third counted a study high "only if three or more of the eight
+items were assessed as high risk of bias". Core GRADE 4 then declines to
+settle the question: "The choice of threshold--high risk of bias in only
+one or more than one item or category--may be an issue that will be
+impossible to resolve". Whichever value you pass here is your own
+operational choice, and it is worth recording it alongside the item-count
+rule your review actually used.}
 
 \item{rob_overrides}{(v0.5) Optional named character vector of study-level
 Risk-of-Bias overrides keyed on \code{meta_obj$studlab}, e.g.
@@ -131,6 +148,14 @@ the pooled estimate when high-RoB studies are excluded, computed on the
 absolute analysis scale: \eqn{(|TE_{all}| - |TE_{low}|) / |TE_{low}|},
 where \eqn{TE_{low}} is the inverse-variance weighted mean of the
 low/some-concerns RoB studies. Default \code{0.10} (10 percent).
+\strong{\eqn{TE_{low}} is always a fixed-effect estimate}
+(\eqn{\sum w \cdot TE / \sum w} with \eqn{w = 1/se^2}), even when the
+parent meta-analysis is a random-effects model. Part of any observed shift
+can therefore come from the estimator difference rather than from risk of
+bias, and the gap widens with heterogeneity. Core GRADE 4 does not specify
+how to recompute the restricted estimate; \code{rob_refit = TRUE} refits
+the model on the low-RoB subset and keeps both estimates on the same
+footing.
 A downgrade under this criterion requires BOTH (a) the relative change to
 be \emph{strictly} greater than the threshold (\code{>}; a change exactly at
 the threshold does not rate down) AND (b) the shift to be in the
@@ -187,8 +212,20 @@ body of evidence down.}
 \code{"no"}. See \code{rob_rationale} for how it is recorded.
 Default \code{NULL}.}
 
-\item{indirectness_subdomains}{(v0.5) Optional Core GRADE 5 subdomain
-judgment table. A data.frame / tibble (or an equivalent list) with:
+\item{indirectness_subdomains}{(v0.5) Optional per-PICO subdomain judgment
+table.
+\strong{Attribution}: asking the indirectness question separately for each
+PICO element is Core GRADE 5's; the table, the 4-point answer scale
+(\code{"yes"} / \code{"probably_yes"} / \code{"probably_no"} /
+\code{"no"}) and the wording "Is the evidence sufficiently direct?" are
+\strong{pmatools conventions} and do not appear in the Core GRADE 5
+article body. Core GRADE 5 instead asks how likely it is that the effect
+differs substantially from the target PICO, and grades that likelihood per
+element in its Table 2 ("Likelihood of rating down"): Population = "Low
+likelihood", Intervention = "Intermediate", Comparison = "Substantial",
+Outcome = "High likelihood". The worst-case fold below is symmetric and
+does not reproduce that gradient.
+A data.frame / tibble (or an equivalent list) with:
 \describe{
 \item{subdomain}{Required. Subdomain label, typically
 \code{"Population"}, \code{"Intervention"}, \code{"Comparison"},
@@ -236,7 +273,30 @@ side of the clinical threshold, or spread across both sides?}
 
 \item{inconsistency_subgroup_explained}{Required when
 \code{inconsistency_threshold_side = "opposite_sides"}.
-\code{"yes"} / \code{"no"}: is the inconsistency explained by a credible subgroup?}
+\code{"yes"} / \code{"no"}: is the inconsistency explained by a credible
+subgroup?
+
+\strong{How to decide.} pmatools cannot assess credibility; Core GRADE 3
+points at a formal instrument and three key criteria. Verbatim (Core
+GRADE 3 summary points): "Key criteria for determining the credibility of
+a subgroup analysis include the P value associated with a test of
+interaction, consistency with a priori hypotheses that include direction
+of effect, and whether the subgroup effect is based on within study
+comparisons". The instrument is ICEMAN
+(\url{https://www.iceman.help}; Schandelmaier S, Briel M, Varadhan R,
+et al. CMAJ 2020;192:E901-6. doi:10.1503/cmaj.200077).
+
+\strong{This implementation is more permissive than Core GRADE 3.}
+Passing \code{"yes"} lets the pooled estimate through without rating down.
+Core GRADE 3 instead says (verbatim) that "a conclusion of moderate or
+high credibility warrants the creation of separate PICO questions for each
+subgroup, separate presentation of results for each subgroup, separate
+ratings of certainty considering all five domains of rating down, and
+separate conclusions in keeping with each estimate of effect". So
+\code{"yes"} should be reserved for credibility that is at least moderate,
+and the faithful next step is to split the analysis and rate each subgroup
+separately (see \code{\link{grade_meta_multi}}), not to keep reporting the
+pooled estimate.}
 
 \item{imprecision}{Optional overall imprecision scalar judgment. One of
 \code{"no"}, \code{"some_concerns"}, \code{"serious"} (legacy
@@ -261,7 +321,15 @@ underlying effect, benefit or harm?" — the null is the threshold and
 a MID is optional.
 }
 With \code{threshold_type = "mid"} and no \code{threshold}, the call
-aborts unless \code{require_threshold = FALSE}.}
+aborts unless \code{require_threshold = FALSE}.
+
+\strong{Guideline use forces \code{"mid"}.} Core GRADE 7, verbatim: "To
+inform recommendations, that threshold must be the MID (the smallest
+difference in effect that patients would consider important) rather than
+the null. Thus, decisions on the MID must precede certainty ratings in the
+evidence synthesis." A rating produced with \code{threshold_type = "null"}
+is therefore not a suitable input to a recommendation, however defensible
+it is as a systematic review result.}
 
 \item{threshold}{(v0.2) Numeric clinical decision Threshold (a minimally
 important effect). This is a cross-cutting parameter shared by the three
@@ -449,6 +517,55 @@ performed.}
 Run the BMJ 2025 Core GRADE assessment on a meta-analysis object and
 return per-domain judgments and final certainty.
 }
+\section{Internal level names vs Core GRADE wording}{
+
+The domain judgment vocabulary used by every \code{*} argument and by
+\code{$domain_assessments$judgment} does \strong{not} match the Core GRADE
+wording, and the mismatch is off by exactly one step. Core GRADE 1,
+verbatim: "We characterise limitations in each of these domains involved in
+rating down certainty as not serious; serious; very serious; or, rarely,
+extremely serious."
+
+\tabular{lll}{
+\strong{pmatools value} \tab \strong{Core GRADE wording} \tab \strong{levels down} \cr
+\code{"no"}            \tab not serious        \tab  0 \cr
+\code{"some_concerns"} \tab serious            \tab -1 \cr
+\code{"serious"}       \tab very serious       \tab -2 \cr
+(not implemented)      \tab extremely serious  \tab -3 \cr
+}
+
+So \code{rob = "serious"} means \emph{very serious} risk of bias (\eqn{-2}),
+not the source's "serious" (\eqn{-1}). The legacy alias
+\code{"very_serious"} is still accepted for that level and is the less
+ambiguous spelling. \code{$downgrade} always carries the signed number, so
+read that when in doubt.
+}
+
+\section{Parts of Core GRADE not implemented}{
+
+\itemize{
+\item \strong{Rating up} non-randomised evidence. Core GRADE 1, verbatim:
+Core GRADE users "can rate up certainty in non-randomised studies (but
+not randomised controlled trials) for large effects and for evidence of
+a dose-response gradient". Certainty can only be rated down here; record
+an upgrade by hand with
+\code{evidence_profile(other_text =, other_downgrade =)}. Rating up for
+plausible confounding is correctly absent: Core GRADE 1 drops it
+explicitly, saying it "has proved too difficult to apply and too rarely
+applicable to be part of Core GRADE".
+\item \strong{"Extremely serious" (\eqn{-3})} — see the vocabulary table
+above. The maximum downgrade from one domain is \eqn{-2}.
+\item \strong{The cross-domain gestalt step.} Core GRADE 1 asks for
+"stepping back and taking an overall view of the threats to certainty of
+evidence" after the individual domains, precisely so that several
+borderline domains do not add up to an unduly low rating. pmatools sums
+the per-domain downgrades arithmetically, so a result with two or three
+near-threshold domains can land lower than a Core GRADE panel would put
+it. Inspect \code{$domain_assessments$notes} and override the domains
+you judge borderline.
+}
+}
+
 \examples{
 \dontrun{
 library(meta)

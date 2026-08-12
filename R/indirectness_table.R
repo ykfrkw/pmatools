@@ -29,10 +29,35 @@ INDIRECTNESS_MARK_OFF <- "\u2610"
 #'
 #' @description
 #' Renders the Population / Intervention / Comparison / Outcome subdomain
-#' judgments recorded by \code{\link{grade_meta}} in the BMJ Core GRADE 5
-#' publication format: one row per subdomain with its target question, the
-#' evidence found, and the 4-point judgment ("Is the evidence sufficiently
-#' direct?"), plus a closing row with the overall domain judgment.
+#' judgments recorded by \code{\link{grade_meta}}: one row per subdomain with
+#' its target question, the evidence found, and the 4-point judgment ("Is the
+#' evidence sufficiently direct?"), plus a closing row with the overall domain
+#' judgment.
+#'
+#' @section Attribution:
+#' This table layout is a \strong{pmatools} implementation of the per-PICO
+#' reasoning Core GRADE 5 describes; \strong{it is not a Core GRADE 5
+#' publication table}. The published article carries only two tables: Table 1
+#' (an adaptation of a summary of findings table) and Table 2 ("Summary of
+#' indirectness issues", with the columns PICO element / Reason for rating down
+#' / Examples / Likelihood of rating down). No table of the shape rendered here
+#' appears in the article body (the online supplementary appendices have not
+#' been checked).
+#'
+#' The 4-point answer scale (\code{"yes"} / \code{"probably_yes"} /
+#' \code{"probably_no"} / \code{"no"}) and the question wording "Is the
+#' evidence sufficiently direct?" are likewise \strong{pmatools conventions}.
+#' Core GRADE 5 does not pose a yes/no directness question; it asks how likely
+#' it is that the effect differs substantially between the target PICO and the
+#' available evidence, and Table 2 grades that answer as "Low" /
+#' "Intermediate" / "Substantial" / "High likelihood" of rating down.
+#'
+#' Core GRADE 5 Table 2 also treats the four PICO elements
+#' \emph{asymmetrically}: Population carries a "Low likelihood" of rating down,
+#' Intervention "Intermediate", Comparison "Substantial", and Outcome "High
+#' likelihood". This table (and the worst-case fold behind it) treats the four
+#' elements symmetrically, so a "probably no" on Population weighs the same as
+#' one on Outcome. The table footer repeats this caveat.
 #'
 #' @param x A \code{pmatools} object created by \code{\link{grade_meta}} with
 #'   \code{indirectness_subdomains} supplied.
@@ -179,13 +204,28 @@ indirectness_table <- function(x, summary_text = NULL, ...) {
   ft <- flextable::width(ft, j = 2, width = 2.8)
   for (j in 3:6) ft <- flextable::width(ft, j = j, width = 0.85)
 
-  ft <- flextable::add_footer_lines(ft, values = paste0(
-    "Indirectness subdomain judgments (Core GRADE 5, Guyatt et al. BMJ 2025); ",
-    "not an official GRADE Working Group assessment. ",
-    INDIRECTNESS_MARK_ON, " marks the recorded judgment. ",
-    "Yes / Probably yes do not rate down; Probably no rates down 1 level; ",
-    "No rates down 2 levels. The overall judgment defaults to the worst case ",
-    "across subdomains."
+  ft <- flextable::add_footer_lines(ft, values = c(
+    paste0(
+      "Indirectness subdomain judgments, implemented by pmatools from the ",
+      "per-PICO reasoning in Core GRADE 5 (Guyatt et al. BMJ 2025;389:e083865); ",
+      "not an official GRADE Working Group assessment. This table layout, the ",
+      "4-point answer scale and the wording 'Is the evidence sufficiently ",
+      "direct?' are pmatools conventions and do not appear in the Core GRADE 5 ",
+      "article body. ",
+      INDIRECTNESS_MARK_ON, " marks the recorded judgment. ",
+      "Yes / Probably yes do not rate down; Probably no rates down 1 level; ",
+      "No rates down 2 levels. The overall judgment defaults to the worst case ",
+      "across subdomains."
+    ),
+    paste0(
+      "Core GRADE 5 Table 2 grades the four PICO elements asymmetrically ",
+      "(Population: 'Low likelihood' of rating down; Intervention: ",
+      "'Intermediate'; Comparison: 'Substantial'; Outcome: 'High likelihood'). ",
+      "The worst-case fold used here is symmetric, so a concern recorded ",
+      "against Population weighs as much as one against Outcome. Rating down ",
+      "two levels is, per Core GRADE 5, 'typically more salient for surrogate ",
+      "outcomes'."
+    )
   ))
   ft <- flextable::fontsize(ft, size = 8, part = "footer")
   ft <- flextable::color(ft, color = "#555555", part = "footer")

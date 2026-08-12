@@ -2,7 +2,7 @@
 % Please edit documentation in R/utils.R
 \name{suggest_threshold}
 \alias{suggest_threshold}
-\title{Suggest a conventional default Threshold based on the effect measure}
+\title{Suggest a placeholder Threshold based on the effect measure}
 \usage{
 suggest_threshold(meta_obj)
 }
@@ -11,30 +11,75 @@ suggest_threshold(meta_obj)
 \code{\link[meta]{metacont}}).}
 }
 \value{
-A list with \code{threshold_user} (user-facing value) and
+A list with \code{threshold_user} (user-facing value),
 \code{threshold_scale} (one of \code{"ratio"}, \code{"te_scale"},
-\code{"ard"}). For binary ratio measures (OR / RR / HR) the list
-additionally contains \code{threshold_absolute}, a nested list with
-\code{threshold_user} and \code{threshold_scale = "ard"} suggesting a
-conventional absolute risk difference threshold (0.05, ie 50 per 1,000)
-for use with \code{threshold_scale = "ard"} in
-\code{\link{grade_meta}}. Returns \code{NULL} if the effect measure is
-unrecognized.
+\code{"ard"}) and \code{source} (\code{"core_grade_6"} or
+\code{"package_convention"} — where the number comes from).
+
+For binary ratio measures (OR / RR / HR) the \strong{first candidate is
+the absolute one}: \code{threshold_user} / \code{threshold_scale} describe
+an absolute risk difference of 0.05 (50 per 1,000), the same list is
+repeated under \code{threshold_absolute}, and the ratio-scale fallback is
+available under \code{threshold_ratio}. This ordering follows the source:
+Core GRADE 1, 6 and 7 contain no ratio-scale MID at all, and every binary
+MID they discuss is on the absolute scale (e.g. Core GRADE 7 lists MIDs
+"associated with mortality of 1\\%, stroke of 2\\%, myocardial infarction of
+3\\%, and serious gastrointestinal bleeding of 5\\%"; Core GRADE 2 discusses
+"an MID of 5 deaths per" 1000).
+
+Returns \code{NULL} if the effect measure is unrecognized.
 }
 \description{
-Returns a conventional clinical decision Threshold (a minimally important
+Returns a placeholder clinical decision Threshold (a minimally important
 effect on the analysis scale) suitable for pre-filling the input field in
-interactive UIs. Users should override with a published or expert-derived
-Threshold whenever available.
+interactive UIs. \strong{These are pmatools conventions, not Core GRADE
+values}, with one partial exception (SMD; see below). Replace them with a
+published or expert-derived MID for the outcome in hand before reporting
+anything.
 }
-\details{
-Defaults:
+\section{Where these numbers come from}{
+
+\describe{
+\item{SMD 0.20 (\code{source = "core_grade_6"})}{The only default with a
+source. Core GRADE 6 does cite it — "an SMD of 0.2 is the threshold for
+a small and important effect" — but immediately qualifies it, verbatim:
+"clinicians may be appropriately sceptical of this threshold, which is
+limited by large variability in the methods investigators use to
+calculate the SMD".}
+\item{Everything else (\code{source = "package_convention"})}{OR 1.25,
+RR 1.20, HR 1.20, RoM 1.10, MD 0.20 \eqn{\times} pooled SD and ARD 0.05
+have \strong{no basis in the Core GRADE series}. They exist only so that
+an input field can be pre-filled.}
+}
+}
+
+\section{Why a single default conflicts with Core GRADE}{
+
 \itemize{
-\item OR / RR / HR: 1.20–1.25 on the ratio scale
-(plus an absolute suggestion of ARD 0.05 in \code{threshold_absolute})
-\item RoM: 1.10 (10 percent ratio of means)
-\item SMD: 0.20 (Cohen's small)
-\item MD: 0.20 \eqn{\times} pooled SD (Cohen's small in raw units)
-\item ARD: 0.05 (5 percent absolute risk difference)
+\item \strong{No ratio-scale MIDs exist in the source.} Core GRADE 1, 6
+and 7 give no example of a MID on a ratio scale; binary MIDs are always
+absolute (per 1000 or percent). A ratio-scale default is therefore an
+extrapolation by pmatools.
+\item \strong{The MID belongs to the outcome, not to the effect measure.}
+Core GRADE 7, verbatim: "MIDs associated with mortality of 1\\%, stroke of
+2\\%, myocardial infarction of 3\\%, and serious gastrointestinal bleeding
+of 5\\% reflect the gradient of importance across these outcomes." One
+default shared by every outcome erases exactly that gradient.
+\item \strong{The procedure runs the other way round.} Core GRADE 7 has
+users look at the CI first and establish a MID only where the answer
+depends on it ("whether the MID for mortality is 2\\%, 1\\%, or less than
+1\\%, the CI does not cross the MID threshold ... one need not specify a
+single particular value"). Starting from a pre-filled default inverts
+that order.
 }
+}
+
+\examples{
+\dontrun{
+s <- suggest_threshold(m)
+s$threshold_user   # absolute risk difference for binary outcomes
+s$source           # "package_convention" -> replace it
+s$threshold_ratio  # ratio-scale fallback, binary outcomes only
+}
+
 }

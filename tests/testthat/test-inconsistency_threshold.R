@@ -83,15 +83,38 @@ test_that("the scalar override is the only route to -2 for inconsistency", {
 
 # ---- Auto path: I^2 only (no Q-test) ----
 
-test_that("auto Step 1: I^2 <= 25% -> 'no' regardless of Q p", {
+# Cut-off updated 25% -> 30% (v0.5.1). Reason: 30% is the only numeric value
+# Core GRADE 3 puts on paper ("one will seldom see serious inconsistency with
+# I2 values <30%"); 25% had no source. I^2 = 0.28 is the new pass case and
+# would have rated down under the old cut-off.
+test_that("auto Step 1: I^2 <= 30% -> 'no' regardless of Q p", {
   m <- make_mock_meta(c(0.1, 0.1, 0.1), i2 = 0.20, tau2 = 0)
   g <- grade_meta(m, threshold_type = "null")
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_equal(row$judgment, "no")
   expect_true(row$auto)
+  expect_match(row$notes, "I2 <= 30%", fixed = TRUE)
 })
 
-test_that("auto Step 1: I^2 > 25% triggers Step 2", {
+test_that("I^2 between the old 25% and the new 30% cut-off no longer rates down", {
+  # Opposite-sided TEs: under the pre-v0.5.1 cut-off this reached Step 2 and
+  # returned 'some_concerns'. It now stops at Step 1.
+  m <- make_mock_meta(c(-0.5, 0.5, -0.5), i2 = 0.28)
+  g <- grade_meta(m, threshold_type = "null")
+  row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
+  expect_equal(row$judgment, "no")
+})
+
+test_that("the auto note names the I^2 gate as a surrogate for visual inspection", {
+  m <- make_mock_meta(c(-0.5, 0.5, -0.5), i2 = 0.60)
+  g <- grade_meta(m, threshold_type = "null")
+  row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
+  expect_match(row$notes, "visual inspection of forest plots", fixed = TRUE)
+  expect_match(row$notes, "CINeMA", fixed = TRUE)
+  expect_match(row$notes, "ICEMAN", fixed = TRUE)
+})
+
+test_that("auto Step 1: I^2 > 30% triggers Step 2", {
   m <- make_mock_meta(c(-0.5, 0.5, -0.5), i2 = 0.60)
   g <- grade_meta(m, threshold_type = "null")
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]

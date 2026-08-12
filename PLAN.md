@@ -90,7 +90,7 @@
 - [x] 複数アウトカム一括ワークフロー：`run_ma_multi()` / `grade_meta_multi()` / `pmatools_set` / `reorder_outcomes()` / `set_primary()`
 - [x] `export_bundle()` を S3 generic 化（第 1 引数 `x`、**breaking**）＋ `outcomes/NN_name/` 階層レイアウト
 - [x] BMJ 様式 SoF：`sof_table()` / `grade_table()` / `grade_report()` の `style = "bmj"`（GRADEpro 様式が既定のまま）
-- [x] Plain language summary（Core GRADE 2 Table 1 の文言を逐語採用）
+- [x] Plain language summary（**Core GRADE 6 Box 1** の文言を逐語採用。当初は Core GRADE 2 Table 1 を典拠としていたが、Box 1 がそれを包含する正典であり、方向（reduces / increases）を明示する点が異なる）
 - [x] `inst/templates/analysis_script_multi.R.tpl`（複数アウトカム版 analysis.R、書き出し前に `parse()` で構文検査）
 - [x] tests: 936 pass / 0 fail、`R CMD check` 0 errors / 0 warnings / 0 notes
 

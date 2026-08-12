@@ -1,3 +1,76 @@
+# pmatools 0.5.1 (development version)
+
+## Source-attribution corrections
+
+A line-by-line comparison against the published Core GRADE 1-7 articles turned
+up places where pmatools presented its own operational choices as if they came
+from the source. These are corrected below. Only one judgment changes.
+
+* **Inconsistency: the automated Step 1 cut-off moves from `I² > 25%` to
+  `I² > 30%`** — the only number Core GRADE 3 puts on paper ("one will seldom
+  see serious inconsistency with I2 values <30%"). 25% had no source. Analyses
+  with 25% < I² ≤ 30% now stop at Step 1 and are not rated down. The domain
+  notes also now say that the I² gate is an automation surrogate for a step
+  Core GRADE 3 describes as visual ("Core GRADE relies on the visual inspection
+  of forest plots"), and that the 80% majority share (CINeMA) and 20%
+  each-side share (a pmatools convention) are not Core GRADE numbers either.
+  **This is the only behaviour change in this batch.**
+* `suggest_threshold()` gains a **`source`** field (`"core_grade_6"` or
+  `"package_convention"`), and for binary outcomes the **absolute** candidate
+  (ARD 0.05) is now the first candidate, with the ratio value moved to
+  `$threshold_ratio`. The Core GRADE series contains no ratio-scale MID, and
+  every binary MID it discusses is on the absolute scale. SMD 0.20 is the only
+  default with a source, and Core GRADE 6 hedges it. The entry-gate error
+  message says all of this. `threshold_scale = "auto"` is unaffected.
+* `indirectness_table()` is **no longer described as a "BMJ Core GRADE 5
+  publication format"** table. No table of that shape appears in the article
+  body, which carries only Table 1 (an adapted summary of findings table) and
+  Table 2 ("Summary of indirectness issues"). The layout, the 4-point answer
+  scale and the wording "Is the evidence sufficiently direct?" are pmatools
+  conventions; Core GRADE 5 instead grades the *likelihood* of rating down per
+  PICO element (Low / Intermediate / Substantial / High). The table footer and
+  the documentation now say so, including that Core GRADE 5 weighs the four
+  elements asymmetrically while the worst-case fold does not.
+* `rob_some_concerns` no longer implies Core GRADE 4 defines the fold. The
+  phrase "some concerns" does not occur in that article; it sets the binary
+  boundary by counting high-risk items and explicitly declines to settle the
+  count.
+* The count-share fallbacks (Risk of bias and Indirectness) and the extension
+  of the CI-ratio cut-off of 3 to HR / IRR are now flagged as pmatools
+  conventions in the notes.
+* `TE_low` in the risk-of-bias direction check is documented as **always a
+  fixed-effect estimate**, even under a random-effects parent model.
+* `chinn_smd_to_or()` and the SoF footnotes now state that Chinn's formula is
+  **not** Core GRADE 6's option 2 (normal distribution, MID-based, per study
+  before pooling), which is not implemented.
+* Indirectness domain notes use the Core GRADE wording ("not serious" /
+  "serious" / "very serious") instead of the risk-of-bias-derived "some
+  concerns". The stored level names are unchanged.
+* Plain language summary attribution corrected from Core GRADE 2 Table 1 to
+  **Core GRADE 6 Box 1** in the five places that still carried the old
+  citation, and the fourth selection input (the direction of the pooled point
+  estimate) is now documented.
+* `?grade_meta` and the README gain an **internal-name vs Core GRADE wording
+  table** (`"some_concerns"` = the source's "serious"; `"serious"` = its "very
+  serious"), and the README documents what Core GRADE covers that pmatools
+  does not: rating up non-randomised evidence for large effects and
+  dose-response, "extremely serious" (−3), the cross-domain gestalt step, and
+  four summary of findings features Core GRADE 6 asks for.
+* The README indirectness section gains the guideline / health technology
+  assessment distinction, the indirectness-vs-inconsistency test, the two
+  search scenarios, and the surrogate-outcome basis for rating down two levels
+  — all with the source's own wording.
+* The inconsistency documentation points at ICEMAN for subgroup credibility and
+  notes that pmatools is more permissive than Core GRADE 3, which asks for
+  separate PICO questions once credibility is moderate or high.
+* SPEC §5.2 rewritten to match the code (it still described a `≥ 0.75`
+  cut-off and a `(n_above + n_trivial)/k` formula retired in v0.5.1).
+* Imprecision: the OIS note read `<= 30%` while the decision used `< 30%`; the
+  display now matches Fig 4's "N<30% of OIS" node. The unused `rating_target` /
+  `threshold_type` arguments are documented as unused, and the notes now say
+  that Fig 4's *second* two-level condition (the plain language description
+  suggesting "may" rather than "likely") is not auto-assessed.
+
 # pmatools 0.5.0
 
 ## Breaking changes
@@ -144,10 +217,13 @@
   `indirectness_rationale`. The normalised table is returned as
   `$indirectness_subdomains` (`domain_assessments` keeps its one-row-per-domain
   schema).
-* New `indirectness_table()` renders those subdomain judgments as a flextable
-  in the BMJ Core GRADE 5 publication format: target question, evidence found,
-  a colour-graded 4-option judgment row with the recorded answer ticked, and a
-  merged "Judgment across subdomains" row carrying the overall judgment.
+* New `indirectness_table()` renders those subdomain judgments as a flextable:
+  target question, evidence found, a colour-graded 4-option judgment row with
+  the recorded answer ticked, and a merged "Judgment across subdomains" row
+  carrying the overall judgment. (This entry originally called the layout a
+  Core GRADE 5 publication table; that was wrong and is corrected in 0.5.1 —
+  the layout is a pmatools implementation of Core GRADE 5's per-PICO
+  reasoning, and no such table appears in the article body.)
 * Imprecision notes record which Fig 4 path produced the judgment, including
   the CI ratio rule for binary outcomes (relative risk CI ratio >= 3, odds
   ratio CI ratio >= 2.5) and the continuous 400-per-group (total N 800) rule
