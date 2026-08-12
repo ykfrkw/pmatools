@@ -29,7 +29,7 @@ set <- grade_meta_multi(
   common = {{common_arg}},
   per_outcome = {{per_outcome_arg}}
 )
-
+{{not_reported_block}}
 set <- reorder_outcomes(set, {{order_arg}})
 {{primary_line}}
 print(set)
@@ -46,6 +46,8 @@ outcome_dirs <- {{dir_names_arg}}
 for (i in seq_along(set$order)) {
   nm  <- set$order[i]
   g   <- set$outcomes[[nm]]
+  # No study reported this outcome, so there is nothing to plot or write out.
+  if (inherits(g, "pmatools_not_reported")) next
   dir_i <- file.path("outcomes", outcome_dirs[i])
   dir.create(dir_i, recursive = TRUE, showWarnings = FALSE)
 

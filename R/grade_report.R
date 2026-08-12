@@ -65,8 +65,15 @@ grade_report <- function(outcomes,
     outcomes <- .set_outcome_list(set)
     if (is.null(primary) && length(set$primary) > 0) primary <- set$primary
   }
-  if (!is.list(outcomes) || !all(vapply(outcomes, inherits, logical(1), "pmatools"))) {
-    rlang::abort("outcomes must be a named list of pmatools objects.")
+  ok_element <- if (is.list(outcomes)) {
+    vapply(outcomes, function(g) {
+      inherits(g, "pmatools") || .is_not_reported(g)
+    }, logical(1))
+  } else FALSE
+  if (!is.list(outcomes) || !all(ok_element)) {
+    rlang::abort(paste0(
+      "outcomes must be a named list of pmatools objects from grade_meta(), ",
+      "or pmatools_not_reported objects from not_reported_outcome()."))
   }
   palette <- match.arg(palette)
   style   <- match.arg(style)
@@ -159,6 +166,23 @@ grade_report <- function(outcomes,
       if (nm %in% primary) " *(Primary)*" else " *(Secondary)*"
     } else ""
 
+    # A not-reported outcome has no domains to tabulate, so the section is a
+    # short paragraph instead of the domain table.
+    if (.is_not_reported(g)) {
+      parts <- c(
+        paste0("**", .not_reported_label(g), ".**"),
+        if (!is.null(g$follow_up)) paste0("Follow-up: ", g$follow_up, "."),
+        if (!is.null(g$reason)) g$reason,
+        "No included study reported this outcome; no certainty rating."
+      )
+      lines <- c(lines,
+                 paste0("### ", nm, group_tag),
+                 "",
+                 paste(parts, collapse = " "),
+                 "")
+      next
+    }
+
     lines <- c(
       lines,
       paste0("### ", nm, group_tag),
@@ -227,10 +251,32 @@ grade_report <- function(outcomes,
   hdr <- paste0("| Outcome | k | N ", arm_hdr, "| Effect (95% CI) | Certainty |")
   sep <- "|---|---|---|---|---|---|---|"
 
+  # Group label rows are emitted the same way for every outcome, so the
+  # not-reported branch below only replaces the value cells.
+  group_label <- function(i, nm) {
+    if (is.null(primary)) return(character(0))
+    if (i == 1L || (nm %in% primary) != (nms[i - 1L] %in% primary)) {
+      label <- if (nm %in% primary) prim_lbl else sec_lbl
+      return(paste0("| ", label, " | | | | | | |"))
+    }
+    character(0)
+  }
+
   rows <- c()
   for (i in seq_along(outcomes)) {
     nm <- nms[i]
     g  <- outcomes[[i]]
+
+    # Branch before sprintf("%d", k): k is NULL here and would error.
+    if (.is_not_reported(g)) {
+      lbl  <- .not_reported_label(g)
+      rows <- c(rows, group_label(i, nm),
+                sprintf("| %s | %s | %s | %s | %s | %s | %s |",
+                        nm, lbl, lbl, lbl, lbl, lbl,
+                        NOT_REPORTED_CERTAINTY))
+      next
+    }
+
     k  <- g$meta$k
     n  <- .total_n(g$meta)
     cer  <- gsub("\n", " ", arms[[i]]$cer)
@@ -238,12 +284,7 @@ grade_report <- function(outcomes,
     eff  <- gsub("\n", " ", .format_effect(g$meta, g$outcome_type, prediction))
     cert <- paste0(g$certainty, " ", CERTAINTY_SYMBOLS[[g$certainty]])
 
-    if (!is.null(primary)) {
-      if (i == 1L || (nm %in% primary) != (nms[i - 1L] %in% primary)) {
-        label <- if (nm %in% primary) prim_lbl else sec_lbl
-        rows  <- c(rows, paste0("| ", label, " | | | | | | |"))
-      }
-    }
+    rows <- c(rows, group_label(i, nm))
 
     rows <- c(rows, sprintf("| %s | %d | %s | %s | %s | %s | %s |",
       nm, k,
@@ -300,6 +341,22 @@ grade_report <- function(outcomes,
     } else ""
 
     doc <- officer::body_add_par(doc, paste0(nm, group_tag), style = "heading 3")
+
+    # Same treatment as the Markdown report: no domain table, because there is
+    # no body of evidence whose domains could be judged.
+    if (.is_not_reported(g)) {
+      parts <- c(
+        paste0(.not_reported_label(g), "."),
+        if (!is.null(g$follow_up)) paste0("Follow-up: ", g$follow_up, "."),
+        if (!is.null(g$reason)) g$reason,
+        "No included study reported this outcome; no certainty rating."
+      )
+      doc <- officer::body_add_par(doc, paste(parts, collapse = " "),
+                                   style = "Normal")
+      doc <- officer::body_add_par(doc, "", style = "Normal")
+      next
+    }
+
     doc <- officer::body_add_par(doc, sprintf(
       "Final certainty: %s %s  |  Starting: %s  |  Design: %s",
       g$certainty, CERTAINTY_SYMBOLS[[g$certainty]],
