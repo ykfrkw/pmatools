@@ -307,3 +307,55 @@ test_that("export_bundle script reruns rare-event methods when rare object suppl
   expect_true(any(grepl("run_rare_ma", script, fixed = TRUE)))
   expect_true(any(grepl("rare_event_method_forest.pdf", script, fixed = TRUE)))
 })
+
+test_that("legacy export_bundle(ma = ) named call works with a deprecation warning", {
+  ma <- make_meta_for_bundle()
+  g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    rob_rationale = "Consensus RoB2: all domains low risk",
+                                    indirectness = "no",
+                                    outcome_name = "Test", threshold_type = "null"))
+  out_dir <- tempfile()
+  dir.create(out_dir)
+
+  # The warning fires once per session, so reset the rlang counter to keep this
+  # test independent of the order the tests run in.
+  rlang::reset_warning_verbosity("export_bundle_ma_arg")
+
+  expect_warning(
+    zip_path <- export_bundle(ma = ma, grade = g,
+                              output_dir = out_dir,
+                              bundle_name = "legacy_named",
+                              include = c("data", "results")),
+    regexp = "deprecated"
+  )
+
+  expect_true(file.exists(zip_path))
+  files <- zip::zip_list(zip_path)$filename
+  expect_true("data_long.csv" %in% files)
+  expect_true("results.txt" %in% files)
+})
+
+test_that("legacy ma = call dispatches on a pmatools object too", {
+  ma <- make_meta_for_bundle()
+  g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    rob_rationale = "Consensus RoB2: all domains low risk",
+                                    indirectness = "no",
+                                    outcome_name = "Test", threshold_type = "null"))
+  out_dir <- tempfile()
+  dir.create(out_dir)
+
+  rlang::reset_warning_verbosity("export_bundle_ma_arg")
+
+  expect_warning(
+    zip_path <- export_bundle(ma = g,
+                              output_dir = out_dir,
+                              bundle_name = "legacy_grade",
+                              include = c("results")),
+    regexp = "deprecated"
+  )
+  expect_true(file.exists(zip_path))
+})
+
+test_that("export_bundle errors when no object is passed at all", {
+  expect_error(export_bundle(output_dir = tempdir()))
+})

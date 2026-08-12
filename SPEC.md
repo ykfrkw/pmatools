@@ -1,9 +1,15 @@
-# pmatools v0.2 — Package Specification
+# pmatools — Package Specification
 
 > Authoritative specification for the pmatools R package. Implementation MUST conform to this document. UI-side concerns (Shiny wizard, educational copy, accordion layout) are specified separately in `~/Developer/pairwise_meta_analysis/SPEC.md`.
 
-**Version target:** 0.2.0
-**Backward compatibility:** All v0.1.0 public APIs continue to work unchanged. New parameters are added with defaults that preserve existing behavior. No breaking changes.
+**Version target:** 0.5.0
+**Document history:** this file was written for v0.2.0 and has been updated in place for v0.5.0; section numbering is preserved so the diff stays readable. Sections that still describe v0.2 behaviour verbatim are marked **[v0.2 — superseded]** with a pointer to the section that governs.
+
+**Backward compatibility:** v0.2 introduced no breaking changes. v0.4.0 and v0.5.0 did — see `NEWS.md`, which is authoritative for the change list. The three that most affect callers:
+
+1. `grade_meta()` requires a rationale for every manual domain-judgment override (v0.4.0).
+2. `grade_meta()` requires a clinical decision Threshold (MID) unless `threshold_type = "null"` or `require_threshold = FALSE` (v0.5.0, Core GRADE 2 entry gate).
+3. `export_bundle()` is an S3 generic whose first argument is `x`, not `ma` (v0.5.0). Legacy `ma =` named calls still work with a deprecation warning; see §4.8.
 
 ---
 
@@ -42,13 +48,19 @@ Imports:
   glue,
   zip
 Suggests:
+  BiasedUrn,
+  metafor,
+  mmeta,
   rmarkdown,
   testthat (>= 3.0.0),
   readxl,
-  DT
+  DT,
+  here
 ```
 
-`DT` and `readxl` are Suggests because they are used only by `ingest_data()` for Excel/clipboard paths and by Shiny consumers.
+`DT` and `readxl` are Suggests because they are used only by `ingest_data()` for Excel/clipboard paths and by Shiny consumers. `BiasedUrn`, `metafor` and `mmeta` are used only by the rare-event methods (§4.12).
+
+No new hard dependency may be added without updating this section.
 
 ---
 
@@ -242,6 +254,8 @@ plot_forest(
 
 `auto_layout = FALSE` behaves like a thin wrapper around `meta::forest()` with no overrides.
 
+Since v0.4 the signature also carries display arguments used by the export bundle: `threshold_lines`, `show_n`, `show_events`, `favors_left`, `favors_right`, `addrow_above`, `addrow_below`. `addrow_below = NULL` (the default) derives the bottom spacing from the drawn content so the heterogeneity text cannot overlap the x-axis band.
+
 ### 4.4 `plot_funnel()` [new]
 
 ```r
@@ -279,26 +293,130 @@ if (k >= 10) {
 
 `auto_layout = TRUE` sets `par(mar = c(4, 4, 3, 4))` to make room for the Egger annotation in the top margin.
 
-### 4.5 `grade_meta()` [modified — backward compatible]
+### 4.5 `grade_meta()`
 
-All v0.1.0 parameters preserved. **New parameters:**
+**Full signature as of v0.5.0** (this is the authoritative list; every argument below exists):
 
 ```r
 grade_meta(
   meta_obj,
-  ...,                                  # all v0.1.0 params unchanged
-  rob_inflation_threshold = 0.10,       # NEW: minimum relative inflation to rate down
-  threshold               = NULL,       # NEW: clinical decision Threshold (numeric)
-  threshold_scale         = "auto"      # NEW: how to interpret `threshold`
-                                         #   "auto"        → infer from meta_obj$sm (recommended)
-                                         #   "te_scale"    → already on meta_obj$TE scale
-                                         #                   (log for OR/RR/HR/RoM, raw for MD/SMD)
-                                         #   "ratio"       → user gave OR/RR ratio (e.g., 1.25);
-                                         #                   internally → log(threshold)
-                                         #   "ard"         → absolute risk difference (binary only);
-                                         #                   internally treated specially
+  study_design                     = c("RCT", "obs"),
+
+  # --- Risk of bias (Core GRADE 4 Fig 2; §5.1) ---
+  rob                              = NULL,   # per-study vector, or scalar override
+  rob_rationale                    = NULL,   # REQUIRED with a scalar `rob`
+  rob_some_concerns                = c("low", "high"),  # which side "some concerns" folds into
+  rob_overrides                    = NULL,   # named chr vector keyed on studlab
+  rob_override_rationale           = NULL,   # named chr vector, one per override (REQUIRED)
+  rob_dominant_threshold           = 0.60,   # weight share for the Fig 2 dominance gate (`>=`)
+  rob_refit                        = TRUE,   # refit on the low-RoB subset when Fig 2 says so
+  rob_inflation_threshold          = 0.10,   # minimum relative inflation to act on
+
+  small_values                     = NULL,   # "desirable" / "undesirable" / NULL
+
+  # --- Indirectness (Core GRADE 5; §4.5.3) ---
+  indirectness                     = NULL,   # scalar judgment, or override of the subdomain table
+  indirectness_rationale           = NULL,   # REQUIRED with a scalar override other than "no"
+  indirectness_subdomains          = NULL,   # PICO data.frame
+
+  # --- Inconsistency (Core GRADE 3; §5.2) ---
+  inconsistency                    = NULL,
+  inconsistency_rationale          = NULL,   # REQUIRED with a scalar `inconsistency`
+  inconsistency_ci_diff            = NULL,
+  inconsistency_threshold_side     = NULL,
+  inconsistency_subgroup_explained = NULL,
+
+  # --- Imprecision (Core GRADE 2 Fig 4; §5.5) ---
+  imprecision                      = NULL,
+  imprecision_rationale            = NULL,   # REQUIRED with a scalar `imprecision`
+
+  # --- Threshold / rating target (Core GRADE 2; §4.5.1, §4.5.2) ---
+  threshold_type                   = c("mid", "null"),
+  threshold                        = NULL,
+  threshold_scale                  = "auto",
+  threshold_baseline               = NULL,
+  rating_target                    = NULL,
+  rating_target_rationale          = NULL,   # REQUIRED with a manual `rating_target`
+  require_threshold                = TRUE,
+
+  outcome_name                     = NULL,
+  outcome_type                     = c("relative", "absolute"),
+
+  # --- Optimal Information Size ---
+  ois_events = NULL, ois_n = NULL, ois_alpha = 0.05, ois_beta = 0.20,
+  ois_p0 = NULL, ois_p1 = NULL, ois_delta = NULL, ois_sd = NULL,
+
+  baseline_risk                    = NULL,
+
+  # --- Publication bias (Core GRADE 4) ---
+  pubias_small_industry            = NULL,
+  pubias_funnel_asymmetry          = NULL,
+  pubias_rationale                 = NULL,   # REQUIRED with a scalar pubias_funnel_asymmetry
+  pubias_unpublished               = NULL,
+  pubias_registry_complete         = NULL
 ) -> S3 "pmatools" object
 ```
+
+`threshold_scale` values:
+
+| Value | Meaning |
+|---|---|
+| `"auto"` | infer from `meta_obj$sm` (recommended) |
+| `"te_scale"` | already on the `meta_obj$TE` scale (log for OR/RR/HR/RoM, raw for MD/SMD) |
+| `"ratio"` | user gave an OR/RR ratio (e.g. 1.25); internally `log(threshold)` |
+| `"ard"` | absolute risk difference; converted to the ratio scale at `threshold_baseline` (or the pooled baseline risk) for OR/RR/HR/RoM |
+
+**Mandatory rationales (v0.4.0, breaking).** Supplying a scalar `rob`, an `indirectness` other than `"no"`, an `inconsistency`, an `imprecision`, a `pubias_funnel_asymmetry`, a manual `rating_target`, or any `rob_overrides` **without** the matching `*_rationale` argument is an error. Rationales are stored in the domain notes and surfaced by `sof_table()`, `grade_report()` and `export_bundle()`.
+
+**Return value additions (v0.5.0).** Beyond the v0.2 fields, the `pmatools` object carries:
+
+| Field | Contents |
+|---|---|
+| `$meta` | the analysis every domain was assessed on — **the low-RoB refit when one happened** |
+| `$meta_full` | the all-studies analysis |
+| `$rob_analysis_set` | `"all"` or `"low_only"` |
+| `$rob_refit` | logical; whether a refit actually took place |
+| `$threshold_type` | `"mid"` or `"null"` |
+| `$rating_target` | `"important_effect"` / `"little_to_no_difference"` / `"non_null_effect"` |
+| `$rating_target_note`, `$rating_target_auto` | derivation note and whether it was derived rather than supplied |
+| `$indirectness_subdomains` | the normalised PICO table, or NULL |
+
+Downstream consumers MUST read pooled numbers from `$meta`, not `$meta_full`, so a refit propagates.
+
+#### 4.5.1 Entry gate: `threshold_type` (Core GRADE 2, v0.5.0 — breaking)
+
+`threshold_type` decides what the certainty rating is *about*, and it is checked before any domain is assessed:
+
+- `threshold_type = "mid"` (default) — certainty in whether the effect crosses a **minimal important difference**. A `threshold` is then **mandatory**: a call without one aborts, and the error message quotes the value `suggest_threshold()` recommends for that `sm`. The abort carries condition class `"pmatools_threshold_gate"`.
+- `threshold_type = "null"` — certainty in a **non-null effect**. No MID needed.
+- `require_threshold = FALSE` — escape hatch restoring the pre-v0.5.0 MID-free behaviour.
+
+`grade_meta_multi()` re-raises the gate abort unchanged rather than recording the outcome as failed, so a batch run cannot be used to get around the gate.
+
+#### 4.5.2 Rating target (Core GRADE 2 Fig 2)
+
+`grade_meta()` derives the target of the rating from the pooled point estimate and `threshold_type`:
+
+| Derived target | Threshold Imprecision evaluates the CI against |
+|---|---|
+| `"important_effect"` | ±MID |
+| `"little_to_no_difference"` | ±MID |
+| `"non_null_effect"` | null (0 on the TE scale) |
+
+Supplying `rating_target` manually overrides the derivation and requires `rating_target_rationale`. `print()` shows the target. Objects created before v0.5.0 have no `$rating_target`; consumers must tolerate its absence (the plain language column is simply omitted).
+
+#### 4.5.3 Indirectness subdomains (Core GRADE 5)
+
+`indirectness_subdomains` is a data.frame with columns `subdomain`, `target`, `evidence`, `judgment`, one row per PICO element (Population / Intervention / Comparison / Outcome). `judgment` uses the 4-point scale:
+
+| Judgment | Levels down |
+|---|---|
+| `"yes"` | 0 |
+| `"probably_yes"` | 0 |
+| `"probably_no"` | 1 |
+| `"no"` | 2 |
+
+Aliases such as `"Probably No"` are normalised. The domain judgment defaults to the **worst case across subdomains**; a scalar `indirectness` still overrides it, and then requires `indirectness_rationale`. The normalised table is returned as `$indirectness_subdomains`; `domain_assessments` keeps its one-row-per-domain schema. `indirectness_table()` (§4.13) renders the table in the BMJ publication format.
 
 **`threshold` and `threshold_scale` interaction (auto-detection table):**
 
@@ -315,24 +433,13 @@ When `threshold_scale = "auto"`:
 
 When `threshold` is supplied but auto-detection fails (unrecognized `sm`), the function aborts with a clear error.
 
-**`rob_inflation_threshold` semantics:**
-
-In `assess_rob()`, after the dominance check, if dominated:
+**`rob_inflation_threshold` semantics:** the relative inflation
 
 ```r
 inflation_ratio <- (abs(TE_all) - abs(TE_low)) / abs(TE_low)
-if (inflation_ratio > rob_inflation_threshold) {
-  judgment <- "serious"
-} else {
-  judgment <- "no"
-}
-notes <- sprintf("Dominated by high-RoB studies (%.1f%% weight); |TE_all|=%.3f, |TE_low|=%.3f, relative inflation=%.1f%% (threshold %.0f%%) → %s",
-                 100 * weight_high, abs(TE_all), abs(TE_low),
-                 100 * inflation_ratio, 100 * rob_inflation_threshold,
-                 if (judgment == "serious") "rate down" else "no rate-down")
 ```
 
-When `small_values` is `NULL` (unknown direction), the conservative rate-down is **only** applied when the threshold is exceeded. This is a behavioral refinement; v0.1.0 always rated down conservatively. Test coverage MUST verify the previous "always rate down when small_values = NULL" tests now pass with `rob_inflation_threshold = 0` (which forces the old behavior).
+is one input to the zone-based direction check, not a judgment on its own. It is evaluated only when the shift runs in the bias-favouring direction, and what it triggers depends on which branch of the Core GRADE 4 Fig 2 flowchart is active. **§5.1 is authoritative for the whole domain.**
 
 **`threshold` semantics — Inconsistency (BMJ Core GRADE 3 flowchart):**
 
@@ -432,10 +539,10 @@ Step 3 proxy:
 | Auto path outcome | Auto judgment | Manual flowchart equivalent |
 |---|---|---|
 | ci_diff_yes = FALSE | `"no"` | `"no"` (same) |
-| ci_diff_yes & majority_one_side | **`"some"`** | `"no"` (manual) |
+| ci_diff_yes & majority_one_side | **`"some_concerns"`** | `"no"` (manual) |
 | ci_diff_yes & opposite_sides | `"serious"` | `"serious"` (same, modulo Step 3) |
 
-Why the auto path returns `"some"` (instead of BMJ's `"no"`) when majority_one_side: the auto Step 1 proxy (I² > 25%) is statistical, not clinical. It cannot rule out that the heterogeneity is clinically meaningful. Returning `"some"` instead of `"no"` is a conservative acknowledgment that "we detected heterogeneity but cannot confirm it is clinically trivial without your judgment." Users who want the BMJ-faithful "no" should supply manual params.
+Why the auto path returns `"some_concerns"` (instead of BMJ's `"no"`) when majority_one_side: the auto Step 1 proxy (I² > 25%) is statistical, not clinical. It cannot rule out that the heterogeneity is clinically meaningful. Returning `"some_concerns"` instead of `"no"` is a conservative acknowledgment that "we detected heterogeneity but cannot confirm it is clinically trivial without your judgment." Users who want the BMJ-faithful "no" should supply manual params.
 
 **Notes content (all signals shown for transparency):**
 
@@ -460,6 +567,8 @@ Resulting judgment: {{judgment}}
 
 **`threshold` semantics — Imprecision:**
 
+> **[v0.2 — superseded]** As of v0.5.0 Imprecision follows the Core GRADE 2 Fig 4 flowchart, in which the Optimal Information Size is consulted **only** when the CI does not cross the chosen threshold *and* the effect is implausibly large. **§5.5 is authoritative.** What follows describes only how `threshold` seeds the OIS inputs when that branch is reached.
+
 In `assess_imprecision()`, when `threshold` is supplied AND no explicit `ois_*` is provided:
 
 - Binary, sm = OR/RR: `ois_p1 = ois_p0 * exp(threshold_internal)` (threshold_internal is on log scale via `threshold_scale = "auto"`).
@@ -471,17 +580,36 @@ If both `threshold` and `ois_*` supplied, `ois_*` wins. Notes string indicates s
 
 `threshold` and `threshold_scale` are the **single source of truth** — RoB, Inconsistency, and Imprecision use the same `threshold_internal` derived from them, never two different Thresholds.
 
-### 4.6 `sof_table()` [modified — backward compatible]
+### 4.6 `sof_table()`
+
+**Full signature as of v0.5.0:**
 
 ```r
 sof_table(
   x,                                     # pmatools object
-  ...,                                    # all v0.1.0 params
-  convert_smd_to_or = FALSE,              # NEW
-  baseline_risk     = NULL,               # existing; semantics extended
-  threshold_label   = NULL                # NEW: optional free-text label
+  style   = c("gradepro", "bmj"),         # v0.5.0
+  palette = c("pastel", "classic"),
+  per        = 1000,
+  prediction = FALSE,
+  follow_up  = NULL,                      # v0.5.0: time frame, BMJ style
+  unit       = NULL,                      # v0.5.0: unit of a continuous difference
+  convert_smd_to_or = FALSE,
+  baseline_risk     = NULL,
+  threshold_label   = NULL,
+  chinn_invert      = FALSE,              # v0.4: flip SMD sign before Chinn
+  label_intervention = "intervention",
+  label_control      = "control",
+  ...
 ) -> flextable
 ```
+
+**`style = "gradepro"` (default).** The v0.1–v0.4 layout. Column headers were renamed in v0.4.0 (breaking for string matching): "Risk with &lt;control&gt;" / "Risk with &lt;intervention&gt;" replaced "Control rate" / "Exp. rate", and the certainty header reads "Certainty of the evidence (Core GRADE series)".
+
+**`style = "bmj"` (v0.5.0).** The BMJ Core GRADE Summary of Findings layout: outcome and follow-up; participants with the study design spelled out; the relative effect with its measure spelled out; a spanning "Absolute effects (95% CI)" block holding control arm, intervention arm and a **Difference** column (e.g. "88 fewer per 1000 (129 fewer to 42 fewer)"); certainty annotated with the domains that pulled it down; and a plain language summary.
+
+**Plain language summaries** are the Core GRADE 2 Table 1 statements, carried verbatim and selected from the certainty level, `threshold_type` and `rating_target`. An object without `$rating_target` (created before v0.5.0) omits the column rather than guessing.
+
+**Analysis-set footnote.** When the rated analysis is a low-RoB refit (§5.1), the table carries a footnote saying so. `grade_table()` numbers the marker per row, so a table mixing analysis sets says which rows were restricted.
 
 When `convert_smd_to_or = TRUE`:
 
@@ -500,7 +628,8 @@ When `convert_smd_to_or = TRUE`:
   p_e_lo      <- baseline_risk * or_lo / (1 + baseline_risk * (or_lo - 1))
   p_e_hi      <- baseline_risk * or_hi / (1 + baseline_risk * (or_hi - 1))
   ```
-- SoF table shows: Outcome, k, N, Control rate (X per `per`), Exp. rate (Y per `per`, [Y_lo; Y_hi]), Effect (SMD ...), Certainty.
+- SoF table shows: Outcome, k, N, Risk with &lt;control&gt; (X per `per`), Risk with &lt;intervention&gt; (Y per `per`, [Y_lo; Y_hi]), Effect (SMD ...), Certainty.
+- `chinn_invert = TRUE` flips the SMD sign before applying Chinn's formula, so a negative-is-better SMD yields OR > 1 in the dichotomised rate columns.
 - Adds a footer note row: *"Continuous outcome dichotomized via Chinn's formula (log OR = SMD × π/√3). Control event rate user-specified{{; threshold: <threshold_label>}}."*
 
 When `convert_smd_to_or = FALSE` (default), behavior is identical to v0.1.0.
@@ -535,42 +664,140 @@ compute_pooled_sd(meta_obj) -> numeric
 
 Returns the sample-size-weighted pooled standard deviation across studies. Required input: `meta_obj` from `metacont()` with `sd.e` and `sd.c` available. Falls back to `weighted.mean(seTE * sqrt(n_total), n_total)` when arm-level SDs are missing.
 
-### 4.8 `export_bundle()` [new]
+### 4.8 `export_bundle()` — S3 generic
+
+As of v0.5.0 `export_bundle()` is an **S3 generic** dispatching on its first argument, which is named `x`:
+
+```r
+export_bundle(x, ...)
+
+# methods
+export_bundle.meta(x, grade, ...)          # single-outcome flat layout  (§4.8.2)
+export_bundle.pmatools(x, ...)             # convenience: x$meta + x     (§4.8.2)
+export_bundle.pmatools_set(x, ...)         # multi-outcome layout        (§4.8.3)
+export_bundle.default(x, ...)              # abort "must be a meta object"
+```
+
+`export_bundle.pmatools(g)` is the unambiguous single-argument form: the `pmatools` object knows which meta object it rated (the low-RoB refit, when one happened), so it passes `x$meta` on.
+
+#### 4.8.1a Legacy `ma =` calls
+
+Before v0.5.0 the first formal was named `ma`. Positional calls are unaffected. A **named** legacy call is intercepted by the generic itself, which reassigns `ma` to `x` and re-dispatches:
+
+```r
+export_bundle(ma = m, grade = g, output_dir = d)   # works; warns
+```
+
+The deprecation warning is raised with `rlang::warn(.frequency = "once", .frequency_id = "export_bundle_ma_arg")`, so it appears once per session. **Do not rely on this path in new code**; it will be removed. Callers outside this repository (notably the Shiny app) are the reason it exists.
+
+#### 4.8.2 Single-outcome layout (`meta` / `pmatools` methods)
 
 ```r
 export_bundle(
-  ma,                                     # meta object (from run_ma)
+  x,                                      # meta object (from run_ma)
   grade,                                  # pmatools S3 object (from grade_meta)
   output_dir   = ".",
   bundle_name  = "pmatools_results",
   include      = c("data", "script", "results",
-                   "forest", "funnel", "grade_table", "grade_appendix"),
+                   "forest", "forest_rob", "funnel", "funnel_trimfill",
+                   "pubias_missing_forest", "grade_table"),
   per          = 1000,
   prediction   = FALSE,
   convert_smd_to_or = FALSE,
   baseline_risk     = NULL,
   threshold_label   = NULL,
-  forest_args  = list(),                  # passed to plot_forest()
-  funnel_args  = list()                   # passed to plot_funnel()
+  chinn_invert      = FALSE,
+  other_text        = NULL,               # "Other considerations" for evidence_profile()
+  other_downgrade   = 0L,
+  data              = NULL,               # canonical long tibble; else reconstructed
+  grade_args        = NULL,               # origin-tracked specs (§4.8.1)
+  ma_args           = NULL,
+  forest_display    = NULL,               # named list passed to plot_forest()
+  rob               = NULL,               # per-study labels; required for "forest_rob"
+  forest_display_rob = NULL,
+  rare               = NULL,              # pma_rare_meta from run_rare_ma()
+  rare_forest_display = NULL,
+  pubias_missing_df  = NULL,              # studies with unavailable results
+  ...
 ) -> chr (path to .zip)
 ```
 
-**ZIP contents (when all `include` items requested):**
+Note the shape change from v0.2: display arguments are passed as the named lists `forest_display` / `forest_display_rob`, not as `forest_args` / `funnel_args`.
+
+**ZIP contents — flat, no sub-directories** (only the requested `include` items appear):
 
 ```
 {bundle_name}.zip
 ├── data_long.csv
 ├── analysis.R
 ├── results.txt
-├── forest_plot.pdf
-├── forest_plot.png         (300 dpi, width = max(7, 3 + 0.3*k))
-├── funnel_plot.pdf
-├── funnel_plot.png         (300 dpi)
-├── grade_table.docx        (multi-outcome SoF; here single outcome → 1-row)
-└── grade_appendix.docx     (full grade_report() docx output)
+├── forest_plot.pdf / .png              (300 dpi, width = max(7, 3 + 0.3*k))
+├── forest_plot_rob.pdf / .png          "forest_rob"; needs `rob`
+├── funnel_plot.pdf / .png              (300 dpi)
+├── funnel_trimfill.pdf / .png          "funnel_trimfill"
+├── pubias_missing_forest.pdf / .png    "pubias_missing_forest"; rendered only when k >= 10
+├── grade_table.docx                    SoF table (single outcome → 1 row)
+├── indirectness_table.docx             when subdomain judgments were recorded
+├── rare_event_diagnostics.csv          when `rare` is supplied
+├── rare_event_method_table.csv         when `rare` is supplied
+└── rare_event_method_forest.pdf / .png when `rare` is supplied
 ```
 
-**`analysis.R` template** (rendered via `glue` from `inst/templates/analysis_script.R.tpl`):
+A renderer that fails warns and is skipped rather than aborting the whole bundle.
+
+#### 4.8.3 Multi-outcome layout (`pmatools_set` method)
+
+```r
+export_bundle(
+  x,                                      # pmatools_set from grade_meta_multi()
+  output_dir  = ".",
+  bundle_name = "pmatools_results",
+  include     = c("data", "script", "results", "forest", "forest_full",
+                  "forest_rob", "funnel", "sof", "evidence_profile",
+                  "indirectness", "readme"),
+  style       = c("bmj", "gradepro"),      # note: BMJ is the default here
+  per         = 1000,
+  prediction  = FALSE,
+  rob         = NULL,                      # named list by outcome, or one vector for all
+  forest_display  = NULL,
+  other_text      = NULL,
+  other_downgrade = 0L,
+  label_intervention = "intervention",
+  label_control      = "control",
+  ...
+) -> chr (path to .zip)
+```
+
+**ZIP contents — hierarchical:**
+
+```
+{bundle_name}.zip
+├── summary_of_findings.docx      rows in set$order
+├── summary_of_findings.csv       the same table as plain text
+├── evidence_profile.docx         one profile per outcome
+├── analysis.R                    multi-outcome reproducibility script
+├── data_long.csv                 every outcome
+├── README.txt                    outcome order and per-outcome analysis sets
+└── outcomes/
+    ├── 01_<slug>/
+    │   ├── forest_plot.pdf / .png          the analysis actually rated
+    │   ├── forest_plot_full.pdf / .png     only when a low-RoB refit happened
+    │   ├── forest_plot_rob.pdf / .png      only when RoB labels are known
+    │   ├── funnel_plot.pdf / .png
+    │   ├── results.txt
+    │   ├── data_long.csv                   this outcome only
+    │   ├── evidence_profile.docx
+    │   └── indirectness_table.docx         only when subdomains were recorded
+    └── 02_<slug>/ ...
+```
+
+Directory names carry the set order as a zero-padded numeric prefix. A non-ASCII outcome name falls back to `outcome_NN`, so the ZIP stays portable.
+
+**`analysis.R` template** (rendered via `glue` from `inst/templates/analysis_script.R.tpl`; the multi-outcome bundle uses `inst/templates/analysis_script_multi.R.tpl`, which re-issues the `run_ma_multi()` / `grade_meta_multi()` / `reorder_outcomes()` / `set_primary()` calls with the arguments actually used).
+
+Both rendered scripts are **syntax-checked with `parse()` before they are written**. If the check fails the script is omitted with a warning and the rest of the bundle still ships.
+
+> **[v0.2 — superseded]** The skeleton below shows the shape only. The real template renders every v0.4/v0.5 argument as well: the domain rationales, the rating-target override and its rationale, `threshold_type`, `require_threshold`, the risk-of-bias settings (`rob_some_concerns`, `rob_overrides`, `rob_override_rationale`, `rob_dominant_threshold`, `rob_refit`), and the full `indirectness_subdomains` table. The template file is authoritative, not this listing.
 
 ```r
 # pmatools auto-generated reproducibility script
@@ -634,13 +861,18 @@ grade_report(
 
 #### 4.8.1 Argument origin tracking (for analysis.R faithfulness)
 
-To produce an `analysis.R` that faithfully reflects what the user did in Shiny, every `grade_meta()` argument must be expressible as one of three "origin types":
+To produce an `analysis.R` that faithfully reflects what the user did in Shiny, every `grade_meta()` argument must be expressible as one of **four** "origin types":
 
 | Origin | Source | analysis.R rendering |
 |---|---|---|
 | `"null"` | unset | literal `NULL` |
 | `"scalar"` | typed value (string or number) | quoted/unquoted literal (`"some"`, `0.10`) |
 | `"column"` | per-study vector from data | column reference (`data$rob`) |
+| `"vector"` | literal vector typed or built in the UI | deparsed `c(...)` literal |
+
+**Any other value aborts.** An unrecognised origin used to fall through and render the argument as `NULL`, which silently produced a reproducibility script that did not reproduce the analysis. Since v0.5.0 `export_bundle()` aborts with a message naming the bad origin and listing the accepted ones. Callers that build `grade_args` programmatically must therefore keep the origin vocabulary in sync with this table.
+
+Named vectors are a special case: the `"vector"` rendering drops names, which would silently break `rob_overrides` / `rob_override_rationale` (both keyed on `studlab`). Those arguments are rendered with their names preserved.
 
 The Shiny app stores each argument in its `state` as a list with origin metadata:
 
@@ -660,16 +892,21 @@ state$grade_args <- list(
 `export_bundle()` accepts this richer structure (or falls back to inferring origin if a plain meta/grade object is passed) and renders via:
 
 ```r
-.format_arg <- function(spec) {
-  if (spec$origin == "null"   || is.null(spec$value)) return("NULL")
-  if (spec$origin == "column") return(paste0("data$", spec$col))
-  if (spec$origin == "scalar") {
-    if (is.character(spec$value)) return(shQuote(spec$value))
-    if (is.numeric(spec$value))   return(format(spec$value))
-    if (is.logical(spec$value))   return(as.character(spec$value))
+ARG_LIT_ORIGINS <- c("null", "column", "scalar", "vector")
+
+.arg_lit <- function(spec) {
+  if (is.list(spec) && !is.null(spec$origin)) {
+    origin <- spec$origin
+    if (length(origin) != 1L || !is.character(origin) ||
+        !origin %in% ARG_LIT_ORIGINS) {
+      rlang::abort(...)                      # names the bad origin; see §4.8.1
+    }
+    if (origin == "null")   return("NULL")
+    if (origin == "column") return(paste0("data$", spec$col))
+    if (origin == "scalar") { ... }          # quoted/unquoted literal
+    if (origin == "vector") { ... }          # deparsed c(...)
   }
-  # Fallback for unexpected types
-  paste0(deparse(spec$value), collapse = " ")
+  # Plain value (CLI callers who never set grade_args): best-effort literal.
 }
 ```
 
@@ -695,32 +932,165 @@ Domain notes:
 {{domain notes one per line}}
 ```
 
-### 4.9 Existing functions (unchanged behavior)
+### 4.9 `grade_table()` and `grade_report()`
 
-`grade_table()`, `grade_report()`, `print.pmatools()`, `summary.pmatools()` are unchanged in v0.2 except that `grade_table()` and `grade_report()` propagate the `convert_smd_to_or` and `baseline_risk` arguments to `sof_table()` internally.
+```r
+grade_table(
+  outcomes,                               # named list of pmatools objects, OR a pmatools_set
+  primary      = NULL,
+  style        = c("gradepro", "bmj"),
+  palette      = c("pastel", "classic"),
+  show_domains = TRUE,
+  per          = 1000,
+  prediction   = FALSE,
+  follow_up    = NULL,
+  unit         = NULL,
+  label_intervention = "intervention",
+  label_control      = "control"
+) -> flextable
+
+grade_report(
+  outcomes,                               # named list, OR a pmatools_set
+  primary      = NULL,
+  palette      = c("pastel", "classic"),
+  style        = c("gradepro", "bmj"),
+  format       = "docx",                  # any of "docx", "html", "pdf", "md"
+  output_dir   = getwd(),
+  output_file  = "grade_report",
+  title        = "Certainty of Evidence Assessment (Core GRADE series)",
+  show_domains = TRUE,
+  per          = 1000,
+  prediction   = FALSE,
+  label_intervention = "intervention",
+  label_control      = "control"
+) -> chr (paths to written files)
+```
+
+Passing a `pmatools_set` uses the set's `order` for the row order and its `primary` for grouping; the named-list API is unchanged. In the BMJ style, per-outcome `follow_up` / `unit` recorded by `grade_meta_multi()` are picked up automatically, and a table mixing effect measures keeps a generic Effect header plus a footnote pointing at the per-cell measure names.
+
+`print.pmatools()` / `summary.pmatools()` are unchanged apart from also reporting `$rating_target` and any low-RoB refit.
+
+### 4.10 Multi-outcome workflow [v0.5.0]
+
+```r
+run_ma_multi(
+  data,                     # canonical long tibble with an `outcome` column
+  outcomes     = NULL,      # NULL -> every outcome present, in first-seen order
+  sm           = NULL,      # single value, or named by outcome
+  outcome_type = NULL,      # single value, or named by outcome
+  ...                       # forwarded to run_ma()
+) -> named list of meta objects
+
+grade_meta_multi(
+  ma_list,                  # named list from run_ma_multi()
+  common      = list(),     # grade_meta() arguments shared by every outcome
+  per_outcome = list(),     # keyed by outcome name; overrides `common`
+  data        = NULL,
+  primary     = NULL
+) -> pmatools_set
+
+reorder_outcomes(set, order)     -> pmatools_set   # `order` must list every outcome exactly once
+set_primary(set, primary)        -> pmatools_set   # NULL clears the primary set
+```
+
+Because `sm` and `outcome_type` may be named by outcome, binary and continuous outcomes can share one session.
+
+`run_ma()` itself is unchanged and still **aborts** on data holding more than one outcome; `run_ma_multi()` is the only supported way to batch.
+
+**Failure semantics.** An outcome that fails is recorded as `NULL` with a warning so the rest of the batch completes — **except** the Core GRADE 2 entry gate (§4.5.1), whose abort (condition class `"pmatools_threshold_gate"`) is re-raised unchanged.
+
+### 4.11 The `pmatools_set` class [v0.5.0]
+
+A list with at least:
+
+| Field | Contents |
+|---|---|
+| `$outcomes` | named list of `pmatools` objects (a failed outcome is `NULL`) |
+| `$order` | character vector: display order, every outcome exactly once |
+| `$primary` | character vector: primary outcomes (possibly empty) |
+| `$data` | the long-format data the set was built from, when available |
+
+`print()` and `summary()` methods list each outcome's certainty, rating target and analysis set; a low-RoB refit is called out per outcome, and a set mixing analysis sets says so. `grade_table()`, `grade_report()` and `export_bundle()` all accept the set directly.
+
+### 4.12 Rare-event methods and additional plots
+
+Exported but not specified in detail here; see the roxygen pages. They predate this section and their signatures are authoritative in the code:
+
+`run_rare_ma()`, `rare_event_diagnostics()`, `plot_rare_sensitivity_forest()`, `plot_trimfill_forest()`, `plot_forest_rob()`, `plot_forest_indirectness()`, `plot_forest_pubias_subgroup()`, `evidence_profile()`, `combine_arms()`.
+
+`evidence_profile(grade, palette, study_design, other_text, other_downgrade)` renders the per-outcome GRADE evidence profile used by both bundle layouts.
+
+### 4.13 `indirectness_table()` [v0.5.0]
+
+```r
+indirectness_table(x, summary_text = NULL, ...) -> flextable
+```
+
+Renders `x$indirectness_subdomains` (§4.5.3) in the BMJ Core GRADE 5 publication format: target question, evidence found, a colour-graded 4-option judgment row with the recorded answer ticked, and a merged "Judgment across subdomains" row carrying the overall judgment. Aborts with a message telling the caller how to record subdomains when `x` has none.
 
 ---
 
 ## 5. Algorithm specifications
 
-### 5.1 RoB inflation threshold (refined)
+### 5.0 Domain judgment vocabulary
 
-**v0.1.0 behavior:** when dominated, rate down if `(small_values = "undesirable" AND TE_all > TE_low)` OR `(small_values = "desirable" AND TE_all < TE_low)` OR `(small_values = NULL AND always conservative)`.
+Every domain returns one of **three** levels (v0.3+):
 
-**v0.2.0 behavior:**
-
-```
-inflation_ratio = (|TE_all| - |TE_low|) / |TE_low|
-
-direction_ok = match small_values:
-  "undesirable":  TE_all > TE_low
-  "desirable":    TE_all < TE_low
-  NULL:           |TE_all| > |TE_low|         (use absolute distance from null)
-
-rate_down = direction_ok AND (inflation_ratio > rob_inflation_threshold)
+```r
+GRADE_LEVELS <- c("no", "some_concerns", "serious")   # 0, -1, -2
 ```
 
-This means `small_values = NULL` is no longer "always rate down conservatively when dominated"; it now defers to the absolute distance from null. The behavior change is documented in the v0.2 release notes.
+The legacy spellings `"some"` and `"very_serious"` are accepted on input and normalised (`"some"` → `"some_concerns"`, `"very_serious"` → `"serious"`), but **`"some_concerns"` is what the objects, notes and tables contain**. Consumers matching on judgment strings must match the normalised form. Anything outside the accepted set aborts via `validate_grade_level()`.
+
+### 5.1 Risk of bias — Core GRADE 4 Fig 2 flowchart (v0.5.0)
+
+`assess_rob()` follows the BMJ 2025 Core GRADE 4 Fig 2 flowchart literally. `R/domain_rob.R`'s header comment is the maintained long form; this section is the contract.
+
+**Step 0 — binary classification.** Each study is folded into low or high risk of bias:
+
+| `rob_some_concerns` | low | high |
+|---|---|---|
+| `"low"` (default) | `no`, `some_concerns` | `serious` |
+| `"high"` | `no` | `some_concerns`, `serious` |
+
+`rob_overrides` (named by `studlab`) are applied **before** the fold; each override requires a rationale, and a key matching no study label aborts rather than being silently ignored.
+
+**Step 1 — dominance gate (Fig 2's first node).** `w_high` is the inverse-variance weight share carried by high-RoB studies.
+
+```
+dominated  <=>  w_high >= rob_dominant_threshold      # default 0.60, compared with >=
+```
+
+If the weight share cannot be computed the count share is used and the notes say so; if neither can be computed, dominance is assumed (conservative).
+
+> `rob_dominant_threshold` was deprecated in v0.3.1 ("accepted but ignored"). **That decision is retracted in v0.5.0**: the gate is the first decision node of Fig 2 and the two branches below it are not interchangeable.
+
+**Step 2a — dominated = Yes: check the direction of bias.** `TE_all` and `TE_low` are each classified into one of three zones defined by ±Threshold (`above` / `trivial` / `below`). With `za = zone(TE_all)`, `zl = zone(TE_low)`:
+
+| Rule | Condition | Judgment |
+|---|---|---|
+| 1 | `za == zl == "trivial"` | `"no"` |
+| 2 | `za == zl`, non-trivial, inflation ≤ `rob_inflation_threshold` | `"no"` |
+| 3 | `za == zl`, non-trivial, inflation > `rob_inflation_threshold` | `"some_concerns"` (−1) |
+| 4 | `za != zl`, no sign flip across null | `"some_concerns"` (−1) |
+| 5 | `za != zl`, sign flip (`above` ↔ `below`) | `"serious"` (−2) |
+
+`inflation_ratio = (|TE_all| - |TE_low|) / |TE_low|` is evaluated **only** when the shift runs in the bias-favouring direction implied by `small_values`; a deflation in that direction never triggers a downgrade. When the direction gate blocks a downgrade that the inflation threshold would otherwise have caused, the notes say so explicitly, including the direction reasoning, so readers do not conclude the threshold was ignored (v0.4.0).
+
+When `threshold_internal` is NULL/NA/≤ 0 the trivial zone collapses to `{0}`, so only rule 5 can fire.
+
+**Step 2b — dominated = No.** **This branch never rates the domain down.** It decides which studies the analysis should use:
+
+| "Substantial difference between high- and low-RoB estimates?" | `analysis_set` |
+|---|---|
+| Yes (a zone change, i.e. rule 4/5, or a bias-favouring inflation beyond `rob_inflation_threshold`) | `"low_only"` |
+| No | `"all"` |
+
+Consequence (breaking in v0.5.0): a body of evidence in which a *minority* of the weight is at high risk of bias can no longer be downgraded for risk of bias.
+
+**Step 3 — refit (`rob_refit`, default `TRUE`).** When `analysis_set == "low_only"`, `grade_meta()` refits the meta-analysis on the low-RoB subset. Every downstream domain, the rating target, the baseline risk and the SoF table then use the restricted estimate, **so pooled numbers can change with no change to the input data**. The refit is announced with a message, recorded in the RoB notes, shown by `print()`, and footnoted in `sof_table()`. `rob_refit = FALSE` keeps the full analysis and returns the recommendation only.
+
+The object then carries `$meta` (rated analysis), `$meta_full` (all studies), `$rob_analysis_set` and `$rob_refit` — see §4.5.
 
 ### 5.2 Inconsistency — BMJ Core GRADE 3 flowchart (v0.2)
 
@@ -813,7 +1183,7 @@ if (!is.null(threshold_internal)) {
 # Auto judgment: more conservative than manual
 # (auto Step 1 is statistical proxy, cannot confirm "important" clinically)
 if (threshold_side == "majority_one_side") {
-  return judgment = "some", auto = TRUE,
+  return judgment = "some_concerns", auto = TRUE,
          notes = sprintf("AUTO Step 1: I² > 25% → important heterogeneity detected. AUTO Step 2 (%s): majority on one side → 'some' concern (auto path is conservative; supply manual flowchart params for BMJ-faithful 'no').", threshold_label)
 }
 
@@ -824,7 +1194,7 @@ return judgment = "serious", auto = TRUE,
 
 **Why the auto path differs from the manual path on `majority_one_side`:**
 
-In the BMJ manual flowchart, "majority_one_side" → judgment = `"no"` because the user has clinically confirmed Step 1 ("important differences" is real heterogeneity, not just statistical noise). The auto path uses I² > 25% as a **statistical proxy** for Step 1; this proxy can flag heterogeneity that is not clinically important. Returning `"some"` instead of `"no"` is a conservative acknowledgment that the auto path cannot fully replace clinical judgment. Users who want the BMJ-faithful `"no"` should supply manual flowchart parameters.
+In the BMJ manual flowchart, "majority_one_side" → judgment = `"no"` because the user has clinically confirmed Step 1 ("important differences" is real heterogeneity, not just statistical noise). The auto path uses I² > 25% as a **statistical proxy** for Step 1; this proxy can flag heterogeneity that is not clinically important. Returning `"some_concerns"` instead of `"no"` is a conservative acknowledgment that the auto path cannot fully replace clinical judgment. Users who want the BMJ-faithful `"no"` should supply manual flowchart parameters.
 
 **Edge cases:**
 
@@ -842,7 +1212,7 @@ In the BMJ manual flowchart, "majority_one_side" → judgment = `"no"` because t
 | Manual | ci_diff = "yes" | opposite_sides | yes | **No** + note |
 | Manual | ci_diff = "yes" | opposite_sides | no | **Serious** |
 | Auto | I² ≤ 25% | — | — | **No** |
-| Auto | I² > 25% | majority_one_side | — | **Some** *(more conservative than manual)* |
+| Auto | I² > 25% | majority_one_side | — | **some_concerns** *(more conservative than manual)* |
 | Auto | I² > 25% | opposite_sides | n/a | **Serious** |
 
 ### 5.3 Chinn's formula (SMD ↔ OR)
@@ -910,6 +1280,8 @@ If `meta_obj$sd.e/sd.c` is unavailable (some metacont calls), fall back to `weig
 
 **Behavior in `grade_meta()`:**
 
+> **[v0.5.0]** `grade_meta()` still does not auto-fill `threshold`, but it no longer lets the call proceed without one either: with `threshold_type = "mid"` (the default) a missing `threshold` aborts and the error quotes the `suggest_threshold()` value. See §4.5.1.
+
 `grade_meta()` itself does **not** auto-fill `threshold` — passing `threshold = NULL` triggers the I²-fallback path explicitly. The Shiny app calls `suggest_threshold()` to pre-fill the input field, but the *value* the user sees is what gets passed (override-able). This keeps `grade_meta()`'s behavior deterministic and reproducible: no hidden defaults at the R API level.
 
 **Threshold conversion to TE scale** (used internally by `assess_rob()`, `assess_inconsistency()` and `assess_imprecision()`):
@@ -936,6 +1308,44 @@ threshold_to_te_scale <- function(threshold, threshold_scale, sm) {
 }
 ```
 
+### 5.5 Imprecision — Core GRADE 2 Fig 4 flowchart (v0.5.0, breaking)
+
+`assess_imprecision()` follows Fig 4 of Core GRADE 2 verbatim. The chosen threshold is the one the **rating target** selects (§4.5.2): ±MID for `important_effect` / `little_to_no_difference`, null (0) for `non_null_effect`.
+
+```
+Does the CI cross the chosen threshold?
+
+  YES -> Rate down one level                                        [-1]
+         Rate down two levels if either:                            [-2]
+           - the CI crosses two thresholds (important benefit AND important harm), or
+           - the plain language description implies more uncertainty ("may" not "likely").
+         Sample size / OIS is NOT consulted on this path.
+
+  NO  -> Is the effect implausibly large?
+           No  (moderate effect) -> Do not rate down                [-0]
+           Yes (large effect)    -> OIS approach:
+             Continuous outcome:
+               N >= OIS (or 800)        -> do not rate down         [-0]
+               N <  OIS                 -> rate down one level      [-1]
+               N <  30% of OIS          -> consider two levels      [-2]
+             Binary outcome:
+               relative risk CI ratio >= 3, or odds ratio CI ratio >= 2.5
+                                        -> consider two levels      [-2]
+               otherwise, calculate OIS:
+                 N >= OIS               -> do not rate down         [-0]
+                 N <  OIS               -> rate down one level      [-1]
+```
+
+**What changed from v0.2/v0.4 (breaking).** Previously the "N ≤ 30% of OIS" rule forced a two-level rate-down regardless of where the CI sat. Under Fig 4 the OIS branch is reached only when the CI is clear of the threshold *and* the effect is implausibly large, so an analysis with a moderate effect, a CI clear of the threshold and a small sample size no longer rates down at all.
+
+**Operationalisation of "implausibly large".** The BMJ text operationalises this for binary outcomes only ("certainly relative risk reduction >40%, possibly >30%"). For continuous outcomes pmatools uses Cohen's convention (standardised effect ≥ 0.8) and **says so in the notes**, flagging it as a pmatools choice rather than a Core GRADE rule.
+
+**CI ratio** (Fig 4 caption) is the upper CI limit divided by the lower limit on the ratio scale.
+
+**Notes** record which Fig 4 path produced the judgment, including which CI-ratio rule fired and the continuous 400-per-group (total N 800) rule of thumb.
+
+**Manual override.** A scalar `imprecision` (with mandatory `imprecision_rationale`) bypasses this assessment entirely (v0.4.0).
+
 ---
 
 ## 6. Test matrix
@@ -954,6 +1364,21 @@ threshold_to_te_scale <- function(threshold, threshold_scale, sm) {
 | test-suggest_threshold.R *(new)* | defaults match table for OR/RR/SMD/MD/ARD/RoM; MD default = 0.2 × pooled SD; unknown sm returns NULL |
 | test-chinn.R *(new)* | numerical accuracy of factor π/√3, NA propagation, sof_table integration with convert_smd_to_or = TRUE |
 
+**Added since v0.2** (the files actually on disk are authoritative; `test-threshold_scale.R` and `test-suggest_threshold.R` were folded into other files):
+
+| File | Coverage |
+|---|---|
+| test-rating_target.R | Core GRADE 2 Fig 2 target derivation, manual override + mandatory rationale, `threshold_type` entry gate |
+| test-imprecision.R | Fig 4 paths (§5.5), CI-ratio rules, OIS branch reachability |
+| test-rob_flowchart.R | Core GRADE 4 Fig 2 (§5.1): dominance gate, the 5 zone rules, `analysis_set`, refit propagation |
+| test-domain_rob.R | inflation threshold boundaries, `rob_some_concerns`, `rob_overrides` |
+| test-indirectness_subdomains.R | PICO table normalisation, worst-case rollup, scalar override |
+| test-sof_bmj.R | BMJ SoF layout, Difference column, plain language summaries |
+| test-multi_outcome.R | `run_ma_multi()`, `grade_meta_multi()`, ordering, the hierarchical bundle layout |
+| test-override-rationale.R | every mandatory `*_rationale` (v0.4.0) |
+| test-threshold_absolute.R | `threshold_scale = "ard"` + `threshold_baseline` conversion |
+| test-domain_pubias.R, test-evidence_profile.R, test-grade_report.R, test-plot_forest_rob.R, test-plot_forest_subgroup.R, test-rare_events.R, test-sof_table.R | as named |
+
 ---
 
 ## 7. Edge cases
@@ -970,6 +1395,15 @@ threshold_to_te_scale <- function(threshold, threshold_scale, sm) {
 | `sof_table(convert_smd_to_or = TRUE, baseline_risk = NULL)` | abort with informative message |
 | `export_bundle` to non-writable directory | abort with file-system error |
 | `export_bundle` with `include = c("data")` only | ZIP contains only `data_long.csv`; no analysis.R |
+| `export_bundle(ma = m, grade = g, ...)` (legacy named call) | works; deprecation warning once per session (§4.8.1a) |
+| `export_bundle` with a `grade_args` entry whose `origin` is not one of the four accepted values | abort naming the bad origin (§4.8.1) |
+| `export_bundle` on a `pmatools_set` with zero outcomes | abort "the pmatools_set holds no outcomes" |
+| `grade_meta` with `threshold_type = "mid"` and no `threshold` | abort (class `"pmatools_threshold_gate"`), quoting the `suggest_threshold()` value |
+| `grade_meta` with a scalar domain override and no matching `*_rationale` | abort |
+| `rob_overrides` key matching no `studlab` | abort (never silently ignored) |
+| `run_ma` on data with more than one `outcome` value | abort; use `run_ma_multi()` |
+| One outcome of a `run_ma_multi()` / `grade_meta_multi()` batch fails | recorded as `NULL` with a warning; the batch continues — except a threshold-gate abort, which is re-raised |
+| Non-ASCII outcome name in the multi-outcome bundle | directory falls back to `outcome_NN` |
 
 ---
 
@@ -987,7 +1421,7 @@ threshold_to_te_scale <- function(threshold, threshold_scale, sm) {
 | File | Audience | Content |
 |---|---|---|
 | `README.md` (updated) | First-time users | install_github, 30-line quick start (CLI + Shiny URL), feature highlights |
-| `vignettes/pmatools_cli.Rmd` (new) | R users | End-to-end CLI workflow on bundled `cbti_depression.csv`; explain Threshold, inflation threshold, Chinn |
+| `sample.R` | R users | End-to-end CLI workflow on bundled `cbti_depression.csv`, run as part of the release gate (§10). **This is what shipped instead of `vignettes/pmatools_cli.Rmd`, which does not exist.** |
 | `PLAN.md` (updated) | Maintainer | v0.2 scope, what's done / not done, v0.3 roadmap |
 | `SPEC.md` (this file) | Maintainer + AI implementers | Authoritative spec |
 | roxygen man pages | Function-level reference | `?grade_meta`, `?sof_table`, etc., kept in sync with SPEC |
@@ -995,6 +1429,13 @@ threshold_to_te_scale <- function(threshold, threshold_scale, sm) {
 ---
 
 ## 10. Backward compatibility checklist
+
+> **[v0.2 — superseded]** The checklist below was the v0.2 release gate and is kept for history. v0.4.0 and v0.5.0 deliberately broke items 2–5 of it (mandatory rationales, the SoF header rename, the Core GRADE 2 entry gate, the RoB and Imprecision flowcharts). `NEWS.md` is the authoritative change list. The v0.5.0 gate is instead:
+>
+> - [ ] `Rscript -e 'devtools::test()'` — all tests pass
+> - [ ] `Rscript -e 'devtools::load_all("."); source("sample.R")'` — the worked example runs end to end
+> - [ ] `Rscript -e 'devtools::check(args = c("--no-manual"))'` — 0 ERROR, 0 WARNING
+> - [ ] `export_bundle(ma = m, grade = g, ...)` still works for the out-of-repo Shiny caller (§4.8.1a)
 
 - [ ] All v0.1.0 example code in `sample.R` continues to run unchanged with v0.2.0 installed
 - [ ] All existing `tests/testthat/test-grade_meta.R` cases pass without modification (or with clearly-documented adjustments for the two intentional behavior changes below)
@@ -1009,14 +1450,15 @@ threshold_to_te_scale <- function(threshold, threshold_scale, sm) {
 
 ---
 
-## 11. Out of scope (v0.3+)
+## 11. Out of scope (v0.6+)
 
 - GRADE upgrade domains (large effect, dose-response, plausible confounding)
 - GRADEpro JSON export/import
-- Multi-outcome session in Shiny
 - shinyapps.io deployment automation in pmatools (kept in pairwise_meta_analysis)
 - Internationalization
 - CRAN submission
+
+**Delivered since this list was written:** the multi-outcome session (§4.10–§4.11) shipped in v0.5.0. The pmatools side — `run_ma_multi()`, `grade_meta_multi()`, `pmatools_set`, `reorder_outcomes()`, `set_primary()` and the hierarchical export layout — is complete; wiring it into the Shiny wizard is UI work tracked in the app's own SPEC.
 
 ---
 

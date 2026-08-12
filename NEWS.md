@@ -1,4 +1,4 @@
-# pmatools (development version)
+# pmatools 0.5.0
 
 ## Breaking changes
 
@@ -34,6 +34,14 @@
   announced with a message, recorded in the Risk-of-bias notes, shown by
   `print()`, and footnoted in `sof_table()`. Set `rob_refit = FALSE` to keep
   the full analysis and receive the recommendation only.
+* `export_bundle()` is now an S3 generic, so its **first argument is named
+  `x`** rather than `ma`. Positional calls (`export_bundle(m, g, ...)`) are
+  unaffected. Legacy named calls (`export_bundle(ma = m, grade = g, ...)`)
+  still work but emit a deprecation warning once per session and will be
+  removed in a future release; pass the object positionally or as `x =`.
+* `grade_args$origin` in `export_bundle()` must now be one of `"null"`,
+  `"column"`, `"scalar"` or `"vector"`. Any other value aborts instead of
+  silently rendering the argument as `NULL` in the reproducibility script.
 
 ## New features
 
@@ -62,7 +70,8 @@
   up automatically, and a table mixing effect measures keeps a generic Effect
   header with a footnote pointing at the per-cell measure names.
 * `export_bundle()` is now an S3 generic. The single-outcome ZIP is unchanged
-  (`export_bundle(ma, grade, ...)`, flat layout); passing a `pmatools_set`
+  (`export_bundle(ma, grade, ...)`, flat layout — see Breaking changes for the
+  first argument's rename); passing a `pmatools_set`
   writes the multi-outcome layout instead: `summary_of_findings.docx`/`.csv`,
   `evidence_profile.docx`, `analysis.R`, `data_long.csv` and `README.txt` at
   the top level, plus one `outcomes/NN_name/` directory per outcome (forest,
@@ -105,7 +114,6 @@
   `$rob_analysis_set` (`"all"` / `"low_only"`) and `$rob_refit`. `$meta` is now
   the analysis every domain was assessed on, which is the refitted one when a
   refit happened.
-
 * Rating target (Core GRADE 2 Fig 2): `grade_meta()` derives the target of the
   certainty rating from the pooled point estimate
   (`"important_effect"` / `"little_to_no_difference"` / `"non_null_effect"`)
