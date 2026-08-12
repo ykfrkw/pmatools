@@ -311,7 +311,7 @@ grade_meta(
   rob_some_concerns                = c("low", "high"),  # which side "some concerns" folds into
   rob_overrides                    = NULL,   # named chr vector keyed on studlab
   rob_override_rationale           = NULL,   # named chr vector, one per override (REQUIRED)
-  rob_dominant_threshold           = 0.60,   # weight share for the Fig 2 dominance gate (`>=`)
+  rob_dominant_threshold           = 0.55,   # weight share for the Fig 2 dominance gate (`>=`)
   rob_refit                        = TRUE,   # refit on the low-RoB subset when Fig 2 says so
   rob_inflation_threshold          = 0.10,   # minimum relative inflation to act on
 
@@ -319,6 +319,7 @@ grade_meta(
 
   # --- Indirectness (Core GRADE 5; §4.5.3) ---
   indirectness                     = NULL,   # scalar judgment, or override of the subdomain table
+  indirectness_dominant_threshold  = 0.55,   # weight share for per-study aggregation (pmatools convention)
   indirectness_rationale           = NULL,   # REQUIRED with a scalar override other than "no"
   indirectness_subdomains          = NULL,   # PICO data.frame
 
@@ -347,7 +348,7 @@ grade_meta(
 
   # --- Optimal Information Size ---
   ois_events = NULL, ois_n = NULL, ois_alpha = 0.05, ois_beta = 0.20,
-  ois_p0 = NULL, ois_p1 = NULL, ois_delta = NULL, ois_sd = NULL,
+  ois_p0 = NULL, ois_p1 = NULL, ois_rrr = 0.20, ois_delta = NULL, ois_sd = NULL,
 
   baseline_risk                    = NULL,
 
@@ -572,16 +573,17 @@ Resulting judgment: {{judgment}}
 
 > **[v0.2 — superseded]** As of v0.5.0 Imprecision follows the Core GRADE 2 Fig 4 flowchart, in which the Optimal Information Size is consulted **only** when the CI does not cross the chosen threshold *and* the effect is implausibly large. **§5.5 is authoritative.** What follows describes only how `threshold` seeds the OIS inputs when that branch is reached.
 
-In `assess_imprecision()`, when `threshold` is supplied AND no explicit `ois_*` is provided:
+In `assess_imprecision()`, when no explicit `ois_*` is provided:
 
-- Binary, sm = OR/RR: `ois_p1 = ois_p0 * exp(threshold_internal)` (threshold_internal is on log scale via `threshold_scale = "auto"`).
-- Binary, ARD scale: `ois_p1 = ois_p0 + threshold_internal` (threshold_internal is the absolute risk difference).
-- Continuous (MD): `ois_delta = threshold_internal` (raw outcome units).
+- **Binary (v0.5.1): `ois_p1 = ois_p0 * (1 - ois_rrr)`, default `ois_rrr = 0.20`.** The MID is *not* used. Core GRADE 2 (p6): "For binary outcomes, these involve specifying the acceptable error rates: α (typically 0.05) and β (typically 0.20), the control group event rate (chosen from the context), and **a modest relative risk reduction, typically 20% or 25%**." `ois_p0` still comes from the ARD baseline risk when `threshold_scale = "ard"`, otherwise from the pooled control-arm rate.
+- Continuous (MD): `ois_delta = threshold_internal` (raw outcome units) — the same paragraph writes the continuous case out separately and *does* send it to the MID ("by specifying the smallest difference between intervention and control that one would want to avoid missing (ie, the MID)").
 - Continuous (SMD): `ois_delta = threshold_internal × pooled_SD` *(see §5.4 for pooled_SD computation)*.
 
-If both `threshold` and `ois_*` supplied, `ois_*` wins. Notes string indicates source.
+**Comparison unit (v0.5.1): participants, not events.** Core GRADE 2 Fig 4 caption: "N=number of participants; OIS=optimal information size"; body: "If the total sample size of all the studies included in a meta-analysis exceeds the OIS, one does not rate down". The auto-computed binary OIS is therefore a target **N** compared against `sum(n.e) + sum(n.c)`; the implied event count is reported in the notes for information. Supplying `ois_events` explicitly still selects an event-based comparison (backward compatible).
 
-`threshold` and `threshold_scale` are the **single source of truth** — RoB, Inconsistency, and Imprecision use the same `threshold_internal` derived from them, never two different Thresholds.
+If both `threshold` and `ois_*` supplied, `ois_*` wins (`ois_p1` also wins over `ois_rrr`). Notes string indicates source.
+
+`threshold` and `threshold_scale` are the **single source of truth** — RoB, Inconsistency, and Imprecision derive their boundary from them. Inconsistency and Imprecision additionally share the *chosen* threshold resolved by the rating target (Core GRADE 3 Fig 2: "Evaluate point estimates of studies **in relation to chosen threshold**"), so a `non_null_effect` target puts both domains on the null.
 
 ### 4.6 `sof_table()`
 
@@ -829,6 +831,7 @@ g <- grade_meta(
   study_design            = "{{study_design}}",
   rob                     = {{rob_expr}},
   rob_dominant_threshold  = {{rob_dom_threshold}},
+  indirectness_dominant_threshold = {{indirectness_dom_threshold}},
   rob_inflation_threshold = {{rob_inf_threshold}},
   small_values            = {{small_values_expr}},
   indirectness            = "{{indirectness}}",
@@ -836,6 +839,7 @@ g <- grade_meta(
   threshold               = {{threshold_expr}},
   ois_p0                  = {{ois_p0_expr}},
   ois_p1                  = {{ois_p1_expr}},
+  ois_rrr                 = {{ois_rrr_arg}},
   ois_delta               = {{ois_delta_expr}},
   ois_sd                  = {{ois_sd_expr}},
   pubias_small_industry   = "{{pubias_small_industry}}",
@@ -1063,7 +1067,7 @@ The legacy spellings `"some"` and `"very_serious"` are accepted on input and nor
 **Step 1 — dominance gate (Fig 2's first node).** `w_high` is the inverse-variance weight share carried by high-RoB studies.
 
 ```
-dominated  <=>  w_high >= rob_dominant_threshold      # default 0.60, compared with >=
+dominated  <=>  w_high >= rob_dominant_threshold      # default 0.55 (Fig 2 footnote: ">=55% = possibly dominating"), compared with >=
 ```
 
 If the weight share cannot be computed the count share is used and the notes say so; if neither can be computed, dominance is assumed (conservative).

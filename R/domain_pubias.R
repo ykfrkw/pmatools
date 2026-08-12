@@ -1,13 +1,28 @@
 # domain_pubias.R - Publication bias domain assessment
 #
-# BMJ 2025 Core GRADE 4 Figure 5 flowchart, faithfully:
+# BMJ 2025 Core GRADE 4 Figure 5 flowchart, faithfully.
 #
-#   [Top-level] pubias_registry_complete == "yes"
-#                 -> "no" (structural rule-out by complete pre-registration coverage)
+# Fig 5 has exactly four decision nodes and no entry-level rule-out:
+#   1. "Most or all studies small and industry sponsored"
+#   2. "Is statistical analysis of publication bias feasible? (ie, meta-analysis
+#       was performed, >=10 studies)"
+#   3. "Visual asymmetry of funnel plot and/or statistical test strongly
+#       suggests publication bias"
+#   4. "Documentation of unpublished studies (eg, in registry of FDA)"
+# Every leaf is "Rate down" / "Do not rate down"; the figure never rates down
+# two levels for publication bias.
+#
+# pmatools implementation:
 #
 #   Q1. pubias_small_industry == "yes"
 #         -> "some_concerns" (-1)
-#         else -> Q2 (default "no" assumption with note)
+#         else -> registry check, then Q2 (default "no" assumption with note)
+#
+#   [After Q1] pubias_registry_complete == "yes"
+#         -> "no" (a pmatools convenience input, NOT a node of Fig 5; see the
+#            note text). It is evaluated AFTER Q1 (v0.5.1) so that a body of
+#            small industry-sponsored trials still rates down even when the
+#            user asserts complete registry coverage.
 #
 #   Q2. k >= 10 ?
 #         YES -> Q3 (.pubias_statistical)
@@ -16,22 +31,30 @@
 #   Q3 (k >= 10): asymmetry detection
 #         pubias_funnel_asymmetry "yes" (manual) -> "some_concerns" (-1)
 #         pubias_funnel_asymmetry "no"  (manual) -> "no"
-#         auto Egger p < 0.01                    -> "serious"        (-2)
-#         auto 0.01 <= Egger p < 0.05            -> "some_concerns"  (-1)
+#         auto Egger p < 0.05                    -> "some_concerns"  (-1)
 #         auto Egger p >= 0.05                   -> "no"
 #         Egger fails to run                     -> "no" + prominent
 #           "QUALITATIVE ASSESSMENT REQUIRED" note (propagated to SoF /
 #           Evidence Profile / grade_table / grade_report footnotes)
+#
+#       The p-value cut-off is NOT in the source. Core GRADE 4 Fig 5 asks only
+#       whether asymmetry "strongly suggests publication bias" -- a qualitative
+#       judgment with no significance threshold. p < 0.05 is a pmatools
+#       operational convention and is labelled as such in the domain notes.
+#       The former p < 0.01 -> "serious" (-2) tier was removed in v0.5.1: Core
+#       GRADE 4 never describes a two-level publication-bias downgrade.
 #
 #   Q4 (k < 10):
 #         pubias_unpublished == "yes" -> "some_concerns" (-1)
 #         pubias_unpublished == "no"  -> "no"
 #         NULL -> assume "no" with warning
 #
-# Trim-and-fill is no longer used to drive the GRADE judgment (the 2-tier Egger
-# rule subsumes the previous sign-flip escalation). The {meta} trim-and-fill
-# computation remains available via plot_trimfill_forest() for the Reporting
-# bias tab in the companion Shiny app.
+# Rate down at most ONE level: "serious" (-2) is reachable only through a
+# scalar override elsewhere in the package, never from this flowchart.
+#
+# Trim-and-fill is not used to drive the GRADE judgment. The {meta}
+# trim-and-fill computation remains available via plot_trimfill_forest() for
+# the Reporting bias tab in the companion Shiny app.
 
 # Marker prepended to the publication-bias note whenever no statistical test
 # and no manual input decided the judgment, so downstream outputs (SoF table,
@@ -87,26 +110,13 @@ assess_pubias <- function(meta_obj,
                               "Publication bias")
   }
 
-  # --- Top-level: complete pre-registration coverage rules out pub bias -----
-  if (!is.null(pubias_registry_complete)) {
-    if (!pubias_registry_complete %in% c("yes", "no")) {
-      rlang::abort("pubias_registry_complete must be 'yes' or 'no'.")
-    }
-    if (pubias_registry_complete == "yes") {
-      return(make_domain_row(
-        domain   = "Publication bias",
-        judgment = "no",
-        auto     = FALSE,
-        notes    = paste0(
-          "STRUCTURAL RULE-OUT: pubias_registry_complete = 'yes'. ",
-          "Comprehensive pre-registration coverage assumed; ",
-          "publication bias is structurally ruled out -> do not rate down."
-        )
-      ))
-    }
+  # Validate up front; the registry input is consumed after Q1 (see below).
+  if (!is.null(pubias_registry_complete) &&
+      !pubias_registry_complete %in% c("yes", "no")) {
+    rlang::abort("pubias_registry_complete must be 'yes' or 'no'.")
   }
 
-  # --- Q1: Small + industry-sponsored ---------------------------------------
+  # --- Q1: Small + industry-sponsored (Core GRADE 4 Fig 5, first node) ------
   if (!is.null(pubias_small_industry)) {
     if (!pubias_small_industry %in% c("yes", "no")) {
       rlang::abort("pubias_small_industry must be 'yes' or 'no'.")
@@ -118,13 +128,41 @@ assess_pubias <- function(meta_obj,
         auto     = FALSE,
         notes    = paste0(
           "Q1: Most/all studies are small AND industry-sponsored ",
-          "-> rate down 1 (some_concerns)."
+          "-> rate down 1 (some_concerns).",
+          if (identical(pubias_registry_complete, "yes")) paste0(
+            " pubias_registry_complete = 'yes' was also supplied, but it is ",
+            "evaluated only after Q1: Core GRADE 4 Fig 5 begins with the ",
+            "small-and-industry-sponsored node, and asserting registry ",
+            "coverage does not remove that concern."
+          ) else ""
         )
       ))
     }
     q1_note <- "Q1: Not dominated by small industry-sponsored studies. "
   } else {
     q1_note <- "Q1: pubias_small_industry not specified; assumed 'no'. "
+  }
+
+  # --- Post-Q1: user-asserted complete pre-registration coverage ------------
+  # Not a node of Core GRADE 4 Fig 5. The figure's only registry node is Q4
+  # ("Documentation of unpublished studies"), reached when k < 10. This input
+  # records the USER'S claim that every registered trial can be accounted for
+  # and short-circuits the remaining nodes; the note says whose claim it is.
+  if (identical(pubias_registry_complete, "yes")) {
+    return(make_domain_row(
+      domain   = "Publication bias",
+      judgment = "no",
+      auto     = FALSE,
+      notes    = paste0(
+        q1_note,
+        "pubias_registry_complete = 'yes': the user asserts that ",
+        "pre-registration is universal in this field and that all registered ",
+        "trials are accounted for, so the remaining Fig 5 nodes are not ",
+        "evaluated -> do not rate down. This rule-out is a pmatools input, ",
+        "not a decision node of Core GRADE 4 Fig 5, and rests entirely on ",
+        "that assertion."
+      )
+    ))
   }
 
   # --- Q2: Statistical feasibility (k >= 10) --------------------------------
@@ -155,8 +193,20 @@ assess_pubias <- function(meta_obj,
 }
 
 # --------------------------------------------------------------------------
-# Q3: k >= 10 -- statistical / visual asymmetry branch (2-tier Egger)
+# Q3: k >= 10 -- statistical / visual asymmetry branch (single-tier Egger)
+#
+# Core GRADE 4 Fig 5 phrases this node qualitatively ("strongly suggests
+# publication bias") and gives no p-value cut-off; p < 0.05 below is a
+# pmatools operational convention, stated as such in the domain note. The
+# figure has a single "Rate down" leaf here, so the judgment never exceeds
+# one level.
 # --------------------------------------------------------------------------
+.PUBIAS_EGGER_CONVENTION <- paste0(
+  "The p < 0.05 cut-off is a pmatools operational convention, not a Core ",
+  "GRADE criterion: Core GRADE 4 Fig 5 asks qualitatively whether funnel-plot ",
+  "asymmetry and/or a statistical test 'strongly suggests publication bias' ",
+  "and specifies no p-value threshold, nor any two-level downgrade."
+)
 .pubias_statistical <- function(meta_obj, k, pubias_funnel_asymmetry, q1_note,
                                 rationale = NULL) {
 
@@ -225,17 +275,16 @@ assess_pubias <- function(meta_obj,
         qual_note, " ",
         q1_note,
         sprintf("Q2: Statistical analysis feasible (k = %d >= 10) but ", k),
-        "Egger's test failed to run. [auto (Egger's test, 2-tier)]"
+        "Egger's test failed to run. [auto (Egger's test)]"
       )
     ))
-  } else if (pval < 0.01) {
-    egger_note <- sprintf("Egger's test: p = %.4f.", pval)
-    judgment   <- "serious"
-    asym_desc  <- "Q3 (auto): Egger's test p < 0.01 -> strong evidence of funnel-plot asymmetry -> rate down 2 (serious)."
   } else if (pval < 0.05) {
-    egger_note <- sprintf("Egger's test: p = %.3f.", pval)
+    egger_note <- sprintf("Egger's test: p = %.4f.", pval)
     judgment   <- "some_concerns"
-    asym_desc  <- "Q3 (auto): Egger's test 0.01 <= p < 0.05 -> evidence of funnel-plot asymmetry -> rate down 1 (some_concerns)."
+    asym_desc  <- paste0(
+      "Q3 (auto): Egger's test p < 0.05 -> evidence of funnel-plot asymmetry ",
+      "-> rate down 1 (some_concerns)."
+    )
   } else {
     egger_note <- sprintf("Egger's test: p = %.3f.", pval)
     judgment   <- "no"
@@ -249,8 +298,8 @@ assess_pubias <- function(meta_obj,
     notes    = paste0(
       q1_note,
       sprintf("Q2: Statistical analysis feasible (k = %d >= 10). ", k),
-      asym_desc, " ", egger_note,
-      " [auto (Egger's test, 2-tier)]"
+      asym_desc, " ", egger_note, " ", .PUBIAS_EGGER_CONVENTION,
+      " [auto (Egger's test)]"
     )
   )
 }

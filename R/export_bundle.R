@@ -584,7 +584,7 @@ export_bundle.meta <- function(x,
     rob_some_concerns = grade_args$rob_some_concerns$value          %||% "low",
     rob_overrides_arg = .named_chr_lit(grade_args$rob_overrides),
     rob_override_rationale_arg = .named_chr_lit(grade_args$rob_override_rationale),
-    rob_dom_threshold= grade_args$rob_dominant_threshold$value     %||% 0.60,
+    rob_dom_threshold= grade_args$rob_dominant_threshold$value     %||% 0.55,
     # rob_refit: fall back to what the stored object actually did, so the
     # bundled script reproduces the analysis set that produced these numbers.
     rob_refit_arg    = .arg_lit(
@@ -605,6 +605,8 @@ export_bundle.meta <- function(x,
       # regenerated script were later given an indirectness_subdomains table.
       .arg_lit(grade_args$indirectness, fallback = "NULL")
     },
+    indirectness_dom_threshold =
+      grade_args$indirectness_dominant_threshold$value %||% 0.55,
     indirectness_rationale_arg = if (!is.null(grade$indirectness_subdomains)) {
       .indirectness_rationale_lit(grade)
     } else {
@@ -654,6 +656,7 @@ export_bundle.meta <- function(x,
     ois_beta_arg     = .arg_lit(grade_args$ois_beta,               fallback = "0.2"),
     ois_p0_arg       = .arg_lit(grade_args$ois_p0,                 fallback = "NULL"),
     ois_p1_arg       = .arg_lit(grade_args$ois_p1,                 fallback = "NULL"),
+    ois_rrr_arg      = .arg_lit(grade_args$ois_rrr,                fallback = "0.2"),
     ois_delta_arg    = .arg_lit(grade_args$ois_delta,              fallback = "NULL"),
     ois_sd_arg       = .arg_lit(grade_args$ois_sd,                 fallback = "NULL"),
     baseline_risk_arg = .arg_lit(

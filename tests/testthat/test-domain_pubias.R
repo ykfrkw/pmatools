@@ -45,14 +45,38 @@ make_small_meta <- function() {
   )
 }
 
-# --- Top-level structural rule-out ------------------------------------------
-test_that("pubias_registry_complete = 'yes' short-circuits to 'no'", {
-  m <- make_strong_asymmetry()  # would otherwise be 'serious' via Egger
+# --- Registry rule-out, evaluated after Q1 ----------------------------------
+# Updated (v0.5.1): Core GRADE 4 Fig 5 has no structural rule-out node, so
+# pubias_registry_complete is now consumed AFTER Q1 and can no longer suppress
+# the small-and-industry-sponsored downgrade.
+test_that("pubias_registry_complete = 'yes' short-circuits the Fig 5 nodes after Q1", {
+  m <- make_strong_asymmetry()  # would otherwise rate down via Egger
   g <- grade_meta(m, pubias_registry_complete = "yes",
-                  pubias_small_industry = "yes", threshold_type = "null")  # would otherwise be -1
+                  pubias_small_industry = "no", threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   expect_equal(pb$judgment, "no")
-  expect_match(pb$notes, "STRUCTURAL RULE-OUT")
+  expect_match(pb$notes, "pubias_registry_complete = 'yes'", fixed = TRUE)
+  expect_match(pb$notes, "not a decision node of Core GRADE 4 Fig 5", fixed = TRUE)
+})
+
+test_that("Q1 rate-down survives pubias_registry_complete = 'yes' (k >= 10)", {
+  m <- make_strong_asymmetry()
+  g <- grade_meta(m, pubias_registry_complete = "yes",
+                  pubias_small_industry = "yes", threshold_type = "null")
+  pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
+  expect_equal(pb$judgment, "some_concerns")
+  expect_match(pb$notes, "Q1:")
+  expect_match(pb$notes, "evaluated only after Q1", fixed = TRUE)
+})
+
+test_that("Q1 rate-down survives pubias_registry_complete = 'yes' when k < 10", {
+  # Acceptance case H: small + industry-sponsored, complete registry, k < 10.
+  m <- make_symmetric()  # k = 3
+  g <- grade_meta(m, pubias_small_industry = "yes",
+                  pubias_registry_complete = "yes", threshold_type = "null")
+  pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
+  expect_equal(pb$judgment, "some_concerns")
+  expect_equal(pb$downgrade, -1L)
 })
 
 # --- Q1: small + industry-sponsored -----------------------------------------
@@ -64,22 +88,26 @@ test_that("Q1: pubias_small_industry = 'yes' -> some_concerns", {
   expect_match(pb$notes, "Q1:")
 })
 
-# --- Q3 (k >= 10): 2-tier auto Egger ----------------------------------------
-test_that("Q3 auto: Egger p < 0.01 -> serious (-2)", {
+# --- Q3 (k >= 10): single-tier auto Egger -----------------------------------
+# Updated (v0.5.1): the p < 0.01 -> serious (-2) tier was removed. Core GRADE 4
+# never describes a two-level publication-bias downgrade, and Fig 5's asymmetry
+# node is qualitative ("strongly suggests") with no p-value cut-off.
+test_that("Q3 auto: very small Egger p still rates down only one level", {
   m <- make_strong_asymmetry()
   g <- grade_meta(m, threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
-  expect_equal(pb$judgment, "serious")
-  expect_match(pb$notes, "p < 0.01")
-  expect_match(pb$notes, "rate down 2")
+  expect_equal(pb$judgment, "some_concerns")
+  expect_equal(pb$downgrade, -1L)
+  expect_match(pb$notes, "p < 0.05")
+  expect_match(pb$notes, "pmatools operational convention", fixed = TRUE)
 })
 
-test_that("Q3 auto: 0.01 <= Egger p < 0.05 -> some_concerns (-1)", {
+test_that("Q3 auto: Egger p < 0.05 -> some_concerns (-1)", {
   m <- make_mild_asymmetry()
   g <- grade_meta(m, threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   expect_equal(pb$judgment, "some_concerns")
-  expect_match(pb$notes, "0.01 <= p < 0.05")
+  expect_match(pb$notes, "p < 0.05")
 })
 
 test_that("Q3 auto: Egger p >= 0.05 -> no", {

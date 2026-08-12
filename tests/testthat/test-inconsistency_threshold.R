@@ -57,7 +57,9 @@ test_that("opposite_sides + subgroup explained -> 'no'", {
   expect_equal(row$judgment, "no")
 })
 
-test_that("opposite_sides + no subgroup -> 'serious'", {
+# Updated (v0.5.1): Core GRADE 3 declines to endorse a two-level inconsistency
+# downgrade, so every automated / flowchart path caps at -1.
+test_that("opposite_sides + no subgroup -> 'some_concerns' (capped at -1)", {
   m <- make_mock_meta(c(-0.5, 0.5, -0.5), i2 = 0.7)
   g <- grade_meta(m,
     inconsistency_ci_diff            = "yes",
@@ -65,7 +67,18 @@ test_that("opposite_sides + no subgroup -> 'serious'", {
     inconsistency_subgroup_explained = "no", threshold_type = "null"
   )
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
+  expect_equal(row$judgment, "some_concerns")
+  expect_equal(row$downgrade, -1L)
+  expect_match(row$notes, "capped at one level", fixed = TRUE)
+})
+
+test_that("the scalar override is the only route to -2 for inconsistency", {
+  m <- make_mock_meta(c(-0.5, 0.5, -0.5), i2 = 0.7)
+  g <- grade_meta(m, threshold_type = "null", inconsistency = "serious",
+                  inconsistency_rationale = "Directions of effect irreconcilable")
+  row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_equal(row$judgment, "serious")
+  expect_equal(row$downgrade, -2L)
 })
 
 # ---- Auto path: I^2 only (no Q-test) ----
@@ -82,8 +95,8 @@ test_that("auto Step 1: I^2 > 25% triggers Step 2", {
   m <- make_mock_meta(c(-0.5, 0.5, -0.5), i2 = 0.60)
   g <- grade_meta(m, threshold_type = "null")
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  # opposite-sided TEs -> 'serious'
-  expect_equal(row$judgment, "serious")
+  # opposite-sided TEs -> rate down, capped at one level (v0.5.1)
+  expect_equal(row$judgment, "some_concerns")
 })
 
 # ---- Auto Step 2 with Threshold ----
@@ -100,11 +113,43 @@ test_that("auto Step 2 with Threshold: all studies above Threshold -> majority_o
 })
 
 test_that("auto Step 2 with Threshold: zone tally distinguishes opposite from majority", {
-  # TE values: 1 above, 1 below, 1 trivial -> opposite sides
+  # TE values: 1 above, 1 below, 1 trivial -> opposite sides (capped at -1)
   m <- make_mock_meta(c(0.30, -0.30, 0.0), i2 = 0.70)
   g <- grade_meta(m, threshold = 1.20, threshold_scale = "ratio")
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  expect_equal(row$judgment, "serious")
+  expect_equal(row$judgment, "some_concerns")
+  expect_match(row$notes, "clinically opposite", fixed = TRUE)
+})
+
+# ---- Chosen threshold shared with Imprecision (Core GRADE 3 Fig 2) ---------
+
+test_that("inconsistency and imprecision use the SAME chosen threshold", {
+  # threshold_type = "null" with a point estimate beyond the MID resolves the
+  # rating target to non_null_effect, whose chosen threshold is the null.
+  # Before v0.5.1 Inconsistency still received the raw MID here.
+  m <- make_mock_meta(c(0.30, -0.30, 0.0), i2 = 0.70)
+  m$TE.random <- 0.60   # |TE| > log(1.2) -> non_null_effect
+  g <- grade_meta(m, threshold = 1.20, threshold_scale = "ratio",
+                  threshold_type = "null")
+  expect_equal(g$rating_target, "non_null_effect")
+
+  incon <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
+  impre <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
+  # Inconsistency now says the chosen threshold is the null...
+  expect_match(incon$notes, "vs null = 0 (chosen threshold is the null",
+               fixed = TRUE)
+  # ...and Imprecision rates against the null threshold too.
+  expect_match(impre$notes, "the null threshold", fixed = TRUE)
+})
+
+test_that("a MID target makes both domains use +/-MID", {
+  m <- make_mock_meta(c(0.30, -0.30, 0.0), i2 = 0.70)
+  g <- grade_meta(m, threshold = 1.20, threshold_scale = "ratio")
+  incon <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
+  impre <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
+  expect_match(incon$notes, "vs +/-Threshold", fixed = TRUE)
+  expect_match(incon$notes, "same as Imprecision", fixed = TRUE)
+  expect_match(impre$notes, "the Threshold (+/-MID)", fixed = TRUE)
 })
 
 # ---- Auto Step 2 without Threshold (null=0 fallback) ----

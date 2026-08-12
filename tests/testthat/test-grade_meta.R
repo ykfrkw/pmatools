@@ -117,11 +117,25 @@ test_that("inconsistency domain is auto-computed", {
   expect_true(incon_row$judgment %in% c("no", "some", "serious", "very_serious"))
 })
 
-test_that("high I2 (opposite-sided TEs) gives serious inconsistency (auto)", {
+test_that("high I2 (opposite-sided TEs) rates down one level (auto)", {
+  # Updated (v0.5.1): the auto opposite-sides path used to return "serious"
+  # (-2). Core GRADE 3 declines to endorse a two-level inconsistency downgrade,
+  # so automated judgments are capped at -1.
   m <- make_metabin_high_i2()
   g <- grade_meta(m, threshold_type = "null")
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
+  expect_equal(incon_row$judgment, "some_concerns")
+  expect_equal(incon_row$downgrade, -1L)
+  expect_match(incon_row$notes, "capped at one level", fixed = TRUE)
+})
+
+test_that("inconsistency can still reach -2 through the scalar override", {
+  m <- make_metabin_high_i2()
+  g <- grade_meta(m, threshold_type = "null", inconsistency = "serious",
+                  inconsistency_rationale = "Unexplained opposite-direction effects")
+  incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_equal(incon_row$judgment, "serious")
+  expect_equal(incon_row$downgrade, -2L)
 })
 
 test_that("inconsistency flowchart: ci_diff = no → do not rate down", {
@@ -132,14 +146,16 @@ test_that("inconsistency flowchart: ci_diff = no → do not rate down", {
   expect_false(incon_row$auto)
 })
 
-test_that("inconsistency flowchart: opposite_sides + no subgroup → serious", {
+test_that("inconsistency flowchart: opposite_sides + no subgroup → rate down 1", {
+  # Updated (v0.5.1): capped at -1 per Core GRADE 3 (see above).
   m <- make_metabin()
   g <- grade_meta(m,
     inconsistency_ci_diff            = "yes",
     inconsistency_threshold_side     = "opposite_sides",
     inconsistency_subgroup_explained = "no", threshold_type = "null")
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  expect_equal(incon_row$judgment, "serious")
+  expect_equal(incon_row$judgment, "some_concerns")
+  expect_match(incon_row$notes, "capped at one level", fixed = TRUE)
 })
 
 test_that("inconsistency flowchart: majority_one_side → do not rate down", {

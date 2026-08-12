@@ -5,9 +5,41 @@
 #
 # Inputs (mutually exclusive with the subdomain table):
 #   (a) scalar GRADE level ("no" / "some_concerns" / "serious")
-#   (b) length-k vector of per-study GRADE levels (worst case aggregation)
+#   (b) length-k vector of per-study GRADE levels (weight-share aggregation)
 #   (c) column name in meta_obj$data (expanded to (b))
 #   (d) `indirectness_subdomains`: a PICO subdomain table (Core GRADE 5)
+#
+# (b)/(c) Per-study aggregation: weight-share dominance, not worst case
+# ---------------------------------------------------------------------------
+# Indirectness is a judgment about the body of evidence, and Core GRADE 5
+# frames it in terms of where the bulk of the evidence sits (p2-3, verbatim):
+#
+#   "However, if Core GRADE users are interested in effects in elderly people
+#    but all or almost all evidence comes from younger people, in low dose but
+#    all or almost all evidence comes from high dose, or in long follow-up but
+#    all or almost all evidence comes from short follow-up, they lack the data
+#    to test whether effects differ across these variables."
+#
+# A worst-case fold (used up to v0.5.0) rated the whole body of evidence down
+# when a single study out of eighteen was indirect, which is the opposite of
+# "all or almost all". Since v0.5.1 the aggregation is:
+#
+#   w_serious = inverse-variance weight share of studies rated "serious"
+#   w_any     = weight share of studies rated "some_concerns" or "serious"
+#
+#   w_serious >= indirectness_dominant_threshold -> "serious"       (-2)
+#   w_any     >= indirectness_dominant_threshold -> "some_concerns" (-1)
+#   otherwise                                    -> "no"
+#
+# CAVEAT: the threshold itself has NO basis in Core GRADE 5, which offers no
+# numeric operationalisation of "all or almost all". The default 0.55 is a
+# pmatools convention, chosen to match rob_dominant_threshold (whose value
+# *is* sourced, from Core GRADE 4 Fig 2). This is stated in the domain notes
+# on every aggregated judgment. When study weights cannot be computed the
+# count share is used instead and the note says so.
+#
+# The subdomain table (d) keeps its worst-case fold: subdomains are facets of
+# one judgment, not units of evidence, so weighting them is meaningless.
 #
 # (d) Subdomain judgments (Core GRADE 5, BMJ publication format)
 # ---------------------------------------------------------------------------
@@ -23,7 +55,8 @@
 #   no              | evidence is not applicable       | serious        (-2)
 #
 # The overall domain judgment defaults to the WORST case across subdomains
-# (same principle as .aggregate_indirectness() for per-study vectors). Because
+# (unlike the per-study aggregation above, which is weight-share based: a
+# subdomain is a facet of one judgment, not a unit of evidence). Because
 # Core GRADE 5 treats indirectness as a clinical-judgment domain, a scalar
 # `indirectness` may still be supplied alongside the subdomain table to
 # override that default; a value different from the default requires
@@ -68,17 +101,22 @@ INDIRECTNESS_OVERALL_LABELS <- c(
 #' @param rationale Free-text justification for a manual override.
 #' @param subdomains Optional PICO subdomain table (see
 #'   \code{\link{grade_meta}}).
+#' @param dominant_threshold Weight share at or above which per-study
+#'   indirectness dominates the body of evidence. Default \code{0.55}; see the
+#'   caveat at the top of this file (the value has no basis in Core GRADE 5).
 #' @return A one-row tibble from \code{make_domain_row()}.
 #' @keywords internal
 #' @noRd
 assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
-                                subdomains = NULL) {
+                                subdomains = NULL,
+                                dominant_threshold = 0.55) {
   # Subdomain table takes over the whole domain (Core GRADE 5 style).
   if (!is.null(subdomains)) {
     return(.assess_indirectness_subdomains(subdomains, indirectness, rationale))
   }
 
   k <- meta_obj$k
+  dominant_threshold <- .check_indirectness_dominant_threshold(dominant_threshold)
 
   # デフォルト: スカラ "no"
   if (is.null(indirectness)) indirectness <- "no"
@@ -95,7 +133,7 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
       ))
     }
     ind_vec <- as.character(data[[col]])
-    return(.aggregate_indirectness(ind_vec))
+    return(.aggregate_indirectness(ind_vec, meta_obj, dominant_threshold))
   }
 
   # スカラ
@@ -121,7 +159,7 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
   # ベクタ
   if (length(indirectness) == k) {
     validate_grade_level(indirectness, "indirectness")
-    return(.aggregate_indirectness(indirectness))
+    return(.aggregate_indirectness(indirectness, meta_obj, dominant_threshold))
   }
 
   rlang::abort(paste0(
@@ -130,21 +168,132 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
   ))
 }
 
-.aggregate_indirectness <- function(ind_vec) {
+# Validate indirectness_dominant_threshold. Mirrors
+# .check_dominant_threshold() (Risk of bias) so the two arguments behave alike.
+.check_indirectness_dominant_threshold <- function(x) {
+  if (is.null(x)) return(0.55)
+  if (!is.numeric(x) || length(x) != 1L || !is.finite(x) || x <= 0 || x > 1) {
+    rlang::abort(paste0(
+      "indirectness_dominant_threshold must be a single weight share in ",
+      "(0, 1] (default 0.55). It sets how much of the pooled weight must come ",
+      "from indirect studies before the body of evidence counts as indirect ",
+      "(Core GRADE 5: 'all or almost all evidence comes from ...'). Core ",
+      "GRADE 5 gives no numeric threshold; 0.55 is a pmatools convention."
+    ))
+  }
+  as.numeric(x)
+}
+
+# Caveat text attached to every aggregated per-study judgment.
+.INDIRECTNESS_THRESHOLD_CAVEAT <- paste0(
+  "Core GRADE 5 describes indirectness of the body of evidence qualitatively ",
+  "('all or almost all evidence comes from ...') and gives no numeric ",
+  "threshold; indirectness_dominant_threshold is a pmatools convention ",
+  "(default 0.55, aligned with rob_dominant_threshold)."
+)
+
+# Inverse-variance weight share carried by the studies flagged by `idx`.
+# Returns NA_real_ when no usable weights are available (the caller then falls
+# back to the count share). Mirrors the alignment logic of the Risk-of-bias
+# dominance gate: {meta} can keep full-length $TE/$w.* while $k counts fewer
+# rows, so vectors are realigned to n_total before indexing.
+.indirectness_weight_share <- function(meta_obj, idx, n_total) {
+  if (is.null(meta_obj) || n_total <= 0L) return(NA_real_)
+  align <- function(v) {
+    if (is.null(v)) return(NULL)
+    if (length(v) == n_total) return(v)
+    keep <- is.finite(v) & v > 0
+    if (sum(keep) == n_total) return(v[keep])
+    keep_te <- is.finite(meta_obj$TE)
+    if (length(keep_te) == length(v) && sum(keep_te) == n_total) return(v[keep_te])
+    NULL
+  }
+  w_vec <- NULL
+  for (slot in c("w.random", "w.common", "w.fixed")) {
+    v <- align(meta_obj[[slot]])
+    if (!is.null(v)) {
+      ok <- is.finite(v) & v > 0
+      if (any(ok) && sum(v[ok]) > 0) { w_vec <- v; break }
+    }
+  }
+  if (is.null(w_vec)) {
+    se <- align(meta_obj$seTE)
+    if (!is.null(se)) {
+      v <- 1 / se^2
+      if (any(is.finite(v) & v > 0)) w_vec <- v
+    }
+  }
+  if (is.null(w_vec) || length(w_vec) != n_total) return(NA_real_)
+  ok <- is.finite(w_vec)
+  w_total <- sum(w_vec[ok], na.rm = TRUE)
+  if (!is.finite(w_total) || w_total <= 0) return(NA_real_)
+  sum(w_vec[idx & ok], na.rm = TRUE) / w_total
+}
+
+.aggregate_indirectness <- function(ind_vec, meta_obj = NULL,
+                                    dominant_threshold = 0.55) {
   validate_grade_level(ind_vec, "indirectness")
   ind_vec <- .normalize_grade_level(ind_vec)
-  order_map <- c(no = 1, some_concerns = 2, serious = 3)
-  worst <- names(which.max(order_map[ind_vec]))
-  n <- length(ind_vec)
+  n   <- length(ind_vec)
   tbl <- table(ind_vec)
-  notes <- paste(
+  counts_note <- paste(
     paste0(names(tbl), ": n=", as.integer(tbl)), collapse = "; "
   )
+
+  idx_serious <- ind_vec == "serious"
+  idx_any     <- ind_vec %in% c("some_concerns", "serious")
+
+  share_serious <- .indirectness_weight_share(meta_obj, idx_serious, n)
+  share_any     <- .indirectness_weight_share(meta_obj, idx_any, n)
+
+  if (is.na(share_serious) || is.na(share_any)) {
+    share_serious <- sum(idx_serious) / max(1L, n)
+    share_any     <- sum(idx_any)     / max(1L, n)
+    basis      <- "count"
+    basis_note <- paste0(
+      "Study weights could not be computed, so the shares below are COUNT ",
+      "shares rather than inverse-variance weight shares."
+    )
+  } else {
+    basis      <- "weight"
+    basis_note <- ""
+  }
+
+  if (share_serious >= dominant_threshold) {
+    judgment <- "serious"
+    decision <- sprintf(
+      paste0("Studies rated 'serious' carry %.0f%% of the %s >= %.0f%% ",
+             "-> the body of evidence is dominated by evidence that is not ",
+             "applicable; rate down 2 levels."),
+      100 * share_serious, basis, 100 * dominant_threshold
+    )
+  } else if (share_any >= dominant_threshold) {
+    judgment <- "some_concerns"
+    decision <- sprintf(
+      paste0("Indirect studies ('some concerns' or 'serious') carry %.0f%% of ",
+             "the %s >= %.0f%% -> rate down 1 level."),
+      100 * share_any, basis, 100 * dominant_threshold
+    )
+  } else {
+    judgment <- "no"
+    decision <- sprintf(
+      paste0("Indirect studies carry only %.0f%% of the %s (< %.0f%%), so the ",
+             "body of evidence is not dominated by indirect evidence -> do ",
+             "not rate down."),
+      100 * share_any, basis, 100 * dominant_threshold
+    )
+  }
+
   make_domain_row(
     domain   = "Indirectness",
-    judgment = worst,
+    judgment = judgment,
     auto     = FALSE,
-    notes    = paste0("Aggregated from ", n, " studies (worst case). ", notes)
+    notes    = paste0(
+      "Aggregated from ", n, " studies by ", basis, " share. ", counts_note,
+      ". ", decision,
+      if (nzchar(basis_note)) paste0(" ", basis_note) else "",
+      " ", .INDIRECTNESS_THRESHOLD_CAVEAT
+    )
   )
 }
 
@@ -289,7 +438,8 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
   tibble::as_tibble(lapply(x, as.character))
 }
 
-# Worst case across subdomains (same principle as .aggregate_indirectness()).
+# Worst case across subdomains (deliberately NOT the weight-share rule used for
+# per-study vectors: subdomains are facets of a single judgment).
 .indirectness_worst_case <- function(sub_tbl) {
   order_map <- c(no = 1, some_concerns = 2, serious = 3)
   names(which.max(order_map[sub_tbl$grade_level]))

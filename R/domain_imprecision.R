@@ -45,6 +45,20 @@
 #                              N >= OIS -> Do not rate down       [-0]
 #                              N <  OIS -> Rate down one level    [-1]
 #
+#   両側 MID を跨いだときの -2 は、閾値として null を選んだ経路にも適用される
+#   (本文 6 ページ目 逐語):
+#     "The two considerations also apply to imprecision judgments when Core
+#      GRADE users choose the null as the threshold of interest. For example,
+#      consider a situation in which users rate their certainty in a benefit
+#      (threshold the null) but the CI also includes clearly important harm.
+#      The finding that the CI is consistent with both benefit and important
+#      harm motivates a plain language summary stating that the intervention
+#      'may' result in a benefit, and rating down two levels for imprecision."
+#   したがって rating target = non_null_effect (閾値 = null) でも、MID が
+#   与えられていれば ±MID を跨ぐかを別途評価し、両側を跨ぐなら -2 とする。
+#   -1 / -0 の判定は従来どおり null (= 0) を基準にする。MID がない場合は
+#   両側判定が不能なので -1 止まりになる。
+#
 #   CI ratio (Fig 4 caption): 「CI 上限 / CI 下限」を比スケールで取った値。
 #   "Large effect" = implausibly large: 本文は二値アウトカムについて
 #   "implausibly large (certainly relative risk reduction >40%, possibly
@@ -67,18 +81,40 @@
 #
 # OIS (Optimal Information Size) の計算方法:
 #
+#   比較の単位は「参加者数」(Core GRADE 2 Fig 4 caption 逐語:
+#   "N=number of participants; OIS=optimal information size"、本文 6 ページ目:
+#   "If the total sample size of all the studies included in a meta-analysis
+#    exceeds the OIS, one does not rate down")。二値アウトカムでも総イベント数
+#   ではなく総サンプルサイズ (n.e + n.c) を OIS と比較する。総イベント数は参考値
+#   として notes に併記する。ois_events を明示指定した場合のみイベント数比較に
+#   なる（後方互換）。
+#
 #   方法 1 — 直接指定:
-#     ois_events: バイナリ結果の目標総イベント数
-#     ois_n     : 連続結果の目標総サンプル数
+#     ois_events: バイナリ結果の目標総イベント数（後方互換の経路）
+#     ois_n     : 目標総サンプル数
 #
 #   方法 2 — 自動計算（方法 1 が未指定の場合に使用）:
 #     バイナリ結果: ois_p0 と ois_p1 を指定
 #       n_arm = (z_alpha/2 + z_beta)^2 × [p0(1-p0) + p1(1-p1)] / (p0-p1)^2
-#       OIS_events ≈ 2 × n_arm × p̄  (p̄ = (p0+p1)/2)
+#       OIS_n = 2 × n_arm                （参加者数）
+#       参考: OIS_events ≈ 2 × n_arm × p̄  (p̄ = (p0+p1)/2)
 #     連続結果: ois_delta と ois_sd を指定
 #       n_arm = 2 × (z_alpha/2 + z_beta)^2 × sigma^2 / delta^2
 #       OIS_n = 2 × n_arm
 #     既定: ois_alpha = 0.05 (両側), ois_beta = 0.20 (検出力 80%)
+#
+#   ois_p1 の導出 (二値):
+#     Core GRADE 2 本文 6 ページ目 逐語:
+#       "For binary outcomes, these involve specifying the acceptable error
+#        rates: alpha (typically 0.05) and beta (typically 0.20), the control
+#        group event rate (chosen from the context), and a modest relative risk
+#        reduction, typically 20% or 25%."
+#     すなわち二値の OIS は MID ではなく「控えめな相対リスク減少」で決める。
+#     pmatools は ois_rrr (既定 0.20) を用いて ois_p1 = ois_p0 * (1 - ois_rrr)
+#     とする。ois_p1 を明示指定した場合はそちらが優先される。
+#     連続アウトカムは同じ段落で書き分けられており ("by specifying the smallest
+#     difference between intervention and control that one would want to avoid
+#     missing (ie, the MID)")、従来どおり MID を ois_delta に使う。
 
 assess_imprecision <- function(meta_obj,
                                outcome_type       = "relative",
@@ -90,6 +126,7 @@ assess_imprecision <- function(meta_obj,
                                ois_p1             = NULL,
                                ois_delta          = NULL,
                                ois_sd             = NULL,
+                               ois_rrr            = 0.20,
                                threshold_internal = NULL,
                                threshold_kind     = NULL,
                                threshold_ard      = NULL,
@@ -149,21 +186,43 @@ assess_imprecision <- function(meta_obj,
   #   beyond_thresholds       : CI lies entirely outside trivial zone on one side
   #                             (upper <= -T OR lower >= +T)
   has_threshold <- .has_mid(thr_eff)
-  if (has_threshold) {
-    crosses_lower_threshold <- (lower < -thr_eff) && (upper > -thr_eff)
-    crosses_upper_threshold <- (lower <  thr_eff) && (upper >  thr_eff)
+
+  # The +/-MID zone is evaluated whenever a MID exists, even when the rating
+  # threshold is the null: Core GRADE 2 (p6) explicitly extends the two-level
+  # consideration ("the CI also includes clearly important harm") to the
+  # null-threshold path. On that path the -1 / -0 decision still uses the null;
+  # only the "crosses BOTH thresholds -> rate down two levels" branch consults
+  # +/-MID.
+  mid_zone <- if (has_threshold) {
+    thr_eff
+  } else if (.has_mid(threshold_internal)) {
+    threshold_internal
+  } else {
+    NULL
+  }
+  has_mid_zone <- !is.null(mid_zone)
+
+  if (has_mid_zone) {
+    crosses_lower_threshold <- (lower < -mid_zone) && (upper > -mid_zone)
+    crosses_upper_threshold <- (lower <  mid_zone) && (upper >  mid_zone)
     crosses_both_thresholds <- crosses_lower_threshold && crosses_upper_threshold
     crosses_one_threshold   <- xor(crosses_lower_threshold, crosses_upper_threshold)
-    within_thresholds       <- (lower >= -thr_eff) && (upper <= thr_eff)
-    beyond_thresholds       <- (upper <= -thr_eff) || (lower >= thr_eff)
-    crosses_threshold       <- crosses_lower_threshold || crosses_upper_threshold
+    within_thresholds       <- (lower >= -mid_zone) && (upper <= mid_zone)
+    beyond_thresholds       <- (upper <= -mid_zone) || (lower >= mid_zone)
   } else {
+    crosses_lower_threshold <- NA
+    crosses_upper_threshold <- NA
     crosses_both_thresholds <- NA
     crosses_one_threshold   <- NA
     within_thresholds       <- NA
     beyond_thresholds       <- NA
+  }
+
+  crosses_threshold <- if (has_threshold) {
+    crosses_lower_threshold || crosses_upper_threshold
+  } else {
     # Null threshold (target = non-null effect, or no MID available).
-    crosses_threshold       <- crosses_null
+    crosses_null
   }
 
   # Defensive: treat NA as NULL
@@ -174,22 +233,26 @@ assess_imprecision <- function(meta_obj,
   if (!is.null(ois_delta)  && (length(ois_delta)  == 0 || is.na(ois_delta)))  ois_delta  <- NULL
   if (!is.null(ois_sd)     && (length(ois_sd)     == 0 || is.na(ois_sd)))     ois_sd     <- NULL
 
-  # v0.2: derive ois_p1/ois_delta from threshold_internal when not explicitly provided
+  # Derive the OIS inputs that were not supplied explicitly.
+  #   binary     : ois_p0 (control-arm risk) + ois_rrr (modest RRR, Core GRADE 2)
+  #   continuous : ois_delta = MID           (Core GRADE 2, same paragraph)
   threshold_used_note <- ""
-  if (is.null(ois_events) && is.null(ois_n) &&
-      !is.null(threshold_internal) && !is.na(threshold_internal) &&
-      threshold_internal != 0) {
+  has_mid_for_ois <- !is.null(threshold_internal) && !is.na(threshold_internal) &&
+                     threshold_internal != 0
+  if (is.null(ois_events) && is.null(ois_n)) {
     if (outcome_type == "relative") {
       # ARD Threshold converted to the ratio scale: anchor ois_p0 to the same
       # baseline risk that was used for the conversion, for consistency.
-      if (is.null(ois_p0) && !is.null(threshold_ard) &&
+      if (is.null(ois_p0) && has_mid_for_ois && !is.null(threshold_ard) &&
           !is.null(threshold_p0) && is.finite(threshold_p0)) {
         ois_p0 <- threshold_p0
         threshold_used_note <- sprintf(
           " (ois_p0 from threshold baseline risk = %.4f)", ois_p0
         )
       }
-      # Auto-fall back ois_p0 to control-arm pooled proportion if missing
+      # Auto-fall back ois_p0 to control-arm pooled proportion if missing.
+      # Core GRADE 2 calls for "the control group event rate (chosen from the
+      # context)", so the observed control-arm risk is the natural default.
       if (is.null(ois_p0)) {
         cer <- tryCatch(.compute_control_risk(meta_obj, method = "simple"),
                         error = function(e) NULL)
@@ -201,30 +264,23 @@ assess_imprecision <- function(meta_obj,
         }
       }
       if (is.null(ois_p1) && !is.null(ois_p0)) {
-        sm_local <- meta_obj$sm %||% ""
-        if (!is.null(threshold_ard) && is.finite(threshold_ard)) {
-          # ARD Threshold with a ratio sm: threshold_internal is on the log
-          # scale, so use the raw ARD for the risk arithmetic.
-          ois_p1 <- ois_p0 + threshold_ard
-        } else if (identical(threshold_kind, "ard")) {
-          ois_p1 <- ois_p0 + threshold_internal
-        } else if (identical(sm_local, "OR")) {
-          # OR scale: invert odds, not risk. RR-style p1 = p0 * exp(Threshold)
-          # is only accurate when p0 is small; for p0 ~ 0.5 it can be
-          # ~10% off and biases the OIS estimate.
-          or_val <- exp(threshold_internal)
-          ois_p1 <- (ois_p0 * or_val) / (1 - ois_p0 + ois_p0 * or_val)
-        } else {
-          # RR / HR / RoM: log scale, ois_p1 = p0 * exp(Threshold).
-          ois_p1 <- ois_p0 * exp(threshold_internal)
-        }
+        # Core GRADE 2 (p6): binary OIS uses "a modest relative risk reduction,
+        # typically 20% or 25%" -- NOT the MID. The MID is reserved for the
+        # continuous branch, which the same paragraph writes out separately.
+        rrr    <- .check_ois_rrr(ois_rrr)
+        ois_p1 <- ois_p0 * (1 - rrr)
         ois_p1 <- max(min(ois_p1, 1 - 1e-6), 1e-6)
         threshold_used_note <- paste0(threshold_used_note, sprintf(
-          " (ois_p1 derived from Threshold: ois_p1 = %.4f)", ois_p1
+          paste0(" (ois_p1 from a modest relative risk reduction, ois_rrr = ",
+                 "%.0f%%: ois_p1 = %.4f; Core GRADE 2 specifies an RRR rather ",
+                 "than the MID for binary outcomes)"),
+          100 * rrr, ois_p1
         ))
       }
-    } else {
-      # Continuous outcomes
+    } else if (has_mid_for_ois) {
+      # Continuous outcomes: Core GRADE 2 keeps the MID here ("by specifying
+      # the smallest difference between intervention and control that one would
+      # want to avoid missing (ie, the MID)").
       if (is.null(ois_delta)) {
         ois_delta <- threshold_internal
         threshold_used_note <- sprintf(
@@ -239,6 +295,8 @@ assess_imprecision <- function(meta_obj,
   if (is.null(ois_events) && is.null(ois_n)) {
     auto_ois <- .calc_ois(outcome_type, ois_alpha, ois_beta,
                           ois_p0, ois_p1, ois_delta, ois_sd)
+    # `.calc_ois()` returns type = "n" for binary outcomes too (Core GRADE 2
+    # Fig 4 compares participants, not events).
     if (!is.null(auto_ois)) {
       ois_calc_note <- paste0(auto_ois$formula, threshold_used_note)
       if (auto_ois$type == "events") ois_events <- auto_ois$value
@@ -272,7 +330,14 @@ assess_imprecision <- function(meta_obj,
     ci_ratio                = ci_ratio,
     ci_ratio_cut            = ci_ratio_cut,
     threshold_label         = if (has_threshold) "the Threshold (+/-MID)"
-                              else "the null threshold"
+                              else "the null threshold",
+    two_level_label         = if (has_threshold) {
+                                "TWO thresholds (important benefit and important harm)"
+                              } else {
+                                paste0("BOTH MIDs (+/-MID) -- the CI is consistent ",
+                                       "with benefit and with clearly important harm ",
+                                       "(Core GRADE 2, null-threshold path)")
+                              }
   )
   judgment <- fig4$judgment
 
@@ -309,16 +374,19 @@ assess_imprecision <- function(meta_obj,
     paste0("OIS not applied on this Fig 4 path [", ois_detail, "]")
   }
 
-  thresh_str <- if (!has_threshold) {
+  # The +/-MID zone description is reported whenever a MID exists. On the
+  # null-threshold path it is informational for -1/-0 but decisive for -2.
+  mid_suffix <- if (has_threshold) "" else " [MID zone; rating threshold = null]"
+  thresh_str <- if (!has_mid_zone) {
     ""
   } else if (isTRUE(crosses_both_thresholds)) {
-    "; crosses BOTH Thresholds"
+    paste0("; crosses BOTH Thresholds", mid_suffix)
   } else if (isTRUE(crosses_one_threshold)) {
-    "; crosses one Threshold"
+    paste0("; crosses one Threshold", mid_suffix)
   } else if (isTRUE(within_thresholds)) {
-    "; within Threshold (trivial effect)"
+    paste0("; within Threshold (trivial effect)", mid_suffix)
   } else {
-    "; beyond Threshold (definitively important effect)"
+    paste0("; beyond Threshold (definitively important effect)", mid_suffix)
   }
 
   # The rating target itself is appended by grade_meta() (it owns the Fig 2
@@ -344,6 +412,21 @@ assess_imprecision <- function(meta_obj,
 # --------------------------------------------------------------------------
 # OIS 自動計算
 # --------------------------------------------------------------------------
+
+# Validate the modest relative risk reduction used for the binary OIS
+# (Core GRADE 2: "a modest relative risk reduction, typically 20% or 25%").
+.check_ois_rrr <- function(x) {
+  if (is.null(x) || length(x) != 1L || is.na(x) || !is.numeric(x) ||
+      !is.finite(x) || x <= 0 || x >= 1) {
+    rlang::abort(paste0(
+      "ois_rrr must be a single relative risk reduction in (0, 1), e.g. 0.20 ",
+      "for a 20% RRR (Core GRADE 2: 'a modest relative risk reduction, ",
+      "typically 20% or 25%')."
+    ))
+  }
+  as.numeric(x)
+}
+
 .calc_ois <- function(outcome_type, ois_alpha, ois_beta,
                       ois_p0, ois_p1, ois_delta, ois_sd) {
   # Defensive: treat NA as NULL (Shiny may pass NA from blank numericInput)
@@ -365,12 +448,18 @@ assess_imprecision <- function(meta_obj,
     n_arm        <- (za + zb)^2 * (ois_p0 * (1 - ois_p0) + ois_p1 * (1 - ois_p1)) /
                     (ois_p0 - ois_p1)^2
     p_bar        <- (ois_p0 + ois_p1) / 2
+    total_n      <- ceiling(2 * n_arm)
     total_events <- ceiling(2 * n_arm * p_bar)
+    # Core GRADE 2 Fig 4 compares PARTICIPANTS with the OIS ("N=number of
+    # participants"), so the binary OIS is returned as a target sample size.
+    # The implied event count is reported alongside it for information.
     formula_str  <- sprintf(
-      "OIS: p0=%.3f, p1=%.3f, alpha=%.2f, beta=%.2f -> target %d events",
-      ois_p0, ois_p1, ois_alpha, ois_beta, total_events
+      paste0("OIS: p0=%.3f, p1=%.3f, alpha=%.2f, beta=%.2f -> target N=%d ",
+             "participants (implies ~%d events; Core GRADE 2 Fig 4 compares ",
+             "participants)"),
+      ois_p0, ois_p1, ois_alpha, ois_beta, total_n, total_events
     )
-    return(list(type = "events", value = total_events, formula = formula_str))
+    return(list(type = "n", value = total_n, formula = formula_str))
   }
 
   if (outcome_type == "absolute" && !is.null(ois_delta) && !is.null(ois_sd)) {
@@ -390,8 +479,10 @@ assess_imprecision <- function(meta_obj,
 # --------------------------------------------------------------------------
 # OIS 達成率（達成判定 / serious 判定の双方に使用）
 #
-# Returns list(pct, observed, target, unit). `unit` is "events" (binary) or
-# "N" (continuous). When neither is computable, all four fields are NA.
+# Returns list(pct, observed, target, unit). `unit` is "N" (participants,
+# Core GRADE 2 Fig 4: "N=number of participants") or "events" when the caller
+# supplied `ois_events` explicitly (kept for backward compatibility).
+# When neither is computable, all four fields are NA.
 # --------------------------------------------------------------------------
 .compute_ois_pct <- function(meta_obj, ois_events, ois_n) {
   na_out <- list(pct = NA_real_, observed = NA_integer_,
@@ -552,7 +643,9 @@ assess_imprecision <- function(meta_obj,
                                   n_total,
                                   ci_ratio,
                                   ci_ratio_cut,
-                                  threshold_label = "the Threshold") {
+                                  threshold_label = "the Threshold",
+                                  two_level_label =
+                                    "TWO thresholds (important benefit and important harm)") {
   out <- function(judgment, path, ois_used = FALSE) {
     list(judgment = judgment,
          path     = paste0("Fig 4 path: ", path),
@@ -562,10 +655,9 @@ assess_imprecision <- function(meta_obj,
   # --- Yes branch: CI crosses the chosen threshold -------------------------
   if (isTRUE(crosses_threshold)) {
     if (isTRUE(crosses_both_thresholds)) {
-      return(out("serious", sprintf(paste0(
-        "CI crosses %s -> rate down; CI crosses TWO thresholds (important ",
-        "benefit and important harm) -> rate down two levels"),
-        threshold_label)))
+      return(out("serious", sprintf(
+        "CI crosses %s -> rate down; CI crosses %s -> rate down two levels",
+        threshold_label, two_level_label)))
     }
     return(out("some_concerns", sprintf(paste0(
       "CI crosses %s -> rate down one level (sample size not considered on ",

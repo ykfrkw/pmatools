@@ -1,40 +1,70 @@
 # domain_inconsistency.R - Inconsistency domain assessment
 #
 # BMJ 2025 Core GRADE 3, Fig 2 flowchart (preserved from v0.1.0).
-# v0.2 enhancement: when `threshold_internal` is supplied, Step 2 uses +/-Threshold
-# as the clinical decision boundary (3-zone classification) instead of null = 0.
+#
+# Threshold (v0.5.1): Core GRADE 3 Fig 2 node 2 reads, verbatim, "Evaluate point
+# estimates of studies **in relation to chosen threshold**". The chosen
+# threshold is the one Core GRADE 2 Fig 2 resolved for the rating target, so
+# `threshold_chosen` is the SAME value the Imprecision domain uses
+# (target_info$threshold_for_imprecision): +/-MID for the important-effect and
+# little-to-no-difference targets, and the null (0) for a non-null-effect
+# target. Before v0.5.1 this domain received the raw MID even when Imprecision
+# was rating against the null, so the two domains could disagree about the
+# boundary; Fig 4 of Core GRADE 3 demonstrates that the choice reverses the
+# inconsistency verdict, so they must agree.
 #
 # Steps:
 #   Step 1. Are there important differences in point estimates AND limited CI overlap?
 #     NO  -> judgment = "no" (do not rate down)
 #     YES -> Step 2
 #
-#   Step 2. Where do point estimates fall vs the clinical decision Threshold?
+#   Step 2. Where do point estimates fall vs the chosen threshold?
 #     majority_one_side -> judgment = "no" (manual) or "some" (auto, conservative)
 #     opposite_sides    -> Step 3
 #
 #   Step 3. Is opposite-sided inconsistency explained by credible subgroup?
 #     yes -> judgment = "no" + note
-#     no  -> judgment = "serious"
+#     no  -> judgment = "some_concerns" (-1; see the -1 cap below)
+#
+# Rate down at most ONE level (v0.5.1). Core GRADE 3 (p5-6) verbatim:
+#   "A final issue is consideration of rating down twice for inconsistency.
+#    Although this is a theoretical possibility, we have found compelling
+#    reason to rate down twice for inconsistency sufficiently unusual that it
+#    need not concern users of Core GRADE."
+# Every automated / flowchart path in this file therefore stops at
+# "some_concerns" (-1). "serious" (-2) remains reachable only through the
+# scalar `inconsistency` override, which requires a written rationale.
 #
 # Auto Step 1 proxy: I^2 > 25%  (Q-test no longer used; v0.1.0 used "I^2 > 25% OR Q p < 0.10")
 # Auto Step 2 proxy:
-#   With threshold_internal:
-#     classify TE per study into 3 zones around +/-Threshold;
-#     pct_one_side = max((above+trivial)/k, (below+trivial)/k);
-#     >=0.75 -> majority_one_side
-#   Without threshold_internal:
-#     fall back to v0.1.0 null=0 behavior (pct_positive >= 0.75 or <= 0.25)
-# Auto Step 3: cannot be auto-detected -> opposite_sides leads to "serious"
+#   With threshold_chosen > 0:
+#     classify TE per study into 3 zones around +/-threshold_chosen;
+#     largest single-zone share >= 80% -> majority_one_side -> "no"
+#   Without threshold_chosen (null threshold, or none supplied):
+#     the trivial zone collapses to {0} and the same 80% rule is applied
+#     around the null.
+# Auto Step 3: cannot be auto-detected -> opposite_sides leads to
+#   "some_concerns" (-1), with a note pointing at the override.
 #
 # I^2 / tau^2 / Q statistics are always shown in notes but never drive the judgment.
+
+# Note appended whenever an automated / flowchart path would historically have
+# rated down two levels. Core GRADE 3 does not support that, so the judgment is
+# capped at -1 and the user is pointed at the explicit override.
+.INCONSISTENCY_CAP_NOTE <- paste0(
+  "Core GRADE 3 states that a compelling reason to rate down twice for ",
+  "inconsistency is sufficiently unusual that it need not concern Core GRADE ",
+  "users, so this automated judgment is capped at one level (some concerns). ",
+  "If two levels are genuinely warranted, supply the scalar override ",
+  "inconsistency = 'serious' with inconsistency_rationale."
+)
 
 assess_inconsistency <- function(meta_obj,
                                  inconsistency                    = NULL,
                                  inconsistency_ci_diff            = NULL,
                                  inconsistency_threshold_side     = NULL,
                                  inconsistency_subgroup_explained = NULL,
-                                 threshold_internal               = NULL,
+                                 threshold_chosen                 = NULL,
                                  rationale                        = NULL) {
 
   # ----- Statistics (always computed for notes) -----
@@ -146,23 +176,23 @@ assess_inconsistency <- function(meta_obj,
 
     return(make_domain_row(
       domain   = "Inconsistency",
-      judgment = "serious",
+      judgment = "some_concerns",
       auto     = FALSE,
       notes    = paste0(
         "FLOWCHART Step 3: Opposite-sided estimates not explained by subgroup ",
-        "-> rate down. | ", stat_note
+        "-> rate down one level. ", .INCONSISTENCY_CAP_NOTE, " | ", stat_note
       )
     ))
   }
 
   # ----- Path C: auto-detect -----
-  .auto_inconsistency(meta_obj, i2_pct, stat_note, threshold_internal)
+  .auto_inconsistency(meta_obj, i2_pct, stat_note, threshold_chosen)
 }
 
 # --------------------------------------------------------------------------
 # Auto-detect path
 # --------------------------------------------------------------------------
-.auto_inconsistency <- function(meta_obj, i2_pct, stat_note, threshold_internal = NULL) {
+.auto_inconsistency <- function(meta_obj, i2_pct, stat_note, threshold_chosen = NULL) {
 
   # Step 1 proxy: I^2 > 25%
   has_i2 <- !is.na(i2_pct)
@@ -197,9 +227,9 @@ assess_inconsistency <- function(meta_obj,
   k <- length(te_vec)
   te_vec <- te_vec[!is.na(te_vec)]
 
-  # 3-level inconsistency classification:
+  # 2-level inconsistency classification (v0.5.1):
   #   max single-zone share >= 80%               -> "no" (consistent direction)
-  #   both directions have substantial mass      -> "serious" (-2)
+  #   both directions have substantial mass      -> "some_concerns" (-1)
   #     (n_above/k >= 20% AND n_below/k >= 20%)
   #   else                                       -> "some_concerns" (-1)
   #
@@ -207,11 +237,14 @@ assess_inconsistency <- function(meta_obj,
   # the substantial-both-directions criterion captures clinically opposite
   # effects across studies, which corresponds to BMJ Core GRADE 3's
   # "point estimates on opposite sides of threshold" qualitative trigger.
+  # It no longer rates down two levels: Core GRADE 3 declines to endorse a
+  # two-level inconsistency downgrade (see .INCONSISTENCY_CAP_NOTE), so the
+  # opposite-sides zone tally is reported in the notes but capped at -1.
   ZONE_MAJORITY    <- 0.80
   OPPOSITE_EACH    <- 0.20
 
-  if (!is.null(threshold_internal) && !is.na(threshold_internal) && threshold_internal > 0) {
-    M <- threshold_internal
+  if (!is.null(threshold_chosen) && !is.na(threshold_chosen) && threshold_chosen > 0) {
+    M <- threshold_chosen
     n_above   <- sum(te_vec > +M)
     n_below   <- sum(te_vec < -M)
     n_trivial <- length(te_vec) - n_above - n_below
@@ -228,10 +261,13 @@ assess_inconsistency <- function(meta_obj,
   pct_max_zone  <- max(zone_counts) / n_total
   pct_each_side <- min(n_above, n_below) / n_total
 
+  # The label names the CHOSEN threshold (Core GRADE 3 Fig 2: "Evaluate point
+  # estimates of studies in relation to chosen threshold"), which is the same
+  # one the Imprecision domain rates against.
   threshold_label <- if (M > 0) {
-    sprintf("vs +/-Threshold = +/-%g", M)
+    sprintf("vs +/-Threshold = +/-%g (chosen threshold; same as Imprecision)", M)
   } else {
-    "vs null = 0 (Threshold not specified)"
+    paste0("vs null = 0 (chosen threshold is the null; same as Imprecision)")
   }
 
   if (pct_max_zone >= ZONE_MAJORITY) {
@@ -243,9 +279,9 @@ assess_inconsistency <- function(meta_obj,
     )
   } else if (pct_each_side >= OPPOSITE_EACH) {
     threshold_side <- "opposite_substantial"
-    judgment_auto  <- "serious"
+    judgment_auto  <- "some_concerns"
     decision_note  <- sprintf(
-      "Both directions have substantial mass: n_above = %d (%.0f%%) AND n_below = %d (%.0f%%) >= %.0f%% each -> rate down 2 (clinically opposite).",
+      "Both directions have substantial mass: n_above = %d (%.0f%%) AND n_below = %d (%.0f%%) >= %.0f%% each -> rate down 1 (clinically opposite).",
       n_above, n_above / n_total * 100,
       n_below, n_below / n_total * 100,
       OPPOSITE_EACH * 100
@@ -279,16 +315,17 @@ assess_inconsistency <- function(meta_obj,
     ))
   }
 
-  if (judgment_auto == "serious") {
+  if (identical(threshold_side, "opposite_substantial")) {
     return(make_domain_row(
       domain   = "Inconsistency",
-      judgment = "serious",
+      judgment = "some_concerns",
       auto     = TRUE,
       notes    = paste0(
         "AUTO Step 1: I2 > 25% -> important heterogeneity detected. ",
         side_note,
         " Subgroup explanation not auto-detectable; supply ",
-        "inconsistency_subgroup_explained = 'yes' to override. | ",
+        "inconsistency_subgroup_explained = 'yes' to override. ",
+        .INCONSISTENCY_CAP_NOTE, " | ",
         stat_note
       )
     ))

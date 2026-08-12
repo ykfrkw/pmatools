@@ -49,8 +49,13 @@
 #'   aborts (Core GRADE transparency principle). Default \code{NULL}.
 #' @param rob_dominant_threshold (v0.5, reinstated) Weight share at or above
 #'   which the body of evidence counts as \emph{dominated} by high-RoB studies
-#'   in BMJ Core GRADE 4 Fig 2 (first decision node). Default \code{0.60};
-#'   the comparison is \code{>=}, so exactly 60 percent counts as dominated.
+#'   in BMJ Core GRADE 4 Fig 2 (first decision node). The footnote to that
+#'   figure offers two candidate values — "\code{>65\%} weight or
+#'   \code{>=55\%} weight = possibly dominating" — and pmatools defaults to
+#'   the conservative one, \code{0.55}, with a \code{>=} comparison so that
+#'   exactly 55 percent counts as dominated. Pass \code{0.65} for the stricter
+#'   reading. (Default changed from \code{0.60} in v0.5.1: \code{0.60} matched
+#'   neither candidate.)
 #'   The share is computed from the inverse-variance study weights; when those
 #'   are unavailable the count share is used instead and the domain note says
 #'   so. When neither is computable, dominance is assumed (conservative).
@@ -100,6 +105,24 @@
 #'   \code{"no"} is a manual override and requires
 #'   \code{indirectness_rationale}. \code{"no"} (no downgrade) never requires
 #'   a rationale, so default calls are unaffected.
+#' @param indirectness_dominant_threshold (v0.5.1) Weight share at or above
+#'   which per-study indirectness dominates the body of evidence. Only used
+#'   when \code{indirectness} is a per-study vector or a column name (the
+#'   \code{indirectness_subdomains} table keeps its worst-case fold). Studies
+#'   rated \code{"serious"} are pooled first: if their share reaches the
+#'   threshold the domain is \code{"serious"}; otherwise, if the combined
+#'   share of \code{"some_concerns"} and \code{"serious"} studies reaches it,
+#'   the domain is \code{"some_concerns"}; otherwise \code{"no"}. Default
+#'   \code{0.55}.
+#'   \strong{The threshold has no basis in Core GRADE 5}, which operationalizes
+#'   indirectness of the body of evidence only qualitatively ("all or almost
+#'   all evidence comes from ..."); \code{0.55} is a pmatools convention
+#'   aligned with \code{rob_dominant_threshold}, and every aggregated domain
+#'   note says so. Shares come from the inverse-variance study weights; when
+#'   those are unavailable the count share is used and the note says so.
+#'   \strong{Behaviour change (v0.5.1)}: per-study vectors were previously
+#'   folded worst-case, so a single indirect study out of many rated the whole
+#'   body of evidence down.
 #' @param indirectness_rationale Free-text justification, required whenever
 #'   \code{indirectness} is supplied as a scalar GRADE level other than
 #'   \code{"no"}. See \code{rob_rationale} for how it is recorded.
@@ -249,7 +272,21 @@
 #' @param ois_beta Type II error rate for OIS calculation (default 0.20, ie 80 percent power).
 #' @param ois_p0 For binary outcomes: baseline (control) event rate for OIS calculation.
 #'   Used with \code{ois_p1} to auto-compute target events.
-#' @param ois_p1 For binary outcomes: experimental arm event rate for OIS calculation.
+#' @param ois_p1 For binary outcomes: experimental arm event rate for OIS
+#'   calculation. When supplied it takes precedence over \code{ois_rrr}.
+#' @param ois_rrr (v0.5.1) For binary outcomes: the "modest relative risk
+#'   reduction" the OIS is powered to detect, used to derive \code{ois_p1}
+#'   from \code{ois_p0} as \eqn{p_1 = p_0 (1 - ois\_rrr)}. Default \code{0.20}.
+#'   Core GRADE 2 specifies exactly this input for binary outcomes: "For binary
+#'   outcomes, these involve specifying the acceptable error rates: alpha
+#'   (typically 0.05) and beta (typically 0.20), the control group event rate
+#'   (chosen from the context), and a modest relative risk reduction, typically
+#'   20 percent or 25 percent." Pass \code{0.25} for the other value the paper
+#'   names. Ignored when \code{ois_p1}, \code{ois_events} or \code{ois_n} is
+#'   supplied, and ignored for continuous outcomes, where the same paragraph
+#'   directs users to the MID instead (\code{ois_delta}).
+#'   \strong{Behaviour change (v0.5.1)}: \code{ois_p1} was previously derived
+#'   from the MID for binary outcomes too.
 #' @param ois_delta For continuous outcomes: minimally important difference for OIS
 #'   calculation. Used with \code{ois_sd}.
 #' @param ois_sd For continuous outcomes: pooled SD for OIS calculation.
@@ -342,11 +379,12 @@ grade_meta <- function(meta_obj,
                        rob_some_concerns                = c("low", "high"),
                        rob_overrides                    = NULL,
                        rob_override_rationale           = NULL,
-                       rob_dominant_threshold           = 0.60,
+                       rob_dominant_threshold           = 0.55,
                        rob_refit                        = TRUE,
                        rob_inflation_threshold          = 0.10,
                        small_values                     = NULL,
                        indirectness                     = NULL,
+                       indirectness_dominant_threshold  = 0.55,
                        indirectness_rationale           = NULL,
                        indirectness_subdomains          = NULL,
                        inconsistency                    = NULL,
@@ -371,6 +409,7 @@ grade_meta <- function(meta_obj,
                        ois_beta                         = 0.20,
                        ois_p0                           = NULL,
                        ois_p1                           = NULL,
+                       ois_rrr                          = 0.20,
                        ois_delta                        = NULL,
                        ois_sd                           = NULL,
                        baseline_risk                    = NULL,
@@ -505,17 +544,23 @@ grade_meta <- function(meta_obj,
   d_indir <- assess_indirectness(
     indirectness,
     meta_obj,
-    rationale  = indirectness_rationale,
-    subdomains = indirectness_sub_tbl
+    rationale          = indirectness_rationale,
+    subdomains         = indirectness_sub_tbl,
+    dominant_threshold = indirectness_dominant_threshold
   )
 
+  # Inconsistency evaluates point estimates "in relation to chosen threshold"
+  # (Core GRADE 3 Fig 2), which is the same threshold the rating target
+  # resolved for Imprecision -- +/-MID, or the null when the target is a
+  # non-null effect. Passing the raw MID here instead (pre-v0.5.1) let the two
+  # domains judge against different boundaries.
   d_incon <- assess_inconsistency(
     meta_obj,
     inconsistency                    = inconsistency,
     inconsistency_ci_diff            = inconsistency_ci_diff,
     inconsistency_threshold_side     = inconsistency_threshold_side,
     inconsistency_subgroup_explained = inconsistency_subgroup_explained,
-    threshold_internal               = threshold_internal,
+    threshold_chosen                 = target_info$threshold_for_imprecision,
     rationale                        = inconsistency_rationale
   )
 
@@ -549,6 +594,7 @@ grade_meta <- function(meta_obj,
       ois_beta           = ois_beta,
       ois_p0             = ois_p0,
       ois_p1             = ois_p1,
+      ois_rrr            = ois_rrr,
       ois_delta          = ois_delta,
       ois_sd             = ois_sd,
       threshold_internal = threshold_internal,

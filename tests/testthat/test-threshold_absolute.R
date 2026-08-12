@@ -125,10 +125,13 @@ test_that("grade_meta converts ARD threshold and OIS uses p1 = p0 + ARD", {
 
   d <- g$domain_assessments
   impre_notes <- d$notes[d$domain == "Imprecision"]
-  # OIS derivation must use the raw ARD (p1 = 0.18 + 0.05 = 0.23),
-  # not the log-converted threshold value.
-  expect_match(impre_notes, "ois_p1 = 0.2300", fixed = TRUE)
-  expect_match(impre_notes, "p1=0.230", fixed = TRUE)
+  # Updated (v0.5.1): ois_p0 is still anchored to the ARD baseline risk
+  # (0.18), but ois_p1 now comes from the modest RRR Core GRADE 2 prescribes
+  # for binary outcomes (0.18 * (1 - 0.20) = 0.144), not from the threshold.
+  expect_match(impre_notes, "ois_p0 from threshold baseline risk = 0.1800",
+               fixed = TRUE)
+  expect_match(impre_notes, "ois_p1 = 0.1440", fixed = TRUE)
+  expect_match(impre_notes, "p1=0.144", fixed = TRUE)
   expect_match(impre_notes, "p0=0.180", fixed = TRUE)
 
   # Conversion note flows into all three Threshold-aware domains
