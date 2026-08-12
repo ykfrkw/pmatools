@@ -84,12 +84,20 @@
 # pattern, so re-running is a no-op.
 
 # Self-locating, so `Rscript shiny/stage_bundle.R` works from anywhere in the
-# repo and deploy.R can source() it. Under source() the --file= argument is
-# deploy.R's, but both live in this directory, so dirname() still lands here.
+# repo and deploy.R can source() it.
+#
+# --file= is whatever Rscript was handed, which is usually RELATIVE, and under
+# source() it is deploy.R's rather than ours. Both scripts live in this
+# directory so the dirname is right either way -- but deploy.R has already
+# setwd()'d here by then, so resolving "shiny" against the new working
+# directory looks for shiny/shiny and fails. When the derived path does not
+# exist, the working directory is already the app directory: use it.
 .script_dir <- function() {
   f <- grep("^--file=", commandArgs(FALSE), value = TRUE)
   if (length(f) == 0L) return(normalizePath("."))   # interactive fallback
-  normalizePath(dirname(sub("^--file=", "", f[1L])))
+  d <- dirname(sub("^--file=", "", f[1L]))
+  if (!dir.exists(d)) return(normalizePath("."))
+  normalizePath(d)
 }
 
 APP_DIR    <- .script_dir()
