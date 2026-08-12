@@ -93,10 +93,22 @@
   42 fewer)"), certainty with the domains that pulled it down, and a plain
   language summary. New arguments `follow_up` and `unit` supply the time frame
   and the unit of a continuous difference.
-* Plain language summaries (Core GRADE 2 Table 1): the statements are carried
-  verbatim and chosen from the certainty level, `threshold_type` and
-  `rating_target`. Objects created before the Core GRADE 2 entry gate (no
-  `$rating_target`) simply omit the column.
+* Plain language summaries (**Core GRADE 6 Box 1**): the statements are carried
+  verbatim and chosen from the certainty level, `threshold_type`,
+  `rating_target` and the **direction of the pooled point estimate**. Core
+  GRADE 6 Box 1 is the canonical source for summary of findings tables — it
+  summarises the earlier Core GRADE 2 Table 1 guidance and adds the guidance
+  specific to the null and MID thresholds. The practical consequence is that
+  the statements name the direction of the effect on the outcome (`reduces` /
+  `increases` / `has little to no effect`, e.g. "Treatment increases serious
+  adverse events") instead of Core GRADE 2 Table 1's fixed "benefit" wording,
+  which inverted the meaning of every harm outcome: an outcome with RR 2.42 for
+  serious adverse events used to be summarised as "Treatment likely has an
+  important benefit". Very low certainty now follows the Core GRADE 6 Table 1
+  wording, "We are very uncertain about the effect of X on Y". Objects created
+  before the Core GRADE 2 entry gate (no `$rating_target`) still simply omit
+  the column, as do rows with no usable pooled estimate to take a direction
+  from.
 * The Core GRADE 4 analysis-set note now travels with every output. In
   `grade_table()` the refitted outcome's row carries a numbered footnote
   marker, so a table mixing analysis sets says which rows were restricted; the
