@@ -176,6 +176,14 @@ step3_ui <- function() {
       )
     ),
 
+    # Which studies the numbers on this step came from. Deliberately its own
+    # top-level output, sibling to (not nested in) the sticky certainty bar,
+    # so it survives that bar's removal untouched: one uiOutput here, one
+    # renderer below, no shared state. Renders nothing when the analysis
+    # rests on all studies, and the bare uiOutput wrapper is unstyled, so the
+    # "all studies" case adds no box and no whitespace.
+    shiny::uiOutput("analysis_set_indicator"),
+
     pma_card(
       title = "Certainty assessment (Core GRADE series)",
       shiny::tabsetPanel(
@@ -200,6 +208,7 @@ step3_ui <- function() {
         # --- Risk of Bias ---
         shiny::tabPanel("Risk of Bias",
           .domain_header("Risk of Bias", "rob_badge", "rob_chip"),
+          shiny::uiOutput("analysis_set_banner_rob"),
           pma_how_collapse(EDU_COPY$domains$rob$how),
           pma_reference(EDU_COPY$domains$rob$ref_text, EDU_COPY$domains$rob$doi),
           htmltools::p(
@@ -575,6 +584,7 @@ step3_ui <- function() {
         # --- Final certainty (7th tab) ---
         shiny::tabPanel("Final certainty",
           shiny::uiOutput("cert_incomplete_banner"),
+          shiny::uiOutput("analysis_set_banner_cert"),
           htmltools::h5("GRADE Evidence Profile"),
           htmltools::div(
             style = "margin-top: 0.5rem; margin-bottom: 1rem;",
@@ -1442,6 +1452,21 @@ step3_server <- function(input, output, session, state) {
   output$indir_chip  <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Indirectness")    %||% "no"))
   output$impre_chip  <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Imprecision")     %||% "no"))
   output$pubias_chip <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Publication bias")%||% "no"))
+
+  # ----- Risk-of-bias analysis set (Core GRADE 4 Fig 2) -------------------
+  # Display only: these three outputs read the rated object and change no
+  # judgment, no number and no rating. They exist because grade_meta() can
+  # refit the analysis on the low risk-of-bias subset and only says so via
+  # an R-level message() that never reaches the browser.
+  output$analysis_set_indicator <- shiny::renderUI(
+    pma_analysis_set_indicator(grade_obj()))
+  shiny::outputOptions(output, "analysis_set_indicator",
+                       suspendWhenHidden = FALSE)
+
+  output$analysis_set_banner_rob <- shiny::renderUI(
+    pma_analysis_set_banner(grade_obj()))
+  output$analysis_set_banner_cert <- shiny::renderUI(
+    pma_analysis_set_banner(grade_obj()))
 
   output$sticky_cert_badge <- shiny::renderUI({
     g <- grade_obj()
