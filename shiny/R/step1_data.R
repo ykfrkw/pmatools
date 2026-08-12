@@ -4,6 +4,34 @@
 # `state$data`. RoB and Indirectness can be added/edited per study even
 # when the source dataset lacks those columns.
 
+# Minimal downloadable templates for the Upload / Paste branches. Written
+# from literals on purpose: they document the data contract, so they must
+# not drift when the bundled sample datasets change.
+#
+# Three studies, not two, so that rob and indirectness each show all three
+# accepted values in the data itself. They are deliberately not aligned
+# study-by-study: the two columns are independent judgments.
+PMA_TEMPLATE_CSV <- list(
+  binary = c(
+    "studlab,treat,n,event,rob,indirectness",
+    "Example A 2021,intervention,60,18,low,low",
+    "Example A 2021,control,58,9,low,low",
+    "Example B 2023,intervention,45,14,some,high",
+    "Example B 2023,control,47,6,some,high",
+    "Example C 2024,intervention,80,22,high,some",
+    "Example C 2024,control,78,17,high,some"
+  ),
+  continuous = c(
+    "studlab,treat,n,mean,sd,rob,indirectness",
+    "Example A 2021,intervention,60,12.4,5.1,low,low",
+    "Example A 2021,control,58,15.8,5.6,low,low",
+    "Example B 2023,intervention,45,11.9,4.8,some,high",
+    "Example B 2023,control,47,14.2,5.2,some,high",
+    "Example C 2024,intervention,80,13.1,5.4,high,some",
+    "Example C 2024,control,78,15.0,5.5,high,some"
+  )
+)
+
 step1_ui <- function() {
   s <- EDU_COPY$steps$step1
 
@@ -48,7 +76,32 @@ step1_ui <- function() {
         shiny::textAreaInput(
           "data_paste", "Paste tab- or comma-separated data",
           rows = 8,
-          placeholder = "studlab\ttreat\tn\tevent\nA\texperimental\t50\t10\nA\tcontrol\t50\t15\n..."
+          placeholder = paste0(
+            "studlab\ttreat\tn\tevent\trob\tindirectness\n",
+            "Example A 2021\tintervention\t60\t18\tlow\tlow\n",
+            "Example A 2021\tcontrol\t58\t9\tlow\tlow\n..."
+          )
+        )
+      ),
+      # Shown for both Upload and Paste: neither branch has anything on
+      # screen to copy the required shape from.
+      shiny::conditionalPanel(
+        "input.input_method != 'sample'",
+        htmltools::div(
+          class = "pma-card-subtitle",
+          style = "margin-top: 0.5rem;",
+          "Need the exact shape? Download a template: one row per study-arm, ",
+          "and the ", htmltools::code("treat"), " values become the ",
+          "Intervention / Control choices in Step 2."
+        ),
+        htmltools::div(
+          style = "margin-bottom: 0.5rem;",
+          shiny::downloadButton("template_binary", "Binary template (.csv)",
+                                class = "btn btn-secondary btn-sm"),
+          shiny::downloadButton("template_continuous",
+                                "Continuous template (.csv)",
+                                class = "btn btn-secondary btn-sm",
+                                style = "margin-left: 0.5rem;")
         )
       ),
       htmltools::p(
@@ -87,6 +140,21 @@ step1_ui <- function() {
 step1_server <- function(input, output, session, state) {
 
   loaded_signature <- shiny::reactiveVal(NULL)
+
+  # ----- Example templates (Upload / Paste branches) -----
+  # Generated from PMA_TEMPLATE_CSV, never read off disk, so the download
+  # cannot pick up a changed sample dataset. Read-path untouched.
+  .template_download <- function(kind) {
+    shiny::downloadHandler(
+      filename    = function() paste0("pmatools_template_", kind, ".csv"),
+      contentType = "text/csv",
+      content     = function(file) {
+        writeLines(PMA_TEMPLATE_CSV[[kind]], con = file)
+      }
+    )
+  }
+  output$template_binary     <- .template_download("binary")
+  output$template_continuous <- .template_download("continuous")
 
   # Map an uploaded RoB / Indirectness column to the Step 3 editor vocabulary
   # ("low" / "some" / "high"; NA = not set). Delegates to the vendored
