@@ -1175,7 +1175,9 @@ step2_server <- function(input, output, session, state) {
     footer <- c(
       "",
       "--- Software versions ---",
-      sprintf("pmatools : %s", safe_ver("pmatools", "0.3.4 (vendored)")),
+      # pmatools is vendored, not installed: resolved via the shared helper
+      # in ui_helpers.R, which consults options(pmatools.version_stamp).
+      sprintf("pmatools : %s", pma_pmatools_version()),
       sprintf("meta     : %s", safe_ver("meta")),
       sprintf("R        : %s", paste(R.version$major, R.version$minor, sep = "."))
     )

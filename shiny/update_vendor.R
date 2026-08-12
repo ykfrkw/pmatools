@@ -16,6 +16,14 @@
 # source pmatools DESCRIPTION against the app DESCRIPTION and warns loudly
 # about anything missing. Run it standalone with:
 #   Rscript update_vendor.R --check-only
+#
+# !! R/_pmatools/VERSION IS GENERATED - DO NOT HAND-EDIT !!
+#
+# This script writes the source pmatools DESCRIPTION `Version:` field to
+# R/_pmatools/VERSION, and app.R loads it into
+# options(pmatools.version_stamp = ...) so the app can report which pmatools
+# it actually vendors. Editing that file by hand is pointless: the next
+# vendor refresh deletes R/_pmatools/ and regenerates the stamp.
 # =============================================================================
 #
 # Run after pulling new pmatools commits in ~/Developer/pmatools/.
@@ -103,6 +111,38 @@ src_r <- list.files(file.path(PMATOOLS_SRC, "R"), pattern = "\\.R$",
 src_r <- src_r[basename(src_r) != "data.R"]
 file.copy(src_r, target_r)
 cat("  R/_pmatools/: ", length(src_r), " files\n", sep = "")
+
+# 1b. Version stamp. The app SOURCES these files instead of installing the
+#     package, so utils::packageVersion("pmatools") always errors there and
+#     nothing downstream can tell which pmatools it is running. Record the
+#     source DESCRIPTION Version in R/_pmatools/VERSION; app.R reads it into
+#     options(pmatools.version_stamp = ...). Written AFTER the copy step
+#     because that step unlink()s and recreates the whole directory.
+stamp_vendored_version <- function(src_desc, target_dir) {
+  if (!file.exists(src_desc)) {
+    warning("Version stamp NOT written: DESCRIPTION not found at ", src_desc,
+            call. = FALSE)
+    return(NA_character_)
+  }
+  ver <- tryCatch(read.dcf(src_desc, fields = "Version")[1L, 1L],
+                  error = function(e) NA_character_)
+  if (is.na(ver) || !nzchar(trimws(ver))) {
+    warning("Version stamp NOT written: no usable 'Version:' field in ",
+            src_desc, ". The app will report ",
+            "'(vendored; version unknown)' until this is fixed.",
+            call. = FALSE)
+    return(NA_character_)
+  }
+  ver <- trimws(ver)
+  writeLines(ver, file.path(target_dir, "VERSION"))
+  ver
+}
+
+stamped_version <- stamp_vendored_version(
+  file.path(PMATOOLS_SRC, "DESCRIPTION"), target_r)
+cat("  R/_pmatools/VERSION: ",
+    if (is.na(stamped_version)) "NOT WRITTEN (see warning)" else stamped_version,
+    "\n", sep = "")
 
 # 2. inst assets
 target_inst <- file.path(APP_DIR, "_pmatools_inst")
