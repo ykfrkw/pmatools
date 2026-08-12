@@ -542,6 +542,104 @@ test_that("export_bundle errors when no object is passed at all", {
   expect_error(export_bundle(output_dir = tempdir()))
 })
 
+# ---------------------------------------------------------------------------
+# results.txt after a Core GRADE 4 Fig 2 low-RoB refit
+# ---------------------------------------------------------------------------
+
+# Not dominated (50% < 55%) and the low-RoB estimate lands in a different zone,
+# so Fig 2 recommends "use low risk of bias studies only" and grade_meta()
+# refits on the 3 low-RoB studies. tau.preset = 0 keeps the weights exact.
+make_refit_grade <- function() {
+  ma <- meta::metagen(TE = c(1.2, 0.02, 0.02, 0.02),
+                      seTE = sqrt(1 / c(400, 400 / 3, 400 / 3, 400 / 3)),
+                      studlab = c("High-1", "Low-1", "Low-2", "Low-3"),
+                      sm = "RR", tau.preset = 0)
+  g <- suppressWarnings(grade_meta(
+    ma, study_design = "RCT",
+    rob = c("serious", "no", "no", "no"),
+    rob_rationale = "Consensus RoB2: study 1 high risk",
+    indirectness = "no",
+    small_values = "undesirable",
+    threshold = 1.05, threshold_scale = "ratio",
+    outcome_name = "Refit test"
+  ))
+  list(ma = ma, g = g)
+}
+
+read_bundle_results <- function(zip_path) {
+  unz_dir <- tempfile(); dir.create(unz_dir)
+  zip::unzip(zip_path, exdir = unz_dir)
+  readLines(file.path(unz_dir, "results.txt"), warn = FALSE)
+}
+
+test_that("results.txt names the analysis set when grade_meta refit on low RoB", {
+  fx <- make_refit_grade()
+  skip_if_not(isTRUE(fx$g$rob_refit), "fixture did not trigger the low-RoB refit")
+
+  out_dir <- tempfile(); dir.create(out_dir)
+  # The all-studies object, as the Shiny app passes it: the summary block and
+  # the certainty assessment below it then describe different analyses.
+  zip_path <- export_bundle(fx$ma, fx$g,
+                            output_dir = out_dir,
+                            bundle_name = "refit_bundle",
+                            include = c("results"))
+  txt <- read_bundle_results(zip_path)
+
+  expect_false(any(grepl("^\\[ Meta-analysis summary \\]$", txt)))
+  expect_true(any(grepl("[ Meta-analysis summary - all studies (4 studies; NOT the analysis rated below) ]",
+                        txt, fixed = TRUE)))
+  expect_true(any(grepl("[ Meta-analysis summary - low risk of bias studies only (3 of 4 studies; rated below) ]",
+                        txt, fixed = TRUE)))
+
+  # Both blocks are present, and the rated one comes before the certainty
+  # assessment it belongs to.
+  i_full  <- grep("- all studies", txt, fixed = TRUE)
+  i_rated <- grep("- low risk of bias studies only", txt, fixed = TRUE)
+  i_grade <- grep("[ Certainty assessment", txt, fixed = TRUE)
+  expect_length(i_full, 1L)
+  expect_length(i_rated, 1L)
+  expect_lt(i_full, i_rated)
+  expect_lt(i_rated, i_grade[1])
+})
+
+test_that("results.txt prints one qualified block when the rated analysis is passed", {
+  fx <- make_refit_grade()
+  skip_if_not(isTRUE(fx$g$rob_refit), "fixture did not trigger the low-RoB refit")
+
+  out_dir <- tempfile(); dir.create(out_dir)
+  # export_bundle(g) hands .write_results_txt() the refit object itself, so
+  # there is only one estimate to report -- but it still must be labelled.
+  zip_path <- export_bundle(fx$g,
+                            output_dir = out_dir,
+                            bundle_name = "refit_bundle_rated",
+                            include = c("results"))
+  txt <- read_bundle_results(zip_path)
+
+  expect_false(any(grepl("^\\[ Meta-analysis summary \\]$", txt)))
+  expect_true(any(grepl("[ Meta-analysis summary - low risk of bias studies only (3 of 4 studies; rated below) ]",
+                        txt, fixed = TRUE)))
+  expect_length(grep("[ Meta-analysis summary", txt, fixed = TRUE), 1L)
+})
+
+test_that("results.txt keeps the unqualified heading with no refit", {
+  ma <- make_meta_for_bundle()
+  g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                   rob_rationale = "Consensus RoB2: all domains low risk",
+                                   indirectness = "no",
+                                   outcome_name = "Test", threshold_type = "null"))
+  expect_false(isTRUE(g$rob_refit))
+
+  out_dir <- tempfile(); dir.create(out_dir)
+  zip_path <- export_bundle(ma, g,
+                            output_dir = out_dir,
+                            bundle_name = "no_refit_bundle",
+                            include = c("results"))
+  txt <- read_bundle_results(zip_path)
+
+  expect_true(any(grepl("^\\[ Meta-analysis summary \\]$", txt)))
+  expect_length(grep("[ Meta-analysis summary", txt, fixed = TRUE), 1L)
+})
+
 # ---- grade_args names are matched exactly ----------------------------------
 #
 # `$` on a list partial-matches. Before these tests, a bundle carrying only an

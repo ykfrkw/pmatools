@@ -460,6 +460,15 @@ rating without any change to the input data. Read the breaking changes first.
 
 ## Bug fixes
 
+* `results.txt` in an exported bundle headed its pooled estimate
+  `[ Meta-analysis summary ]` even after a Core GRADE 4 Fig 2 low-risk-of-bias
+  refit, so the block could report the all-studies analysis while the certainty
+  assessment printed below it was computed on the low-RoB subset. The heading
+  now names the analysis set (`- all studies (4 studies; NOT the analysis rated
+  below)` / `- low risk of bias studies only (3 of 4 studies; rated below)`),
+  and when the caller passes the all-studies object the rated analysis is
+  printed as a second, separately headed block. Without a refit the heading is
+  unchanged.
 * `grade_meta()` decided whether a supplied `indirectness` was a manual
   override of the subdomain worst case with `missing()`, which is `FALSE`
   whenever the caller passes every argument — exactly what the Shiny app and
