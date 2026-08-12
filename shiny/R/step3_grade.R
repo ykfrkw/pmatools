@@ -41,6 +41,25 @@ step3_threshold_suggestions <- function(s) {
   out
 }
 
+# Sub-tab navigation inside Step 3. File scope rather than local to
+# step3_ui(), because step3_server() re-renders the Final certainty copy of
+# it whenever the confirmation state changes (see output$grade_nav_final).
+.grade_nav <- function(back_id, back_label, next_id, next_label = "Next",
+                       next_disabled = FALSE) {
+  htmltools::div(
+    style = paste(
+      "display: flex;",
+      "justify-content: space-between;",
+      "margin-top: 1.5rem;"),
+    shiny::actionButton(back_id, back_label,
+      class = "btn btn-secondary"),
+    # See pma_wizard_nav(): TRUE / NULL, never a string, never FALSE.
+    shiny::actionButton(next_id, next_label,
+      class = "btn btn-primary",
+      disabled = if (isTRUE(next_disabled)) TRUE else NULL)
+  )
+}
+
 step3_ui <- function() {
   s <- EDU_COPY$steps$step3
 
@@ -93,18 +112,6 @@ step3_ui <- function() {
         "margin-top: 1rem; padding: 0.5rem 0.75rem;",
         "border: 1px dashed hsl(var(--border)); border-radius: 6px;"),
       shiny::checkboxInput(id, label, value = FALSE, width = "100%")
-    )
-  }
-  .grade_nav <- function(back_id, back_label, next_id, next_label = "Next") {
-    htmltools::div(
-      style = paste(
-        "display: flex;",
-        "justify-content: space-between;",
-        "margin-top: 1.5rem;"),
-      shiny::actionButton(back_id, back_label,
-        class = "btn btn-secondary"),
-      shiny::actionButton(next_id, next_label,
-        class = "btn btn-primary")
     )
   }
 
@@ -662,8 +669,11 @@ step3_ui <- function() {
           shiny::uiOutput("save_outcome_panel"),
           shiny::uiOutput("saved_outcomes_list"),
 
-          .grade_nav("grade_back_final", "Back: Publication bias",
-                     "grade_next_final", "Next: Export")
+          # The only Next in Step 3 that leaves the step (every other one
+          # just moves to the following sub-tab, which stays free), so it is
+          # the only one gated on the domain confirmations. Rendered as its
+          # own output so that gate can flip without rebuilding this tab.
+          shiny::uiOutput("grade_nav_final")
         )
       )
     )
@@ -1382,6 +1392,17 @@ step3_server <- function(input, output, session, state) {
   # Mirror into state so Step 4 (export gate) can read it.
   shiny::observe({
     state$domain_confirmed <- domain_confirmed()
+  })
+
+  # Nav on the Final certainty tab. Its Next is the one that leaves Step 3,
+  # so it carries the same signal as the Step 4 download gate: enabled only
+  # once every domain is confirmed. The other six sub-tabs keep a plain,
+  # always-enabled Next - moving between sub-tabs is never gated.
+  output$grade_nav_final <- shiny::renderUI({
+    .grade_nav("grade_back_final", "Back: Publication bias",
+               "grade_next_final", "Next: Export",
+               next_disabled = length(
+                 pma_unconfirmed_domains(domain_confirmed())) > 0)
   })
 
   # Banner on the Final certainty tab while domains remain unconfirmed.
