@@ -319,8 +319,10 @@ step1_server <- function(input, output, session, state) {
       htmltools::p(class = "pma-card-subtitle",
                    paste0(
                      "Long-format view (one row per study x arm, or study x ",
-                     "outcome x arm when an outcome column is present). Edit ",
-                     "cells inline if needed. The table is automatically ",
+                     "outcome x arm when an outcome column is present). To ",
+                     "edit a cell, double-click it, type the new value, then ",
+                     "click outside the cell to apply it (pressing Enter on ",
+                     "its own does not). The table is automatically ",
                      "re-validated."
                    )),
       DT::DTOutput("data_preview"),
@@ -400,11 +402,16 @@ step1_server <- function(input, output, session, state) {
     }
   })
 
+  # commit_loaded_data() reads state$rob_table, so this observer re-runs on
+  # every Step 3 RoB / Indirectness change. Commit the edited table, not the
+  # raw ingest: otherwise a RoB edit silently reverts Step 1 cell edits in
+  # state$data while the preview (which reads state$data_edits) still shows
+  # them, and Step 2 / Step 3 quietly analyse different numbers.
   shiny::observe({
     res <- ingested()
     if (!isTRUE(loaded_current()) ||
         is.null(res) || (is.list(res) && !is.null(res$error))) return()
-    commit_loaded_data(res)
+    commit_loaded_data(state$data_edits %||% res)
   })
 
   # ----- Advance hook -----
