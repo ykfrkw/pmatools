@@ -144,10 +144,12 @@ server <- function(input, output, session) {
     rare_mode_requested = TRUE,
     rare_mode_active = FALSE,
     grade          = NULL,
-    # Certainty assessments banked on the Step 3 "Final certainty" tab, as a
-    # named list of pmatools objects keyed by outcome label (see
-    # pma_outcomes_list() in ui_helpers.R), plus the subset the reviewer has
-    # marked primary for the combined Summary of Findings table.
+    # Certainty assessments, banked automatically once every domain of an
+    # outcome is confirmed (shiny/SPEC.md 3.4.14), as a named list of pmatools
+    # objects keyed by outcome label (see pma_outcomes_list() in
+    # ui_helpers.R), plus the subset the reviewer has marked primary for the
+    # combined Summary of Findings table. Listed on Step 4, beside the table
+    # they feed.
     outcomes       = NULL,
     sof_primary    = character(0),
     # Which certainty domains have been reviewed for the outcome currently
@@ -166,6 +168,12 @@ server <- function(input, output, session) {
     # previous outcome can be told apart from one given for this one.
     outcome_sig    = NULL,
     outcome_gen    = 1L,
+    # Stable identity of the outcome being rated, stamped onto the row it is
+    # banked as (pma_upsert_outcome(), ui_helpers.R). It is what lets a rename
+    # in Step 2 RELABEL the saved row instead of adding a second one. Derived
+    # from the generation counter rather than randomly: uniqueness is only ever
+    # needed within one session, and a counter needs no RNG.
+    outcome_uid    = "outcome-1",
     # Outcome identity, collected in Step 2 and consumed by Step 3 / Step 4.
     # Held in state (not read straight off input$) because the Step 2 widgets
     # are destroyed whenever another step's body is rendered.
@@ -277,6 +285,10 @@ server <- function(input, output, session) {
   # the saved outcomes, and the forest / funnel display preferences.
   begin_new_outcome <- function(identity = FALSE) {
     state$outcome_gen      <- (state$outcome_gen %||% 1L) + 1L
+    # A new outcome is a new row, so it gets its own identity. Minted here and
+    # nowhere else, so the row a save lands in cannot outlive the assessment it
+    # was made for.
+    state$outcome_uid      <- paste0("outcome-", state$outcome_gen)
     state$grade            <- NULL
     state$domain_confirmed <- NULL
     state$pubias_missing   <- NULL

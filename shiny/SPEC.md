@@ -648,9 +648,11 @@ Rendered by `.responder_block()` (`R/step3_threshold.R`), **below** the Decision
 under a control, read while the reviewer decides that control; past one desktop
 line it stops being read. `EDU_COPY_SUBTITLE_FIELDS` /
 `EDU_COPY_SUBTITLE_WORD_CAP` (`R/educational_copy.R`) name the copy-deck strings
-that render as one and pin the cap; `test-edu-copy.R` asserts it. Step headers,
-the intro modal and the saved-outcome copy are deliberately outside the
-registry, and the comment there says why.
+that render as one and pin the cap; `test-edu-copy.R` asserts it. Step headers
+and the intro modal are deliberately outside the registry, and the comment
+there says why. The four `multi_outcome` strings joined it in 0.5.1, when the
+press-to-save model they described was deleted (§3.4.14) — they were exempted
+as "a later phase owns them", and that phase has now happened.
 
 **There are no tooltips, and there will not be.** `pma_help()` — a `(?)` span
 with a Bootstrap tooltip — had no call site and nothing ever initialised
@@ -1022,6 +1024,30 @@ Certainty of evidence was rated using the GRADE approach following the BMJ 2025 
 (https://github.com/ykfrkw/pmatools)."
 ```
 
+#### 3.5.5 The saved-outcome list lives here (v0.5.1)
+
+The "Summary of Findings (all saved outcomes)" card carries, in order:
+`sof_intro_block` (`step4_intro` / `step4_empty`), `sof_stale_warning`,
+`combined_sof_block`, and `pma_add_next_outcome_button()`.
+
+`combined_sof_block` renders the combined table **and**
+`pma_saved_outcomes_ui()` — the per-row Move up / Move down / Mark primary /
+Remove controls. The list used to sit on the Step 3 "Final certainty" tab, one
+step away from the table it feeds, and Step 4 rendered a second copy of it
+writing to the same input ids. There is one copy now, on the step that owns it.
+
+Two consequences for the block itself:
+
+- **no early return when the list is empty.** It used to return `NULL` for
+  `length(outs) == 0`, which took the list with it; the table half is skipped
+  instead, and `pma_saved_outcomes_ui()` is passed
+  `empty_text = EDU_COPY$multi_outcome$list_empty` so the empty state is a
+  sentence rather than nothing;
+- **a global signal above the list** once there is at least one row:
+  *"N outcomes saved — add another, or download below."* The reviewer's
+  question at this point is "did the thing I just confirmed land here?", and
+  before this the only answer was to count rows.
+
 ### 3.4.12 Domain flowcharts (v0.5.1)
 
 Each of the four flowcharted domains — Risk of Bias, Inconsistency, Imprecision,
@@ -1134,6 +1160,59 @@ be alive in one session.
 viewport, and left alone the strip is what sets the page's minimum width — a
 phone scrolled the *whole page* sideways to read a paragraph. `.pma-card
 .nav-tabs` is `overflow-x: auto` with proximity scroll-snap.
+
+### 3.4.14 Banking an outcome — automatic, keyed by uid (v0.5.1)
+
+**There is no Save button.** An outcome is banked into `state$outcomes` the
+moment its sixth certainty domain is confirmed, and re-banked whenever the
+rating it holds changes. `output$save_outcome_panel`, `input$save_outcome`, the
+"already saved — replace?" modal and `input$save_outcome_overwrite` are all
+**deleted**. The press was never a decision: §3.4.13 already makes confirming
+all six domains the reviewer's statement that the rating is finished, and a
+button behind that statement could only be forgotten. It regularly was — a
+reviewer confirmed six domains, walked to Step 4 and found an empty table.
+
+The trigger is one `observe()` in `step3_server()` over `grade_obj()` +
+`domain_confirmed()`, **debounced 750 ms**, storing when
+`.save_blocked_reasons()` is empty. Three guards, each answering a way the
+naive version banks the wrong row:
+
+| guard | what it stops |
+|---|---|
+| `req()` on `state$step == 3` | all four step servers are wired unconditionally in `app.R`, and `grade_obj()` / `domain_confirmed()` read Step 3 `input$` widgets that are destroyed whenever another step's body renders. Off-step the observer must not even take the dependency |
+| `req()` on `state$outcome_gen` unchanged since the top of the observer | `begin_new_outcome()` bumps the generation and blanks the outcome name in one tick; a save queued before the bump must not land after it |
+| `.save_key()` returns `NULL` for a blank outcome name, and the observer no-ops on `NULL` | the old fallback was the literal string `"Outcome"`, so a save firing during the reset banked a row called *Outcome*. A nameless outcome is not saveable, and the reviewer has to name it in Step 2 anyway |
+
+**Identity is a uid, not the name.** `state$outcome_uid` is minted by
+`begin_new_outcome()` (and at session start, for the first outcome), stamped
+onto the stored object as `attr(g, "pma_outcome_uid")`, and
+`pma_upsert_outcome(outcomes, name, g, uid)` (`R/ui_helpers.R`, pure and unit
+tested) drops any existing row carrying that uid before inserting under the
+*current* display name. So **renaming an outcome in Step 2 renames its row**.
+Before this it added a second one — a pre-existing bug that auto-save would
+have made constant, since every keystroke in the name field re-banks.
+
+`names(outcomes)` stays the **display name**. `grade_table()`,
+`pma_saved_outcomes_ui()`, `.outcome_set()` and `set$order` all key on it, so
+the list is not re-keyed by uid; the uid rides along as an attribute, the same
+way the dataset signature does.
+
+`attr(g, "pma_saved_at")` keeps its name — it is on every stored object — but
+under auto-save it means *last recomputed at*, so the row label reads
+**"last updated"**.
+
+**What stays on Final certainty** is `pma_add_next_outcome_button()`, the end
+of the step, and one line beside it naming what happened: *"Saved automatically
+as **&lt;name&gt;**."* while it is saved, and while it is not, the domains still
+outstanding as `pma_domain_jump_links()` — the same links as
+`cert_incomplete_banner`, under their own id prefix (`autosave_jump_`) because
+both are in the DOM at once and Shiny input ids must be unique.
+
+**The saved-outcome list moved to Step 4** (§3.5.5). The per-row observers
+(`outcome_delete`, `outcome_move`, `outcome_primary`) did **not**: they read
+`.outcome_set()` and the `state$sof_primary` helpers, which are step3-local, so
+moving them costs a refactor for no user benefit. The comment above them says
+so.
 
 ---
 

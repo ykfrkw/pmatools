@@ -201,11 +201,70 @@ pma_domain_jump_links <- function(keys, id_prefix, before = "", after = "") {
 
 # ----- Saved outcomes (multi-outcome Summary of Findings) -----------------
 # state$outcomes is a NAMED LIST of pmatools objects (the value of
-# state$grade at the moment the user pressed "Save"), keyed by outcome
-# label, in insertion order. It is exactly the shape grade_table() expects,
-# so it can be passed straight through without reshaping. The save time is
-# carried as attr(<obj>, "pma_saved_at") because attributes survive both the
-# list round-trip and grade_table()'s inherits() check.
+# state$grade the last time every certainty domain was confirmed), keyed by
+# outcome label, in insertion order. It is exactly the shape grade_table()
+# expects, so it can be passed straight through without reshaping. The write
+# time is carried as attr(<obj>, "pma_saved_at") because attributes survive
+# both the list round-trip and grade_table()'s inherits() check.
+#
+# The attribute name is historical: there is no Save button any more (see
+# shiny/SPEC.md 3.4.14), so what it holds is when the row was last recomputed.
+# On screen it is labelled "last updated" for that reason; renaming the
+# attribute would only mean rewriting every reader of it.
+PMA_SAVED_AT_ATTR <- "pma_saved_at"
+
+# ----- Outcome identity: a uid, not the display name ----------------------
+# Under auto-save a row is re-banked on every recompute, so "which row is
+# this?" has to survive a rename - otherwise correcting a typo in the outcome
+# name adds a second row rather than relabelling the first. That was true
+# before auto-save too; auto-save would have made it constant.
+#
+# The uid is minted per outcome by app.R's begin_new_outcome() and carried as
+# an attribute, the way the dataset signature is. names(outcomes) stays the
+# DISPLAY name: grade_table(), pma_saved_outcomes_ui(), .outcome_set() and
+# set$order all key on it.
+PMA_OUTCOME_UID_ATTR <- "pma_outcome_uid"
+
+# The uid stamped on one saved outcome (NA when it carries none - anything
+# banked before this existed, which then behaves as it always did).
+pma_outcome_uid <- function(g) {
+  uid <- attr(g, PMA_OUTCOME_UID_ATTR, exact = TRUE)
+  if (is.null(uid) || length(uid) != 1L || is.na(uid)) return(NA_character_)
+  as.character(uid)
+}
+
+# Insert `g` under `name`, or update the row that already carries `uid`.
+#
+# Pure, so it is testable without a Shiny session; the rename-in-place case is
+# the one that matters. Position is preserved on an update, because row order
+# is a statement about priority the reviewer set by hand.
+pma_upsert_outcome <- function(outcomes, name, g, uid = NULL) {
+  outcomes <- pma_outcomes_list(outcomes)
+  name <- trimws(as.character(name %||% "")[1L])
+  # A row with no name cannot be printed, reordered or removed - every one of
+  # those keys on names(outcomes). Callers gate on this before they get here.
+  if (is.na(name) || !nzchar(name)) stop("a saved outcome needs a name")
+  uid <- as.character(uid %||% NA_character_)[1L]
+  attr(g, PMA_OUTCOME_UID_ATTR) <- uid
+  known <- vapply(outcomes, pma_outcome_uid, character(1))
+  at <- if (is.na(uid)) integer(0) else which(!is.na(known) & known == uid)
+  if (!length(at)) {
+    # New row, or a different outcome claiming a name already in use. The
+    # second case overwrites, which is what a named list does anyway and what
+    # every reader of names(outcomes) needs: two rows cannot share one name.
+    outcomes[[name]] <- g
+    return(outcomes)
+  }
+  at <- at[1L]
+  outcomes[[at]] <- g
+  names(outcomes)[at] <- name
+  # Renaming onto a name some OTHER row holds would leave a duplicate. The
+  # other row is the older claim on that name and loses it, exactly as it
+  # would have under the plain insert above.
+  displaced <- setdiff(which(names(outcomes) == name), at)
+  if (length(displaced)) outcomes <- outcomes[-displaced]
+  outcomes
+}
 
 # ----- Dataset provenance guard -------------------------------------------
 # A saved outcome carries the signature of the dataset it was rated on, so
@@ -625,6 +684,15 @@ pma_outcomes_list <- function(outcomes) {
   outcomes[keep]
 }
 
+# Clock time a row was last written, as the reviewer reads it. Empty string
+# when the object carries no stamp, so the caller can paste it unconditionally.
+pma_outcome_updated_label <- function(g) {
+  ts <- attr(g, PMA_SAVED_AT_ATTR, exact = TRUE)
+  if (is.null(ts) || length(ts) != 1L || is.na(ts)) return("")
+  out <- tryCatch(format(as.POSIXct(ts), "%H:%M"), error = function(e) "")
+  if (is.na(out)) "" else out
+}
+
 # One-row-per-outcome summary used by the saved-outcome list UI.
 # `signature` is the signature of the dataset currently loaded; when given,
 # the `stale` column marks outcomes saved from a different dataset.
@@ -633,7 +701,7 @@ pma_outcome_summary_df <- function(outcomes, signature = NULL) {
   if (length(outcomes) == 0) {
     return(data.frame(name = character(0), k = character(0),
                       effect = character(0), certainty = character(0),
-                      stale = logical(0),
+                      updated = character(0), stale = logical(0),
                       stringsAsFactors = FALSE))
   }
   data.frame(
@@ -649,6 +717,7 @@ pma_outcome_summary_df <- function(outcomes, signature = NULL) {
       if (is.null(out) || is.na(out)) "-" else gsub("\n", "; ", out)
     }, character(1)),
     certainty = vapply(outcomes, function(g) g$certainty %||% "-", character(1)),
+    updated = vapply(outcomes, pma_outcome_updated_label, character(1)),
     stale = unname(pma_outcomes_stale(outcomes, signature)),
     stringsAsFactors = FALSE, row.names = NULL
   )
@@ -712,7 +781,11 @@ pma_saved_outcomes_ui <- function(outcomes, delete_input_id = "outcome_delete",
         htmltools::div(style = "font-weight: 600;", df$name[i]),
         htmltools::div(
           style = "font-size: 0.8rem; color: hsl(var(--muted-foreground));",
-          sprintf("k = %s | %s", df$k[i], df$effect[i])),
+          # "last updated", not "saved at": nobody presses Save, so the stamp
+          # says when the row was last recomputed (shiny/SPEC.md 3.4.14).
+          sprintf("k = %s | %s%s", df$k[i], df$effect[i],
+                  if (nzchar(df$updated[i]))
+                    paste0(" | last updated ", df$updated[i]) else "")),
         if (isTRUE(df$stale[i])) htmltools::div(
           style = sprintf("font-size: 0.78rem; margin-top: 0.15rem; color: %s;",
                           PMA_ALERT_FG),
@@ -745,8 +818,8 @@ pma_saved_outcomes_ui <- function(outcomes, delete_input_id = "outcome_delete",
 }
 
 # "+ Add next outcome". Shown at the bottom of Step 4's combined Summary of
-# Findings card and beside the Save button on Step 3's Final certainty tab, so
-# the reviewer can start the next outcome straight from either place. Both
+# Findings card and at the end of Step 3's Final certainty tab, so the reviewer
+# can start the next outcome straight from either place. Both
 # copies write to the same input id via Shiny.setInputValue (rather than being
 # two actionButtons sharing an id), because only one step body is ever mounted
 # at a time and this keeps that assumption out of the code.

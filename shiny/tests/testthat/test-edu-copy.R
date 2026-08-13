@@ -39,6 +39,21 @@ test_that("every EDU_COPY subtitle fits one desktop line", {
   }
 })
 
+test_that("the saved-outcome copy no longer describes a Save button", {
+  # There is none as of 0.5.1 (shiny/SPEC.md 3.4.14). `save_locked` was the
+  # "saving is locked until..." note and was already dead code; the other four
+  # strings told the reviewer to press something.
+  expect_null(EDU_COPY$multi_outcome$save_locked)
+  for (field in c("save_intro", "list_empty", "step4_intro", "step4_empty")) {
+    text <- EDU_COPY$multi_outcome[[field]]
+    expect_true(nzchar(text), info = field)
+    expect_false(grepl("save it|Save a|press|button", text), info = field)
+    # ... and each is now capped like every other subtitle.
+    expect_true(paste0("multi_outcome$", field) %in% EDU_COPY_SUBTITLE_FIELDS,
+                info = field)
+  }
+})
+
 test_that("edu_copy_word_count() counts what a reader sees", {
   expect_equal(edu_copy_word_count("one two three"), 3L)
   # Copy is assembled with paste0() across source lines, so a joined string can

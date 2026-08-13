@@ -403,8 +403,8 @@ step1_server <- function(input, output, session, state) {
 
   # Saved outcomes survive a data reload on purpose (never silently
   # discarded), but a reload is exactly when a Summary of Findings table can
-  # start mixing datasets. Say so once per load; Step 3 / Step 4 then flag
-  # the individual rows that came from other data.
+  # start mixing datasets. Say so once per load; Step 4 then flags the
+  # individual rows that came from other data.
   shiny::observeEvent(ingested(), {
     res <- ingested()
     if (is.null(res) ||
@@ -415,8 +415,8 @@ step1_server <- function(input, output, session, state) {
       sprintf(paste0(
         "%d saved outcome(s) are kept. Any that were saved from a different ",
         "dataset are marked \"different dataset\" in the saved-outcome list ",
-        "(Step 3) and warned about above the combined Summary of Findings ",
-        "table (Step 4). Nothing was removed."), n),
+        "on Step 4, and warned about above the combined Summary of Findings ",
+        "table there. Nothing was removed."), n),
       type = "warning", duration = 12)
   }, ignoreInit = TRUE)
 

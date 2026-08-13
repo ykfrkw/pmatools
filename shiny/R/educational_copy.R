@@ -139,41 +139,25 @@ EDU_COPY <- list(
 
   # ----- Multiple outcomes -> one combined Summary of Findings table -----
   # A systematic review normally reports every patient-important outcome in
-  # a single SoF table. This app rates one outcome at a time (Steps 2-3);
-  # saving each completed rating builds the multi-outcome table for Step 4.
+  # a single SoF table. This app rates one outcome at a time (Steps 2-3), and
+  # banks each rating the moment its last certainty domain is confirmed. All
+  # four strings said "press Save" until 0.5.1; there is no Save button.
   multi_outcome = list(
     save_intro = paste0(
-      "A Summary of Findings table normally reports every patient-important ",
-      "outcome of the review, one row per outcome. This app rates one ",
-      "outcome at a time. When you are satisfied with the certainty rating ",
-      "shown above, save it here, then press '+ Add next outcome': the app ",
-      "returns to Step 2 with this outcome's answers cleared, ready for the ",
-      "next one. Step 4 assembles every saved outcome into a single Summary ",
-      "of Findings table."
-    ),
-    save_locked = paste0(
-      "Saving is locked until every certainty domain has been reviewed and ",
-      "confirmed. Provide inputs in each tab, or tick 'I have reviewed this ",
-      "domain', then come back here."
+      "Each outcome is banked automatically once every domain is confirmed. ",
+      "Step 4 assembles the saved outcomes into one Summary of Findings table."
     ),
     list_empty = paste0(
-      "No outcomes saved yet. Saved outcomes stay in this session even when ",
-      "you go back to Step 2 and rate a different outcome."
+      "No outcomes saved yet. An outcome is saved once every certainty ",
+      "domain is confirmed in Step 3."
     ),
     step4_intro = paste0(
-      "One row per saved outcome, using the certainty rating that was in ",
-      "place when you saved it. Row order is a statement about priority, so ",
-      "set it yourself with the arrows in the list below the table; mark the ",
-      "outcomes your protocol prespecified as primary to group them under a ",
-      "'Primary outcomes' heading, or mark none for an ungrouped table. The ",
-      "single-outcome Evidence Profile and Summary of Findings for the ",
-      "outcome currently open in Step 3 are exported as well."
+      "One row per saved outcome. Reorder with the arrows below; mark the ",
+      "outcomes your protocol prespecified as primary to group them."
     ),
     step4_empty = paste0(
-      "No saved outcomes yet. Save a certainty assessment on the Step 3 ",
-      "'Final certainty' tab to build a multi-outcome Summary of Findings ",
-      "table. Without saved outcomes the export contains the single-outcome ",
-      "Evidence Profile and Summary of Findings only."
+      "No outcomes saved yet. Confirm every certainty domain in Step 3 and ",
+      "the outcome is saved here automatically."
     )
   )
 )
@@ -187,14 +171,17 @@ EDU_COPY <- list(
 EDU_COPY_SUBTITLE_WORD_CAP <- 25L
 
 # Every EDU_COPY string the app renders INTO a `.pma-card-subtitle`, named
-# explicitly rather than derived, because three groups of strings are
+# explicitly rather than derived, because two groups of strings are
 # deliberately not capped and a blanket rule could not tell them apart:
 #
 #   * `steps$*$title` / `$why` - a step header defines the step rather than
 #     annotating a control, and `$why` is the Step 1 warning about doing the
 #     review before the pooling, which is the one place length is the point;
-#   * `multi_outcome$*` - the saved-outcome UI, which a later phase owns;
 #   * `threshold_labels` - widget labels, not subtitles.
+#
+# `multi_outcome$*` was a third exemption, granted because a later phase owned
+# the saved-outcome UI. That phase has happened (the Save button is gone), so
+# the four strings are capped like everything else.
 #
 # A new subtitle string belongs in this vector. Leaving it out is a decision,
 # not an oversight, and the test names the file that will tell you so.
@@ -204,6 +191,10 @@ EDU_COPY_SUBTITLE_FIELDS <- c(
   "config_tab$continuous_departure",
   "config_tab$chinn_caveat",
   "config_tab$responder_default",
+  "multi_outcome$save_intro",
+  "multi_outcome$list_empty",
+  "multi_outcome$step4_intro",
+  "multi_outcome$step4_empty",
   paste0("threshold_help$", c("OR", "RR", "HR", "RoM", "SMD", "MD", "ARD"))
 )
 

@@ -74,6 +74,29 @@
   navigation is locked — the tab strip and the stepper still move freely, and
   what a domain is *rated* as is untouched. See `shiny/SPEC.md` §3.4.13.
 
+* **Shiny app: there is no Save button. An outcome is banked automatically.**
+  The "Save this outcome's assessment as …" button on the Step 3 "Final
+  certainty" tab, the "already saved — replace?" modal behind it and the
+  saved-outcome list beside it are all deleted. An outcome is written into the
+  Summary of Findings table the moment its sixth certainty domain is
+  confirmed, and rewritten whenever the rating it holds changes (debounced
+  750 ms). Confirming all six domains was already the reviewer's statement
+  that the rating was finished — the button behind that statement could only
+  be forgotten, and was: six ticks, then an empty Step 4 table. A session that
+  relied on *not* pressing Save to keep a provisional rating out of the table
+  no longer can; delete the row on Step 4 instead, or leave a domain
+  unconfirmed. Two behaviours change with it. **Renaming an outcome in Step 2
+  now renames its saved row** rather than adding a second one — outcomes carry
+  a session-stable uid, and `pma_upsert_outcome()` matches on that rather than
+  on the display name; a review that had deliberately duplicated a row by
+  renaming it will find one row. **An outcome with a blank name is not
+  saveable**: the old key fell back to the literal string `"Outcome"`, which
+  under an automatic save would be banked as a row every time "+ Add next
+  outcome" blanked the name. **The saved-outcome list moved to Step 4**, below
+  the combined table it feeds; the per-row Move / Mark primary / Remove
+  controls are unchanged and there is now one copy of them rather than two.
+  See `shiny/SPEC.md` §3.4.14 and §3.5.5.
+
 * **Shiny app: the Risk of Bias sensitivity-analysis change threshold is no
   longer settable.** `rob_inf_threshold` — the slider on the Configuration tab
   labelled "Sensitivity-analysis change threshold (Risk of Bias only)" — is

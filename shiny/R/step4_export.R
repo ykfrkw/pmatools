@@ -6,9 +6,10 @@ step4_ui <- function() {
   htmltools::tagList(
     pma_step_header(s$title),
 
-    # Multi-outcome Summary of Findings, assembled from the assessments
-    # saved on the Step 3 "Final certainty" tab. Shown before the bundle
-    # settings so the user can check the table they are about to export.
+    # Multi-outcome Summary of Findings, assembled from the assessments the
+    # app banks whenever every certainty domain of an outcome is confirmed
+    # (shiny/SPEC.md 3.4.14). Shown before the bundle settings so the user can
+    # check the table they are about to export.
     pma_card(
       title = "Summary of Findings (all saved outcomes)",
       shiny::uiOutput("sof_intro_block"),
@@ -93,9 +94,10 @@ step4_ui <- function() {
 step4_server <- function(input, output, session, state) {
 
   # ----- Multi-outcome Summary of Findings --------------------------------
-  # state$outcomes is a named list of pmatools objects saved on the Step 3
-  # "Final certainty" tab (see pma_outcomes_list()). It is exactly what the
-  # vendored grade_table() consumes, so no reshaping is needed here.
+  # state$outcomes is a named list of pmatools objects, banked automatically
+  # once every certainty domain of an outcome is confirmed (see
+  # pma_outcomes_list()). It is exactly what the vendored grade_table()
+  # consumes, so no reshaping is needed here.
   saved_outcomes <- shiny::reactive(pma_outcomes_list(state$outcomes))
 
   # Signature of the dataset currently loaded in Step 1; saved outcomes whose
@@ -179,9 +181,9 @@ step4_server <- function(input, output, session, state) {
   })
   shiny::outputOptions(output, "sof_stale_warning", suspendWhenHidden = FALSE)
 
-  output$combined_sof_block <- shiny::renderUI({
-    outs <- saved_outcomes()
-    if (length(outs) == 0) return(NULL)
+  # The rendered table half of the block below, split out so the block itself
+  # reads as "table when there is one, list always".
+  .combined_sof_table_block <- function() {
     ft <- combined_sof()
     body <- if (inherits(ft, "pma_sof_error")) {
       htmltools::p(paste("Combined SoF render error:", ft$message))
@@ -193,8 +195,28 @@ step4_server <- function(input, output, session, state) {
     }
     htmltools::tagList(
       lapply(combined_rare_alerts(), pma_rare_event_banner),
-      pma_sof_scroller(body),
+      pma_sof_scroller(body)
+    )
+  }
+
+  # The table and the list of rows that build it. The list used to be rendered
+  # here only when there was at least one outcome, and a second copy of it sat
+  # on Step 3; there is one copy now, and its empty state is a sentence rather
+  # than nothing - see shiny/SPEC.md 3.5.5.
+  output$combined_sof_block <- shiny::renderUI({
+    outs <- saved_outcomes()
+    has_rows <- length(outs) > 0
+    htmltools::tagList(
+      if (has_rows) .combined_sof_table_block(),
+      # The reviewer's question on arriving here is "did the outcome I just
+      # confirmed land?", and counting rows was the only way to answer it.
+      if (has_rows) htmltools::p(
+        class = "pma-card-subtitle",
+        style = "margin-top: 0.75rem; margin-bottom: 0;",
+        sprintf("%d outcome%s saved - add another, or download below.",
+                length(outs), if (length(outs) == 1) "" else "s")),
       pma_saved_outcomes_ui(outs, delete_input_id = "outcome_delete",
+                            empty_text = EDU_COPY$multi_outcome$list_empty,
                             signature = current_signature(),
                             primary = state$sof_primary)
     )

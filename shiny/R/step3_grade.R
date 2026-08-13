@@ -163,6 +163,12 @@ STEP3_DOMAIN_NAVS <- list(
 STEP3_CONFIRM_GATE_TITLE <-
   "Tick 'I have reviewed this domain' to continue"
 
+# How long the auto-save waits after the last change before banking the
+# outcome. Long enough that typing a rationale is one write rather than one
+# per keystroke, short enough that the reviewer never leaves the tab ahead of
+# it (shiny/SPEC.md 3.4.14).
+STEP3_AUTOSAVE_DEBOUNCE_MS <- 750L
+
 step3_ui <- function(state = NULL) {
   s <- EDU_COPY$steps$step3
 
@@ -804,16 +810,19 @@ step3_ui <- function(state = NULL) {
           ),
           htmltools::hr(),
 
-          # ----- Save this outcome for the multi-outcome SoF table -----
-          # Sits at the end of the Final certainty tab: this is the point in
-          # the wizard where the rating for one outcome is complete, and the
-          # natural place to bank it before going back to Step 2 for the
-          # next outcome.
-          htmltools::h5("Saved outcomes for the Summary of Findings table"),
+          # ----- This outcome's place in the multi-outcome SoF table -----
+          # The end of the step: the rating for one outcome is complete here,
+          # so this is where the app says it has been banked and offers the
+          # next outcome. There is no Save button (shiny/SPEC.md 3.4.14), and
+          # the list of banked outcomes is on Step 4, beside the table it
+          # feeds.
+          htmltools::h5("Saved for the Summary of Findings table"),
           htmltools::p(class = "pma-card-subtitle",
                        EDU_COPY$multi_outcome$save_intro),
-          shiny::uiOutput("save_outcome_panel"),
-          shiny::uiOutput("saved_outcomes_list"),
+          shiny::uiOutput("autosave_status"),
+          # Returns to Step 2 and clears everything belonging to this outcome
+          # (app.R's begin_new_outcome()).
+          pma_add_next_outcome_button(),
 
           # The only Next in Step 3 that leaves the step (every other one
           # just moves to the following sub-tab, which stays free), so it is
@@ -2587,17 +2596,24 @@ step3_server <- function(input, output, session, state) {
   # ids are rebuilt with the banner, so the observers are declared once here,
   # over the fixed set of domain keys, and guard against the 0 a freshly
   # rendered actionLink reports.
-  for (.domain_key in names(PMA_DOMAIN_LABELS)) {
-    local({
-      key <- .domain_key
-      link_id <- paste0("cert_jump_", key)
-      shiny::observeEvent(input[[link_id]], {
-        if (!isTRUE((input[[link_id]] %||% 0L) > 0L)) return()
-        shiny::updateTabsetPanel(session, "grade_tabs",
-                                 selected = PMA_DOMAIN_LABELS[[key]])
-        session$sendCustomMessage("scroll_top", list())
-      }, ignoreInit = TRUE)
-    })
+  #
+  # Two prefixes because two messages on the Final certainty tab name the same
+  # domains at the same time - the incomplete banner at the top and the
+  # auto-save line at the bottom - and both are in the DOM at once, so one set
+  # of ids would collide.
+  for (.jump_prefix in c("cert_jump_", "autosave_jump_")) {
+    for (.domain_key in names(PMA_DOMAIN_LABELS)) {
+      local({
+        key <- .domain_key
+        link_id <- paste0(.jump_prefix, key)
+        shiny::observeEvent(input[[link_id]], {
+          if (!isTRUE((input[[link_id]] %||% 0L) > 0L)) return()
+          shiny::updateTabsetPanel(session, "grade_tabs",
+                                   selected = PMA_DOMAIN_LABELS[[key]])
+          session$sendCustomMessage("scroll_top", list())
+        }, ignoreInit = TRUE)
+      })
+    }
   }
 
   # Banner on the Final certainty tab while domains remain unconfirmed.
@@ -3858,13 +3874,18 @@ step3_server <- function(input, output, session, state) {
     })
   }
 
-  # ----- Saving the current outcome into state$outcomes -------------------
+  # ----- Banking the current outcome into state$outcomes ------------------
   # Key for the saved outcome: the Outcome name entered in Step 2. The label
   # is what grade_table() prints in the Outcome column, so keeping the two
   # identical avoids a second, divergent name field.
+  #
+  # NULL, not a fallback label, when the name is blank. The fallback used to be
+  # the literal "Outcome", and with the save automatic that string would be
+  # banked as a row every time begin_new_outcome(identity = TRUE) blanked the
+  # name. A nameless outcome is not saveable; Step 2 asks for the name anyway.
   .save_key <- shiny::reactive({
     nm <- trimws(state$outcome_name %||% "")
-    if (nzchar(nm)) nm else "Outcome"
+    if (nzchar(nm)) nm else NULL
   })
 
   .save_blocked_reasons <- shiny::reactive({
@@ -3883,52 +3904,45 @@ step3_server <- function(input, output, session, state) {
     reasons
   })
 
-  output$save_outcome_panel <- shiny::renderUI({
-    reasons <- .save_blocked_reasons()
-    if (length(reasons)) {
-      # Same locked-note treatment as the Step 4 download gate: an
-      # unconfirmed assessment must not be banked into the SoF table.
-      return(htmltools::div(
+  # The one line that reports what happened, beside "+ Add next outcome" at
+  # the end of the tab. There is nothing to press: it either names the row
+  # that was banked, or names what is still in the way.
+  output$autosave_status <- shiny::renderUI({
+    if (is.null(state$ma) || is.null(grade_obj())) {
+      return(htmltools::p(
         class = "pma-card-subtitle",
-        style = paste(
-          "border: 1px dashed hsl(var(--border)); border-radius: 6px;",
-          "padding: 0.75rem; margin-top: 0.5rem;"),
-        htmltools::p(style = "margin: 0;",
-          htmltools::strong("Saving locked - certainty assessment incomplete.")),
-        htmltools::p(style = "margin: 0.25rem 0 0;",
-          paste0("To save this outcome, ", paste(reasons, collapse = "; "), "."))
-      ))
+        "Not saved yet: run the analysis in Step 2 and set a decision threshold."))
+    }
+    keys <- pma_unconfirmed_domain_keys(domain_confirmed())
+    if (length(keys)) {
+      # Its own id prefix: cert_incomplete_banner is on this same tab with the
+      # same domain names, and two actionLinks cannot share an input id.
+      return(htmltools::p(
+        class = "pma-card-subtitle",
+        pma_domain_jump_links(
+          keys, "autosave_jump_",
+          before = "Saved once every domain is confirmed. Still open: ",
+          after = ".")))
     }
     key <- .save_key()
-    htmltools::div(
-      style = "margin-top: 0.5rem;",
-      shiny::actionButton(
-        "save_outcome",
-        sprintf("Save this outcome's assessment as \"%s\"", key),
-        class = "btn btn-primary", style = "width: 100%;"),
-      # Sits beside Save so the reviewer can carry straight on to the next
-      # outcome. It returns to Step 2 and clears everything that belongs to
-      # this outcome (app.R's begin_new_outcome()).
-      pma_add_next_outcome_button(style = "width: 100%;"),
-      htmltools::p(
+    if (is.null(key)) {
+      return(htmltools::p(
         class = "pma-card-subtitle",
-        style = "margin-top: 0.4rem;",
-        "Saved under the Outcome name set in Step 2 - change it there to ",
-        "relabel the Summary of Findings row. \"+ Add next outcome\" returns ",
-        "to Step 2 with this outcome's name, direction, follow-up and every ",
-        "certainty answer cleared; the saved outcomes, the loaded data and ",
-        "the per-study risk-of-bias and indirectness ratings are kept.")
-    )
+        "Name this outcome in Step 2 - a saved row is keyed by its name."))
+    }
+    htmltools::p(
+      class = "pma-card-subtitle",
+      htmltools::HTML(sprintf("Saved automatically as <strong>%s</strong>.",
+                              htmltools::htmlEscape(key))))
   })
-  shiny::outputOptions(output, "save_outcome_panel", suspendWhenHidden = FALSE)
+  shiny::outputOptions(output, "autosave_status", suspendWhenHidden = FALSE)
 
-  # Signature of the dataset currently loaded in Step 1. Used both to stamp
-  # newly saved outcomes and to flag already-saved ones that came from a
-  # different dataset (see pma_dataset_signature()).
+  # Signature of the dataset currently loaded in Step 1. Used to stamp each
+  # banked outcome so Step 4 can flag rows that came from a different dataset
+  # (see pma_dataset_signature()).
   .current_signature <- shiny::reactive(pma_dataset_signature(state$data))
 
   .store_outcome <- function(key, g) {
-    outs <- pma_outcomes_list(state$outcomes)
     # Follow-up and unit are per-outcome, so they are banked ON the saved
     # object rather than read from the live Step 2 fields at render time -
     # otherwise the combined Step 4 table would print the current outcome's
@@ -3937,73 +3951,59 @@ step3_server <- function(input, output, session, state) {
     # is why Step 4 passes no follow_up / unit argument of its own.
     g$follow_up <- sof_follow_up()
     g$unit      <- pma_sof_unit(g, state$outcome_unit)
-    attr(g, "pma_saved_at") <- Sys.time()
+    # grade_table() labels rows by list name, so the object's own outcome_name
+    # is aligned with the key for any downstream single-outcome use of it.
+    g$outcome_name <- key
+    attr(g, PMA_SAVED_AT_ATTR) <- Sys.time()
     # Provenance stamp: which dataset this rating was made on.
     attr(g, PMA_DATASET_SIGNATURE_ATTR) <- pma_dataset_signature(state$data)
-    outs[[key]] <- g
+    outs <- pma_upsert_outcome(state$outcomes, key, g, state$outcome_uid)
     state$outcomes <- outs
+    # One notification id, so re-banking the same outcome replaces the toast
+    # instead of stacking a new one on every recompute.
     shiny::showNotification(
-      sprintf("Saved \"%s\" (%s certainty). %d outcome(s) ready for the combined Summary of Findings table.",
+      sprintf("Saved \"%s\" (%s certainty). %d outcome(s) in the Step 4 table.",
               key, g$certainty %||% "-", length(outs)),
-      type = "message", duration = 5)
+      id = "pma_outcome_saved", type = "message", duration = 4)
   }
 
-  shiny::observeEvent(input$save_outcome, {
-    if (length(.save_blocked_reasons())) {
-      shiny::showNotification(
-        "Cannot save: review and confirm every certainty domain first.",
-        type = "error", duration = 6)
-      return()
-    }
-    g <- grade_obj()
-    if (is.null(g)) return()
-    key <- .save_key()
-    # grade_table() labels rows by list name, so the pmatools object's own
-    # outcome_name is aligned with the key for any downstream single-outcome
-    # use of the saved object.
-    g$outcome_name <- key
-    if (key %in% names(pma_outcomes_list(state$outcomes))) {
-      shiny::showModal(shiny::modalDialog(
-        title = "Outcome already saved",
-        htmltools::p(sprintf(
-          "\"%s\" is already in the saved list. Replace it with the current assessment?",
-          key)),
-        footer = htmltools::tagList(
-          shiny::modalButton("Cancel"),
-          shiny::actionButton("save_outcome_overwrite", "Replace",
-                              class = "btn btn-primary")
-        ),
-        easyClose = TRUE
-      ))
-      return()
-    }
-    .store_outcome(key, g)
+  # ----- Auto-save --------------------------------------------------------
+  # Confirming all six domains IS the reviewer's statement that the rating is
+  # finished (SPEC 3.4.13); a Save button behind that statement could only be
+  # forgotten, and regularly was - six ticks, then an empty Step 4 table.
+  #
+  # req() on the step first, and before anything else is read. All four step
+  # servers are wired unconditionally in app.R, and grade_obj() /
+  # domain_confirmed() read Step 3 input$ widgets that are destroyed whenever
+  # another step's body renders. Off-step this must not even take the
+  # dependency, let alone act on the teardown values.
+  .autosave_pending <- shiny::reactive({
+    shiny::req(identical(as.integer(state$step), 3L))
+    list(gen     = state$outcome_gen,
+         key     = .save_key(),
+         grade   = grade_obj(),
+         blocked = .save_blocked_reasons())
   })
 
-  shiny::observeEvent(input$save_outcome_overwrite, {
-    shiny::removeModal()
-    if (length(.save_blocked_reasons())) return()
-    g <- grade_obj()
-    if (is.null(g)) return()
-    key <- .save_key()
-    g$outcome_name <- key
-    .store_outcome(key, g)
-  })
+  # Every keystroke in a rationale field and every nudge of the threshold
+  # recomputes grade_obj(). Without the debounce each of those is a write.
+  .autosave_debounced <- shiny::debounce(.autosave_pending,
+                                         STEP3_AUTOSAVE_DEBOUNCE_MS)
 
-  output$saved_outcomes_list <- shiny::renderUI({
-    outs <- pma_outcomes_list(state$outcomes)
-    sig  <- .current_signature()
-    n_stale <- sum(pma_outcomes_stale(outs, sig))
-    htmltools::tagList(
-      pma_stale_warning_banner(n_stale),
-      pma_saved_outcomes_ui(outs,
-                            delete_input_id = "outcome_delete",
-                            empty_text = EDU_COPY$multi_outcome$list_empty,
-                            signature = sig,
-                            primary = state$sof_primary)
-    )
+  shiny::observe({
+    pending <- .autosave_debounced()
+    # The generation the save was queued FOR. begin_new_outcome() bumps the
+    # counter and blanks the outcome name in one tick, so a save that crossed
+    # the bump would bank the outgoing rating under whatever is on screen now.
+    shiny::req(identical(pending$gen, shiny::isolate(state$outcome_gen)))
+    shiny::req(length(pending$blocked) == 0L)
+    shiny::req(!is.null(pending$key), !is.null(pending$grade))
+    # isolate(), or this never stops: .store_outcome() reads state$outcomes to
+    # upsert into it and then writes it back, which would invalidate this
+    # observer and re-fire it forever. Everything the save depends on is
+    # already in `pending`; the rest is read as of now, on purpose.
+    shiny::isolate(.store_outcome(pending$key, pending$grade))
   })
-  shiny::outputOptions(output, "saved_outcomes_list", suspendWhenHidden = FALSE)
 
   # ----- Row order and primary outcomes -----------------------------------
   # state$outcomes stays a plain named list (see the note on
@@ -4013,9 +4013,11 @@ step3_server <- function(input, output, session, state) {
   # the app's storage to the class would change the ZIP's directory layout,
   # which is a separate step.
   #
-  # Both observers live here, beside Remove, and serve BOTH saved-outcome
-  # lists: the Step 3 one and the Step 4 one write to the same input ids, and
-  # only one step body is mounted at a time.
+  # All three observers live here although the list they serve is now on
+  # Step 4 and nowhere else. Moving them would mean moving .outcome_set() and
+  # the state$sof_primary handling with them, both step3-local - a refactor
+  # the reviewer would not see. The input ids are set from the rendered HTML
+  # (pma_saved_outcomes_ui()), so which step renders the list does not matter.
 
   shiny::observeEvent(input$outcome_delete, {
     key  <- as.character(input$outcome_delete)[1]
