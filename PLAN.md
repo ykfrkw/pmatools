@@ -208,11 +208,23 @@ SPEC.md §11「Out of scope」と同期していること。
 
 ### 関連: Shiny アプリの UI/UX レビュー
 
-上記フィードバックのうち UI に現れる分（2 MIC・4 アプリ説明・6 downgrade 語彙と
-−3・7 RoB の分かりにくさ・8 RoB2 の 3 段階）は、アプリ実機を通したレビュー結果と
-まとめて [shiny/UX_REVIEW.md](shiny/UX_REVIEW.md) に整理してある。5 フェーズの
-実装順もそちら。パッケージ側の改名（項目 6）に依存するのは Phase 5 だけで、
-Phase 1〜4 は先行して着手できる。
+上記フィードバックのうち UI に現れる分は、アプリ実機を通したレビューと
+まとめて [shiny/UX_REVIEW.md](shiny/UX_REVIEW.md) に整理してある。
+
+**2026-08-13 時点で、そこに挙がった UI 側の作業は 9 フェーズとして main に
+入っている。** この節の項目 2（MIC 表記）と項目 7（RoB のルールが分かりづらい）は
+実装済み。残っているのは:
+
+- **項目 1・3・4・5** — README の companion repository 記述、サンプルデータに
+  無い `Mortality` の例、アプリ説明の追加、`threshold_baseline` と `ois_p0` の
+  重複。いずれもパッケージと README の作業で、UI 側の実装を伴わない
+- **項目 6**（downgrade 語彙の Core GRADE 準拠と手動 −3）— UX_REVIEW.md の
+  当初見積もりが誤っていた。アプリ側の小さな diff ではなく、パッケージに
+  **第 4 の judgment レベルを新設**する必要がある（現状 no / some_concerns /
+  serious の 3 値のみ）。この節の改名作業と同時にやるのが自然
+- **項目 8**（RoB2 の 3 段階）— 表の誤りは未修正。ただし調査の結果、アプリは
+  `study_design = "RCT"` をハードコードしていて観察研究の経路が無いので、
+  ROBINS-I との併記は不要で RoB 2 の 3 値だけで足りる
 
 ### 実装順の目安
 

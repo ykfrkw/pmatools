@@ -4,10 +4,15 @@ Reviewed 2026-08-13 against the app running locally from a freshly staged bundle
 (`main@2edfdfc-dirty`, pmatools 0.5.1), walked end to end with the bundled CBT-I
 sample dataset at desktop (1440px) and phone (375px) widths.
 
-This is a **review and a plan, not a change**. Nothing in `R/` or `shiny/` was
-edited. Items marked *(feedback)* implement a point from the "未着手フィードバック"
+Items marked *(feedback)* implement a point from the "未着手フィードバック"
 section of [PLAN.md](../PLAN.md); the two documents are meant to be worked
 together, because several UI fixes are the visible half of a package-side rename.
+
+> **Status.** The findings below are a record of the app on 2026-08-13, before
+> any of this work. Most of them have since shipped — see
+> [What shipped](#what-shipped) at the end, which also lists the three
+> conclusions here that turned out to be wrong. Read that section before acting
+> on anything above it.
 
 ---
 
@@ -297,34 +302,64 @@ line and makes every support question answerable.
 
 ---
 
-## Proposed sequence
+## What shipped
 
-Ordered so that each phase is shippable on its own and nothing waits on the
-package rename.
+The review above is a record of the app as it stood on 2026-08-13. A second,
+larger round of feedback arrived the same day; the two were merged into one
+plan and implemented as nine phases, all on `main`. This section replaces the
+sequence originally proposed here — several of those phases were superseded
+rather than executed, and saying which is more useful than leaving the old
+list to be read as current.
 
-**Phase 1 — reachability (no copy changes, no package changes).**
-C-1 responsive overflow, C-2 progress markers and jump links, C-3 sticky CTA and
-collapsed model details. These are the three that stop a first-time user, and
-none of them touches wording, so they can land while the copy questions are
-still open.
+| Phase | Commit | Closes |
+|---|---|---|
+| Table fonts | `7883e82` | I-6 (part), F-5 |
+| Bibliographic references | `c8dc626`, `d282afc` | F-4 (part) |
+| Step 1/2 modal, accordions, responsive | `c3eb70f` | C-1 (Step 2), C-3, I-6 |
+| Step 3 nav and the confirmation gate | `e729cf7`, `a3365fc` | C-1 (tab strip), C-2, I-2, F-5 |
+| Step 3 copy purge and tab surgery | `8c0b34f`, `f99fa6a` | I-1, I-3 (as superseded), I-5, F-1 |
+| Flowchart regeneration | `bf30953` | — |
+| Publication bias tab | `4a48e4b` | — |
+| Auto-save outcomes | `65f9780` | — |
+| Export bundle | `8f40507`, `5c8621f` | — |
 
-**Phase 2 — the Risk of Bias screen.**
-I-1 consolidation, I-5 error handling, I-7 plot title. Do F-3 (RoB 2 three-level
-dropdown) in the same PR: it is the same screen, and the fix is meaningless
-without it.
+Three of the review's own conclusions did not survive contact with the work:
 
-**Phase 3 — copy tiers.**
-I-3 tooltip tier + the mechanical pass over `pma-card-subtitle` paragraphs,
-I-6 deduplication, F-1 MIC removal, F-4 version in footer. Largest diff, lowest
-risk, easiest to review in isolation.
+- **I-3 was wrong.** It proposed a tooltip tier and more `<details>`. The
+  second feedback round asked for the opposite — delete, do not hide — and
+  that is what shipped. `pma_help()` was deleted rather than wired up: it had
+  never been called and Bootstrap tooltips had never been initialised, so the
+  tier it proposed had never actually existed to extend.
+- **F-2 understated its cost by an order of magnitude.** "App-side this is a
+  small diff" is false. `pma_judgment_choices()` maps onto exactly three
+  package values, so a manual −3 needs a *fourth package judgment level*,
+  propagating into `.grade_level_wording()`, the certainty arithmetic,
+  `evidence_profile()`, `sof_table()` and `sof_bmj()`. It is deferred, and it
+  belongs with the downgrade-vocabulary rename in [PLAN.md](../PLAN.md), not
+  with the UI work.
+- **I-1 was half right.** Consolidating the risk-of-bias screen was correct,
+  but the review proposed *moving* the sensitivity-analysis change threshold.
+  It was deleted instead: a pmatools convention rather than a Core GRADE rule,
+  which a reviewer had no basis on which to move.
 
-**Phase 4 — Step 1 data confidence.**
-I-4 detected-columns strip, column toggle, bulk RoB buttons moved forward.
+## Still open
 
-**Phase 5 — with the package rename.**
-F-2 downgrade vocabulary and the manual −3, once `DESCRIPTION`/`SPEC.md` land the
-Core GRADE naming. App-side this is a small diff; it is last only because it
-cannot ship first.
+| Item | Why it is still here |
+|---|---|
+| F-2, manual `Extremely serious (-3)` | Needs a fourth package judgment level; scope it with the downgrade-vocabulary rename |
+| I-4, Step 1 detected-columns strip | Nothing in the second feedback round touched Step 1's preview; the 39-column dump is unchanged |
+| I-7, forest title collides with the column headers | Standalone `R/plot_forest_rob.R` fix, never picked up |
+| F-3, RoB 2 three-level dropdown | The per-study editors still take free text. `study_design` is hardcoded to `"RCT"`, so ROBINS-I is out of scope and the three RoB 2 levels are the whole vocabulary needed |
+| PLAN.md items 1, 3, 5 | README's companion-repo line, the `Mortality` example that is not in the sample data, and the `threshold_baseline` / `ois_p0` overlap — package and README work with no UI component |
 
-Per the repo rules, each phase updates `shiny/SPEC.md` in the same PR as the
-change it describes, and a behaviour change edits `shiny/SPEC.md` first.
+## Note for whoever reads this next
+
+This repo takes concurrent sessions. While these phases were landing, another
+session committed `53714f5`, `668cb27`, `f9a267b` and `a44ce00` to the same
+branch, two of which touched the same files. Agent worktrees are also created
+from a stale base rather than from current `main` — check `git log -1` in a
+worktree before trusting it, and rebase before reporting rather than at merge
+time, when whoever wrote the work still knows which hunks are load-bearing.
+
+Per the repo rules, each phase updated `shiny/SPEC.md` in the same PR as the
+change it describes, and a behaviour change edited `shiny/SPEC.md` first.
