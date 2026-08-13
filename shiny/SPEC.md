@@ -672,8 +672,22 @@ the UI still named MIC at all.
 | input | where it lives | why |
 |---|---|---|
 | `per` | Configuration | it relabels the control-group risk, the absolute threshold and the OIS figures, none of which are on Final certainty (Final certainty keeps a read-only echo) |
-| `rob_some_concerns` | **Risk of Bias**, under `Inputs for this domain` | it decides which side of the binary split each study falls on, and the stratified forest on that tab draws exactly that split. Its **scope is unchanged** — still one review-wide setting that persists across outcomes, still absent from `PMA_OUTCOME_INPUT_IDS$rob`. Only the point of edit moved (0.5.1; it was on Configuration for one release, and on a closed `<details>` on Risk of Bias before that) |
+| `rob_some_concerns` | **Risk of Bias**, under `Inputs for this domain` | it decides which side of the binary split each study falls on, and the stratified forest on that tab draws exactly that split. Its **scope is unchanged** — still one review-wide setting that persists across outcomes, still absent from `PMA_OUTCOME_INPUT_IDS$rob`. Only the point of edit moved (0.5.1; it was on Configuration for one release, and on a closed `<details>` on Risk of Bias before that). Seeded from `state$rob_some_concerns` — see below |
 | `rob_inf_threshold` | **deleted** (0.5.1) | a pmatools convention rather than a Core GRADE 4 rule, and a reviewer had no basis on which to move it. The package default `rob_inflation_threshold = 0.10` (`R/domain_rob.R`) now applies unconditionally; the app no longer passes the argument at all, and `export_bundle()` writes the same 0.10 into the bundled `analysis.R`. Deleting the slider also removed the only consumer of the RoB `how` closure's `inflation_threshold` argument — producer and consumer died together |
+
+**The some-concerns boundary survives a rebuild.** `state$rob_some_concerns`
+holds the setting; `step3_ui(state)` seeds the radio from it under `isolate()`,
+and an `observeEvent` mirrors the input back. Without the seed a hard-coded
+`selected = "high"` would undo a reviewer's `"low"` on every 3 → 2 → 3 round
+trip, because `output$step_body` rebuilds the whole step and a freshly built
+widget pushes its declared default to the server. That is the intended
+behaviour for everything else on Step 3 — the rest is outcome-scoped and is
+meant to clear — which is exactly why this one setting needs the exception.
+`begin_new_outcome()` deliberately does not touch it: the scope is the review,
+not the outcome. `.rob_some_concerns_setting()` falls back to the same state
+value, closing the window between a rebuild and the rebuilt radio reporting in,
+during which the domains would otherwise be rated against the opposite
+convention.
 
 **The per-N display unit.** `radioButtons("per", …)` offers 100 or 1,000 and is
 backed by the `display_per_state()` reactiveVal, seeded under `isolate()` and

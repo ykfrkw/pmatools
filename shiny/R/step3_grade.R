@@ -163,8 +163,23 @@ STEP3_DOMAIN_NAVS <- list(
 STEP3_CONFIRM_GATE_TITLE <-
   "Tick 'I have reviewed this domain' to continue"
 
-step3_ui <- function() {
+step3_ui <- function(state = NULL) {
   s <- EDU_COPY$steps$step3
+
+  # app.R's step_body renderUI rebuilds this whole body on every step change,
+  # and a freshly built widget pushes its declared default back to the server.
+  # Everything else on this step is outcome-scoped and is meant to be cleared
+  # that way; rob_some_concerns is not. It is a review-wide convention that
+  # persists across outcomes, so a hard-coded selected = "high" would silently
+  # undo a reviewer's "low" on every 3 -> 2 -> 3 round trip. Seeding from the
+  # mirrored state is the same trick step2_ui() uses for the outcome fields.
+  rob_some_concerns_default <- "high"
+  if (!is.null(state)) {
+    v <- shiny::isolate(state$rob_some_concerns)
+    if (!is.null(v) && length(v) == 1L && v %in% c("low", "high")) {
+      rob_some_concerns_default <- v
+    }
+  }
 
   .domain_header <- function(name, badge_id, chip_id) {
     htmltools::div(
@@ -310,7 +325,7 @@ step3_ui <- function() {
               choices = c(
                 "Some concerns count as high risk of bias (default)" = "high",
                 "Some concerns count as low risk of bias"            = "low"),
-              selected = "high"),
+              selected = rob_some_concerns_default),
             htmltools::p(class = "pma-card-subtitle",
               paste0("Core GRADE 4 leaves this boundary open, so it is a ",
                      "review decision. Unrated studies follow the same ",
@@ -1865,10 +1880,24 @@ step3_server <- function(input, output, session, state) {
   # "*" default of the rob vector, an unrated study) falls on. Reviewer
   # choice; "high" until the radio group reports in, so the first render
   # matches the documented default rather than the vendored one.
+  #
+  # The mirror in state is what makes the choice survive a rebuild of the Step
+  # 3 body. It is also the fallback here: between a rebuild and the rebuilt
+  # radio reporting its value there is a window in which input$ is NULL, and
+  # falling back to the bare "high" in that window would rate one pass of the
+  # domains against the opposite convention.
   .rob_some_concerns_setting <- function() {
     v <- input$rob_some_concerns
+    if (is.null(v) || length(v) != 1L || !v %in% c("low", "high")) {
+      v <- state$rob_some_concerns
+    }
     if (is.null(v) || length(v) != 1L || !v %in% c("low", "high")) "high" else v
   }
+
+  shiny::observeEvent(input$rob_some_concerns, {
+    v <- input$rob_some_concerns
+    if (length(v) == 1L && v %in% c("low", "high")) state$rob_some_concerns <- v
+  }, ignoreInit = FALSE)
 
   .study_covariate <- function(labels, col, default = NA_character_) {
     labels <- as.character(labels)

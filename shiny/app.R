@@ -153,6 +153,12 @@ server <- function(input, output, session) {
     # Which certainty domains have been reviewed for the outcome currently
     # open; written by step3_server(), read by Step 4's export gate.
     domain_confirmed = NULL,
+    # Where "some concerns" falls on the binary risk-of-bias split. Review-wide
+    # rather than outcome-scoped: it is a convention the reviewer sets once for
+    # the whole review, so begin_new_outcome() deliberately leaves it alone.
+    # Mirrored here because the Step 3 widget is destroyed whenever another
+    # step's body renders, and a rebuilt widget pushes its default back.
+    rob_some_concerns = "high",
     # Outcome provenance. `outcome_sig` is pma_analysis_signature() of the
     # analysis the Step 3 answers were given for, and `outcome_gen` counts how
     # many outcomes this session has begun. Every Step 3 answer is stamped
@@ -217,7 +223,7 @@ server <- function(input, output, session) {
     switch(state$step,
       `1` = step1_ui(),
       `2` = step2_ui(state),
-      `3` = step3_ui(),
+      `3` = step3_ui(state),
       `4` = step4_ui(),
       step1_ui()
     )
