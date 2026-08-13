@@ -586,8 +586,8 @@ says all of this.
 credibility on Core GRADE 3's three criteria — the P value from a test of
 interaction, whether the comparison is within-study rather than between-study,
 and whether a small number of direction-specifying a priori hypotheses was made
-— assessed with **ICEMAN** ([www.iceman.help](https://www.iceman.help);
-Schandelmaier et al. *CMAJ* 2020;192:E901-6). Note that pmatools is more
+— assessed with **ICEMAN** (Schandelmaier S, et al. CMAJ. 2020). Note that
+pmatools is more
 permissive here than the source: passing `"yes"` lets the **pooled** estimate
 through with no downgrade, whereas Core GRADE 3 says "a conclusion of moderate
 or high credibility warrants the creation of separate PICO questions for each
@@ -1138,9 +1138,8 @@ Full runnable code in [sample.R](sample.R). Sample data is bundled in `inst/extd
 
 ### Study
 
-**Furukawa Y, Nagaoka D, Sato S, et al.**
+**Furukawa Y, et al. J Affect Disord. 2024.**
 *Cognitive behavioral therapy for insomnia to treat major depressive disorder with comorbid insomnia.*
-J Affect Disord. 2024;367:359-366. doi:10.1016/j.jad.2024.09.017
 
 - **Question:** Is CBT-I effective for achieving depression response in patients with MDD and comorbid insomnia?
 - **Effect measure:** Odds Ratio (OR), random-effects, k = 17 RCTs
@@ -2161,12 +2160,11 @@ out-of-scope list.
 
 ## References
 
-- Guyatt G, et al. Why Core GRADE is needed. BMJ 2025;389:bmj-2024-081902.
-- Guyatt G, et al. Core GRADE 1: Overview. BMJ 2025. PMID: 40262844.
-- Guyatt G, et al. Core GRADE 2: Choosing the target of certainty rating and assessing imprecision. BMJ 2025;389:e081904. doi:10.1136/bmj-2024-081904.
-- Guyatt G, et al. Core GRADE 3: Inconsistency. BMJ 2025. PMID: 40328467.
-- Guyatt G, et al. Core GRADE 4: Risk of bias, publication bias. BMJ 2025. PMID: 40360206.
-- Guyatt G, et al. Core GRADE 5: Indirectness. BMJ 2025. PMID: 40393729.
-- Furukawa Y, et al. CBT-I for MDD with comorbid insomnia. J Affect Disord. 2024;367:359-366.
-- Higgins JPT, et al. Measuring inconsistency in meta-analyses. BMJ 2003;327:557.
-- Sterne JAC, et al. Recommendations for examining funnel plot asymmetry. BMJ 2011;343:d4002.
+- Core GRADE 1. Guyatt G, et al. BMJ. 2025.
+- Core GRADE 2. Guyatt G, et al. BMJ. 2025.
+- Core GRADE 3. Guyatt G, et al. BMJ. 2025.
+- Core GRADE 4. Guyatt G, et al. BMJ. 2025.
+- Core GRADE 5. Guyatt G, et al. BMJ. 2025.
+- Furukawa Y, et al. J Affect Disord. 2024.
+- Higgins JPT, et al. BMJ. 2003.
+- Sterne JAC, et al. BMJ. 2011.

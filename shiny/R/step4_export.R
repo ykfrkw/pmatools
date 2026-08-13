@@ -64,12 +64,15 @@ step4_ui <- function() {
         "(Balduzzi S, et al. Evid Based Ment Health. 2019). Certainty of ",
         "evidence was rated following the BMJ 2025 Core GRADE series ",
         "(Guyatt G, et al. BMJ. 2025), implemented in pmatools ",
-        "(Furukawa Y).")),
-      # The list is the citation list, so it carries citations and nothing
-      # else. pmatools has no paper of its own; the tool is named here and the
-      # reviewer reaches it the way they reached this app.
+        "(Furukawa Y, https://yukifurukawa.jp/pmatools/).")),
+      # No DOIs and no hyperlinks, but software is not an article: a reader
+      # copying this into a manuscript needs somewhere to find pmatools, and
+      # there is no journal, volume or DOI to point them at. The URL is plain
+      # text, so the block still reads as one style rather than one linked
+      # entry among six.
       htmltools::tags$ul(
-        htmltools::tags$li("Furukawa Y. pmatools. 2025."),
+        htmltools::tags$li(
+          "Furukawa Y. pmatools. 2025. https://yukifurukawa.jp/pmatools/"),
         htmltools::tags$li(
           "Balduzzi S, et al. Evid Based Ment Health. 2019."),
         htmltools::tags$li("Core GRADE 1. Guyatt G, et al. BMJ. 2025."),
