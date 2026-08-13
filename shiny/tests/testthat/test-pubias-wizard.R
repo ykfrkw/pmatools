@@ -132,3 +132,135 @@ test_that("the reachable path is what the breadcrumb may link to", {
                            registry_complete = STEP3_PUBIAS_DEFER, k = 3),
     c("q1", "extra", "q4", "result"))
 })
+
+# --------------------------------------------------------------------------
+# step3_pubias_flow_ids(): the chart above the wizard
+# --------------------------------------------------------------------------
+# The chart is a PROGRESS indicator, so it is lit from the answers rather than
+# from the `flow_path` fact - the fact only exists once grade_meta() has rated
+# the domain, and by then the reviewer has finished. That makes this the one
+# place the app translates wizard node keys into figure ids on its own, and the
+# one place it can drift away from inst/figures/pubias.svg without the package
+# suite noticing.
+
+.pubias_svg <- local({
+  # The staged copy first, the source tree second - the same two places
+  # pma_flowchart_path() looks.
+  cands <- c(file.path(PMA_APP_ROOT, "_pmatools_inst", "figures",
+                       "pubias.svg"),
+             file.path(dirname(PMA_APP_ROOT), "inst", "figures", "pubias.svg"))
+  hit <- Filter(file.exists, cands)
+  if (length(hit)) hit[[1L]] else NA_character_
+})
+
+test_that("nothing is lit until something is answered", {
+  expect_identical(step3_pubias_flow_ids(), character(0))
+  expect_identical(step3_pubias_flow_ids(small_industry = "", k = 14),
+                   character(0))
+})
+
+test_that("each answer lights its node, its edge and any leaf it reaches", {
+  expect_identical(
+    step3_pubias_flow_ids(small_industry = "yes"),
+    c("pma-pubias-node-q1", "pma-pubias-edge-q1-yes",
+      "pma-pubias-leaf-down1-q1"))
+
+  # Answered Q1 = "no": the trail runs on to the node now being asked, so the
+  # chart shows where the reviewer is as well as where they have been.
+  expect_identical(
+    step3_pubias_flow_ids(small_industry = "no"),
+    c("pma-pubias-node-q1", "pma-pubias-edge-q1-no",
+      "pma-pubias-node-registry"))
+
+  expect_identical(
+    step3_pubias_flow_ids(small_industry = "no", registry_complete = "yes"),
+    c("pma-pubias-node-q1", "pma-pubias-edge-q1-no",
+      "pma-pubias-node-registry", "pma-pubias-edge-registry-yes",
+      "pma-pubias-leaf-nodown-registry"))
+})
+
+test_that("the k gate lights the branch it computed, on either side", {
+  base <- list(small_industry = "no",
+               registry_complete = STEP3_PUBIAS_DEFER)
+
+  expect_identical(
+    do.call(step3_pubias_flow_ids, c(base, list(k = 14))),
+    c("pma-pubias-node-q1", "pma-pubias-edge-q1-no",
+      "pma-pubias-node-registry", "pma-pubias-edge-registry-no",
+      "pma-pubias-node-q2", "pma-pubias-edge-q2-yes", "pma-pubias-node-q3"))
+
+  expect_identical(
+    do.call(step3_pubias_flow_ids, c(base, list(k = 4))),
+    c("pma-pubias-node-q1", "pma-pubias-edge-q1-no",
+      "pma-pubias-node-registry", "pma-pubias-edge-registry-no",
+      "pma-pubias-node-q2", "pma-pubias-edge-q2-no", "pma-pubias-node-q4"))
+
+  # An answer on the branch that was NOT taken lights nothing on it, exactly
+  # as it advances nothing in step3_pubias_node().
+  expect_false("pma-pubias-leaf-nodown-q4" %in%
+    do.call(step3_pubias_flow_ids,
+            c(base, list(unpublished = "no", k = 14))))
+})
+
+test_that("the terminal answers light their leaves", {
+  base <- list(small_industry = "no",
+               registry_complete = STEP3_PUBIAS_DEFER)
+
+  for (case in list(
+    list(args = list(funnel_asymmetry = "yes", k = 14),
+         leaf = "pma-pubias-leaf-down1-q3"),
+    list(args = list(funnel_asymmetry = "no", k = 14),
+         leaf = "pma-pubias-leaf-nodown-q3"),
+    list(args = list(unpublished = "yes", k = 4),
+         leaf = "pma-pubias-leaf-down1-q4"),
+    list(args = list(unpublished = "no", k = 4),
+         leaf = "pma-pubias-leaf-nodown-q4"))) {
+    ids <- do.call(step3_pubias_flow_ids, c(base, case$args))
+    expect_identical(ids[length(ids)], case$leaf)
+  }
+})
+
+test_that("an answer that decides no leaf stops the trail at a node", {
+  # Accepting the automated Egger test hands Q3 to a p value this function
+  # does not have, so the chart lights the node and waits.
+  ids <- step3_pubias_flow_ids(small_industry = "no",
+                               registry_complete = STEP3_PUBIAS_DEFER,
+                               funnel_asymmetry = STEP3_PUBIAS_USE_EGGER,
+                               k = 14)
+  expect_identical(ids[length(ids)], "pma-pubias-node-q3")
+
+  # "reporting bias is plausible" is the app's own rate-down-1 rule, and the
+  # figure draws no leaf for a rule that is not in the figure.
+  ids <- step3_pubias_flow_ids(small_industry = "no",
+                               registry_complete = "no", k = 14)
+  expect_identical(ids[length(ids)], "pma-pubias-edge-registry-no")
+})
+
+test_that("every id the chart lights is an id the figure draws", {
+  # The drift guard. inst/figures/pubias.svg is redrawn by
+  # data-raw/build_figures.R, and 0.5.1 deleted two leaves from it; the
+  # package suite checks the ids the ASSESSOR emits (test-flowchart-nodes.R)
+  # and would not have seen these.
+  skip_if(is.na(.pubias_svg), "no pubias.svg in this checkout")
+  svg <- paste(readLines(.pubias_svg, warn = FALSE), collapse = "\n")
+  drawn <- unique(gsub('^id="|"$', "",
+                       regmatches(svg, gregexpr('id="pma-pubias-[^"]+"',
+                                                svg))[[1L]]))
+  expect_true(length(drawn) > 0L)
+
+  # Every combination of answers the wizard can be in, not a sample: the whole
+  # input space is five small factors.
+  grid <- expand.grid(
+    small_industry    = c("", "no", "yes"),
+    registry_complete = c("", "no", "yes", STEP3_PUBIAS_DEFER),
+    funnel_asymmetry  = c("", "no", "yes", STEP3_PUBIAS_USE_EGGER),
+    unpublished       = c("", "no", "yes"),
+    k                 = c(0, 4, 10, 14),
+    stringsAsFactors  = FALSE)
+  lit <- unique(unlist(lapply(seq_len(nrow(grid)), function(i) {
+    do.call(step3_pubias_flow_ids, as.list(grid[i, ]))
+  })))
+
+  expect_true(length(lit) > 0L)
+  expect_identical(setdiff(lit, drawn), character(0))
+})

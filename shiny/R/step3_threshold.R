@@ -267,6 +267,76 @@ step3_pubias_reachable <- function(small_industry = NULL,
   c(out, if (step3_pubias_statistical(k)) "q3" else "q4", "result")
 }
 
+# The figure ids the answers so far have LIT, for the chart that sits above the
+# wizard (inst/figures/pubias.svg, ids catalogued as .PUBIAS_FIG5_NODE_IDS in
+# R/domain_pubias.R).
+#
+# Why this is not pma_flow_path_ids(): that reads the `flow_path` fact, which
+# does not exist until grade_meta() has RATED the domain. The chart's job here
+# is the opposite one - it is a progress indicator shown from the first node,
+# so it has to light up from the answers alone, before any rating exists.
+#
+# Two vocabularies meet here. The wizard's node keys (q1 / extra / q3 / q4 /
+# result) are not the figure's ids, and the mapping is not one-to-one: `extra`
+# is the dashed registry node, and the k gate is the figure's q2, which the
+# wizard never asks. Hence a pure function with tests rather than inline logic.
+#
+# Nothing is lit until something is answered: an unlit chart says "you have not
+# started", and lighting the entry node before the reviewer has touched it
+# would say the opposite.
+#
+# Two answers stop the trail at a node rather than a leaf, because the leaf is
+# genuinely not decided yet:
+#   - STEP3_PUBIAS_USE_EGGER defers Q3 to the automated test, whose p value
+#     this function does not have;
+#   - "no" on the registry node is the app's own rate-down-1 rule, and the
+#     figure has no leaf for a rule that is not in the figure.
+step3_pubias_flow_ids <- function(small_industry = NULL,
+                                  registry_complete = NULL,
+                                  funnel_asymmetry = NULL,
+                                  unpublished = NULL,
+                                  k = 0L) {
+  if (!.pubias_answered(small_industry)) return(character(0))
+
+  ids <- "pma-pubias-node-q1"
+  if (identical(.pubias_chr(small_industry), "yes")) {
+    return(c(ids, "pma-pubias-edge-q1-yes", "pma-pubias-leaf-down1-q1"))
+  }
+  ids <- c(ids, "pma-pubias-edge-q1-no", "pma-pubias-node-registry")
+
+  if (!.pubias_answered(registry_complete)) return(ids)
+  registry <- .pubias_chr(registry_complete)
+  if (identical(registry, "yes")) {
+    return(c(ids, "pma-pubias-edge-registry-yes",
+             "pma-pubias-leaf-nodown-registry"))
+  }
+  ids <- c(ids, "pma-pubias-edge-registry-no")
+  if (!identical(registry, STEP3_PUBIAS_DEFER)) return(ids)
+
+  ids <- c(ids, "pma-pubias-node-q2")
+  if (step3_pubias_statistical(k)) {
+    ids <- c(ids, "pma-pubias-edge-q2-yes", "pma-pubias-node-q3")
+    asymmetry <- .pubias_chr(funnel_asymmetry)
+    if (identical(asymmetry, "yes")) {
+      return(c(ids, "pma-pubias-edge-q3-yes", "pma-pubias-leaf-down1-q3"))
+    }
+    if (identical(asymmetry, "no")) {
+      return(c(ids, "pma-pubias-edge-q3-no", "pma-pubias-leaf-nodown-q3"))
+    }
+    return(ids)
+  }
+
+  ids <- c(ids, "pma-pubias-edge-q2-no", "pma-pubias-node-q4")
+  documented <- .pubias_chr(unpublished)
+  if (identical(documented, "yes")) {
+    return(c(ids, "pma-pubias-edge-q4-yes", "pma-pubias-leaf-down1-q4"))
+  }
+  if (identical(documented, "no")) {
+    return(c(ids, "pma-pubias-edge-q4-no", "pma-pubias-leaf-nodown-q4"))
+  }
+  ids
+}
+
 # Map a suggest_threshold() return onto the two threshold reactiveVals used by
 # the Configuration tab.
 #

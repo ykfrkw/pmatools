@@ -618,94 +618,114 @@ step3_ui <- function(state = NULL) {
           # short-circuit order. Changing an earlier answer re-derives
           # everything after it. The breadcrumb above it re-opens any answered
           # node - without it a one-question-at-a-time wizard is a trap.
+          #
+          # The chart comes FIRST and is drawn from the first node onwards,
+          # unlit. One question at a time answers "what am I being asked"; it
+          # never answered "how much of this is left", and a reviewer three
+          # questions in could not tell whether two more were coming. The two
+          # surfaces therefore have different jobs: the wizard below is the
+          # only place anything is answered, and the chart is a progress
+          # indicator that lights up as the answers arrive.
+          shiny::uiOutput("pubias_flowchart"),
           shiny::uiOutput("pubias_breadcrumb"),
           shiny::uiOutput("pubias_wizard"),
 
-          # The funnel plots are STATICALLY placed and shown by a
-          # conditionalPanel, not rendered inside the wizard's renderUI:
-          # imageOutput / the funnel display panels re-bind badly when the
-          # container they live in is replaced on every answer.
-          shiny::conditionalPanel(
-            "output.pubias_show_funnel === true",
-            shinycssloaders::withSpinner(
-              shiny::imageOutput("pubias_funnel", height = "auto"),
-              type = 4, color = "#0f172a", size = 0.6,
-              proxy.height = "320px"),
-            pma_funnel_display_panel("funnel_pub"),
-            shiny::uiOutput("pubias_egger_result"),
-            htmltools::tags$details(
-              htmltools::tags$summary("Reference: trim-and-fill"),
-              htmltools::div(
-                htmltools::p(class = "pma-card-subtitle",
-                  "How the pooled estimate would shift if the imputed studies ",
-                  "existed. ",
-                  htmltools::HTML(paste0(
-                    "<strong>Not part of the Core GRADE algorithm</strong>."))),
-                shinycssloaders::withSpinner(
-                  shiny::imageOutput("pubias_trimfill_funnel", height = "auto"),
-                  type = 4, color = "#0f172a", size = 0.6,
-                  proxy.height = "320px"),
-                pma_funnel_display_panel("funnel_trim", include_egger = FALSE),
-                shiny::uiOutput("pubias_trimfill_summary")
-              )
-            )
-          ),
-
-          # ----- The verdict, and the RoB-ME reference beside it ------------
-          # DT::DTOutput must stay statically placed: inside a renderUI,
-          # DT / htmlwidgets does not bind cleanly. It is therefore wrapped in
-          # a conditionalPanel rather than moved. The output already carries
-          # suspendWhenHidden = FALSE, so hiding it this way keeps the server
-          # side alive.
+          # The verdict, once the wizard has reached its result node. The
+          # flowchart that used to sit under it is the one above - drawing the
+          # same figure twice on one tab says nothing the once did not.
           shiny::conditionalPanel(
             "output.pubias_show_result === true",
-            shiny::uiOutput("pubias_evaluation"),
-            htmltools::tags$details(
-              htmltools::tags$summary(
-                "Reference: available vs missing results (RoB-ME)"),
+            shiny::uiOutput("pubias_evaluation")
+          ),
+
+          # ----- Reference plots, one at a time -----------------------------
+          # All three are REFERENCE material rather than answers, and all three
+          # are computable the moment state$ma exists, so none of them is gated
+          # on a wizard node: the funnel used to appear only at q3 and the
+          # RoB-ME editor only at the result, which meant each was absent
+          # exactly when a reviewer might want to check it against a different
+          # question.
+          #
+          # The tabset is declared STATICALLY, and that is the load-bearing
+          # part: imageOutput and DT::DTOutput do not re-bind cleanly inside a
+          # container a renderUI replaces. Bootstrap only toggles `display`
+          # here, so the outputs are built once and survive every switch.
+          #
+          # The three imageOutputs deliberately keep Shiny's default
+          # suspendWhenHidden: a renderImage that first evaluates while its
+          # panel is display:none reads a container width of 0 and sizes itself
+          # wrong. Suspending until the panel is shown is what gets each plot
+          # its real width. pubias_missing_editor keeps its
+          # suspendWhenHidden = FALSE, which it needs for the cell-edit
+          # round trip.
+          shiny::tabsetPanel(
+            id = "pubias_plots", type = "tabs",
+
+            shiny::tabPanel("Funnel",
+              shinycssloaders::withSpinner(
+                shiny::imageOutput("pubias_funnel", height = "auto"),
+                type = 4, color = "#0f172a", size = 0.6,
+                proxy.height = "320px"),
+              pma_funnel_display_panel("funnel_pub"),
+              shiny::uiOutput("pubias_egger_result")
+            ),
+
+            shiny::tabPanel("Trim-and-fill",
+              htmltools::p(class = "pma-card-subtitle",
+                "How the pooled estimate would shift if the imputed studies ",
+                "existed. ",
+                htmltools::HTML(paste0(
+                  "<strong>Not part of the Core GRADE algorithm</strong>."))),
+              shinycssloaders::withSpinner(
+                shiny::imageOutput("pubias_trimfill_funnel", height = "auto"),
+                type = 4, color = "#0f172a", size = 0.6,
+                proxy.height = "320px"),
+              pma_funnel_display_panel("funnel_trim", include_egger = FALSE),
+              shiny::uiOutput("pubias_trimfill_summary")
+            ),
+
+            shiny::tabPanel("Missing results (RoB-ME)",
+              htmltools::p(class = "pma-card-subtitle",
+                "Studies with no extractable estimate arrive automatically; ",
+                "add trials that exist but were never loaded. ",
+                htmltools::HTML(paste0(
+                  "<strong>Not part of the Core GRADE algorithm</strong> - ",
+                  "act on it through the override below.")),
+                " After RoB-ME (Page MJ, et al. BMJ. 2023)."),
               htmltools::div(
-                htmltools::p(class = "pma-card-subtitle",
-                  "Studies with no extractable estimate arrive here ",
-                  "automatically; add trials that exist but were never loaded. ",
-                  "After RoB-ME (Page MJ, et al. BMJ. 2023)",
-                  htmltools::HTML(paste0(
-                    ". <strong>Not part of the Core GRADE algorithm</strong> - ",
-                    "act on it through the override below."))),
-                htmltools::div(
-                  style = "display: flex; gap: 0.5rem; margin-bottom: 0.5rem;",
-                  shiny::actionButton("pubias_missing_add",
-                                      "+ Add missing trial", class = "btn-sm")
-                ),
-                htmltools::p(class = "pma-card-subtitle",
-                  "Click any cell to edit; Results known suggests RoB-ME ",
-                  "labels and accepts free text. Auto-classified rows cannot ",
-                  "be removed."),
-                # Datalist powering the in-cell autocomplete for results_known.
-                htmltools::tags$datalist(id = "pubias_rk_datalist",
-                  htmltools::tags$option(value = "Reported but data not extractable"),
-                  htmltools::tags$option(value = "Not measured"),
-                  htmltools::tags$option(value = "Measured but not reported (suspect P > 0.05)"),
-                  htmltools::tags$option(value = "Measured but not reported (suspect P < 0.05)"),
-                  htmltools::tags$option(value = "Measured but not reported (in the opposite direction)")
-                ),
-                # When DT injects an <input type="text"> on cell edit for the
-                # results_known column (index 2 of the visible columns), give
-                # it a `list` attribute so the browser shows the datalist
-                # suggestions while still allowing free-text typing.
-                htmltools::tags$script(htmltools::HTML(
-                  "$(document).on('focusin', '#pubias_missing_editor input[type=text]', function(){",
-                  "  var $td = $(this).closest('td');",
-                  "  var col = $td.parent().children().index($td);",
-                  "  if (col === 2) { $(this).attr('list', 'pubias_rk_datalist'); }",
-                  "});"
-                )),
-                DT::DTOutput("pubias_missing_editor"),
-                shinycssloaders::withSpinner(
-                  shiny::imageOutput("pubias_missing_forest", height = "auto"),
-                  type = 4, color = "#0f172a", size = 0.6,
-                  proxy.height = "320px"),
-                pma_forest_display_panel("pubias")
-              )
+                style = "display: flex; gap: 0.5rem; margin-bottom: 0.5rem;",
+                shiny::actionButton("pubias_missing_add",
+                                    "+ Add missing trial", class = "btn-sm")
+              ),
+              htmltools::p(class = "pma-card-subtitle",
+                "Click any cell to edit; Results known suggests RoB-ME ",
+                "labels and accepts free text. Auto-classified rows cannot ",
+                "be removed."),
+              # Datalist powering the in-cell autocomplete for results_known.
+              htmltools::tags$datalist(id = "pubias_rk_datalist",
+                htmltools::tags$option(value = "Reported but data not extractable"),
+                htmltools::tags$option(value = "Not measured"),
+                htmltools::tags$option(value = "Measured but not reported (suspect P > 0.05)"),
+                htmltools::tags$option(value = "Measured but not reported (suspect P < 0.05)"),
+                htmltools::tags$option(value = "Measured but not reported (in the opposite direction)")
+              ),
+              # When DT injects an <input type="text"> on cell edit for the
+              # results_known column (index 2 of the visible columns), give
+              # it a `list` attribute so the browser shows the datalist
+              # suggestions while still allowing free-text typing.
+              htmltools::tags$script(htmltools::HTML(
+                "$(document).on('focusin', '#pubias_missing_editor input[type=text]', function(){",
+                "  var $td = $(this).closest('td');",
+                "  var col = $td.parent().children().index($td);",
+                "  if (col === 2) { $(this).attr('list', 'pubias_rk_datalist'); }",
+                "});"
+              )),
+              DT::DTOutput("pubias_missing_editor"),
+              shinycssloaders::withSpinner(
+                shiny::imageOutput("pubias_missing_forest", height = "auto"),
+                type = 4, color = "#0f172a", size = 0.6,
+                proxy.height = "320px"),
+              pma_forest_display_panel("pubias")
             )
           ),
 
@@ -2691,7 +2711,11 @@ step3_server <- function(input, output, session, state) {
   # rating rather than as a broken build. tryCatch() around the whole body,
   # not around each helper: any of them can be the one that fails, and the
   # reviewer's next move is the same whichever it was.
-  .domain_evaluation <- function(domain, keys = NULL) {
+  # `flowchart = FALSE` for a domain that already draws its own. Publication
+  # bias is the one: its chart is a progress indicator above the wizard, drawn
+  # from the first node onwards, and repeating it under the verdict would put
+  # the same figure on the tab twice.
+  .domain_evaluation <- function(domain, keys = NULL, flowchart = TRUE) {
     if (is.null(grade_obj())) {
       return(htmltools::tagList(
         htmltools::h5("Evaluation"),
@@ -2709,7 +2733,7 @@ step3_server <- function(input, output, session, state) {
         # The picture of the decision, with the branch this analysis took lit
         # up, directly under the verdict it explains. NULL for Indirectness,
         # which has no flowchart to draw (Core GRADE 5 Table 2 is a gradient).
-        pma_flowchart_details(domain, facts)
+        if (flowchart) pma_flowchart_details(domain, facts)
       )
     }, error = function(e) {
       htmltools::tagList(
@@ -2737,7 +2761,7 @@ step3_server <- function(input, output, session, state) {
   output$impre_evaluation  <- shiny::renderUI(
     .domain_evaluation("Imprecision"))
   output$pubias_evaluation <- shiny::renderUI(
-    .domain_evaluation("Publication bias"))
+    .domain_evaluation("Publication bias", flowchart = FALSE))
   for (.id in c("rob_evaluation", "incon_evaluation", "impre_evaluation",
                 "pubias_evaluation")) {
     shiny::outputOptions(output, .id, suspendWhenHidden = FALSE)
@@ -3055,6 +3079,10 @@ step3_server <- function(input, output, session, state) {
   # Unnumbered. The node KEYS keep Fig 5's q1/q3/q4, but the reviewer never
   # sees the numbers: the chart interleaves the registry node between Q1 and
   # Q2, so on screen the numbering described neither Fig 5 nor the route.
+  #
+  # These name the breadcrumb's re-open links and nothing else. The breadcrumb
+  # no longer restates each answer beside them - the lit chart above shows the
+  # route, in the algorithm's own shape, and did it better than a prose trail.
   PUBIAS_NODE_TITLES <- c(
     q1     = "Small and industry-sponsored?",
     extra  = "Overall reporting-bias judgment",
@@ -3063,48 +3091,61 @@ step3_server <- function(input, output, session, state) {
     result = "Result"
   )
 
-  # One line per answered node, each a link back to it, plus the computed Q2
-  # step - which is not a question and never gets a screen of its own.
+  # Figure 5, from the first node onwards, lit by the answers so far rather
+  # than by the `flow_path` fact: that fact arrives only once grade_meta() has
+  # rated the domain, which is exactly when a progress indicator is of no
+  # further use. step3_pubias_flow_ids() (R/step3_threshold.R, pure and
+  # unit-tested) does the wizard-key -> figure-id translation.
+  output$pubias_flowchart <- shiny::renderUI({
+    if (is.null(state$ma)) return(NULL)
+    htmltools::tagList(
+      pma_flowchart(
+        PMA_FLOWCHART_FIGS[["Publication bias"]]$fig,
+        on_ids = step3_pubias_flow_ids(
+          small_industry    = input$pubias_small_industry,
+          registry_complete = input$pubias_registry_complete,
+          funnel_asymmetry  = input$pubias_funnel_asymmetry,
+          unpublished       = input$pubias_unpublished,
+          k                 = pubias_k()),
+        caption = pma_algorithm_source("Publication bias")),
+      # The chart's second node is the k gate, which is computed rather than
+      # asked, so the chart can light the branch but cannot print the number
+      # it turned on. It used to be a breadcrumb line; it belongs under the
+      # picture of the node it decides.
+      htmltools::div(class = "pma-crumb pma-crumb-auto",
+                     step3_pubias_k_line(pubias_k()))
+    )
+  })
+  shiny::outputOptions(output, "pubias_flowchart", suspendWhenHidden = FALSE)
+
+  # Links only. This used to restate every answer in prose beside the node
+  # title; the lit chart above says the same thing in one glance and says it
+  # in the algorithm's own shape. What prose could not replace is the
+  # "change" affordance - without a way back into an answered node, a
+  # one-question-at-a-time wizard is a trap - so that is all that is left.
   output$pubias_breadcrumb <- shiny::renderUI({
     if (is.null(state$ma)) return(NULL)
     node <- pubias_node()
     path <- step3_pubias_reachable(input$pubias_small_industry,
                                    input$pubias_registry_complete,
                                    pubias_k())
-    .answer_of <- function(nd) {
+    .answered <- function(nd) {
       v <- switch(nd,
         q1    = input$pubias_small_industry,
         extra = input$pubias_registry_complete,
         q3    = input$pubias_funnel_asymmetry,
         q4    = input$pubias_unpublished,
         NULL)
-      if (is.null(v) || length(v) != 1L || !nzchar(v)) return(NULL)
-      switch(as.character(v),
-        "yes"   = "Yes",
-        "no"    = "No",
-        "defer" = "left to the Figure 5 nodes",
-        "egger" = "accept the automated Egger test",
-        as.character(v))
+      !is.null(v) && length(v) == 1L && nzchar(v)
     }
-    # Walked in path order, so the trail reads in the order the algorithm
-    # took - including Q2, which is COMPUTED and therefore reported in place
-    # rather than asked as a screen of its own.
+    # Walked in path order, so the links read in the order the algorithm took.
     crumbs <- lapply(setdiff(path, "result"), function(nd) {
-      k_line <- if (nd %in% c("q3", "q4")) {
-        htmltools::div(class = "pma-crumb pma-crumb-auto",
-                       step3_pubias_k_line(pubias_k()))
-      } else NULL
-      ans <- .answer_of(nd)
-      crumb <- if (is.null(ans) || identical(nd, node)) NULL else {
-        htmltools::div(
-          class = "pma-crumb",
-          htmltools::span(PUBIAS_NODE_TITLES[[nd]]), " ",
-          htmltools::strong(ans), " ",
-          shiny::actionLink(paste0("pubias_open_", nd), "change")
-        )
-      }
-      if (is.null(k_line) && is.null(crumb)) return(NULL)
-      htmltools::tagList(k_line, crumb)
+      if (identical(nd, node) || !.answered(nd)) return(NULL)
+      htmltools::div(
+        class = "pma-crumb",
+        shiny::actionLink(paste0("pubias_open_", nd),
+                          paste("Change:", PUBIAS_NODE_TITLES[[nd]]))
+      )
     })
     crumbs <- Filter(Negate(is.null), crumbs)
     if (!length(crumbs)) return(NULL)
@@ -3204,16 +3245,16 @@ step3_server <- function(input, output, session, state) {
   })
   shiny::outputOptions(output, "pubias_wizard", suspendWhenHidden = FALSE)
 
-  # Flags for the two statically-placed blocks. Assigning a reactive to an
-  # output is what makes it readable from a conditionalPanel condition;
-  # suspendWhenHidden = FALSE because the panel it gates is initially hidden,
-  # and a suspended output never evaluates.
-  output$pubias_show_funnel <- shiny::reactive({
-    !is.null(state$ma) && step3_pubias_statistical(pubias_k()) &&
-      identical(pubias_node(), "q3")
-  })
-  shiny::outputOptions(output, "pubias_show_funnel", suspendWhenHidden = FALSE)
-
+  # The verdict is the one block still gated on a node: it is the wizard's
+  # conclusion, and printing it before the wizard has run says the domain was
+  # rated when nothing has been answered. The reference plots below it are no
+  # longer gated at all - a companion pubias_show_funnel used to keep the
+  # funnel to node q3, which hid it exactly when a reviewer wanted to check it
+  # against a different question.
+  #
+  # Assigning a reactive to an output is what makes it readable from a
+  # conditionalPanel condition; suspendWhenHidden = FALSE because the panel it
+  # gates is initially hidden, and a suspended output never evaluates.
   output$pubias_show_result <- shiny::reactive({
     !is.null(state$ma) && identical(pubias_node(), "result")
   })

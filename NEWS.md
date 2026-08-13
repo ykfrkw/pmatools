@@ -165,6 +165,27 @@
   the fit actually did: `Random effects (REML), Hartung-Knapp CI, k = 12`.
   Forcing Hartung-Knapp below three studies warns and applies it as asked.
 
+* **Shiny app: the Publication bias wizard shows the whole route from the
+  start, and its three reference plots become a tabset.** The Figure 5 chart
+  used to appear only after the domain had been rated, under the verdict, so a
+  reviewer answering the third question could not tell that two more were
+  coming — a one-question-at-a-time wizard that never said how long it was. The
+  chart now sits **above** the wizard and is drawn from the first node onwards:
+  unlit to begin with, lighting up node by node as answers arrive. It is lit
+  from the answers rather than from the `flow_path` fact, by a new pure
+  `step3_pubias_flow_ids()`, because that fact does not exist until the domain
+  has been rated. The wizard itself is unchanged and is still the only place
+  anything is answered; the copy under the verdict no longer repeats the
+  figure, and the breadcrumb is now the "change" links alone — the lit chart
+  says what its prose trail used to. Below the wizard, the funnel, the
+  trim-and-fill funnel and the missing-results (RoB-ME) editor become three
+  panels of one tabset, each at full width, instead of a funnel that appeared
+  only at one question and two blocks folded into `<details>`. None of the
+  three is gated on a wizard node any more: all three are reference material,
+  all three are computable as soon as the analysis exists, and gating them hid
+  each one exactly when a reviewer might want to check it against a different
+  question. No judgment, note or export changes.
+
 * **Shiny app: Step 3 says how far through it you are, and where the next click
   goes.** Each domain tab's Next stays greyed (with the reason on hover) until
   that domain's box is ticked; the tab strip marks a confirmed tab with a tick

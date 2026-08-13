@@ -799,7 +799,7 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
 ```
 
 - **Q2 is not a question.** k decides it (`.pubias_effective_k()`), so it is
-  reported as a one-line automatic step in the breadcrumb, never a screen.
+  reported as a one-line automatic step under the chart, never a screen.
 - **The reviewer sees no question numbers (0.5.1).** `PUBIAS_NODE_TITLES`, the
   three wizard `h5()` headings and `step3_pubias_k_line()` state the question
   and drop the `Q1` / `Q2` / `Q3` / `Q4` prefix, and `inst/figures/pubias.svg`
@@ -821,17 +821,54 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
 - **Advancing happens on answer.** One `observeEvent` per input clears
   `pubias_reopen`; the derivation moves on by itself. No `updateTabsetPanel`,
   no manual Next.
-- **A breadcrumb re-opens any answered node.** `pubias_reopen` is honoured
-  ahead of the derivation, but only for a node the current answers put on the
-  path — so re-opening Q1 and answering "yes" cannot strand the reviewer on a
-  Q3 that no longer exists. Reset by `state$step3_reset()`.
-- **Structural constraints.** The funnel and trim-and-fill `imageOutput`s and
-  the RoB-ME `DT::DTOutput` are **statically placed** and gated by
-  `conditionalPanel` on `output.pubias_show_funnel` /
-  `output.pubias_show_result`, not moved inside the `renderUI`: DT does not
-  bind cleanly inside one. Both flags carry
-  `outputOptions(suspendWhenHidden = FALSE)`, or the panel they gate would
-  never appear.
+- **A breadcrumb re-opens any answered node, and does nothing else (0.5.1).**
+  `pubias_reopen` is honoured ahead of the derivation, but only for a node the
+  current answers put on the path — so re-opening Q1 and answering "yes" cannot
+  strand the reviewer on a Q3 that no longer exists. Reset by
+  `state$step3_reset()`. `output$pubias_breadcrumb` is now **links only**: it
+  used to restate every answer in prose beside its `PUBIAS_NODE_TITLES` heading,
+  which the lit chart above says better and in the algorithm's own shape. The
+  titles survive as the link text, because two undifferentiated "change" links
+  would be a trap of their own.
+- **The chart is a progress indicator, drawn before the first answer (0.5.1).**
+  `output$pubias_flowchart` renders Figure 5 **above** the wizard, from the
+  first node onwards, unlit, and lights up node by node as answers arrive. One
+  question at a time answers "what am I being asked" but never answered "how
+  much is left", and a reviewer three questions in could not tell whether two
+  more were coming. The two surfaces therefore have different jobs: the wizard
+  is the only place anything is answered; the chart says where the reviewer is.
+  - `on_ids` comes from `step3_pubias_flow_ids()` (`R/step3_threshold.R`, pure
+    and unit-tested), **not** from `pma_flow_path_ids()`: the `flow_path` fact
+    exists only once `grade_meta()` has rated the domain, which is exactly when
+    a progress indicator has stopped being useful. It translates the wizard's
+    node keys (`q1` / `extra` / `q3` / `q4`) into the figure's ids, which are
+    a different vocabulary — `extra` is the dashed registry node, and the k
+    gate is the figure's `q2`, which the wizard never asks.
+  - Two answers stop the trail at a node rather than a leaf, because no leaf is
+    decided yet: `"egger"` hands Q3 to a p value the function does not have,
+    and `"no"` on the registry node is the app's own rate-down-1 rule, for
+    which the figure draws no leaf.
+  - `.domain_evaluation("Publication bias", flowchart = FALSE)` suppresses the
+    usual under-the-verdict copy, so the tab draws the figure once.
+  - The k gate is printed under the chart by `step3_pubias_k_line()`: the chart
+    can light that branch but cannot print the number it turned on.
+- **Structural constraints.** The three reference plots — funnel,
+  trim-and-fill, missing results (RoB-ME) — are a **statically declared
+  `tabsetPanel`** below the wizard, one panel at a time at full width, Funnel
+  first. Static is load-bearing: `imageOutput` and `DT::DTOutput` do not
+  re-bind cleanly inside a container a `renderUI` replaces, and a `tabsetPanel`
+  only toggles `display`, so the outputs are built once and survive every
+  switch. `pubias_missing_editor` keeps
+  `outputOptions(suspendWhenHidden = FALSE)`.
+  - The tabset is **not gated on a wizard node**. All three are computable the
+    moment `state$ma` exists and all three are reference material rather than
+    answers; gating them meant the funnel appeared only at `q3` and the RoB-ME
+    editor only at the result, so each was absent exactly when a reviewer might
+    want to check it against a different question. `output$pubias_show_funnel`
+    is deleted with the gate.
+  - `output$pubias_show_result` remains, gating `output$pubias_evaluation`
+    alone: the verdict is the wizard's conclusion, and printing it before the
+    wizard has run reports a rating of nothing.
 
 **Inconsistency asks one question, not three.** `ci_diff` and `threshold_side`
 are gone: `.auto_inconsistency()` derives Core GRADE 3's Steps 1 and 2, and the
@@ -992,12 +1029,14 @@ Publication bias — shows the decision tree it was judged by, **with the path t
 analysis actually took highlighted**. Indirectness has no flowchart; Core GRADE 5
 Table 2 is a gradient, and its `indir_subdomain_table` stays the visual.
 
-Two renderings of the same file, both through `pma_flowchart()` in `R/ui_helpers.R`:
+Three renderings of the same file, all through `pma_flowchart()` in
+`R/ui_helpers.R`:
 
 | where | `on_ids` | why |
 |---|---|---|
-| under the verdict, in `<details class="pma-flowchart-details" open>` | the path taken | it answers "why this judgment", so it is open by default — but a reviewer who does not want it can shut it |
+| under the verdict, in `<details class="pma-flowchart-details" open>` | the path taken, from the `flow_path` fact | it answers "why this judgment", so it is open by default — but a reviewer who does not want it can shut it |
 | inside the collapsed "How is this judged?" accordion | none | the plain diagram, as reference |
+| **above the Publication bias wizard**, always visible | the answers so far, from `step3_pubias_flow_ids()` | that tab asks one question at a time, so the chart is what says how much is left; it has to light up before any rating exists. The under-the-verdict copy is suppressed there (`flowchart = FALSE`) so the figure is drawn once |
 
 `pma_flowchart()` reads `_pmatools_inst/figures/<figkey>.svg` (staged path first, a
 local-development fallback second — the same shape `step1_data.R` uses for `extdata`,
