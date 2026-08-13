@@ -98,9 +98,14 @@ EDU_COPY <- list(
   # bodies: it was a recitation of what Core GRADE 6 ranks, and the reviewer
   # answers nothing with it.
   config_tab = list(
+    # The two presentations are an either/or (input$sof_presentation), so Core
+    # GRADE 6's recommendation to print them side by side is still out of
+    # reach. What the choice does NOT touch is the rating, and a reviewer
+    # picking between them here has every reason to think it might.
     continuous_departure = paste0(
-      "Only the responder proportion is offered, so Core GRADE 6's ",
-      "agreement check is unavailable; read magnitude cautiously."
+      "Offered as a choice, not side by side, so Core GRADE 6's agreement ",
+      "check is unavailable; read magnitude cautiously. Neither choice ",
+      "changes the rating."
     ),
     chinn_caveat = paste0(
       "Chinn's formula, not Core GRADE 6's per-instrument procedure. The two ",

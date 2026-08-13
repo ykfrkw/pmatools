@@ -99,9 +99,16 @@ state <- reactiveValues(
   display   = list(                # SoF display options
     per                = 1000,
     prediction         = FALSE,
-    convert_smd_to_or  = FALSE,
+    # The GUARDED responder-presentation boolean, written by step3_server()
+    # from input$sof_presentation only after sm and the proportion have been
+    # checked -- never a raw mirror of the radio. Named `convert` because it
+    # is not the radio; it is what reaches sof_table(convert_smd_to_or =).
+    convert            = FALSE,
     baseline_risk      = NULL,
-    threshold_label    = NULL
+    chinn_invert       = FALSE,
+    threshold_label    = NULL,
+    follow_up          = NULL,
+    unit               = NULL
   )
 )
 ```
@@ -455,7 +462,7 @@ Resulting judgment: {{judgment}}
 
 #### 3.4.5 Educational copy — Inconsistency
 
-> **How this is judged.** GRADE rates down for inconsistency when there are *important differences in effect across studies* AND those differences cannot be explained. The BMJ Core GRADE 3 flowchart asks three questions in sequence. **Step 1**: Are there important differences in point estimates AND limited overlap of confidence intervals? If no, do not rate down. If yes, continue. **Step 2**: Where do the point estimates fall relative to the **clinical decision threshold** (the MID)? If a clear majority sits on one side of the threshold, the direction of effect is consistent — do not rate down. If a substantial proportion fall on opposite sides, continue. **Step 3**: Can the opposite-sided difference be explained by a credible subgroup analysis (e.g., RCTs vs observational, adults vs children)? If yes, present the subgroups separately and do not rate down; if no, rate down for serious inconsistency. I² is shown as *supportive context only* — the decision is anchored in clinical judgment about whether the differences are important and whether the directions are consistent. (τ² and Q-test results are also displayed for transparency but never drive the judgment.) Reference: BMJ Core GRADE 3 (Guyatt et al., 2025).
+> **How this is judged.** GRADE rates down for inconsistency when there are *important differences in effect across studies* AND those differences cannot be explained. The BMJ Core GRADE 3 flowchart asks three questions in sequence. **Step 1**: Are there important differences in point estimates AND limited overlap of confidence intervals? If no, do not rate down. If yes, continue. **Step 2**: Where do the point estimates fall relative to the **clinical decision threshold**? If a clear majority sits on one side of the threshold, the direction of effect is consistent — do not rate down. If a substantial proportion fall on opposite sides, continue. **Step 3**: Can the opposite-sided difference be explained by a credible subgroup analysis (e.g., RCTs vs observational, adults vs children)? If yes, present the subgroups separately and do not rate down; if no, rate down for serious inconsistency. I² is shown as *supportive context only* — the decision is anchored in clinical judgment about whether the differences are important and whether the directions are consistent. (τ² and Q-test results are also displayed for transparency but never drive the judgment.) Reference: BMJ Core GRADE 3 (Guyatt et al., 2025).
 
 **Auto-evaluation result template:**
 
@@ -466,12 +473,12 @@ AUTO Step 1: I² = {{i2_pct}}%
   → {{"important differences detected (I² > 25%)" | "no important heterogeneity (I² ≤ 25%)"}}
 
 {{#if has_mid}}
-AUTO Step 2 (vs ±MID = ±{{mid}}):
+AUTO Step 2 (vs ±Threshold = ±{{threshold}}):
   Zone counts (k = {{k}}): above_mid = {{n_above}}, trivial = {{n_trivial}}, below_mid = {{n_below}}
   Largest one-side proportion = {{pct_one_side}}%
   → {{"majority on one side" | "opposite sides"}}
 {{else}}
-AUTO Step 2 (vs null = 0; MID not specified):
+AUTO Step 2 (vs null = 0; Threshold not specified):
   {{pct_positive}}% of point estimates above null
   → {{"majority on one side" | "opposite sides"}}
 {{/if}}
@@ -489,25 +496,23 @@ Resulting judgment: {{judgment}}
 
 **Note on auto vs manual asymmetry:** When auto Step 1 detects heterogeneity AND auto Step 2 sees majority on one side, the auto judgment is **"some"** (not "no"). This is because the auto Step 1 (I² > 25%) is a *statistical* proxy and cannot confirm that the differences are clinically important — supplying manual flowchart parameters lets you assert "no important difference" or "majority on one side" with clinical authority, yielding the BMJ-faithful "no" judgment.
 
-**Recommended input — single MID field (always shown, dynamically labeled):**
+**Recommended input — single decision-threshold field (always shown, dynamically labeled):**
 
-The label and default value adapt to the meta-analysis effect measure (`meta_obj$sm`). The Shiny app calls `pmatools::suggest_mid(state$ma)` to pre-fill:
+The threshold moved to the Configuration tab (§3.4.0) and the input is `threshold_cont` on the continuous branch, `threshold_abs` / `threshold_ratio` on the binary one. The label and default value adapt to the meta-analysis effect measure (`meta_obj$sm`). The Shiny app calls `pmatools::suggest_threshold(state$ma)` to pre-fill, and renders its `$source` as a badge so a pmatools convention is never presented as a Core GRADE number:
 
-| `sm` | Input label | Default | Help text |
-|---|---|---|---|
-| OR | "MID (as OR ratio, e.g., 1.25 = 25% relative odds change)" | 1.25 | "An OR of 1.25 vs 1.0 represents a 25% relative change in odds — a typical small but clinically meaningful effect." |
-| RR | "MID (as risk ratio, e.g., 1.20 = 20% relative risk change)" | 1.20 | "An RR of 1.20 vs 1.0 represents a 20% relative change in risk." |
-| HR | "MID (as hazard ratio)" | 1.20 | "An HR of 1.20 vs 1.0 represents a 20% relative change in hazard." |
-| RoM | "MID (as ratio of means, e.g., 1.10 = 10% ratio change)" | 1.10 | "A 10% ratio of means is a typical small clinically meaningful difference for continuous outcomes." |
-| SMD | "MID (in standardized units, e.g., 0.20 = Cohen's small)" | 0.20 | "Cohen's small effect size (0.20) is widely accepted as the smallest clinically meaningful SMD." |
-| MD | "MID (in outcome units, e.g., 3 PHQ-9 points)" | **0.20 × pooled SD = {{computed}}** | "Auto-suggested as 0.20 × pooled SD (Cohen's small in raw units). Replace with a published MID for your outcome if available." |
-| ARD | "MID (as absolute risk difference, e.g., 0.05 = 5%)" | 0.05 | "A 5% absolute risk difference is a typical small clinically meaningful effect." |
+| `sm` | Input label | Default | `$source` | Help text |
+|---|---|---|---|---|
+| OR | "Threshold (as OR ratio, e.g., 1.25 = 25% relative odds change)" | 1.25 | pmatools convention | "An OR of 1.25 vs 1.0 represents a 25% relative change in odds — a typical small but clinically meaningful effect." |
+| RR | "Threshold (as risk ratio, e.g., 1.20 = 20% relative risk change)" | 1.20 | pmatools convention | "An RR of 1.20 vs 1.0 represents a 20% relative change in risk." |
+| HR | "Threshold (as hazard ratio)" | 1.20 | pmatools convention | "An HR of 1.20 vs 1.0 represents a 20% relative change in hazard." |
+| RoM | "Threshold (as ratio of means, e.g., 1.10 = 10% ratio change)" | 1.10 | pmatools convention | "A 10% ratio of means is a typical small clinically meaningful difference for continuous outcomes." |
+| SMD | "Threshold (in standardized units, e.g., 0.20 = Cohen's small)" | 0.20 | **Core GRADE 6** | "Core GRADE 6's own threshold for a small and important effect, shown with the paper's own scepticism note about SMD variability." |
+| MD | "Threshold (in outcome units, e.g., 3 PHQ-9 points)" | **0.20 × pooled SD = {{computed}}** | pmatools convention | "Auto-suggested as 0.20 × pooled SD (Cohen's small in raw units). Replace with a published threshold for your outcome if available." |
+| ARD | "Threshold (as absolute risk difference, e.g., 0.05 = 5%)" | 0.05 | pmatools convention | "A 5% absolute risk difference is a typical small clinically meaningful effect." |
 
-Note below the input: "*This MID is shared with Imprecision below — enter once, used for both.* The default is a conventional value; please replace with a published or expert-derived MID for your specific outcome whenever possible."
+Note below the input: "*This threshold is shared with Risk of Bias, Inconsistency and Imprecision — enter once, used for all three.* The default is a conventional value; please replace with a published or expert-derived threshold for your specific outcome whenever possible."
 
-**Advanced (collapsed by default — for users who want to specify scale explicitly):**
-
-- `selectInput("mid_scale", "MID scale (advanced)", c("Auto-detect from effect measure" = "auto", "Already on TE scale (log for ratios)" = "te_scale", "Ratio scale (e.g., OR=1.25)" = "ratio", "Absolute risk difference" = "ard"), selected = "auto")`
+**Scale (binary branch only):** `radioButtons("threshold_mode", c("absolute", "relative"))` on the Configuration tab, with the absolute scale recommended and converted to the analysis scale at the control-group risk. The continuous branch has one box and no scale choice. `threshold_scale` is what `grade_meta()` receives; the app derives it rather than asking.
 
 **Manual flowchart inputs (BMJ-faithful path; collapsed by default):**
 
@@ -516,9 +521,9 @@ The BMJ flowchart can be driven manually for a fully clinically-informed judgmen
 - *Step 1: Are there important differences in point estimates AND limited overlap of confidence intervals?*
   - `selectInput("inconsistency_ci_diff", c("(use auto)" = "", "No" = "no", "Yes" = "yes"))`
   - Help: "This is a clinical-visual judgment. Look at the forest plot above: do the point estimates differ by a clinically meaningful amount, and do the CIs fail to overlap substantially?"
-- *Step 2: Where do the point estimates fall relative to the clinical decision threshold (MID)?*
+- *Step 2: Where do the point estimates fall relative to the clinical decision threshold?*
   - Visible only if Step 1 = "yes"
-  - `radioButtons("inconsistency_threshold_side", c("Majority on one side of MID" = "majority_one_side", "Substantial proportion on opposite sides" = "opposite_sides"))`
+  - `radioButtons("inconsistency_threshold_side", c("Majority on one side of the threshold" = "majority_one_side", "Substantial proportion on opposite sides" = "opposite_sides"))`
 - *Step 3: Is the opposite-sided difference explained by a credible subgroup analysis?*
   - Visible only if Step 2 = "opposite_sides"
   - `radioButtons("inconsistency_subgroup_explained", c("Yes" = "yes", "No" = "no"))`
@@ -553,13 +558,13 @@ State logic: `indirectness_reviewed <- reactive(input$indirectness_clicked >= 1)
 
 #### 3.4.7 Educational copy — Imprecision
 
-> **How this is judged.** Imprecision asks whether the **pooled estimate's 95% confidence interval** is narrow enough to support a clinical decision — distinct from Inconsistency, which asks how much true effects vary across studies. The algorithm checks two conditions: **(a)** does the pooled 95% CI cross the null value? and **(b)** is the **Optimal Information Size (OIS)** met? OIS is the sample size a single well-powered RCT would need to detect the **MID** (the same MID you specified for Inconsistency above — the values are linked). If both conditions are met (CI does not cross null AND OIS is reached), no downgrade. If only one fails, rate down 1 level. If both fail, rate down 2 levels. Reference: BMJ Core GRADE 4 (Guyatt et al., 2025).
+> **How this is judged.** Imprecision asks whether the **pooled estimate's 95% confidence interval** is narrow enough to support a clinical decision — distinct from Inconsistency, which asks how much true effects vary across studies. The algorithm checks two conditions: **(a)** does the pooled 95% CI cross the null value? and **(b)** is the **Optimal Information Size (OIS)** met? OIS is the sample size a single well-powered RCT would need to detect the **decision threshold** (the same threshold set on the Configuration tab and shared with Risk of Bias and Inconsistency — enter it once). If both conditions are met (CI does not cross null AND OIS is reached), no downgrade. If only one fails, rate down 1 level. If both fail, rate down 2 levels. Reference: BMJ Core GRADE 4 (Guyatt et al., 2025).
 
 **Auto-evaluation result template:**
 
 ```
 • 95% CI: {{ci}} — {{"crosses null" | "does not cross null"}}
-• MID: {{mid_value | "(not specified)"}}
+• Threshold: {{threshold_value | "(not specified)"}}
 • OIS target: {{ois_target}} {{"events" | "participants"}} (auto-computed); observed: {{ois_observed}} → {{"met" | "not met" | "not assessable"}}
 Resulting judgment: {{judgment}}
 ```
@@ -567,7 +572,10 @@ Resulting judgment: {{judgment}}
 **Override controls (collapsed by default):**
 
 - `numericInput("ois_p0", "Baseline (control) event rate for OIS", value = NA, min = 0, max = 1)` *(binary only)*
-- `numericInput("ois_sd", "Pooled SD for OIS", value = NA, min = 0)` *(continuous only)*
+- `numericInput("ois_sd", ...)` *(continuous only)*, rendered by `output$ois_sd_ui` and **prefilled from the data**, because `.calc_ois()` needs δ and σ on the same scale:
+  - **MD / RoM** — label "Pooled SD for OIS (auto from data)", value `compute_pooled_sd(state$ma)`. The threshold is on the raw outcome scale, so σ has to be too.
+  - **SMD** — label "SD for OIS (1: the SMD is already expressed in SD units, so the threshold above is standardized)", value `1`. An SMD threshold is *already* standardized; prefilling the raw pooled SD there inflated the target N by σ² and could flip Fig 4's large-effect path from `no` to `some_concerns`/`serious` through the "< 30% of OIS" rule.
+  - A value the reviewer types always wins, for every measure.
 - `numericInput("ois_events", "Override OIS — target events", value = NA, min = 0)` *(binary only)*
 - `numericInput("ois_n", "Override OIS — target N", value = NA, min = 0)` *(continuous only)*
 - `selectInput("imprecision_override", "Override Imprecision judgment", same options)`
@@ -608,11 +616,22 @@ Below the accordion, a `pma-card` with:
 #### 3.4.10 Display options card
 
 - `checkboxInput("prediction", "Show 95% prediction interval in Effect column")`
-- `checkboxInput("convert_smd_to_or", "Show as dichotomous outcome (Chinn's formula)")` *— SMD/MD outcomes only*
-- If `convert_smd_to_or` checked:
-  - `numericInput("baseline_risk", "Control event rate (proportion responding)", value = 0.30, min = 0.01, max = 0.99)`
-  - `textInput("threshold_label", "Threshold definition (free text)", placeholder = "e.g., ≥50% reduction in PHQ-9 from baseline")`
-  - Inline note: *"This is the proportion of control patients who would meet the threshold of clinical interest. Continuous effect sizes are statistically rigorous but hard for clinicians and patients to interpret. Showing 'X out of 1,000 patients respond' alongside the SMD often communicates the same evidence more accessibly."*
+- The responder-presentation controls left this card for the Configuration tab; see §3.4.10a. What remains here is a read-only echo (`output$display_options_config_note`) saying where they went.
+
+#### 3.4.10a Presentation of a continuous outcome — Configuration tab
+
+Rendered by `.responder_block()` (`R/step3_threshold.R`), **below** the Decision threshold section on the continuous branch of `output$threshold_panel`. The order is load-bearing: the threshold drives the rating, the presentation does not, and the old order — conversion first — read as though converting were a step on the way to a rating.
+
+- `radioButtons("sof_presentation", "How should the Summary of Findings table present this outcome?", c("The <sm> itself, on its own scale" = "effect", "The proportion of responders, converted with Chinn's formula (Core GRADE 6 option 2)" = "responder"), selected = "effect")` *— SMD/MD outcomes only; other measures get a note saying the conversion is undefined for them and no radio at all.*
+- **`"effect"` is the default.** The premise that a continuous outcome must be dichotomised before it can be rated is false here: `convert_smd_to_or` reaches `sof_table()` only, `grade_meta()` never sees it, and Imprecision is rated on the SMD/MD against `threshold_cont` either way. The Decision threshold section says so on screen. The conversion previously defaulted **on**, which read as the primary route.
+- If `sof_presentation == "responder"`:
+  - `numericInput("baseline_risk_chinn", "Proportion of control patients meeting the threshold of clinical interest", value = RESPONDER_P0_DEFAULT (0.20), min = 0.01, max = 0.99)`, gating Next until it is confirmed or replaced-with-a-rationale. The two `conditionalPanel`s compare against the **constant**, not the seed: what obliges a rationale is departing from the app convention.
+  - `textAreaInput("responder_p0_rationale", ...)` when the default is replaced; `checkboxInput("responder_p0_confirm", ...)` when it is not.
+  - `textInput("threshold_label", "Definition of the threshold of clinical interest (free text)")`
+  - `output$chinn_direction_echo` — `chinn_invert` is derived from the Step 2 direction answer, not asked again.
+- `output$responder_p0_badge` renders `confirmed` / `unconfirmed assumption` beside the section heading, and **nothing at all** on the `"effect"` route, where there is no assumption to confirm.
+- `input$sof_presentation` is registered in `PMA_OUTCOME_INPUT_IDS$configuration` (`R/ui_helpers.R`), so a change of outcome clears it. An id missing from that list is an id whose stale answer survives an outcome change.
+- `responder_mode()` in `step3_server()` is the single definition of "the responder route was chosen"; the Next gate, `sof_convert_args()` and the `state$display$convert` mirror all read it rather than the input.
 
 #### 3.4.11 Information design — what is open, what is collapsed, what was deleted
 
@@ -941,7 +960,7 @@ output$download_zip <- downloadHandler(
       include     = input$include,
       per         = state$display$per,
       prediction  = state$display$prediction,
-      convert_smd_to_or = state$display$convert_smd_to_or,
+      convert_smd_to_or = state$display$convert,
       baseline_risk     = state$display$baseline_risk,
       threshold_label   = state$display$threshold_label
     )
@@ -1253,27 +1272,30 @@ ui <- bslib::page_fluid(
 
 ## 5. Educational copy storage
 
-All American English copy lives in `R/educational_copy.R` as named lists for easy maintenance and translation later. Dynamic content (e.g., MID label per `sm`) is rendered by helpers that consume `EDU_COPY` plus runtime data.
+All American English copy lives in `R/educational_copy.R` as named lists for easy maintenance and translation later. Dynamic content (e.g., the threshold label per `sm`) is rendered by helpers that consume `EDU_COPY` plus runtime data.
 
-**MID input is rendered dynamically:**
+**The decision-threshold input is rendered dynamically:**
 
 ```r
-# In step3_grade.R
-mid_suggestion <- pmatools::suggest_mid(state$ma)   # NULL if sm unrecognized
-mid_label      <- EDU_COPY$mid_labels[[state$ma$sm]] %||% "Minimally important difference"
-mid_help       <- EDU_COPY$mid_help[[state$ma$sm]]   %||% "..."
+# In step3_grade.R, output$threshold_panel (Configuration tab)
+threshold_suggestion <- pmatools::suggest_threshold(state$ma)  # NULL if sm unrecognized
+threshold_label      <- EDU_COPY$threshold_labels[[state$ma$sm]] %||%
+                        "Threshold for clinical importance"
+threshold_help       <- EDU_COPY$threshold_help[[state$ma$sm]]   %||% "..."
 
 ui <- numericInput(
-  inputId = "mid",
-  label   = mid_label,
-  value   = mid_suggestion$mid_user %||% NA,
+  inputId = "threshold_cont",                # continuous branch
+  label   = threshold_label,
+  value   = threshold_suggestion$threshold %||% NA,
   min     = 0,
   step    = 0.01
 )
-# state$grade_args$mid_scale <- mid_suggestion$mid_scale  (default "auto")
+# threshold_suggestion$source drives the badge: "Core GRADE 6" vs
+# "pmatools convention, not Core GRADE". threshold_scale is derived from the
+# branch and from input$threshold_mode, never asked for directly.
 ```
 
-The user's edit replaces the default; `state$grade_args$mid` tracks the live value.
+The user's edit replaces the default; the value is held in a `reactiveVal` (not read straight off the input) so a panel rebuild cannot discard it, and `state$grade_args$threshold` tracks the live value.
 
 
 
@@ -1310,23 +1332,31 @@ EDU_COPY <- list(
     PI   = "Prediction Interval: the range of effects expected in a future similar study...",
     Egger = "Egger's regression test for funnel plot asymmetry..."
   ),
-  mid_labels = list(
-    OR  = "MID (as OR ratio, e.g., 1.25 = 25% relative odds change)",
-    RR  = "MID (as risk ratio, e.g., 1.20 = 20% relative risk change)",
-    HR  = "MID (as hazard ratio, e.g., 1.20)",
-    RoM = "MID (as ratio of means, e.g., 1.10)",
-    SMD = "MID (in standardized units, e.g., 0.20 = Cohen's small)",
-    MD  = "MID (in outcome units; default = 0.20 × pooled SD)",
-    ARD = "MID (as absolute risk difference, e.g., 0.05 = 5%)"
+  # Named for the decision THRESHOLD, which is what the app asks for and what
+  # grade_meta() takes. "MID" survives only where a source quotes it.
+  threshold_labels = list(
+    OR  = "Threshold (as OR ratio, e.g., 1.25 = 25% relative odds change)",
+    RR  = "Threshold (as risk ratio, e.g., 1.20 = 20% relative risk change)",
+    HR  = "Threshold (as hazard ratio, e.g., 1.20)",
+    RoM = "Threshold (as ratio of means, e.g., 1.10)",
+    SMD = "Threshold (in standardized units, e.g., 0.20 = Cohen's small)",
+    MD  = "Threshold (in outcome units; default = 0.20 × pooled SD)",
+    ARD = "Threshold (as absolute risk difference, e.g., 0.05 = 5%)"
   ),
-  mid_help = list(
+  threshold_help = list(
     OR  = "An OR of 1.25 vs 1.0 represents a 25% relative change in odds — a typical small but clinically meaningful effect.",
     RR  = "An RR of 1.20 vs 1.0 represents a 20% relative change in risk.",
     HR  = "An HR of 1.20 represents a 20% relative change in hazard.",
     RoM = "A 10% ratio of means is a typical small clinically meaningful difference for continuous outcomes.",
     SMD = "Cohen's small effect size (0.20) is widely accepted as the smallest clinically meaningful SMD.",
-    MD  = "Auto-suggested as 0.20 × pooled SD (Cohen's small in raw units). Replace with a published MID for your outcome whenever possible.",
+    MD  = "Auto-suggested as 0.20 × pooled SD (Cohen's small in raw units). Replace with a published threshold for your outcome whenever possible.",
     ARD = "A 5% absolute risk difference is a typical small clinically meaningful effect."
+  ),
+  config_tab = list(
+    continuous_intro     = "...",   # Core GRADE 6's three presentations
+    continuous_departure = "...",   # the two are offered as a choice, not together
+    chinn_caveat         = "...",   # Chinn's formula is not Core GRADE 6 option 2
+    responder_default    = "..."    # the 20% starting value is an app convention
   )
 )
 ```
@@ -1357,14 +1387,15 @@ input$subgroup / input$run_ma (action)     │     ↓ (on "Run analysis")    �
                                                           ↓
                                            ┌──────────────────────────────┐
 input$rob_override / rob_dom_threshold /   │ Step 3 (debounced 500ms)     │
-input$rob_some_concerns / small_values /  │   pmatools::grade_meta()     │
-input$mid /                                 │     ↓                         │
-input$inconsistency_override /              │   state$grade ← pmatools obj │
-input$indirectness /                        │     ↓                         │
-input$imprecision_override /                │   pmatools::sof_table()      │
-input$pubias_* / etc.                       │     ↓ (preview)              │
-input$per / prediction / convert_smd_to_or  │   htmltools_value(ft)        │
-input$baseline_risk / threshold_label       │                              │
+input$rob_some_concerns / small_values /   │   pmatools::grade_meta()     │
+input$threshold_cont / threshold_abs /      │     ↓                         │
+input$threshold_ratio / threshold_mode /    │   state$grade ← pmatools obj │
+input$inconsistency_override /              │     ↓                         │
+input$indirectness /                        │   pmatools::sof_table()      │
+input$imprecision_override /                │     ↓ (preview)              │
+input$pubias_* / etc.                       │   htmltools_value(ft)        │
+input$per / prediction / sof_presentation / │                              │
+input$baseline_risk_chinn / threshold_label │                              │
                                            └──────────────────────────────┘
                                                           ↓
                                            ┌──────────────────────────────┐
@@ -1417,7 +1448,7 @@ Manual smoke test at minimum:
 
 1. Step 1: load sample → mapping shows green-checked → preview renders → Next
 2. Step 2: defaults → Run analysis → forest renders → funnel renders with Egger annotation → result text shows pooled OR
-3. Step 3: open each accordion → algorithm explanation reads naturally → auto judgment matches expected for sample data → set MID = 0.20 → see zone counts update → click Indirectness "No" → banner clears
+3. Step 3: open each accordion → algorithm explanation reads naturally → auto judgment matches expected for sample data → set the threshold = 0.20 → see zone counts update → click Indirectness "No" → banner clears
 4. Step 4: bundle name → Download ZIP → unzip → 9 files present → open analysis.R in R → `source("analysis.R")` reproduces same TE.random
 
 Optional automated: `shinytest2::record_test()` for Step 1 → Step 4 happy path.

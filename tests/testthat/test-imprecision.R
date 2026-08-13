@@ -558,6 +558,54 @@ test_that("a supplied ois_sd still wins and is not reported as derived", {
                      fixed = TRUE))
 })
 
+# An SMD analysis carrying real arm-level SDs is the case the metagen fixtures
+# elsewhere in this file cannot reach: they have no sd.e/sd.c, so
+# compute_pooled_sd() fails and the unit mismatch never surfaced. The SMD is
+# already in SD units, so sigma is 1 and the OIS is the textbook
+# 2(z_a+z_b)^2/delta^2 per arm -- with the raw pooled SD of about 4 it was
+# inflated by roughly 17x, enough to flip Fig 4's large-effect path.
+test_that("an SMD outcome uses sigma = 1 rather than the raw pooled SD", {
+  m <- continuous_meta()
+  m$sm <- "SMD"
+  r <- assess_imprecision(m, outcome_type = "absolute",
+                          threshold_internal = 0.20)
+  expect_match(r$notes, "sigma=1.000", fixed = TRUE)
+  expect_match(r$notes, "OIS: delta=0.200", fixed = TRUE)
+  expect_match(r$notes, "the SMD is expressed in within-study SD units",
+               fixed = TRUE)
+  expect_false(grepl("derived from the pooled within-study SD", r$notes,
+                     fixed = TRUE))
+
+  n_arm   <- 2 * (stats::qnorm(0.975) + stats::qnorm(0.80))^2 / 0.20^2
+  total_n <- ceiling(2 * n_arm)
+  expect_equal(ceiling(n_arm), 393)
+  expect_equal(total_n, 785)
+  expect_match(r$notes, sprintf("target N=%d", total_n), fixed = TRUE)
+
+  f <- attr(r, "facts")
+  expect_equal(f$numeric[f$key == "ois_sd_source"], 1, tolerance = 1e-8)
+})
+
+test_that("an MD outcome still derives sigma from the pooled SD", {
+  m <- continuous_meta()
+  r <- assess_imprecision(m, outcome_type = "absolute",
+                          threshold_internal = 0.20)
+  sd_pooled <- compute_pooled_sd(m)
+  expect_gt(sd_pooled, 1)
+  expect_match(r$notes, sprintf("sigma=%.3f", sd_pooled), fixed = TRUE)
+  expect_match(r$notes, "derived from the pooled within-study SD", fixed = TRUE)
+})
+
+test_that("a supplied ois_sd still wins over the SMD's sigma = 1", {
+  m <- continuous_meta()
+  m$sm <- "SMD"
+  r <- assess_imprecision(m, outcome_type = "absolute",
+                          threshold_internal = 0.20, ois_sd = 2)
+  expect_match(r$notes, "sigma=2.000", fixed = TRUE)
+  expect_false(grepl("the SMD is expressed in within-study SD units", r$notes,
+                     fixed = TRUE))
+})
+
 test_that("'OIS could not be computed' names the input that was missing", {
   # No MID, so ois_delta cannot be derived and the pooled SD alone is useless.
   m <- meta::metagen(TE = c(1.0, 1.1, 0.9), seTE = c(0.1, 0.1, 0.1),

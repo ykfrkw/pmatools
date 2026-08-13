@@ -390,11 +390,13 @@ server <- function(input, output, session) {
     state$display$prediction      <- isTRUE(input$prediction)
     state$display$threshold_label <- input$threshold_label
     # convert / baseline_risk / chinn_invert are written by step3_server()
-    # instead of being read straight off input$ here. sof_table() aborts when
-    # convert_smd_to_or = TRUE and the summary measure or the control-group
+    # instead of being read straight off input$ here. The reviewer's choice
+    # arrives as input$sof_presentation, but sof_table() aborts when the
+    # responder route is taken and the summary measure or the control-group
     # proportion does not support the conversion, and Step 3 is where those
-    # preconditions are known; chinn_invert has no widget at all, being
-    # derived from the Step 2 outcome-direction answer.
+    # preconditions are known - so state$display$convert is the GUARDED
+    # boolean, not a mirror of the radio. chinn_invert has no widget at all,
+    # being derived from the Step 2 outcome-direction answer.
     state$display$other_text      <- input$other_text
     state$display$other_downgrade <- {
       v <- suppressWarnings(as.integer(input$other_downgrade %||% "0"))

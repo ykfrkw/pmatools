@@ -713,6 +713,12 @@ RESPONDER_P0_DEFAULT <- 0.20
 # (EDU_COPY$config_tab$continuous_intro) is not, because a reviewer answered
 # nothing with it.
 #
+# The two presentations are offered as an either/or (input$sof_presentation),
+# defaulting to the effect itself. NEITHER changes the certainty rating: the
+# conversion reaches sof_table() and nothing else, while Imprecision is rated
+# on the SMD/MD against the threshold set in the section rendered just above
+# this block.
+#
 # `p0` is the seed for the proportion box, passed in by the caller from the
 # reactiveVal that owns it - the widget must not re-assert the constant on
 # every rebuild, or a proportion the reviewer replaced and justified is thrown
@@ -726,12 +732,16 @@ RESPONDER_P0_DEFAULT <- 0.20
   if (!convertible) {
     return(.config_section(
       "Presentation of this outcome",
+      # continuous_departure describes the CHOICE between the two
+      # presentations, and there is no choice on this branch. The italic note
+      # below states this measure's own departure, and states it exactly.
       htmltools::p(
         class = "pma-card-subtitle", style = "font-style: italic;",
         sprintf(paste0(
           "The responder conversion is defined on the standardized mean ",
           "difference only, so the Summary of Findings table reports the %s ",
-          "itself."), sm))
+          "itself, and the certainty rating reads the decision threshold ",
+          "above either way."), sm))
     ))
   }
   # The badge is its own output on purpose: if this renderUI depended on
@@ -739,16 +749,26 @@ RESPONDER_P0_DEFAULT <- 0.20
   # rebuild the panel and reset the very widget being used.
   .config_section(
     htmltools::tagList(
-      "Proportion of control patients meeting the threshold",
+      "Presentation of this outcome",
       shiny::uiOutput("responder_p0_badge", inline = TRUE)),
     .config_note(EDU_COPY$config_tab$continuous_departure),
     .config_note(EDU_COPY$config_tab$chinn_caveat),
-    shiny::checkboxInput("convert_smd_to_or",
-      paste0("Present this outcome as a proportion of responders ",
-             "(recommended; Core GRADE 6 option 2)"),
-      value = TRUE),
+    # A two-way radio rather than a tick-box, and defaulting to the effect
+    # itself. The conversion used to be on by default, which read as though
+    # the rating REQUIRED a binary presentation. It does not: grade_meta()
+    # never sees the conversion, Imprecision is rated on the SMD/MD against
+    # the threshold below either way, and this choice only reaches
+    # sof_table(). Presenting the two as an explicit either/or says so.
+    shiny::radioButtons("sof_presentation",
+      "How should the Summary of Findings table present this outcome?",
+      choices = stats::setNames(
+        c("effect", "responder"),
+        c(sprintf("The %s itself, on its own scale", sm),
+          paste0("The proportion of responders, converted with Chinn's ",
+                 "formula (Core GRADE 6 option 2)"))),
+      selected = "effect"),
     shiny::conditionalPanel(
-      "input.convert_smd_to_or",
+      "input.sof_presentation == 'responder'",
       shiny::numericInput("baseline_risk_chinn",
         paste0("Proportion of control patients meeting the threshold of ",
                "clinical interest"),
