@@ -170,11 +170,12 @@
 # tests/testthat/test-flowchart-nodes.R asserts that every id here is present
 # in the SVG and that no emitted path names an id that is not here. Adding a
 # branch without drawing it therefore fails the build.
+#
+# There is no entry node. Fig 2 as pmatools draws it opens at the dominance
+# question, so the "no high risk of bias study at all" case is routed through
+# it rather than around it -- see the n_high == 0 return below for why that is
+# the same decision and not a convenient fiction.
 .ROB_FIG2_NODE_IDS <- c(
-  "pma-rob-node-anyhigh",
-  "pma-rob-edge-anyhigh-no",
-  "pma-rob-leaf-nohigh",
-  "pma-rob-edge-anyhigh-yes",
   "pma-rob-node-dominance",
   "pma-rob-edge-dominance-yes",
   "pma-rob-node-direction",
@@ -691,6 +692,13 @@ assess_rob <- function(rob, meta_obj,
   }
 
   # If no high-RoB studies at all, no possibility of bias-driven inflation.
+  #
+  # The path walks the ordinary undominated route rather than a branch of its
+  # own, and that is exact rather than convenient: with no high-RoB study the
+  # dominance share is 0, which is below any threshold in (0, 1], and "analyse
+  # all studies" is the right answer when there is nothing to exclude. Every
+  # id below is a node the reader can see, so the picture lights up instead of
+  # showing an unlit chart with no explanation.
   if (n_high == 0) {
     return(.rob_row(make_domain_row(
       domain   = "Risk of bias",
@@ -701,8 +709,9 @@ assess_rob <- function(rob, meta_obj,
         ". -> Do not rate down. | ", tbl_note
       ),
       facts    = .facts(f_high, .flow_path_fact(c(
-        "pma-rob-node-anyhigh", "pma-rob-edge-anyhigh-no",
-        "pma-rob-leaf-nohigh")))
+        "pma-rob-node-dominance", "pma-rob-edge-dominance-no",
+        "pma-rob-node-appreciable", "pma-rob-edge-appreciable-no",
+        "pma-rob-leaf-all")))
     ), analysis_set = "all", high_idx = high_idx))
   }
 
@@ -870,7 +879,6 @@ assess_rob <- function(rob, meta_obj,
       ),
       facts    = .facts(f_high, f_weight, f_shift, f_branch,
                         .flow_path_fact(c(
-                          "pma-rob-node-anyhigh", "pma-rob-edge-anyhigh-yes",
                           "pma-rob-node-dominance",
                           "pma-rob-edge-dominance-yes",
                           "pma-rob-node-direction",
@@ -939,8 +947,7 @@ assess_rob <- function(rob, meta_obj,
   # through the appreciable node's "no" edge rather than the magnitude node's
   # "similar" edge is what keeps the picture honest: the magnitude question
   # was never asked.
-  flow_ids <- c("pma-rob-node-anyhigh", "pma-rob-edge-anyhigh-yes",
-                "pma-rob-node-dominance", "pma-rob-edge-dominance-no",
+  flow_ids <- c("pma-rob-node-dominance", "pma-rob-edge-dominance-no",
                 "pma-rob-node-appreciable")
   flow_ids <- if (!assessable) {
     c(flow_ids, "pma-rob-edge-appreciable-no", "pma-rob-leaf-all")

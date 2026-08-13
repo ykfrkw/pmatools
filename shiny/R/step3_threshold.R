@@ -235,13 +235,17 @@ step3_pubias_statistical <- function(k) {
 }
 
 # The one-line automatic step the breadcrumb shows in place of a Q2 screen.
+# Names the step rather than numbering it: the wizard prints no question
+# numbers, because the chart beside it puts a pmatools node between Fig 5's
+# Q1 and Q2 and the numbering matched neither.
 step3_pubias_k_line <- function(k) {
   k <- suppressWarnings(as.numeric(k))
   if (length(k) != 1L || is.na(k)) k <- 0
   if (step3_pubias_statistical(k)) {
-    sprintf("Q2 - k = %g >= 10, statistical route (funnel / Egger)", k)
+    sprintf("Statistical analysis feasible - k = %g >= 10, funnel / Egger", k)
   } else {
-    sprintf("Q2 - k = %g < 10, registry route (Egger would be unreliable)", k)
+    sprintf("Statistical analysis not feasible - k = %g < 10, registry route",
+            k)
   }
 }
 

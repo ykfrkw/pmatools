@@ -117,25 +117,61 @@ test_that("inconsistency domain is auto-computed", {
   expect_true(incon_row$judgment %in% c("no", "some", "serious", "very_serious"))
 })
 
-test_that("high I2 (opposite-sided TEs) rates down one level (auto)", {
-  # Updated (v0.5): the auto opposite-sides path used to return "serious"
-  # (-2). Core GRADE 3 declines to endorse a two-level inconsistency downgrade,
-  # so automated judgments are capped at -1.
+test_that("high I2 (opposite-sided TEs) rates down two levels (auto)", {
+  # Updated (v0.5.1): the -1 cap v0.5.0 imposed here is gone. These three
+  # studies put a substantial share of estimates on each side of the null with
+  # no subgroup to explain it, so the direction of effect is unresolved and
+  # the domain rates down two levels. The note has to declare the departure
+  # from Core GRADE 3, which describes no two-level inconsistency downgrade.
   m <- make_metabin_high_i2()
   g <- grade_meta(m, threshold_type = "null")
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  expect_equal(incon_row$judgment, "some_concerns")
-  expect_equal(incon_row$downgrade, -1L)
-  expect_match(incon_row$notes, "capped at one level", fixed = TRUE)
-})
-
-test_that("inconsistency can still reach -2 through the scalar override", {
-  m <- make_metabin_high_i2()
-  g <- grade_meta(m, threshold_type = "null", inconsistency = "serious",
-                  inconsistency_rationale = "Unexplained opposite-direction effects")
-  incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_equal(incon_row$judgment, "serious")
   expect_equal(incon_row$downgrade, -2L)
+  expect_match(incon_row$notes, "This departs from Core GRADE 3", fixed = TRUE)
+  expect_false(grepl("capped at one level", incon_row$notes, fixed = TRUE))
+})
+
+test_that("the extra inconsistency level costs exactly one certainty band", {
+  # The point of pinning the overall verdict as well as the domain: the -2
+  # must move the rating by one level and change nothing else. On this
+  # fixture Imprecision rates down one and no other domain rates down, so
+  # High (4) - 2 - 1 = 1 = Very Low. Under the v0.5.0 cap the same fixture
+  # scored 2 = Low, which is what the scalar override below reproduces.
+  m <- make_metabin_high_i2()
+  g <- grade_meta(m, threshold_type = "null")
+
+  downgrades <- stats::setNames(g$domain_assessments$downgrade,
+                                g$domain_assessments$domain)
+  expect_equal(unname(downgrades[["Inconsistency"]]), -2L)
+  expect_equal(unname(downgrades[["Imprecision"]]), -1L)
+  expect_equal(sum(downgrades[setdiff(names(downgrades),
+                                      c("Inconsistency", "Imprecision"))]), 0)
+
+  expect_equal(g$starting_quality, "High")
+  expect_equal(g$certainty_score, 1)
+  expect_equal(g$certainty, "Very Low")
+
+  # Same object, same domains, inconsistency forced back to -1: one band up
+  # and nothing else moves.
+  g1 <- grade_meta(m, threshold_type = "null",
+                   inconsistency = "some_concerns",
+                   inconsistency_rationale = "Pinning the pre-0.5.1 one level")
+  expect_equal(g1$certainty_score, 2)
+  expect_equal(g1$certainty, "Low")
+})
+
+test_that("the scalar override still sets inconsistency independently", {
+  # It used to be the ONLY route to -2 in this domain; the automated
+  # opposite-sides branch now reaches it too, so what this pins is that an
+  # explicit judgment still wins over the flowchart.
+  m <- make_metabin_high_i2()
+  g <- grade_meta(m, threshold_type = "null", inconsistency = "no",
+                  inconsistency_rationale = "Subgroups reported separately")
+  incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
+  expect_equal(incon_row$judgment, "no")
+  expect_equal(incon_row$downgrade, 0)
+  expect_false(incon_row$auto)
 })
 
 test_that("inconsistency flowchart: ci_diff = no → do not rate down", {
@@ -146,16 +182,18 @@ test_that("inconsistency flowchart: ci_diff = no → do not rate down", {
   expect_false(incon_row$auto)
 })
 
-test_that("inconsistency flowchart: opposite_sides + no subgroup → rate down 1", {
-  # Updated (v0.5): capped at -1 per Core GRADE 3 (see above).
+test_that("inconsistency flowchart: opposite_sides + no subgroup → rate down 2", {
+  # Updated (v0.5.1): the manual flowchart answers the same three questions as
+  # the automated path, so it must reach the same leaf and the same -2.
   m <- make_metabin()
   g <- grade_meta(m,
     inconsistency_ci_diff            = "yes",
     inconsistency_threshold_side     = "opposite_sides",
     inconsistency_subgroup_explained = "no", threshold_type = "null")
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  expect_equal(incon_row$judgment, "some_concerns")
-  expect_match(incon_row$notes, "capped at one level", fixed = TRUE)
+  expect_equal(incon_row$judgment, "serious")
+  expect_equal(incon_row$downgrade, -2L)
+  expect_match(incon_row$notes, "This departs from Core GRADE 3", fixed = TRUE)
 })
 
 test_that("inconsistency flowchart: majority_one_side → do not rate down", {

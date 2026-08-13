@@ -86,7 +86,7 @@ test_that("a missing figure yields a sentence, not an error", {
 
 test_that("the figure is inlined and the path lands on the wrapper", {
   skip_if(is.na(.fig_dir), "no figures directory in this checkout")
-  ids  <- c("pma-rob-node-anyhigh", "pma-rob-edge-anyhigh-yes")
+  ids  <- c("pma-rob-node-dominance", "pma-rob-edge-dominance-yes")
   html <- .html(pma_flowchart("rob", on_ids = ids,
                               caption = "Implemented by assess_rob().",
                               dir = .fig_dir))
@@ -97,7 +97,7 @@ test_that("the figure is inlined and the path lands on the wrapper", {
   expect_false(grepl("<img", html, fixed = TRUE))
   # The contract with www/flowchart.js, in one attribute.
   expect_match(html,
-               'data-pma-path="pma-rob-node-anyhigh pma-rob-edge-anyhigh-yes"',
+               'data-pma-path="pma-rob-node-dominance pma-rob-edge-dominance-yes"',
                fixed = TRUE)
   expect_match(html, "Implemented by assess_rob\\(\\)")
 })

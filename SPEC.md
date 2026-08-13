@@ -554,7 +554,7 @@ Step 2 surrogate (3-zone tally, identical shape with and without a threshold):
   pct_each_side <- min(n_above, n_below) / k
 
   if (pct_max_zone  >= ZONE_MAJORITY)  → "majority_one_side"    → "no"
-  else if (pct_each_side >= OPPOSITE_EACH) → "opposite_substantial" → "some_concerns"
+  else if (pct_each_side >= OPPOSITE_EACH) → "opposite_substantial" → "serious"
   else                                  → "heterogeneous"       → "some_concerns"
 
   ZONE_MAJORITY = 0.80   # CINeMA (Nikolakopoulou 2020); Core GRADE 3 Fig 2
@@ -580,10 +580,12 @@ Step 3:
 |---|---|---|
 | ci_diff_yes = FALSE | `"no"` | `"no"` (same) |
 | ci_diff_yes & majority_one_side | `"no"` | `"no"` (same) |
-| ci_diff_yes & opposite_substantial | `"some_concerns"` | `"some_concerns"` (same, modulo Step 3) |
+| ci_diff_yes & opposite_substantial | `"serious"` | `"serious"` (same, modulo Step 3) |
 | ci_diff_yes & heterogeneous | `"some_concerns"` | — (no manual counterpart) |
 
-Every automated and flowchart path is capped at `"some_concerns"` (−1): Core GRADE 3 declines to endorse a two-level inconsistency downgrade. `"serious"` (−2) is reachable only through the scalar `inconsistency` override, which requires `inconsistency_rationale`.
+**The opposite-sided branch rates down two levels, and this departs from the source.** Core GRADE 3 (p5–6) says a compelling reason to rate down twice for inconsistency is "sufficiently unusual that it need not concern users of Core GRADE", and v0.5.0 read that as a cap. pmatools no longer does. The branch is not "studies disagree by more than the eye likes"; it is the narrow case where a substantial share of estimates sits **above** the chosen threshold and a substantial share sits **below** it, and no credible subgroup explains the split — the reviewer cannot say which direction the intervention works in. One level would leave a body of evidence at Moderate while the sign of the effect is unresolved, which overstates it. Core GRADE 3 calls the case unusual rather than impossible, and pmatools' 20%-each-side gate is exactly what makes it unusual: the ordinary disagreements land on `heterogeneous`, which still rates down one.
+
+`"heterogeneous"` (a scattered tally with no substantial opposite mass) stays at `"some_concerns"` (−1), and so does every risk-of-bias path — the cap that was removed here was never a general rule.
 
 **Notes content (all signals shown for transparency):**
 
@@ -596,7 +598,7 @@ AUTO Step 2 ({{threshold_label}}): zone counts (k = {{k}}): above_threshold = {{
   + the zone-cut-off caveat (80% = CINeMA, 20% = pmatools convention)
 {{#if opposite_substantial}}
   + "Supply inconsistency_subgroup_explained = 'yes' to override" + the ICEMAN caveat
-  + the −1 cap note
+  + the two-level departure note (.INCONSISTENCY_TWO_LEVEL_NOTE)
 {{/if}}
 {{/if}}
 | I2 = {{i2_pct}}%, tau2 = {{tau2}}, Q p = {{q_p}} (supplementary; not the primary criterion)
@@ -1392,7 +1394,7 @@ pct_each_side <- min(n_above, n_below)  / k
 if (pct_max_zone >= 0.80) {                    # ZONE_MAJORITY (CINeMA)
   threshold_side <- "majority_one_side";    judgment <- "no"
 } else if (pct_each_side >= 0.20) {            # OPPOSITE_EACH (pmatools)
-  threshold_side <- "opposite_substantial"; judgment <- "some_concerns"
+  threshold_side <- "opposite_substantial"; judgment <- "serious"
 } else {
   threshold_side <- "heterogeneous";        judgment <- "some_concerns"
 }
@@ -1406,17 +1408,18 @@ if (threshold_side == "opposite_substantial") {
                     credible subgroup → do not rate down; present subgroup
                     results separately." + ICEMAN caveat
   }
-  # "no" or unanswered: judgment stays "some_concerns" (−1).
+  # "no" or unanswered: judgment stays "serious" (−2).
 }
 # Notes carry: the I² surrogate caveat, the zone-cut-off provenance caveat,
-# and (for opposite_substantial) the ICEMAN subgroup caveat and the −1 cap.
+# and (for opposite_substantial) the ICEMAN subgroup caveat and the note
+# declaring the two-level departure from Core GRADE 3.
 ```
 
 **AUTO Step 3 (v0.5.1, behaviour change).** `inconsistency_subgroup_explained` now reaches the automated path. Before v0.5.1 the automated opposite-sides note advised the reviewer to supply it, and doing so switched the domain onto Path B — which then aborted unless `inconsistency_ci_diff` **and** `inconsistency_threshold_side` were supplied too. The advice was therefore a no-op, and this closes that gap rather than adding a new judgment route:
 
 - `"yes"` → `"no"` (do not rate down), `auto = TRUE`, with `.INCONSISTENCY_SUBGROUP_CAVEAT`;
-- `"no"` → `"some_concerns"`, `auto = TRUE`, note says the subgroup did not explain it;
-- unanswered → `"some_concerns"`, unchanged from before, note points at the argument.
+- `"no"` → `"serious"`, `auto = TRUE`, note says the subgroup did not explain it;
+- unanswered → `"serious"`, note points at the argument.
 
 It is read **only** on the `opposite_substantial` branch: on `majority_one_side` and `heterogeneous` Core GRADE 3 never reaches Step 3, so an answer there changes nothing. The value is validated (`"yes"` / `"no"`) on both paths.
 
@@ -1435,14 +1438,14 @@ It is read **only** on the `opposite_substantial` branch: on `majority_one_side`
 | Manual | ci_diff = "no" | — | — | **No** |
 | Manual | ci_diff = "yes" | majority_one_side | — | **No** |
 | Manual | ci_diff = "yes" | opposite_sides | yes | **No** + note |
-| Manual | ci_diff = "yes" | opposite_sides | no | **some_concerns** *(capped at −1)* |
+| Manual | ci_diff = "yes" | opposite_sides | no | **serious** (−2) |
 | Auto | I² ≤ 30% | — | — | **No** |
 | Auto | I² > 30% | majority_one_side (max zone ≥ 80%) | not reached | **No** |
 | Auto | I² > 30% | opposite_substantial (≥ 20% each side) | yes | **No** + note *(v0.5.1)* |
-| Auto | I² > 30% | opposite_substantial (≥ 20% each side) | no / unanswered | **some_concerns** |
-| Auto | I² > 30% | heterogeneous (neither) | not reached | **some_concerns** |
+| Auto | I² > 30% | opposite_substantial (≥ 20% each side) | no / unanswered | **serious** (−2) |
+| Auto | I² > 30% | heterogeneous (neither) | not reached | **some_concerns** (−1) |
 
-`"serious"` (−2) for this domain is reachable only through the scalar `inconsistency` override.
+The two `serious` rows are the deliberate departure from Core GRADE 3 described above; they are the only automated route to −2 in this domain. Everything else stops at −1, and the scalar `inconsistency` override (with `inconsistency_rationale`) remains available for judgments the flowchart does not reach.
 
 ### 5.3 Chinn's formula (SMD ↔ OR)
 
@@ -1670,6 +1673,27 @@ source does not, the Fig 5 chart carries a pmatools node that is not one of Figu
 four, and the Inconsistency edges are labelled with pmatools' numeric surrogates
 (I² > 30%, the 0.80 / 0.20 zone shares) which Core GRADE declines to quantify. Each
 figure says so in its `<desc>` and names the source figure in its caption.
+
+**A chart draws decisions, not commentary (v0.5.1).** Three prunings follow from that:
+
+- The Risk-of-Bias chart **starts at the dominance node**. It used to open with "Any
+  study at high risk of bias?", whose "no" branch is not a decision — with no high-risk
+  study the dominance share is 0, which is below the gate, and there is nothing to
+  exclude. That case now routes through the surviving chart
+  (`dominance → dominance-no → appreciable → appreciable-no → leaf-all`), which is where
+  it always belonged, so `.ROB_FIG2_NODE_IDS` no longer carries
+  `pma-rob-node-anyhigh`, `pma-rob-leaf-nohigh` or the two `anyhigh` edges.
+- The Publication-bias chart's questions are **unnumbered**. The Q1–Q4 labels came from
+  Core GRADE 4 Fig 5, but the chart interleaves a pmatools node between Q1 and Q2, so
+  the numbering on screen described neither the source nor the route. The wizard
+  headings and `PUBIAS_NODE_TITLES` in the app dropped their prefixes with it. The
+  `"Q1:"`–`"Q4:"` prefixes inside the domain **notes** stay: those travel into
+  `evidence_profile()` and the `.docx`, where they are the ordered machine-readable
+  record of the assessment and no figure is present to disagree with them.
+- The Publication-bias chart drops its two "qualitative assessment required" leaves.
+  Both were reached with judgment `"no"`, so they are drawn as the `nodown` leaves they
+  are; the qualitative caveat is carried by the note and the `rlang::warn()`, which is
+  where a reader can act on it.
 
 **Where they live.** `inst/figures/<figkey>.svg` is canonical, with `<figkey>` one of
 `rob`, `incon`, `impre`, `pubias`. `man/figures/` carries byte-identical copies so

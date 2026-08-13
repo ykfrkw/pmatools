@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 476" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="incon-title incon-desc">
   <title id="incon-title">Inconsistency: the Core GRADE 3 Figure 2 decision as pmatools implements it</title>
-  <desc id="incon-desc">Flowchart with three sequential steps. Step 1 asks whether there are important differences in point estimates and limited overlap of confidence intervals; pmatools automates this with an I-squared above 30% surrogate. No means do not rate down. Yes leads to Step 2, which asks where the point estimates fall relative to the chosen threshold; pmatools automates this with a zone tally, 80% in one zone counting as a majority and 20% on each side as substantial. A majority means do not rate down; a scattered tally means rate down one level; estimates on opposite sides lead to Step 3, which asks whether a credible subgroup explains the difference. Yes means do not rate down and report the subgroups separately; no means rate down one level. This is pmatools&#8217; operationalisation of the Core GRADE 3 Figure 2 decision, not a reproduction of the published figure: Core GRADE 3 words these nodes qualitatively and quantifies none of them.</desc>
+  <desc id="incon-desc">Flowchart with three sequential steps. Step 1 asks whether there are important differences in point estimates and limited overlap of confidence intervals; pmatools automates this with an I-squared above 30% surrogate. No means do not rate down. Yes leads to Step 2, which asks where the point estimates fall relative to the chosen threshold; pmatools automates this with a zone tally, 80% in one zone counting as a majority and 20% on each side as substantial. A majority means do not rate down; a scattered tally means rate down one level; estimates on opposite sides lead to Step 3, which asks whether a credible subgroup explains the difference. Yes means do not rate down and report the subgroups separately; no means rate down two levels, because the direction of the effect is then unresolved. This is pmatools&#8217; operationalisation of the Core GRADE 3 Figure 2 decision, not a reproduction of the published figure: Core GRADE 3 words these nodes qualitatively and quantifies none of them, and it declines to describe a two-level inconsistency downgrade at all, calling the case unusual enough that Core GRADE users need not consider it.</desc>
   <style>
     .pma-fc-node rect, .pma-fc-leaf rect {
       fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2;
@@ -111,16 +111,16 @@
       <tspan x="750" dy="17">Report the subgroups as separate questions</tspan>
     </text>
   </g>
-  <g id="pma-incon-leaf-down1" class="pma-fc-leaf">
+  <g id="pma-incon-leaf-down2" class="pma-fc-leaf">
     <rect x="560" y="368" width="380" height="56" rx="6" ry="6"/>
     <text x="750" y="391" text-anchor="middle">
-      <tspan x="750" dy="0">Rate down 1 level</tspan>
-      <tspan x="750" dy="17">(some concerns)</tspan>
+      <tspan x="750" dy="0">Rate down 2 levels</tspan>
+      <tspan x="750" dy="17">(serious)</tspan>
     </text>
   </g>
   <text class="pma-fc-caption" x="20" y="446">
-    <tspan x="20" dy="0">After BMJ Core GRADE 3 (Guyatt et al., 2025) Figure 2. pmatools&#8217; operationalisation, not a reproduction:</tspan>
-    <tspan x="20" dy="16">Core GRADE 3 words these nodes qualitatively and quantifies none of them; the numeric surrogates are pmatools&#8217; own.</tspan>
+    <tspan x="20" dy="0">After BMJ Core GRADE 3 (Guyatt et al., 2025) Figure 2. pmatools&#8217; operationalisation, not a reproduction: the numeric surrogates are pmatools&#8217; own, and the</tspan>
+    <tspan x="20" dy="16">two-level leaf departs from Core GRADE 3, which calls a two-level inconsistency downgrade unusual enough to leave out.</tspan>
   </text>
 </svg>
 

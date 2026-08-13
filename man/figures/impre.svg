@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 550" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="impre-title impre-desc">
   <title id="impre-title">Imprecision: the Core GRADE 2 Figure 4 decision as pmatools implements it</title>
-  <desc id="impre-desc">Flowchart. Does the pooled 95% confidence interval cross the chosen threshold? If yes, does it also cross the second threshold, important benefit and important harm? No means rate down one level; yes means rate down two. If the interval does not cross the threshold, is the effect implausibly large? No means do not rate down, and the optimal information size is never consulted on that path. Yes leads to the optimal information size comparison: a total of 800 or more participants on the continuous rule of thumb, a total at or above the OIS, or an OIS that cannot be computed, all mean do not rate down; a total below the OIS means rate down one level; a confidence interval ratio of 3 for a relative risk or 2.5 for an odds ratio, or a total below 30% of the OIS, means rate down two. This is pmatools&#8217; operationalisation of the Core GRADE 2 Figure 4 decision, not a reproduction of the published figure.</desc>
+  <desc id="impre-desc">Flowchart. Does the pooled 95% confidence interval cross the chosen threshold? If yes, does it also cross the second threshold, important benefit and important harm? No means rate down one level; yes means rate down two. If the interval does not cross the threshold, is the effect implausibly large? No means do not rate down. Yes leads to the optimal information size comparison: a total of 800 or more participants on the continuous rule of thumb, a total at or above the OIS, or an OIS that cannot be computed, all mean do not rate down; a total below the OIS means rate down one level; a confidence interval ratio of 3 for a relative risk or 2.5 for an odds ratio, or a total below 30% of the OIS, means rate down two. This is pmatools&#8217; operationalisation of the Core GRADE 2 Figure 4 decision, not a reproduction of the published figure.</desc>
   <style>
     .pma-fc-node rect, .pma-fc-leaf rect {
       fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2;
@@ -47,9 +47,9 @@
     <text class="pma-fc-edge-label" x="263" y="156" text-anchor="start">No</text>
   </g>
   <g id="pma-impre-edge-large-no" class="pma-fc-edge">
-    <path d="M 490 226 L 560 226"/>
-    <path d="M 553 230.5 L 560 226 L 553 221.5"/>
-    <text class="pma-fc-edge-label" x="525" y="219" text-anchor="middle">No</text>
+    <path d="M 490 218 L 560 218"/>
+    <path d="M 553 222.5 L 560 218 L 553 213.5"/>
+    <text class="pma-fc-edge-label" x="525" y="211" text-anchor="middle">No</text>
   </g>
   <g id="pma-impre-edge-large-yes" class="pma-fc-edge">
     <path d="M 255 273 L 255 325"/>
@@ -106,10 +106,9 @@
     </text>
   </g>
   <g id="pma-impre-leaf-nodown-moderate" class="pma-fc-leaf">
-    <rect x="560" y="198" width="380" height="56" rx="6" ry="6"/>
+    <rect x="560" y="198" width="380" height="39" rx="6" ry="6"/>
     <text x="750" y="221" text-anchor="middle">
       <tspan x="750" dy="0">Do not rate down</tspan>
-      <tspan x="750" dy="17">The optimal information size is never consulted here</tspan>
     </text>
   </g>
   <g id="pma-impre-node-ois" class="pma-fc-node">

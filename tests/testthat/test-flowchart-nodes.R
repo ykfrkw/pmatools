@@ -241,6 +241,27 @@ test_that("all four flowcharted domains record a flow_path on a plain rating", {
   }
 })
 
+# The assertion above used to run on one case, and the vocabulary check above
+# THAT is vacuous on an empty path: .flow_path_fact(character(0)) yields "",
+# whose setdiff() against any vocabulary is character(0). So a branch that
+# emitted nothing would render an unlit chart in the app with every test
+# green. The commonest rating in practice -- every study at low risk of bias
+# -- was one such branch. Run the length check over every case instead.
+test_that("no case emits an empty or single-id flow_path", {
+  cases <- .cases()
+  for (nm in names(cases)) {
+    for (domain in names(DOMAIN_FIG)) {
+      ids <- .flow_path(cases[[nm]], domain)
+      if (is.null(ids)) next   # a domain that did not run the flowchart
+      expect_true(
+        length(ids) >= 3L && all(nzchar(ids)),
+        info = paste0(nm, " / ", domain, " emitted an unusable flow_path: '",
+                      paste(ids, collapse = " "), "'")
+      )
+    }
+  }
+})
+
 test_that("the flow_path fact is not scalar-numeric", {
   f <- domain_facts(.cases()$rob_dominated, "Risk of bias")
   expect_true(is.na(f$numeric[f$key == "flow_path"]))

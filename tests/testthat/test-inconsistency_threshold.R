@@ -57,9 +57,11 @@ test_that("opposite_sides + subgroup explained -> 'no'", {
   expect_equal(row$judgment, "no")
 })
 
-# Updated (v0.5): Core GRADE 3 declines to endorse a two-level inconsistency
-# downgrade, so every automated / flowchart path caps at -1.
-test_that("opposite_sides + no subgroup -> 'some_concerns' (capped at -1)", {
+# Updated (v0.5.1): the opposite-sided branch rates down TWO levels. It is the
+# one place pmatools departs from Core GRADE 3 on the size of a downgrade, so
+# the note is asserted alongside the judgment: a -2 that arrives without the
+# reasoning is the failure mode this pins.
+test_that("opposite_sides + no subgroup -> 'serious' (-2), and says why", {
   m <- make_mock_meta(c(-0.5, 0.5, -0.5), i2 = 0.7)
   g <- grade_meta(m,
     inconsistency_ci_diff            = "yes",
@@ -67,18 +69,47 @@ test_that("opposite_sides + no subgroup -> 'some_concerns' (capped at -1)", {
     inconsistency_subgroup_explained = "no", threshold_type = "null"
   )
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  expect_equal(row$judgment, "some_concerns")
-  expect_equal(row$downgrade, -1L)
-  expect_match(row$notes, "capped at one level", fixed = TRUE)
+  expect_equal(row$judgment, "serious")
+  expect_equal(row$downgrade, -2L)
+  expect_match(row$notes, "This departs from Core GRADE 3", fixed = TRUE)
+  expect_match(row$notes, "direction of the effect is unresolved", fixed = TRUE)
 })
 
-test_that("the scalar override is the only route to -2 for inconsistency", {
+test_that("the scattered branch is untouched and still stops at -1", {
+  # The neighbour of the -2 branch, and the reason removing the cap is not a
+  # blanket change. Against +/-log(1.20): 3 estimates above, 1 below, 2 in the
+  # trivial zone. No zone holds 80%, but the smaller side is 1 of 6 (17%) and
+  # so misses the 20% gate, which is what "opposite sides" means here. The
+  # estimates disagree in magnitude, not in direction: -1.
+  m <- make_mock_meta(c(0.30, 0.40, 0.50, 0.05, 0.02, -0.30), i2 = 0.70)
+  g <- grade_meta(m, threshold = 1.20, threshold_scale = "ratio")
+  row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
+  expect_equal(row$judgment, "some_concerns")
+  expect_equal(row$downgrade, -1L)
+  expect_match(row$notes, "heterogeneous magnitude", fixed = TRUE)
+  # No -2 means no departure to declare.
+  expect_false(grepl("This departs from Core GRADE 3", row$notes, fixed = TRUE))
+})
+
+test_that("the scalar override sets inconsistency independently of the flowchart", {
+  # Before v0.5.1 this was the ONLY route to -2 in this domain. The automated
+  # opposite-sides branch now reaches it too, so what is left to pin is that
+  # an explicit judgment replaces the flowchart in either direction.
   m <- make_mock_meta(c(-0.5, 0.5, -0.5), i2 = 0.7)
   g <- grade_meta(m, threshold_type = "null", inconsistency = "serious",
                   inconsistency_rationale = "Directions of effect irreconcilable")
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_equal(row$judgment, "serious")
   expect_equal(row$downgrade, -2L)
+
+  g_down <- grade_meta(m, threshold_type = "null",
+                       inconsistency = "some_concerns",
+                       inconsistency_rationale = "One outlier trial, pre-specified")
+  row_down <- g_down$domain_assessments[
+    g_down$domain_assessments$domain == "Inconsistency", ]
+  expect_equal(row_down$judgment, "some_concerns")
+  expect_equal(row_down$downgrade, -1L)
+  expect_false(row_down$auto)
 })
 
 # ---- Auto path: I^2 only (no Q-test) ----
@@ -118,8 +149,8 @@ test_that("auto Step 1: I^2 > 30% triggers Step 2", {
   m <- make_mock_meta(c(-0.5, 0.5, -0.5), i2 = 0.60)
   g <- grade_meta(m, threshold_type = "null")
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  # opposite-sided TEs -> rate down, capped at one level (v0.5)
-  expect_equal(row$judgment, "some_concerns")
+  # opposite-sided TEs -> Step 2 reached, and its opposite-sides leaf is -2
+  expect_equal(row$judgment, "serious")
 })
 
 # ---- Auto Step 2 with Threshold ----
@@ -136,12 +167,12 @@ test_that("auto Step 2 with Threshold: all studies above Threshold -> majority_o
 })
 
 test_that("auto Step 2 with Threshold: zone tally distinguishes opposite from majority", {
-  # TE values: 1 above, 1 below, 1 trivial -> opposite sides (capped at -1)
+  # TE values: 1 above, 1 below, 1 trivial -> opposite sides, which is -2
   m <- make_mock_meta(c(0.30, -0.30, 0.0), i2 = 0.70)
   g <- grade_meta(m, threshold = 1.20, threshold_scale = "ratio")
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  expect_equal(row$judgment, "some_concerns")
-  expect_match(row$notes, "clinically opposite", fixed = TRUE)
+  expect_equal(row$judgment, "serious")
+  expect_match(row$notes, "rate down 2 (clinically opposite)", fixed = TRUE)
 })
 
 # ---- Auto Step 3: the subgroup answer now reaches the automated path ------
@@ -167,21 +198,26 @@ test_that("auto opposite sides + subgroup explained -> 'no', on the auto path", 
   expect_match(row$notes, "present subgroup results separately", fixed = TRUE)
 })
 
-test_that("auto opposite sides + subgroup NOT explained keeps 'some_concerns'", {
+test_that("auto opposite sides + subgroup NOT explained rates down two levels", {
   g <- grade_meta(.opposite_sides_meta(), threshold = 1.20,
                   threshold_scale = "ratio",
                   inconsistency_subgroup_explained = "no")
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  expect_equal(row$judgment, "some_concerns")
+  expect_equal(row$judgment, "serious")
+  expect_equal(row$downgrade, -2L)
   expect_true(row$auto)
   expect_match(row$notes, "NOT explained by a credible subgroup", fixed = TRUE)
 })
 
-test_that("an unanswered subgroup question is unchanged from before 0.5.1", {
+test_that("an unanswered subgroup question lands on the same leaf as 'no'", {
+  # The default is the conservative one and has been since 0.5.1; what
+  # changed in 0.5.1 is how conservative, so pin the level as well as the
+  # pointer at the argument that would move it.
   g <- grade_meta(.opposite_sides_meta(), threshold = 1.20,
                   threshold_scale = "ratio")
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  expect_equal(row$judgment, "some_concerns")
+  expect_equal(row$judgment, "serious")
+  expect_equal(row$downgrade, -2L)
   expect_match(row$notes, "Supply inconsistency_subgroup_explained",
                fixed = TRUE)
 })

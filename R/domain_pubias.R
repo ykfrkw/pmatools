@@ -63,10 +63,18 @@
 # drawn dashed and named "pmatools input" because it is NOT a node of Core
 # GRADE 4 Fig 5; the figure's only registry node is Q4, reached when k < 10.
 #
-# Q3 and Q4 each carry their own "qualitative assessment required" leaf rather
-# than sharing one: the two are reached for different reasons (a test that
-# could not run, versus a question nobody answered) and an edge crossing the
-# figure to a shared terminal read as a route the algorithm never takes.
+# The ids keep their q1..q4 slugs, but the FIGURE no longer prints those
+# numbers: it interleaves the registry node between Q1 and Q2, so numbering on
+# screen described neither Fig 5 nor the route. The "Q1:" - "Q4:" prefixes in
+# the notes below are unaffected -- they are the exported record.
+#
+# There is no "qualitative assessment required" leaf. Both branches that used
+# to have one (an Egger test that would not run, and a Q4 nobody answered)
+# judge the domain "no", so they light the "do not rate down" leaf they
+# actually reach. What made them different from an answered "no" is a caveat,
+# not a decision, and it travels in the note and in an rlang::warn() where a
+# reader can act on it -- a leaf in a picture cannot be read by a pipeline and
+# was not read by anything else either.
 .PUBIAS_FIG5_NODE_IDS <- c(
   "pma-pubias-node-q1",
   "pma-pubias-edge-q1-yes",
@@ -83,16 +91,12 @@
   "pma-pubias-leaf-down1-q3",
   "pma-pubias-edge-q3-no",
   "pma-pubias-leaf-nodown-q3",
-  "pma-pubias-edge-q3-na",
-  "pma-pubias-leaf-qual-q3",
   "pma-pubias-edge-q2-no",
   "pma-pubias-node-q4",
   "pma-pubias-edge-q4-yes",
   "pma-pubias-leaf-down1-q4",
   "pma-pubias-edge-q4-no",
-  "pma-pubias-leaf-nodown-q4",
-  "pma-pubias-edge-q4-na",
-  "pma-pubias-leaf-qual-q4"
+  "pma-pubias-leaf-nodown-q4"
 )
 
 # Everything past Q1 has come through the registry node, whether or not the
@@ -346,10 +350,13 @@ assess_pubias <- function(meta_obj,
         sprintf("Q2: Statistical analysis feasible (k = %d >= 10) but ", k),
         "Egger's test failed to run. [auto (Egger's test)]"
       ),
+      # The judgment is "no", so the chart shows the "no" leaf. The reason it
+      # is "no" -- an assumption rather than a test result -- is what
+      # qual_note and the warning above are for.
       facts    = .facts(.pubias_k_fact(k), .flow_path_fact(c(
         .PUBIAS_FLOW_TO_Q2, "pma-pubias-edge-q2-yes",
-        "pma-pubias-node-q3", "pma-pubias-edge-q3-na",
-        "pma-pubias-leaf-qual-q3")))
+        "pma-pubias-node-q3", "pma-pubias-edge-q3-no",
+        "pma-pubias-leaf-nodown-q3")))
     ))
   } else if (pval < 0.05) {
     egger_note <- sprintf("Egger's test: p = %.4f.", pval)
@@ -429,13 +436,11 @@ assess_pubias <- function(meta_obj,
     )
   } else {
     judgment   <- "no"
-    # `auto_flag` is TRUE exactly when nobody answered and "no" was assumed,
-    # which is the qualitative-assessment leaf rather than the answered one.
-    flow_end   <- if (auto_flag) {
-      c("pma-pubias-edge-q4-na", "pma-pubias-leaf-qual-q4")
-    } else {
-      c("pma-pubias-edge-q4-no", "pma-pubias-leaf-nodown-q4")
-    }
+    # An assumed "no" and an answered "no" reach the same leaf, because they
+    # are the same judgment. `auto_flag` still separates them everywhere it
+    # matters: src_note carries the qualitative-assessment marker, the caller
+    # was warned, and the row records auto = TRUE.
+    flow_end   <- c("pma-pubias-edge-q4-no", "pma-pubias-leaf-nodown-q4")
     unpub_desc <- "Q4: No documentation of unpublished studies -> do not rate down."
   }
 

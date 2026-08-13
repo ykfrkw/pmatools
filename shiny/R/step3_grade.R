@@ -3005,11 +3005,14 @@ step3_server <- function(input, output, session, state) {
     })
   }
 
+  # Unnumbered. The node KEYS keep Fig 5's q1/q3/q4, but the reviewer never
+  # sees the numbers: the chart interleaves the registry node between Q1 and
+  # Q2, so on screen the numbering described neither Fig 5 nor the route.
   PUBIAS_NODE_TITLES <- c(
-    q1     = "Q1 - small and industry-sponsored?",
+    q1     = "Small and industry-sponsored?",
     extra  = "Overall reporting-bias judgment",
-    q3     = "Q3 - funnel plot asymmetry",
-    q4     = "Q4 - unpublished studies documented?",
+    q3     = "Funnel plot asymmetry",
+    q4     = "Unpublished studies documented?",
     result = "Result"
   )
 
@@ -3069,7 +3072,7 @@ step3_server <- function(input, output, session, state) {
 
     if (identical(node, "q1")) {
       return(htmltools::tagList(
-        htmltools::h5("Q1. Most or all studies small AND industry-sponsored?"),
+        htmltools::h5("Most or all studies small AND industry-sponsored?"),
         htmltools::p(class = "pma-card-subtitle",
           paste0("A 'yes' rates down 1 on its own and ends the assessment; ",
                  "nothing after it can undo the concern.")),
@@ -3109,7 +3112,7 @@ step3_server <- function(input, output, session, state) {
 
     if (identical(node, "q3")) {
       return(htmltools::tagList(
-        htmltools::h5("Q3. Does funnel plot asymmetry strongly suggest publication bias?"),
+        htmltools::h5("Does funnel plot asymmetry strongly suggest publication bias?"),
         # The <details> under this used to give the provenance of p < 0.05.
         # Deleted: the flowchart caption on this tab names the implementing
         # function, and the sentence changed no answer.
@@ -3138,7 +3141,7 @@ step3_server <- function(input, output, session, state) {
 
     if (identical(node, "q4")) {
       return(htmltools::tagList(
-        htmltools::h5("Q4. Documentation of unpublished studies"),
+        htmltools::h5("Documentation of unpublished studies"),
         htmltools::p(class = "pma-card-subtitle",
           sprintf(paste0("Egger's test is unreliable at k = %d, so Figure 5 ",
                          "routes here. Documented unpublished trials rate ",

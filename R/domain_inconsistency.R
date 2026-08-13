@@ -24,16 +24,35 @@
 #
 #   Step 3. Is opposite-sided inconsistency explained by credible subgroup?
 #     yes -> judgment = "no" + note
-#     no  -> judgment = "some_concerns" (-1; see the -1 cap below)
+#     no  -> judgment = "serious" (-2; see the departure below)
 #
-# Rate down at most ONE level (v0.5). Core GRADE 3 (p5-6) verbatim:
+# THE OPPOSITE-SIDED BRANCH RATES DOWN TWO LEVELS, AND THAT DEPARTS FROM THE
+# SOURCE. Core GRADE 3 (p5-6) verbatim:
 #   "A final issue is consideration of rating down twice for inconsistency.
 #    Although this is a theoretical possibility, we have found compelling
 #    reason to rate down twice for inconsistency sufficiently unusual that it
 #    need not concern users of Core GRADE."
-# Every automated / flowchart path in this file therefore stops at
-# "some_concerns" (-1). "serious" (-2) remains reachable only through the
-# scalar `inconsistency` override, which requires a written rationale.
+# v0.5.0 read that as a cap and stopped every path at "some_concerns" (-1).
+# v0.5.1 does not, on the following reasoning, which is stated here rather
+# than hidden because the source says otherwise.
+#
+#   The opposite-sided branch is not "the studies disagree more than the eye
+#   likes" -- that is the neighbouring heterogeneous branch, which still rates
+#   down one level and is unchanged. This branch fires only when a substantial
+#   share of point estimates sits ABOVE the chosen threshold, a substantial
+#   share sits BELOW it, and no credible subgroup explains the split. The
+#   reviewer cannot say which direction the intervention works in. Reporting
+#   such a body of evidence as moderate certainty overstates it.
+#
+#   Core GRADE 3 calls the two-level case unusual, not wrong, and the 20%
+#   each-side gate is exactly what makes it unusual here: ordinary
+#   disagreement never reaches it.
+#
+# .INCONSISTENCY_TWO_LEVEL_NOTE states the departure in the notes wherever
+# the branch fires, so no reader meets the -2 without the reasoning. Every
+# other path in this file still stops at "some_concerns" (-1), and the scalar
+# `inconsistency` override (with a written rationale) remains the way to
+# record a judgment the flowchart does not reach -- in either direction.
 #
 # Auto Step 1 proxy: I^2 > 30%  (v0.5; v0.1.0-v0.4.0 used 25%, and v0.1.0
 #   also used "OR Q p < 0.10").
@@ -75,8 +94,8 @@
 # Auto Step 3: cannot be auto-detected, so it is ASKED. When the zone tally
 #   lands on opposite sides, `inconsistency_subgroup_explained` is read on the
 #   auto path exactly as it is on the manual one: "yes" -> "no" (do not rate
-#   down, present the subgroups separately), "no" -> "some_concerns" (-1),
-#   unanswered -> "some_concerns" (-1) with a note pointing at the argument.
+#   down, present the subgroups separately), "no" -> "serious" (-2),
+#   unanswered -> "serious" (-2) with a note pointing at the argument.
 #   Before v0.5.1 the note pointed at an argument the auto path ignored;
 #   answering it switched the domain onto the manual path, which then demanded
 #   inconsistency_threshold_side as well.
@@ -109,18 +128,30 @@
   "pma-incon-edge-step3-yes",
   "pma-incon-leaf-nodown3",
   "pma-incon-edge-step3-no",
-  "pma-incon-leaf-down1"
+  "pma-incon-leaf-down2"
 )
 
-# Note appended whenever an automated / flowchart path would historically have
-# rated down two levels. Core GRADE 3 does not support that, so the judgment is
-# capped at -1 and the user is pointed at the explicit override.
-.INCONSISTENCY_CAP_NOTE <- paste0(
-  "Core GRADE 3 states that a compelling reason to rate down twice for ",
-  "inconsistency is sufficiently unusual that it need not concern Core GRADE ",
-  "users, so this automated judgment is capped at one level (some concerns). ",
-  "If two levels are genuinely warranted, supply the scalar override ",
-  "inconsistency = 'serious' with inconsistency_rationale."
+# Appended to the opposite-sided branch, and to nothing else. That branch is
+# the ONE place in this file that rates down two levels, and it is a declared
+# departure from the source rather than an implementation detail, so the note
+# says so in the same sentence that reports the judgment. The neighbouring
+# heterogeneous branch still stops at -1 and carries no such note, because
+# nothing about it departs from anything.
+.INCONSISTENCY_TWO_LEVEL_NOTE <- paste0(
+  "Rated down TWO levels (serious). This departs from Core GRADE 3, which ",
+  "states that a compelling reason to rate down twice for inconsistency is ",
+  "sufficiently unusual that it need not concern Core GRADE users, and which ",
+  "therefore describes no two-level inconsistency downgrade. pmatools applies ",
+  "one here because this branch is not ordinary disagreement between studies: ",
+  "it fires only when a substantial share of point estimates lies above the ",
+  "chosen threshold, a substantial share lies below it, and no credible ",
+  "subgroup explains the split, so the direction of the effect is unresolved ",
+  "and reporting the body of evidence as moderate certainty would overstate ",
+  "it. Core GRADE 3 calls the case unusual rather than wrong, and the 20% ",
+  "each-side gate is what keeps it unusual: scattered estimates that do not ",
+  "reach it take the heterogeneous branch and rate down one level. Supply the ",
+  "scalar override inconsistency = 'some_concerns' with ",
+  "inconsistency_rationale to rate down one level instead."
 )
 
 # Step 1 cut-off for the automated path. Core GRADE 3's only number, quoted in
@@ -310,18 +341,18 @@ assess_inconsistency <- function(meta_obj,
 
     return(make_domain_row(
       domain   = "Inconsistency",
-      judgment = "some_concerns",
+      judgment = "serious",
       auto     = FALSE,
       notes    = paste0(
         "FLOWCHART Step 3: Opposite-sided estimates not explained by subgroup ",
-        "-> rate down one level. ", .INCONSISTENCY_SUBGROUP_CAVEAT, " ",
-        .INCONSISTENCY_CAP_NOTE, " | ", stat_note
+        "-> rate down two levels. ", .INCONSISTENCY_SUBGROUP_CAVEAT, " ",
+        .INCONSISTENCY_TWO_LEVEL_NOTE, " | ", stat_note
       ),
       facts    = .facts(c(stat_facts, list(.flow_path_fact(c(
         "pma-incon-node-step1", "pma-incon-edge-step1-yes",
         "pma-incon-node-step2", "pma-incon-edge-step2-opposite",
         "pma-incon-node-step3", "pma-incon-edge-step3-no",
-        "pma-incon-leaf-down1")))))
+        "pma-incon-leaf-down2")))))
     ))
   }
 
@@ -401,9 +432,9 @@ assess_inconsistency <- function(meta_obj,
   k <- length(te_vec)
   te_vec <- te_vec[!is.na(te_vec)]
 
-  # 2-level inconsistency classification (v0.5):
+  # Zone classification:
   #   max single-zone share >= 80%               -> "no" (consistent direction)
-  #   both directions have substantial mass      -> "some_concerns" (-1)
+  #   both directions have substantial mass      -> "serious" (-2)
   #     (n_above/k >= 20% AND n_below/k >= 20%)
   #   else                                       -> "some_concerns" (-1)
   #
@@ -412,10 +443,11 @@ assess_inconsistency <- function(meta_obj,
   # says only "Majority are on one side of threshold" and "Point estimates of
   # substantial proportion of [studies]" and never quantifies either phrase.
   # The substantial-both-directions criterion is our operationalisation of
-  # Core GRADE 3's "point estimates on opposite sides of threshold" trigger.
-  # It no longer rates down two levels: Core GRADE 3 declines to endorse a
-  # two-level inconsistency downgrade (see .INCONSISTENCY_CAP_NOTE), so the
-  # opposite-sides zone tally is reported in the notes but capped at -1.
+  # Core GRADE 3's "point estimates on opposite sides of threshold" trigger,
+  # and the only path here that reaches -2 -- deliberately, and against the
+  # source; the file header and .INCONSISTENCY_TWO_LEVEL_NOTE give the
+  # reasoning. The 20% gate is what separates it from the scattered tally
+  # below, which stays at -1.
   ZONE_MAJORITY    <- 0.80
   OPPOSITE_EACH    <- 0.20
 
@@ -455,9 +487,9 @@ assess_inconsistency <- function(meta_obj,
     )
   } else if (pct_each_side >= OPPOSITE_EACH) {
     threshold_side <- "opposite_substantial"
-    judgment_auto  <- "some_concerns"
+    judgment_auto  <- "serious"
     decision_note  <- sprintf(
-      "Both directions have substantial mass: n_above = %d (%.0f%%) AND n_below = %d (%.0f%%) >= %.0f%% each -> rate down 1 (clinically opposite).",
+      "Both directions have substantial mass: n_above = %d (%.0f%%) AND n_below = %d (%.0f%%) >= %.0f%% each -> rate down 2 (clinically opposite).",
       n_above, n_above / n_total * 100,
       n_below, n_below / n_total * 100,
       OPPOSITE_EACH * 100
@@ -551,20 +583,20 @@ assess_inconsistency <- function(meta_obj,
     step3_note <- if (identical(inconsistency_subgroup_explained, "no")) {
       paste0(" AUTO Step 3: opposite-sided estimates NOT explained by a ",
              "credible subgroup (inconsistency_subgroup_explained = 'no') ",
-             "-> rate down one level. ")
+             "-> rate down two levels. ")
     } else {
       " Supply inconsistency_subgroup_explained = 'yes' to override. "
     }
     return(make_domain_row(
       domain   = "Inconsistency",
-      judgment = "some_concerns",
+      judgment = "serious",
       auto     = TRUE,
       notes    = paste0(
         step1_note,
         side_note,
         step3_note,
         .INCONSISTENCY_SUBGROUP_CAVEAT, " ",
-        .INCONSISTENCY_CAP_NOTE, " | ",
+        .INCONSISTENCY_TWO_LEVEL_NOTE, " | ",
         stat_note
       ),
       # Unanswered lands here too, and takes the same "no" edge: the default
@@ -573,7 +605,7 @@ assess_inconsistency <- function(meta_obj,
       facts    = .facts(c(stat_facts, zone_facts, list(.flow_path_fact(c(
         flow_to_step2, "pma-incon-edge-step2-opposite",
         "pma-incon-node-step3", "pma-incon-edge-step3-no",
-        "pma-incon-leaf-down1")))))
+        "pma-incon-leaf-down2")))))
     ))
   }
 

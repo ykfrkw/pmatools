@@ -291,7 +291,7 @@ make_domain_row <- function(domain, judgment, auto, notes = NA_character_,
 # Facts that exist for a renderer to compute with, not for a reader. They are
 # returned by domain_facts() like any other -- that is the whole point of a
 # machine-readable companion -- but every PROSE renderer drops them, because
-# "Flowchart path: pma-rob-node-anyhigh pma-rob-edge-anyhigh-yes ..." is not a
+# "Flowchart path: pma-rob-node-dominance pma-rob-edge-dominance-yes ..." is not a
 # footnote anybody wants under a Summary of Findings table.
 .FACT_KEYS_MACHINE_ONLY <- c("flow_path")
 

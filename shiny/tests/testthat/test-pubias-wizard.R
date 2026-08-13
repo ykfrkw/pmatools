@@ -53,10 +53,13 @@ test_that("k routes to Q3 or Q4 and Q2 is never a question", {
   expect_false(step3_pubias_statistical(9))
   expect_false(step3_pubias_statistical(NA))
 
-  # Q2 shows up as a reported step, not a screen.
+  # Q2 shows up as a reported step, not a screen. It also shows up without its
+  # number: the wizard prints no question numbers (shiny/SPEC.md).
   expect_match(step3_pubias_k_line(14), "k = 14 >= 10")
-  expect_match(step3_pubias_k_line(14), "statistical route")
+  expect_match(step3_pubias_k_line(14), "Statistical analysis feasible")
   expect_match(step3_pubias_k_line(4), "registry route")
+  expect_false(grepl("Q2", step3_pubias_k_line(14), fixed = TRUE))
+  expect_false(grepl("Q2", step3_pubias_k_line(4), fixed = TRUE))
   expect_false("q2" %in% STEP3_PUBIAS_NODES)
 })
 

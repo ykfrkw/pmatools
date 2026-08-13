@@ -44,7 +44,13 @@
 #' and does not enumerate how. The dominance threshold shown (55% of the pooled
 #' weight) is the conservative one of the two the figure's footnote offers.
 #'
-#' \if{html}{\figure{rob.svg}{options: width="100\%" alt="pmatools risk-of-bias decision flowchart: any study at high risk of bias, then whether those studies dominate the evidence, then either the five-rule direction-of-bias check or the appreciable-evidence and magnitude questions."}}
+#' The chart opens at the dominance question. A body of evidence with no
+#' high-risk study is not drawn a node of its own, because it does not reach a
+#' different decision: the dominance share is then 0, below the gate, and
+#' "analyse all studies" is the answer when there is nothing to exclude. That
+#' case therefore lights the undominated route like any other.
+#'
+#' \if{html}{\figure{rob.svg}{options: width="100\%" alt="pmatools risk-of-bias decision flowchart: whether the high risk of bias studies dominate the evidence, then either the five-rule direction-of-bias check or the appreciable-evidence and magnitude questions."}}
 #' \if{latex}{Figure omitted from the PDF manual (SVG); see the HTML help.}
 #'
 #' @section Inconsistency - Core GRADE 3 Fig 2:
@@ -52,14 +58,29 @@
 #' \code{R/domain_inconsistency.R}; the automated route through the same three
 #' steps is \code{.auto_inconsistency()} in that file.
 #'
-#' Departs from the source in that the numbers on the edges are pmatools'.
-#' Core GRADE 3 words Step 1 as a visual inspection of the forest plot and
-#' Step 2 as "majority on one side" versus "a substantial proportion on
-#' opposite sides", quantifying neither. pmatools automates them as
-#' I-squared above 30% (the only figure Core GRADE 3 names, and it names it
-#' grudgingly), a largest-zone share of 80% (following CINeMA), and 20% on
-#' each side (a pmatools convention). Supplying the manual flowchart inputs
-#' after looking at \code{\link{plot_forest}} follows the source instead.
+#' Departs from the source twice.
+#'
+#' First, the numbers on the edges are pmatools'. Core GRADE 3 words Step 1 as
+#' a visual inspection of the forest plot and Step 2 as "majority on one side"
+#' versus "a substantial proportion on opposite sides", quantifying neither.
+#' pmatools automates them as I-squared above 30% (the only figure Core GRADE 3
+#' names, and it names it grudgingly), a largest-zone share of 80% (following
+#' CINeMA), and 20% on each side (a pmatools convention). Supplying the manual
+#' flowchart inputs after looking at \code{\link{plot_forest}} follows the
+#' source instead.
+#'
+#' Second, and more consequentially, the opposite-sided leaf rates down
+#' \strong{two} levels. Core GRADE 3 declines to describe a two-level
+#' inconsistency downgrade at all, holding that a compelling reason to rate
+#' down twice for inconsistency is "sufficiently unusual that it need not
+#' concern users of Core GRADE". pmatools rates down two here because the
+#' branch is reached only when a substantial share of point estimates sits
+#' above the chosen threshold, a substantial share sits below it, and no
+#' credible subgroup explains the split: the direction of the effect is
+#' unresolved, and moderate certainty would overstate the evidence. The
+#' neighbouring scattered leaf, which is what ordinary disagreement between
+#' studies reaches, still rates down one level. Every judgment on the
+#' two-level branch carries the departure in its \code{notes}.
 #'
 #' \if{html}{\figure{incon.svg}{options: width="100\%" alt="pmatools inconsistency decision flowchart: three sequential steps asking about differences in point estimates and confidence-interval overlap, then the position of the estimates relative to the chosen threshold, then whether a credible subgroup explains an opposite-sided difference."}}
 #' \if{latex}{Figure omitted from the PDF manual (SVG); see the HTML help.}
@@ -90,6 +111,12 @@
 #' The p < 0.05 cut-off on Q3 is also pmatools': Fig 5 asks qualitatively
 #' whether asymmetry "strongly suggests publication bias" and names no
 #' threshold.
+#'
+#' The chart prints no question numbers, although Fig 5 numbers its four nodes
+#' Q1 to Q4: the registry box sits between Q1 and Q2, so numbering on the
+#' drawing would describe neither the source nor the route. The \code{"Q1:"}
+#' to \code{"Q4:"} prefixes in the domain \code{notes} are unchanged -- they
+#' are the exported record, and no figure travels with them.
 #'
 #' \if{html}{\figure{pubias.svg}{options: width="100\%" alt="pmatools publication-bias decision flowchart: whether most studies are small and industry sponsored, a pmatools registry-coverage input, whether statistical analysis is feasible, and then either funnel-plot asymmetry or documentation of unpublished studies."}}
 #' \if{latex}{Figure omitted from the PDF manual (SVG); see the HTML help.}

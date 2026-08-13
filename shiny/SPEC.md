@@ -754,6 +754,14 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
 
 - **Q2 is not a question.** k decides it (`.pubias_effective_k()`), so it is
   reported as a one-line automatic step in the breadcrumb, never a screen.
+- **The reviewer sees no question numbers (0.5.1).** `PUBIAS_NODE_TITLES`, the
+  three wizard `h5()` headings and `step3_pubias_k_line()` state the question
+  and drop the `Q1` / `Q2` / `Q3` / `Q4` prefix, and `inst/figures/pubias.svg`
+  drops it too. The numbering is Core GRADE 4 Fig 5's, but the chart puts a
+  pmatools node between Q1 and Q2, so on screen it numbered neither the source
+  nor the route the reviewer was walking. The **node keys** (`"q1"`, `"q3"`,
+  `"q4"`) and the `"Q1:"`–`"Q4:"` prefixes inside the package's domain notes
+  are unchanged: the first are internal, the second are the exported record.
 - **Two nodes carry an explicit deferral VALUE** rather than a blank:
   `pubias_registry_complete = "defer"` ("leave it to the Figure 5 nodes") and
   `pubias_funnel_asymmetry = "egger"` ("accept the automated Egger test").
@@ -789,6 +797,16 @@ auto-detectable — but only when the automated path reached the opposite-sides
 branch, via a `conditionalPanel` on `output.incon_subgroup_relevant`
 (`suspendWhenHidden = FALSE`). The package reads it on the automated path as of
 0.5.1 (SPEC.md §5.2).
+
+> **That question is now worth two levels (0.5.1).** Leaving
+> `subgroup_explained` unanswered on the opposite-sides branch rates
+> Inconsistency `serious` (−2), not `some_concerns` (−1): with a substantial
+> share of estimates on each side of the threshold and no credible subgroup,
+> the direction of effect is unresolved. The app renders whatever the package
+> returns — no app-side arithmetic changes — but the domain badge, the
+> certainty verdict and the flowchart leaf all move with it, and the leaf now
+> reads "Rate down 2 levels". See SPEC.md §5.2 for why this departs from Core
+> GRADE 3.
 
 **Risk of Bias.** `output$rob_rule_note` (a ~180-word standing statement of the
 binary rule) and the "See also RoB 2" paragraph are deleted, not collapsed: the

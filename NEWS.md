@@ -62,6 +62,48 @@
   silent: the domain scored no downgrade while the screen showed four
   unanswered questions.
 
+* **Inconsistency rates down two levels when the estimates point in opposite
+  directions, and this deliberately departs from Core GRADE 3.** The automated
+  and manual flowcharts used to cap that branch at `"some_concerns"` (−1),
+  citing Core GRADE 3's own sentence that a compelling reason to rate down
+  twice for inconsistency is "sufficiently unusual that it need not concern
+  users of Core GRADE". The reasoning for reversing it: the branch is not
+  "studies disagree more than the eye likes" — that is the neighbouring
+  `heterogeneous` branch, which still rates down one level and is unchanged.
+  This branch fires only when a substantial share of point estimates sits above
+  the chosen threshold, a substantial share sits below it, and no credible
+  subgroup explains the split. The reviewer cannot say which direction the
+  intervention works in, and leaving such a body of evidence at Moderate
+  overstates it. Core GRADE 3 calls the two-level case unusual rather than
+  wrong, and pmatools' 20%-each-side gate is what makes it unusual: ordinary
+  disagreement never reaches it. An analysis that scored −1 here now scores −2,
+  so overall certainty can drop one band without any change to the input data
+  — check `domain_assessments` before comparing a rating against an earlier
+  run. `.INCONSISTENCY_CAP_NOTE` is replaced by
+  `.INCONSISTENCY_TWO_LEVEL_NOTE`, which states the departure in the notes
+  wherever the branch fires; the risk-of-bias one-level cap
+  (`.ROB_CAP_NOTE`) is untouched. See `SPEC.md` §5.2.
+
+* **The decision flowcharts drop three things that were not decisions.** The
+  Risk-of-Bias chart no longer opens with "Any study at high risk of bias?":
+  with no high-risk study the dominance share is 0, which is below the gate,
+  and there is nothing to exclude, so that case now routes through the
+  surviving chart instead of through a node of its own. The Publication-bias
+  chart drops the `Q1`–`Q4` prefixes from its question nodes and from the app's
+  wizard headings and breadcrumb — the numbering is Core GRADE 4 Fig 5's, but
+  the chart interleaves a pmatools node between Q1 and Q2, so on screen it
+  numbered neither the source nor the route — and drops its two "qualitative
+  assessment required" leaves, whose judgment was `"no"` and whose caveat lives
+  in the notes and in the warning. The `"Q1:"`–`"Q4:"` prefixes inside the
+  domain **notes** are deliberately kept: they travel into `evidence_profile()`
+  and the exported `.docx` as the ordered record of the assessment. Code
+  reading `flow_path` against a hard-coded id list must drop
+  `pma-rob-node-anyhigh`, `pma-rob-leaf-nohigh`, `pma-rob-edge-anyhigh-no`,
+  `pma-rob-edge-anyhigh-yes`, `pma-pubias-leaf-qual-q3`,
+  `pma-pubias-leaf-qual-q4`, `pma-pubias-edge-q3-na` and
+  `pma-pubias-edge-q4-na`, and rename `pma-incon-leaf-down1` to
+  `pma-incon-leaf-down2`.
+
 ## New features
 
 * **Shiny app: Step 3 says how far through it you are, and where the next click
