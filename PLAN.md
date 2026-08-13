@@ -134,3 +134,88 @@ SPEC.md §11「Out of scope」と同期していること。
 - CRAN 提出
 - Shiny 側（`pairwise_meta_analysis`）へ複数アウトカムワークフローを配線する UI 作業 — パッケージ側は完了済み、追従はアプリ側の SPEC で管理
 - shinyapps.io 公開ガイド（`pairwise_meta_analysis` 側）
+
+---
+
+## 未着手フィードバック（2026-08-13 受領、実装前のメモ）
+
+ユーザーから GitHub の README/ドキュメントに対して受領。**まだ実装していない。**
+着手時はこの節を上から潰し、済んだ項目は削除する。
+
+### A. ドキュメント表記（低リスク・すぐ直せる）
+
+1. **companion repository の記述を削除** — [README.md:9](README.md:9) の
+   "A wizard-style Shiny front-end lives in the companion repository
+   pairwise_meta_analysis (deployed on shinyapps.io)." は不要。リポジトリ統合済みで
+   Shiny は `shiny/` にある。[SPEC.md:3](SPEC.md:3)・[SPEC.md:25](SPEC.md:25)・
+   [SPEC.md:1686](SPEC.md:1686)・PLAN.md:5 の `~/Developer/pairwise_meta_analysis`
+   参照、および上の「今後の拡張」2 行も同時に直す（同じ古い前提）。
+
+2. **"MIC" 表記をやめ `threshold` に統一** — 残っているのは
+   [shiny/R/step3_threshold.R:410](shiny/R/step3_threshold.R:410) の教育コピー
+   （"Minimal Important Change (MIC)"）。パッケージ側 API はすでに `threshold` /
+   `threshold_type` / `threshold_scale`。UI 文言だけがズレている。
+
+3. **`Mortality` はサンプルデータに無い** — README:82「Several outcomes in one
+   session (v0.5)」の例（README.md:91-106）が `"Mortality"` を使っているが、
+   `inst/extdata/cbti_depression.csv` の outcome は remission / severity /
+   response / dropout 系のみ。実データで動く例に差し替える（コピペで動かない例は
+   README の信頼を落とす）。
+
+4. **Shiny アプリ側の説明を README に入れる** — pmatools は主に Shiny 上での
+   利用を想定している。README にアプリの位置づけ・起動方法・公開 URL
+   （https://yuki-furukawa.shinyapps.io/pmatools/）の節を追加する。
+
+### B. 設計・仕様に踏み込む項目（要検討）
+
+5. **`threshold_baseline` と `ois_p0` が両方あるのは何故か** — README.md:60-70 の
+   `g_abs` 例で同じ 0.25 を 2 回渡していて冗長に見える。現状の役割:
+   - `threshold_baseline`: `threshold_scale = "ard"` のとき、絶対リスク差の閾値を
+     効果尺度（RR/OR）のスケールへ換算するための対照群リスク。未指定ならプール
+     対照群イベント率（[R/utils.R:552](R/utils.R:552) 付近）。
+   - `ois_p0`: OIS（optimal information size）のサンプルサイズ計算に使う対照群
+     イベント率。
+   - `baseline_risk`（SoF 表用）は「未指定なら `ois_p0` を使う」というフォール
+     バックを既に持つ（README.md:1682）。つまり 3 つの引数が同じ量を指している。
+   - 対応方針の候補: (a) 3 者を単一の `baseline_risk` に集約し、旧引数は
+     deprecate、(b) 少なくとも `ois_p0` / `threshold_baseline` の相互フォール
+     バックを実装し README でそう書く。どちらも API 変更なので `feat!:` 扱い、
+     NEWS.md にエントリが要る。
+
+6. **Downgrade scale を Core GRADE 用語に合わせる** — [README.md:184-209](README.md:184)
+   の対応表で pmatools の値が Core GRADE 文言と 1 段ズレている
+   （`"some_concerns"` = serious、`"serious"` = very serious）。
+   - Core GRADE の語彙（not serious / serious / very serious / extremely
+     serious）に合わせて値そのものを改名する。
+   - **−3（extremely serious）は自動判定はしないが、手動指定は可能にする。**
+     現状「単一ドメインの最大 downgrade は −2」とハードコードされているので、
+     手動 `rob = "extremely_serious"` 等の経路を通す必要がある。
+   - 破壊的変更。既存値は legacy alias として受け付けて正規化する（既に
+     `"some"` → `"some_concerns"` の前例あり）。SPEC.md を先に直す。
+
+7. **RoB のルールが分かりづらい** — README.md:440-530 のフローチャート説明・
+   overrides・alias 表・`rob_strata()` が一続きで読みづらい。判定ルールを
+   1 枚の表か図に集約して整理し直す。
+
+8. **RoB2 のマッピング表が誤り** — [README.md:463-472](README.md:463) の
+   「Cochrane RoB 2.0 → Internal GRADE level」表が 4 段階
+   （No concerns / Some concerns / Serious concerns / Critical concerns）に
+   なっているが、**RoB 2 の判定は 3 段階**: low risk of bias / some concerns /
+   high risk of bias。"Serious concerns" / "Critical concerns" は ROBINS-I の
+   語彙。表を RoB 2 の 3 段階に直し、ROBINS-I を併記するなら別表に分ける。
+   [README.md:475](README.md:475)・README.md:1161 の `rob_map` 例、および
+   `rob_strata()` の alias 表（R 側実装）も同じ誤りを持っていないか確認する。
+
+### 関連: Shiny アプリの UI/UX レビュー
+
+上記フィードバックのうち UI に現れる分（2 MIC・4 アプリ説明・6 downgrade 語彙と
+−3・7 RoB の分かりにくさ・8 RoB2 の 3 段階）は、アプリ実機を通したレビュー結果と
+まとめて [shiny/UX_REVIEW.md](shiny/UX_REVIEW.md) に整理してある。5 フェーズの
+実装順もそちら。パッケージ側の改名（項目 6）に依存するのは Phase 5 だけで、
+Phase 1〜4 は先行して着手できる。
+
+### 実装順の目安
+
+A（1〜4）は独立・低リスクなので先に片付く。B は 6 → 8 → 7 → 5 の順が安全
+（6 と 8 は語彙の定義そのもの、7 はその上での再構成、5 は別軸の API 整理）。
+どれも CLAUDE.md §5 に従い SPEC.md / NEWS.md を同じ PR で更新する。
