@@ -160,7 +160,7 @@ GRADE is the international standard for rating certainty of evidence and grading
 |---------|-------|------|
 | Introduction | Why Core GRADE is needed | — |
 | Core GRADE 1 | Overview and PICO framing | 40262844 |
-| Core GRADE 2 | Choosing the target of certainty rating and assessing imprecision | doi:10.1136/bmj-2024-081904 |
+| Core GRADE 2 | Choosing the target of certainty rating and assessing imprecision | 40300802 |
 | Core GRADE 3 | Rating inconsistency | 40328467 |
 | Core GRADE 4 | Risk of bias, publication bias, rating up | 40360206 |
 | Core GRADE 5 | Assessing indirectness | 40393729 |
