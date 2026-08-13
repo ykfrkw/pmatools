@@ -3688,8 +3688,8 @@ step3_server <- function(input, output, session, state) {
       if (length(identity_missing)) htmltools::p(
         class = "pma-card-subtitle",
         htmltools::tags$strong("No analysis. "),
-        "Step 2 is missing: ", paste(identity_missing, collapse = ", "),
-        ". Nothing below is being rated until it is filled in."
+        paste0("Step 2 is missing: ", paste(identity_missing, collapse = ", "),
+               ". Nothing below is being rated until it is filled in.")
       ) else NULL,
       htmltools::p(class = "pma-card-subtitle",
         "Outcome name: ", htmltools::tags$strong(nm),
