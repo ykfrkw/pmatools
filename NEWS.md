@@ -2,6 +2,49 @@
 
 ## Breaking changes
 
+* **The analysis is no longer filtered to one level of an `outcome` column, and
+  the Step 2 "Outcome" selector is gone.** Data carrying an `outcome` column
+  with more than one level used to render a selector and pool only the rows
+  matching it. On a continuous review that is backwards: an `outcome` column
+  naming one measurement scale per study (PHQ-9, HAMD, BDI) is the ordinary
+  shape of the data a standardized mean difference exists to pool, and the
+  filter cut it down to whichever scale sorted first — leaving, in the common
+  case, a single study. Selecting nothing withdrew the analysis silently, so
+  Step 3 reported it as an unconfigured domain rather than as a missing choice.
+  `outcome` is now a descriptive column and every row is pooled. `run_ma()`
+  still refuses the one shape that cannot be pooled — the same `studlab` under
+  two outcomes, which would count that study twice — but its abort now fires
+  only on that condition and names the offending studies, where it previously
+  fired on any file with more than one outcome label anywhere. A caller that
+  relied on the old abort to catch a multi-outcome file must filter the data
+  itself, or check that each study appears once.
+
+* **Continuous outcomes default to presenting the SMD or MD itself, not a
+  proportion of responders.** The Configuration tab's responder conversion was
+  a checkbox ticked by default, which read as though converting were a step on
+  the way to a rating. It never was: Chinn's SMD-to-OR conversion reaches
+  `sof_table()` only and `grade_meta()` has never seen it. It is now a two-way
+  choice (`input$sof_presentation`, replacing `input$convert_smd_to_or`)
+  defaulting to the effect itself, with the threshold section moved above it.
+  A Summary of Findings table that used to come out in responder form will now
+  report the SMD or MD unless the responder option is picked. The certainty
+  rating is unaffected either way — it has always read the decision threshold
+  on the analysis scale. `sof_table()`'s and `export_bundle()`'s
+  `convert_smd_to_or` arguments are unchanged and still default to `FALSE`.
+
+* **The optimal information size for an SMD outcome changes, and with it some
+  Imprecision ratings.** The continuous OIS combined a threshold in
+  standardized units with a standard deviation on the raw scale, so a review
+  with a pooled SD of 4 asked for 12,991 participants where the correct target
+  is 785. An SMD is already expressed in standard deviations, so its sigma is
+  1; mean differences and ratios of means keep the pooled SD, which is correct
+  for them. Figure 4 only consults the OIS on the large-effect path, but there
+  the error inflated the shortfall: on the fixture added with this change the
+  verdict moves from "consider rating down two levels" to "rate down one
+  level". Any saved SMD rating that turned on the OIS should be re-checked.
+  `SPEC.md` §5.5 described the multiplication the code never performed and now
+  describes what runs.
+
 * **Export bundles no longer contain PNG plots.** Every plot used to ship twice,
   once as a PDF and once as a raster PNG of the same figure, in both the
   single-outcome and the multi-outcome layout. Only the PDF ships now, so a ZIP
@@ -105,6 +148,22 @@
   `pma-incon-leaf-down2`.
 
 ## New features
+
+* **The heterogeneity estimator and the random-effects confidence interval are
+  both choices now, and the model that ran is printed above the results.**
+  `run_ma()` and `run_rare_ma()` accept `method.tau` values `"PM"`, `"SJ"`,
+  `"ML"` and `"EB"` alongside the existing `"REML"` and `"DL"`; REML remains the
+  default. Cochrane's Handbook (§10.10.4.1) no longer endorses DerSimonian-Laird
+  and the simulation literature favours REML for continuous outcomes and
+  Paule-Mandel for binary ones, so both are now reachable without leaving the
+  app. Separately, the Hartung-Knapp adjustment was being applied automatically
+  at k ≥ 3 and appeared in no control, no summary and no output — and the app
+  never passed `hakn` to `run_ma()` at all, so the automatic rule could not be
+  overridden from the interface. Step 2 gains a "Random-effects CI" selector
+  (Auto / Hartung-Knapp / Classic) that defaults to that same automatic rule, so
+  existing analyses are unchanged, and a line above the results now names what
+  the fit actually did: `Random effects (REML), Hartung-Knapp CI, k = 12`.
+  Forcing Hartung-Knapp below three studies warns and applies it as asked.
 
 * **Shiny app: Step 3 says how far through it you are, and where the next click
   goes.** Each domain tab's Next stays greyed (with the reason on hover) until
