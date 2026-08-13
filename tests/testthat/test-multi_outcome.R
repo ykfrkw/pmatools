@@ -368,11 +368,12 @@ test_that("the multi-outcome ZIP has the specified layout", {
   # Summary artifacts live at the top level, per-outcome ones do not.
   expect_false(any(grepl("^outcomes/.*summary_of_findings", files)))
 
-  for (stem in c("forest_plot.pdf", "forest_plot.png", "funnel_plot.pdf",
-                 "funnel_plot.png", "results.txt", "data_long.csv",
-                 "evidence_profile.docx")) {
+  for (stem in c("forest_plot.pdf", "funnel_plot.pdf", "results.txt",
+                 "data_long.csv", "evidence_profile.docx")) {
     expect_true(paste0("outcomes/01_mortality/", stem) %in% files, info = stem)
   }
+  # Plots ship as PDF only; the PNG copy was dropped in 0.5.1.
+  expect_false(any(grepl("\\.png$", files)))
   expect_true("outcomes/02_depression_severity/results.txt" %in% files)
   expect_true("outcomes/03_serious_adverse_events/results.txt" %in% files)
 
@@ -663,8 +664,7 @@ test_that("export_bundle on a single pmatools object produces the same flat ZIP"
                               "grade_table")))
   files <- sort(zip::zip_list(zip_path)$filename)
   expect_equal(files, sort(c("data_long.csv", "analysis.R", "results.txt",
-                             "forest_plot.pdf", "forest_plot.png",
-                             "funnel_plot.pdf", "funnel_plot.png",
+                             "forest_plot.pdf", "funnel_plot.pdf",
                              "grade_table.docx", "sof_table.docx")))
   # Flat: nothing is nested under a directory.
   expect_false(any(grepl("/", files, fixed = TRUE)))

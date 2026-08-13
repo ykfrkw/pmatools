@@ -259,35 +259,33 @@ export_bundle.meta <- function(x,
   # 4. forest plot
   if ("forest" %in% include) {
     pdf_path <- file.path(work_dir, "forest_plot.pdf")
-    png_path <- file.path(work_dir, "forest_plot.png")
     fd <- if (is.list(forest_display)) forest_display else list()
     if (is.null(fd$title) || !nzchar(fd$title %||% "")) fd$title <- grade$outcome_name
-    .save_plot_pdf_png(
+    .save_plot_pdf(
       function() do.call(plot_forest, c(list(meta_obj = ma), fd)),
-      pdf_path, png_path,
+      pdf_path,
       width = max(7, 3 + 0.3 * ma$k),
       height = max(5, 1.5 + 0.35 * ma$k)
     )
-    files_in_zip <- c(files_in_zip, pdf_path, png_path)
+    files_in_zip <- c(files_in_zip, pdf_path)
   }
 
   # 4b. forest plot stratified by RoB
   if ("forest_rob" %in% include && !is.null(rob)) {
     pdf_path <- file.path(work_dir, "forest_plot_rob.pdf")
-    png_path <- file.path(work_dir, "forest_plot_rob.png")
     fdr <- if (is.list(forest_display_rob)) forest_display_rob else list()
     if (is.null(fdr$title) || !nzchar(fdr$title %||% "")) {
       fdr$title <- paste0(grade$outcome_name, " (stratified by RoB)")
     }
     k_extra <- if (!is.null(ma$k)) ma$k else 0L
-    .save_plot_pdf_png(
+    .save_plot_pdf(
       function() do.call(plot_forest_rob,
                          c(list(meta_obj = ma, rob = rob), fdr)),
-      pdf_path, png_path,
+      pdf_path,
       width  = max(8, 3 + 0.3 * k_extra),
       height = max(7, 3 + 0.4 * (k_extra + 4))
     )
-    files_in_zip <- c(files_in_zip, pdf_path, png_path)
+    files_in_zip <- c(files_in_zip, pdf_path)
   }
 
   # 4c. rare-events sensitivity outputs
@@ -301,7 +299,6 @@ export_bundle.meta <- function(x,
     files_in_zip <- c(files_in_zip, diag_path, method_path)
 
     pdf_path <- file.path(work_dir, "rare_event_method_forest.pdf")
-    png_path <- file.path(work_dir, "rare_event_method_forest.png")
     rfd <- if (is.list(rare_forest_display)) rare_forest_display else list()
     rfd <- rfd[intersect(names(rfd), c("title", "xlim",
                                       "favors_left", "favors_right"))]
@@ -309,35 +306,33 @@ export_bundle.meta <- function(x,
       rfd$title <- "Rare-event method sensitivity"
     }
     n_methods <- nrow(as.data.frame(rare$method_table))
-    .save_plot_pdf_png(
+    .save_plot_pdf(
       function() do.call(plot_rare_sensitivity_forest,
                          c(list(x = rare), rfd)),
-      pdf_path, png_path,
+      pdf_path,
       width = max(8, 4 + 0.4 * n_methods),
       height = max(5, 2.5 + 0.45 * n_methods)
     )
-    files_in_zip <- c(files_in_zip, pdf_path, png_path)
+    files_in_zip <- c(files_in_zip, pdf_path)
   }
 
   # 5. funnel plot
   if ("funnel" %in% include) {
     pdf_path <- file.path(work_dir, "funnel_plot.pdf")
-    png_path <- file.path(work_dir, "funnel_plot.png")
-    .save_plot_pdf_png(
+    .save_plot_pdf(
       function() plot_funnel(ma),
-      pdf_path, png_path,
+      pdf_path,
       width = 7, height = 6
     )
-    files_in_zip <- c(files_in_zip, pdf_path, png_path)
+    files_in_zip <- c(files_in_zip, pdf_path)
   }
 
   # 5b. trim-and-fill funnel (k >= 10)
   if ("funnel_trimfill" %in% include && (ma$k %||% 0L) >= 10) {
     pdf_path <- file.path(work_dir, "funnel_trimfill.pdf")
-    png_path <- file.path(work_dir, "funnel_trimfill.png")
     tf <- tryCatch(suppressWarnings(meta::trimfill(ma)),
                    error = function(e) NULL)
-    .save_plot_pdf_png(
+    .save_plot_pdf(
       function() {
         if (is.null(tf)) {
           graphics::plot.new()
@@ -368,15 +363,14 @@ export_bundle.meta <- function(x,
           bty    = "o", bg = "#ffffff", cex = 0.8
         )
       },
-      pdf_path, png_path, width = 7, height = 6
+      pdf_path, width = 7, height = 6
     )
-    files_in_zip <- c(files_in_zip, pdf_path, png_path)
+    files_in_zip <- c(files_in_zip, pdf_path)
   }
 
   # 5c. publication bias missing-results forest (k >= 10)
   if ("pubias_missing_forest" %in% include && (ma$k %||% 0L) >= 10) {
     pdf_path <- file.path(work_dir, "pubias_missing_forest.pdf")
-    png_path <- file.path(work_dir, "pubias_missing_forest.png")
     m_df <- if (is.data.frame(pubias_missing_df) &&
                 all(c("studlab", "n", "results_known") %in% names(pubias_missing_df))) {
       pubias_missing_df
@@ -386,15 +380,15 @@ export_bundle.meta <- function(x,
     }
     k_avail <- length(ma$TE)
     k_miss  <- nrow(m_df)
-    .save_plot_pdf_png(
+    .save_plot_pdf(
       function() plot_forest_pubias_subgroup(meta_obj    = ma,
                                              missing_df  = m_df,
                                              auto_detect = FALSE),
-      pdf_path, png_path,
+      pdf_path,
       width  = max(8, 3 + 0.3 * (k_avail + k_miss)),
       height = max(7, 3 + 0.4 * (k_avail + k_miss + 4))
     )
-    files_in_zip <- c(files_in_zip, pdf_path, png_path)
+    files_in_zip <- c(files_in_zip, pdf_path)
   }
 
   # 6a. grade_table.docx — Evidence Profile (Core GRADE series)
@@ -528,18 +522,10 @@ export_bundle.meta <- function(x,
 }
 
 # --------------------------------------------------------------------------
-# Plot saving (PDF + PNG)
+# Plot saving (PDF)
 # --------------------------------------------------------------------------
-.save_plot_pdf_png <- function(draw_fn, pdf_path, png_path,
-                                width = 8, height = 6) {
+.save_plot_pdf <- function(draw_fn, pdf_path, width = 8, height = 6) {
   grDevices::pdf(pdf_path, width = width, height = height)
-  on.exit(grDevices::dev.off(), add = TRUE)
-  draw_fn()
-  grDevices::dev.off()
-  on.exit()  # clear
-
-  grDevices::png(png_path, width = width * 100, height = height * 100,
-                 res = 100)
   on.exit(grDevices::dev.off(), add = TRUE)
   draw_fn()
   grDevices::dev.off()
@@ -879,9 +865,6 @@ export_bundle.meta <- function(x,
     "write.csv(rare_diag, \"rare_event_diagnostics.csv\", row.names = FALSE)\n",
     "write.csv(as.data.frame(rare$method_table), \"rare_event_method_table.csv\", row.names = FALSE)\n",
     "grDevices::pdf(\"rare_event_method_forest.pdf\", width = 8, height = 5)\n",
-    "plot_rare_sensitivity_forest(rare)\n",
-    "grDevices::dev.off()\n",
-    "grDevices::png(\"rare_event_method_forest.png\", width = 800, height = 500, res = 100)\n",
     "plot_rare_sensitivity_forest(rare)\n",
     "grDevices::dev.off()\n"
   )

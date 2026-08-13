@@ -462,7 +462,8 @@ test_that("export_bundle includes rare-event artifacts when supplied", {
   expect_true("rare_event_diagnostics.csv" %in% files)
   expect_true("rare_event_method_table.csv" %in% files)
   expect_true("rare_event_method_forest.pdf" %in% files)
-  expect_true("rare_event_method_forest.png" %in% files)
+  # Plots ship as PDF only; the PNG copy was dropped in 0.5.1.
+  expect_false(any(grepl("\\.png$", files)))
 })
 
 test_that("export_bundle script reruns rare-event methods when rare object supplied", {

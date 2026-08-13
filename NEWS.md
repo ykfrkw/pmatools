@@ -1,5 +1,19 @@
 # pmatools 0.5.1 (development version)
 
+## Breaking changes
+
+* **Export bundles no longer contain PNG plots.** Every plot used to ship twice,
+  once as a PDF and once as a raster PNG of the same figure, in both the
+  single-outcome and the multi-outcome layout. Only the PDF ships now, so a ZIP
+  that used to hold ten plot files holds five, and `forest_plot.png`,
+  `forest_plot_rob.png`, `forest_plot_full.png`, `funnel_plot.png`,
+  `funnel_trimfill.png`, `pubias_missing_forest.png` and
+  `rare_event_method_forest.png` are gone. The generated `analysis.R` drops its
+  PNG device calls to match. A pipeline that picks a plot out of the bundle by
+  name has to read the `.pdf`; the PDF is the higher-fidelity copy of the two
+  and was always written alongside, so nothing is lost but the raster. The
+  app's on-screen plot previews are a separate path and are unaffected.
+
 ## New features
 
 * pmatools now ships **drawings of the decision flowcharts it implements**, and

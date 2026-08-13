@@ -806,17 +806,23 @@ Note the shape change from v0.2: display arguments are passed as the named lists
 ├── data_long.csv
 ├── analysis.R
 ├── results.txt
-├── forest_plot.pdf / .png              (300 dpi, width = max(7, 3 + 0.3*k))
-├── forest_plot_rob.pdf / .png          "forest_rob"; needs `rob`
-├── funnel_plot.pdf / .png              (300 dpi)
-├── funnel_trimfill.pdf / .png          "funnel_trimfill"
-├── pubias_missing_forest.pdf / .png    "pubias_missing_forest"; rendered only when k >= 10
+├── forest_plot.pdf                     (width = max(7, 3 + 0.3*k))
+├── forest_plot_rob.pdf                 "forest_rob"; needs `rob`
+├── funnel_plot.pdf
+├── funnel_trimfill.pdf                 "funnel_trimfill"
+├── pubias_missing_forest.pdf           "pubias_missing_forest"; rendered only when k >= 10
 ├── grade_table.docx                    SoF table (single outcome → 1 row)
 ├── indirectness_table.docx             when subdomain judgments were recorded
 ├── rare_event_diagnostics.csv          when `rare` is supplied
 ├── rare_event_method_table.csv         when `rare` is supplied
-└── rare_event_method_forest.pdf / .png when `rare` is supplied
+└── rare_event_method_forest.pdf        when `rare` is supplied
 ```
+
+**Plots are PDF only (v0.5.1).** Every plot used to ship twice, as a PDF and as a
+raster PNG of the same figure. The PNG was the lower-fidelity copy of the two and
+nothing in the bundle referenced it, so it doubled the plot count for no reader who
+could not open the PDF. The generated `analysis.R` writes PDF only for the same
+reason.
 
 A renderer that fails warns and is skipped rather than aborting the whole bundle.
 
@@ -855,10 +861,10 @@ export_bundle(
 ├── README.txt                    outcome order and per-outcome analysis sets
 └── outcomes/
     ├── 01_<slug>/
-    │   ├── forest_plot.pdf / .png          the analysis actually rated
-    │   ├── forest_plot_full.pdf / .png     only when a low-RoB refit happened
-    │   ├── forest_plot_rob.pdf / .png      only when RoB labels are known
-    │   ├── funnel_plot.pdf / .png
+    │   ├── forest_plot.pdf                 the analysis actually rated
+    │   ├── forest_plot_full.pdf            only when a low-RoB refit happened
+    │   ├── forest_plot_rob.pdf             only when RoB labels are known
+    │   ├── funnel_plot.pdf
     │   ├── results.txt
     │   ├── data_long.csv                   this outcome only
     │   ├── evidence_profile.docx

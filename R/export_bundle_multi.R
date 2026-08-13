@@ -277,17 +277,15 @@ export_bundle.pmatools_set <- function(x,
 # Per-outcome helpers
 # --------------------------------------------------------------------------
 
-# Render one plot to PDF + PNG and return the relative paths. A plot that
-# cannot be drawn (funnel plots of very small analyses, for instance) must not
-# take the whole bundle down, so the half-written files are removed and a
-# warning is emitted instead.
+# Render one plot to PDF and return the relative path. A plot that cannot be
+# drawn (funnel plots of very small analyses, for instance) must not take the
+# whole bundle down, so the half-written file is removed and a warning is
+# emitted instead.
 .bundle_plot <- function(draw_fn, sub_dir, sub_rel, stem,
                          width = 8, height = 6) {
   pdf_path <- file.path(sub_dir, paste0(stem, ".pdf"))
-  png_path <- file.path(sub_dir, paste0(stem, ".png"))
   ok <- tryCatch({
-    .save_plot_pdf_png(draw_fn, pdf_path, png_path,
-                       width = width, height = height)
+    .save_plot_pdf(draw_fn, pdf_path, width = width, height = height)
     TRUE
   }, error = function(e) {
     while (grDevices::dev.cur() > 1L) grDevices::dev.off()
@@ -295,10 +293,10 @@ export_bundle.pmatools_set <- function(x,
     FALSE
   })
   if (!ok) {
-    unlink(c(pdf_path, png_path))
+    unlink(pdf_path)
     return(character(0))
   }
-  file.path(sub_rel, paste0(stem, c(".pdf", ".png")))
+  file.path(sub_rel, paste0(stem, ".pdf"))
 }
 
 # results.txt for an outcome nobody reported: the only file its directory ever
