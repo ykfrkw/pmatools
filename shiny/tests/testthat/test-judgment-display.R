@@ -152,3 +152,35 @@ test_that("pma_step2_required_unset names exactly the blank required fields", {
   expect_true(all(pma_step2_required_unset(NULL, NULL) %in%
                     PMA_STEP2_REQUIRED))
 })
+
+test_that("the required mapping selects depend on the outcome type", {
+  expect_identical(pma_step2_mapping_required("binary"),
+                   c("col_studlab", "col_treat", "col_n", "col_event"))
+  expect_identical(pma_step2_mapping_required("continuous"),
+                   c("col_studlab", "col_treat", "col_n",
+                     "col_mean", "col_sd"))
+  # The ids the client is told to manage are fixed, and cover both types: an
+  # id dropped from the message keeps its cached mark instead of losing it.
+  expect_true(all(pma_step2_mapping_required("binary") %in%
+                    PMA_STEP2_MAPPING_ALL))
+  expect_true(all(pma_step2_mapping_required("continuous") %in%
+                    PMA_STEP2_MAPPING_ALL))
+})
+
+test_that("pma_step2_mapping_unset names the blank selects for that type", {
+  mapped <- list(col_studlab = "study", col_treat = "arm", col_n = "n",
+                 col_event = "events", col_mean = "", col_sd = "")
+  # A binary outcome does not care that mean and sd are unmapped.
+  expect_identical(pma_step2_mapping_unset("binary", mapped), character(0))
+  expect_identical(pma_step2_mapping_unset("continuous", mapped),
+                   c("col_mean", "col_sd"))
+
+  # "(select)" is submitted as "", which is how an unmapped select reads; NULL
+  # is how it reads before the server has populated it at all.
+  expect_identical(pma_step2_mapping_unset("binary", list()),
+                   c("col_studlab", "col_treat", "col_n", "col_event"))
+  expect_identical(
+    pma_step2_mapping_unset("binary", utils::modifyList(mapped,
+                                                        list(col_n = NA))),
+    "col_n")
+})

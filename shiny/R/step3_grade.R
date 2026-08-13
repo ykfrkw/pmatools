@@ -195,7 +195,7 @@ step3_ui <- function() {
     # repaints the highlight after the DOM is thrown away.
     htmltools::tags$script(src = "flowchart.js"),
 
-    pma_step_header(s$title, s$what),
+    pma_step_header(s$title),
 
     # Which studies the numbers on this step came from. Renders nothing when
     # the analysis rests on all studies, and the bare uiOutput wrapper is

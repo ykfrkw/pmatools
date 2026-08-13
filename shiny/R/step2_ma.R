@@ -49,6 +49,17 @@ step2_ui <- function(state = NULL) {
     }
   }
 
+  # Which accordion panels are open when the step is built. "Outcome" always:
+  # it is the only panel holding something no default can supply. "Data
+  # mapping" until an analysis exists, because a pooled result is proof the
+  # mapping resolved - after that, re-opening it on every return trip from
+  # Step 3 is noise. A mapping select that is blank when the reviewer actually
+  # asks for an analysis is handled from the other end, by required-fields.js,
+  # which forces its panel open; that check cannot be made here because the
+  # selects are populated by the server after this UI is built.
+  mapping_settled <- !is.null(state) && !is.null(shiny::isolate(state$ma))
+  open_panels <- c("outcome", if (!mapping_settled) "mapping")
+
   htmltools::tagList(
     # Registers the `pma_required_fields` custom message handler used by the
     # required-field highlighting below. It lives here rather than in app.R's
@@ -57,182 +68,233 @@ step2_ui <- function(state = NULL) {
     # body, which is exactly what repaints the marks (see required-fields.js).
     htmltools::tags$script(src = "required-fields.js"),
 
-    pma_step_header(s$title, s$what, s$why),
+    pma_step_header(s$title),
 
     htmltools::div(
       class = "row",
       style = "display: flex; gap: 1.5rem; flex-wrap: wrap;",
 
-      # Sidebar
+      # Sidebar. `flex: 1 1 320px` rather than `0 0 320px`: the fixed basis
+      # made the sidebar refuse to shrink, so on a 375px phone the row was
+      # wider than the viewport and the whole document scrolled sideways.
       htmltools::div(
-        style = "flex: 0 0 320px;",
+        style = "flex: 1 1 320px;",
         pma_card(
           title = "Model configuration",
-          htmltools::h6("Outcome"),
-          shiny::textInput("outcome_name", "Outcome name (required)",
-                           value = outcome_name_default, width = "100%",
-                           placeholder = "e.g., Depression response"),
-          # No preselected direction: the user must actively choose. The
-          # values "desirable" / "undesirable" are the vocabulary the vendored
-          # pmatools validates, so only the labels are re-worded here.
-          shiny::radioButtons("small_values",
-            "Direction (required): is a SMALLER value of this outcome favorable?",
-            choices = c(
-              "Favorable - smaller is better (e.g., mortality, symptom score)" = "desirable",
-              "Unfavorable - smaller is worse (e.g., response, remission)"     = "undesirable"),
-            selected = small_values_default, inline = FALSE),
-          htmltools::p(class = "pma-card-subtitle",
-            paste0("Both are required. They name the outcome in the Summary of ",
-                   "Findings table, prefill every forest-plot title and axis label, ",
-                   "and set the bias direction used by the Risk-of-Bias check in Step 3.")),
-          # Follow-up belongs to the outcome's identity, not to the display
-          # settings: Core GRADE 6's first column is "Outcome and follow-up",
-          # and a review that pools two outcomes measured over different time
-          # frames needs one value per outcome. It is therefore collected here,
-          # beside the name and direction, and saved with the outcome.
-          shiny::textInput("outcome_follow_up",
-                           "Follow-up / time frame (optional)",
-                           value = follow_up_default, width = "100%",
-                           placeholder = "e.g., longest, range 8-52 weeks"),
-          htmltools::p(class = "pma-card-subtitle",
-            paste0("Printed under the outcome name in the \"Outcome and ",
-                   "follow-up\" column of the Summary of Findings table. ",
-                   "Saved with the outcome, so several outcomes can carry ",
-                   "different follow-up times in one table.")),
-          shiny::conditionalPanel(
-            "input.outcome_type == 'continuous'",
-            shiny::textInput("outcome_unit",
-                             "Unit of the scale (optional, continuous only)",
-                             value = unit_default, width = "100%",
-                             placeholder = "e.g., points on the PHQ-9, days"),
-            htmltools::p(class = "pma-card-subtitle",
-              paste0("Labels the Difference column of the Summary of Findings ",
-                     "table for a mean difference. A standardized mean ",
-                     "difference is not on the original scale, so its ",
-                     "difference is always labelled in standard deviation ",
-                     "units; a ratio measure carries no unit."))
-          ),
-          htmltools::hr(),
-          htmltools::h6("Column mapping"),
-          shiny::selectInput("col_studlab", "Study label (studlab)",
-                             choices = NULL, selectize = FALSE),
-          shiny::selectInput("col_treat", "Arm / treatment (treat)",
-                             choices = NULL, selectize = FALSE),
-          shiny::uiOutput("arm_assignment_ui"),
 
-          shiny::radioButtons("outcome_type", "Outcome type",
-            choices = c("Binary" = "binary", "Continuous" = "continuous"),
-            selected = outcome_type_default, inline = TRUE),
-          shiny::uiOutput("outcome_filter_ui"),
+          # Four accordion panels rather than one 120-line column of controls.
+          # The order is the order the questions arise, and only the panels
+          # that need an answer are open (see `open_panels` above).
+          bslib::accordion(
+            multiple = TRUE,
+            open     = open_panels,
 
-          shiny::selectInput("col_n", "Sample size (n)",
-                             choices = NULL, selectize = FALSE),
-          shiny::conditionalPanel(
-            "input.outcome_type == 'binary'",
-            shiny::selectInput("col_event", "Events",
-                               choices = NULL, selectize = FALSE)
-          ),
-          shiny::conditionalPanel(
-            "input.outcome_type == 'continuous'",
-            shiny::selectInput("col_mean", "Mean",
-                               choices = NULL, selectize = FALSE),
-            shiny::selectInput("col_sd",   "SD",
-                               choices = NULL, selectize = FALSE)
+            bslib::accordion_panel(
+              "Outcome", value = "outcome",
+              shiny::textInput("outcome_name", "Outcome name (required)",
+                               value = outcome_name_default, width = "100%",
+                               placeholder = "e.g., Depression response"),
+              # No preselected direction: the user must actively choose. The
+              # values "desirable" / "undesirable" are the vocabulary the
+              # vendored pmatools validates, so only the labels are re-worded.
+              shiny::radioButtons("small_values",
+                "Direction (required): is a SMALLER value of this outcome favorable?",
+                choices = c(
+                  "Favorable - smaller is better (e.g., mortality, symptom score)" = "desirable",
+                  "Unfavorable - smaller is worse (e.g., response, remission)"     = "undesirable"),
+                selected = small_values_default, inline = FALSE),
+              htmltools::p(class = "pma-card-subtitle",
+                paste0("Both are required. They name the outcome in the Summary of ",
+                       "Findings table, prefill every forest-plot title and axis label, ",
+                       "and set the bias direction used by the Risk-of-Bias check in Step 3.")),
+              # Binary / continuous sits with the outcome's identity rather
+              # than with the column mapping: it is a property of the outcome,
+              # and it decides which of the optional fields below applies.
+              shiny::radioButtons("outcome_type", "Outcome type",
+                choices = c("Binary" = "binary", "Continuous" = "continuous"),
+                selected = outcome_type_default, inline = TRUE),
+              # Which outcome of a multi-outcome dataset is being rated -
+              # identity again, not mapping. Renders nothing when the data
+              # holds a single outcome.
+              shiny::uiOutput("outcome_filter_ui"),
+              # Follow-up belongs to the outcome's identity, not to the display
+              # settings: Core GRADE 6's first column is "Outcome and
+              # follow-up", and a review that pools two outcomes measured over
+              # different time frames needs one value per outcome.
+              shiny::textInput("outcome_follow_up",
+                               "Follow-up / time frame (optional)",
+                               value = follow_up_default, width = "100%",
+                               placeholder = "e.g., longest, range 8-52 weeks"),
+              htmltools::p(class = "pma-card-subtitle",
+                paste0("Printed under the outcome name in the \"Outcome and ",
+                       "follow-up\" column of the Summary of Findings table. ",
+                       "Saved with the outcome, so several outcomes can carry ",
+                       "different follow-up times in one table.")),
+              shiny::conditionalPanel(
+                "input.outcome_type == 'continuous'",
+                shiny::textInput("outcome_unit",
+                                 "Unit of the scale (optional, continuous only)",
+                                 value = unit_default, width = "100%",
+                                 placeholder = "e.g., points on the PHQ-9, days"),
+                htmltools::p(class = "pma-card-subtitle",
+                  paste0("Labels the Difference column of the Summary of Findings ",
+                         "table for a mean difference. A standardized mean ",
+                         "difference is not on the original scale, so its ",
+                         "difference is always labelled in standard deviation ",
+                         "units; a ratio measure carries no unit."))
+              )
+            ),
+
+            bslib::accordion_panel(
+              "Data mapping", value = "mapping",
+              shiny::selectInput("col_studlab", "Study label (studlab)",
+                                 choices = NULL, selectize = FALSE),
+              shiny::selectInput("col_treat", "Arm / treatment (treat)",
+                                 choices = NULL, selectize = FALSE),
+              shiny::uiOutput("arm_assignment_ui"),
+              shiny::selectInput("col_n", "Sample size (n)",
+                                 choices = NULL, selectize = FALSE),
+              shiny::conditionalPanel(
+                "input.outcome_type == 'binary'",
+                shiny::selectInput("col_event", "Events",
+                                   choices = NULL, selectize = FALSE)
+              ),
+              shiny::conditionalPanel(
+                "input.outcome_type == 'continuous'",
+                shiny::selectInput("col_mean", "Mean",
+                                   choices = NULL, selectize = FALSE),
+                shiny::selectInput("col_sd",   "SD",
+                                   choices = NULL, selectize = FALSE)
+              )
+            ),
+
+            bslib::accordion_panel(
+              "Model details", value = "model",
+              # Regular-workflow controls. Each panel uses a single, flat
+              # conditionalPanel expression so that the JS evaluator can hide /
+              # show them reliably across step transitions (nested conditional
+              # panels were not consistently re-evaluated when
+              # input.outcome_type changed in step 2).
+              shiny::conditionalPanel(
+                "input.outcome_type == 'binary' && input.use_rare_workflow != true",
+                shiny::radioButtons("sm_bin", "Summary measure",
+                  choices = c("OR", "RR"), selected = "OR", inline = TRUE)
+              ),
+              shiny::conditionalPanel(
+                "input.outcome_type == 'continuous' && input.use_rare_workflow != true",
+                shiny::uiOutput("sm_cont_ui")
+              ),
+              shiny::conditionalPanel(
+                "input.use_rare_workflow != true",
+                shiny::radioButtons("model", "Model",
+                  choices = c("Random" = "random", "Common (Fixed)" = "common"),
+                  selected = "random", inline = TRUE)
+              ),
+              shiny::conditionalPanel(
+                "input.outcome_type == 'binary' && input.use_rare_workflow != true",
+                shiny::selectInput("method", "Pooling method",
+                  choices = c("Inverse", "MH", "Peto"),
+                  selected = "Inverse")
+              ),
+              shiny::conditionalPanel(
+                "input.model == 'random' && input.use_rare_workflow != true",
+                shiny::selectInput("method_tau", "tau-squared estimator",
+                  choices = c("REML", "DL"),
+                  selected = "REML")
+              ),
+              shiny::conditionalPanel(
+                "input.outcome_type == 'binary' && input.use_rare_workflow != true",
+                shiny::numericInput("incr", "Continuity correction (zero events)",
+                  value = 0.5, min = 0, step = 0.1)
+              )
+            ),
+
+            bslib::accordion_panel(
+              "Subgroup", value = "subgroup",
+              shiny::selectInput("subgroup_col", "Subgroup column",
+                                 choices = c("(none)" = ""),
+                                 selected = "", selectize = FALSE),
+              shiny::uiOutput("subgroup_order_ui")
+            )
           ),
 
-          # Regular-workflow controls. Each panel uses a single, flat
-          # conditionalPanel expression so that the JS evaluator can hide /
-          # show them reliably across step transitions (nested conditional
-          # panels were not consistently re-evaluated when input.outcome_type
-          # changed in step 2).
-          shiny::conditionalPanel(
-            "input.outcome_type == 'binary' && input.use_rare_workflow != true",
-            shiny::radioButtons("sm_bin", "Summary measure",
-              choices = c("OR", "RR"), selected = "OR", inline = TRUE)
-          ),
-          shiny::conditionalPanel(
-            "input.outcome_type == 'continuous' && input.use_rare_workflow != true",
-            shiny::uiOutput("sm_cont_ui")
-          ),
-          shiny::conditionalPanel(
-            "input.use_rare_workflow != true",
-            shiny::radioButtons("model", "Model",
-              choices = c("Random" = "random", "Common (Fixed)" = "common"),
-              selected = "random", inline = TRUE)
-          ),
-          shiny::conditionalPanel(
-            "input.outcome_type == 'binary' && input.use_rare_workflow != true",
-            shiny::selectInput("method", "Pooling method",
-              choices = c("Inverse", "MH", "Peto"),
-              selected = "Inverse")
-          ),
-          shiny::conditionalPanel(
-            "input.model == 'random' && input.use_rare_workflow != true",
-            shiny::selectInput("method_tau", "tau-squared estimator",
-              choices = c("REML", "DL"),
-              selected = "REML")
-          ),
-          shiny::conditionalPanel(
-            "input.outcome_type == 'binary' && input.use_rare_workflow != true",
-            shiny::numericInput("incr", "Continuity correction (zero events)",
-              value = 0.5, min = 0, step = 0.1)
-          ),
-
-          htmltools::hr(),
-          htmltools::h6("Subgroup analysis"),
-          shiny::selectInput("subgroup_col", "Subgroup column",
-                             choices = c("(none)" = ""),
-                             selected = "", selectize = FALSE),
-          shiny::uiOutput("subgroup_order_ui"),
-
-          htmltools::hr(),
-          shiny::checkboxInput("auto_rerun",
-            "Auto-rerun on change (500ms debounce)",
-            value = auto_rerun_default),
-          shiny::actionButton("run_ma", "Run analysis",
-            class = "btn btn-primary", style = "width: 100%;")
+          # Sticky action bar. The sidebar is taller than a laptop viewport
+          # with every panel open, and the primary action used to sit at the
+          # very bottom of it, so changing a model setting meant scrolling back
+          # down to act on it. Bleeds to the card's edges (see .pma-step2-actions
+          # in www/shadcn.css).
+          htmltools::div(
+            class = "pma-step2-actions",
+            shiny::actionButton("run_ma", "Run analysis",
+              class = "btn btn-primary", style = "width: 100%;"),
+            shiny::checkboxInput("auto_rerun",
+              "Auto-rerun on change (500ms debounce)",
+              value = auto_rerun_default)
+          )
         )
       ),
 
-      # Right pane
+      # Right pane. `min-width: min(480px, 100%)` rather than a flat 480px:
+      # the flat floor is what pushed the document past a 375px viewport once
+      # the two columns had wrapped onto separate rows.
       htmltools::div(
-        style = "flex: 1; min-width: 480px;",
+        style = "flex: 1; min-width: min(480px, 100%);",
         shiny::uiOutput("rare_events_panel"),
-        pma_card(
-          title = "Results",
-          shiny::tabsetPanel(
-            id = "ma_tabs",
-            shiny::tabPanel("Forest plot",
-              htmltools::div(class = "pma-forest-image",
+
+        # Before the first run the Results card is an empty tab strip, which
+        # says nothing about what to do next. Hidden and replaced by one line,
+        # rather than unrendered: the card holds the forest-display widgets,
+        # and a renderUI swap would throw away every value typed into them
+        # (the same hazard output$step2_nav exists to avoid). The condition is
+        # written so that the placeholder, not the empty card, is what shows
+        # before output.pma_has_ma has arrived from the server.
+        shiny::conditionalPanel(
+          "!output.pma_has_ma",
+          pma_card(
+            htmltools::p(
+              class = "pma-card-subtitle", style = "margin-bottom: 0;",
+              htmltools::HTML(
+                "Press <strong>Run analysis</strong> to pool the studies."))
+          )
+        ),
+        shiny::conditionalPanel(
+          "output.pma_has_ma",
+          pma_card(
+            title = "Results",
+            shiny::tabsetPanel(
+              id = "ma_tabs",
+              shiny::tabPanel("Forest plot",
+                htmltools::div(class = "pma-forest-image",
+                  shinycssloaders::withSpinner(
+                    shiny::imageOutput("forest_plot", height = "auto"),
+                    type = 4, color = "#0f172a", size = 0.6,
+                    proxy.height = "320px")),
+                shiny::uiOutput("rare_sensitivity_block"),
+                # Ids and layout are shared with the four Step 3 domain
+                # panels; see pma_forest_display_panel() in ui_helpers.R.
+                # NULL prefix = the unprefixed Step 2 ids.
+                pma_forest_display_panel(NULL)
+              ),
+              shiny::tabPanel("Funnel plot",
                 shinycssloaders::withSpinner(
-                  shiny::imageOutput("forest_plot", height = "auto"),
+                  shiny::imageOutput("funnel_plot", height = "auto"),
                   type = 4, color = "#0f172a", size = 0.6,
-                  proxy.height = "320px")),
-              shiny::uiOutput("rare_sensitivity_block"),
-              # Ids and layout are shared with the four Step 3 domain
-              # panels; see pma_forest_display_panel() in ui_helpers.R.
-              # NULL prefix = the unprefixed Step 2 ids.
-              pma_forest_display_panel(NULL)
-            ),
-            shiny::tabPanel("Funnel plot",
-              shinycssloaders::withSpinner(
-                shiny::imageOutput("funnel_plot", height = "auto"),
-                type = 4, color = "#0f172a", size = 0.6,
-                proxy.height = "320px"),
-              pma_funnel_display_panel("funnel_step2"),
-              htmltools::p(class = "pma-card-subtitle",
-                "Egger's test annotation appears when k >= 10.")
-            ),
-            shiny::tabPanel("Text results",
-              htmltools::div(
-                class = "pma-results-wrap",
-                shiny::actionButton("copy_results", "Copy",
-                  icon = shiny::icon("copy"),
-                  class = "btn btn-sm btn-secondary pma-copy-btn"),
-                shinycssloaders::withSpinner(
-                  shiny::verbatimTextOutput("ma_summary"),
-                  type = 4, color = "#0f172a", size = 0.5,
-                  proxy.height = "80px")
+                  proxy.height = "320px"),
+                pma_funnel_display_panel("funnel_step2"),
+                htmltools::p(class = "pma-card-subtitle",
+                  "Egger's test annotation appears when k >= 10.")
+              ),
+              shiny::tabPanel("Text results",
+                htmltools::div(
+                  class = "pma-results-wrap",
+                  shiny::actionButton("copy_results", "Copy",
+                    icon = shiny::icon("copy"),
+                    class = "btn btn-sm btn-secondary pma-copy-btn"),
+                  shinycssloaders::withSpinner(
+                    shiny::verbatimTextOutput("ma_summary"),
+                    type = 4, color = "#0f172a", size = 0.5,
+                    proxy.height = "80px")
+                )
               )
             )
           )
@@ -1257,6 +1319,15 @@ step2_server <- function(input, output, session, state) {
     paste(c(body, footer), collapse = "\n")
   }
 
+  # Drives the two conditionalPanels in the right pane: the one-line "Press Run
+  # analysis" placeholder before the first run, the Results card after it. A
+  # plain output flag rather than a renderUI swap, because the Results card
+  # holds the forest-display widgets and re-rendering it would reset every one
+  # of them. suspendWhenHidden = FALSE because the flag itself is never on
+  # screen, so Shiny would otherwise never compute it.
+  output$pma_has_ma <- shiny::reactive(!is.null(state$ma))
+  shiny::outputOptions(output, "pma_has_ma", suspendWhenHidden = FALSE)
+
   output$ma_summary <- shiny::renderPrint({
     obj <- state$ma
     if (is.null(obj)) return(cat("No analysis run yet."))
@@ -1298,12 +1369,24 @@ step2_server <- function(input, output, session, state) {
   # `armed` is the old required_touched() gate, and it is what turns that pill
   # destructive-red: still nothing painted red until the reviewer has actually
   # asked for an analysis, which is the behaviour the comment above defends.
+  #
+  # The column-mapping selects ride on the same message (see
+  # PMA_STEP2_MAPPING_ALL in R/ui_helpers.R). They are required in exactly the
+  # same sense, and since the accordion can hide them, the client needs to be
+  # told which are blank in order to open the panel that hides one.
   shiny::observe({
-    unset <- pma_step2_required_unset(input$outcome_name, input$small_values)
+    unset <- c(
+      pma_step2_required_unset(input$outcome_name, input$small_values),
+      pma_step2_mapping_unset(
+        input$outcome_type,
+        list(col_studlab = input$col_studlab, col_treat = input$col_treat,
+             col_n       = input$col_n,       col_event = input$col_event,
+             col_mean    = input$col_mean,    col_sd    = input$col_sd))
+    )
     # as.list() so a single id (or none) still serialises as a JSON array.
     session$sendCustomMessage(
       "pma_required_fields",
-      list(all   = as.list(PMA_STEP2_REQUIRED),
+      list(all   = as.list(c(PMA_STEP2_REQUIRED, PMA_STEP2_MAPPING_ALL)),
            unset = as.list(unset),
            armed = isTRUE(required_touched()))
     )

@@ -36,7 +36,7 @@ step1_ui <- function() {
   s <- EDU_COPY$steps$step1
 
   htmltools::tagList(
-    pma_step_header(s$title, s$what, s$why),
+    pma_step_header(s$title),
 
     pma_card(
       title = "Load data",

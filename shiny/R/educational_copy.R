@@ -6,69 +6,36 @@
 
 EDU_COPY <- list(
 
+  # Step headers carry the title and nothing else. Each step used to open with
+  # a paragraph describing what it does and, on Step 1, why the app is only
+  # part of a systematic review. That prose was re-read on every visit, pushed
+  # the first control below the fold, and said the same thing four times. What
+  # is genuinely once-per-session moved to `intro_modal` below; what described
+  # an individual control moved next to that control.
   steps = list(
-    step1 = list(
-      title = "Step 1: Data",
-      what  = paste0(
-        "This step loads your study-level dataset and validates it. ",
-        "The app accepts long-format data only: one row per study-arm pair, ",
-        "or one row per study-outcome-arm pair when an outcome column is present. ",
-        "Required columns include studlab, treat, n, and either event or mean/sd. ",
-        "You can paste from ",
-        "Excel, upload a .csv or .xlsx, or load the bundled sample dataset."
-      ),
-      why   = htmltools::HTML(paste0(
-        "<strong>Statistical pooling is only a small part of a systematic ",
-        "review. A high-quality SR&amp;MA also needs a detailed, prespecified ",
-        "and pre-registered protocol (e.g., on PROSPERO, OSF or other platforms), ",
-        "a comprehensive search, dual independent ",
-        "screening and data extraction, and risk-of-bias assessment - all ",
-        "completed BEFORE the analysis.</strong> ",
-        "This app handles the pooling and Core GRADE certainty steps; make sure ",
-        "the upstream review work is in place first."
-      ))
-    ),
-    step2 = list(
-      title = "Step 2: Meta-analysis",
-      what  = paste0(
-        "This step pools effect estimates across studies using the {meta} ",
-        "R package. You choose the outcome type (binary or continuous), ",
-        "the effect measure (e.g., OR, RR, SMD), the pooling method, and ",
-        "the heterogeneity estimator. The forest plot visualizes study ",
-        "estimates and the pooled effect; the funnel plot helps detect ",
-        "small-study effects and possible publication bias."
-      ),
-      why   = NULL
-    ),
-    step3 = list(
-      title = "Step 3: Certainty assessment (Core GRADE series)",
-      what  = paste0(
-        "This step rates the certainty of evidence: your confidence that ",
-        "the estimate above reflects the true effect. Core GRADE starts at ",
-        "High for randomized trials (or Low for observational studies) ",
-        "and rates DOWN for concerns in five domains: Risk of Bias, ",
-        "Inconsistency, Indirectness, Imprecision, and Publication Bias. ",
-        "First set the decision threshold (it drives three of the five ",
-        "domains), then work through each domain: it explains its ",
-        "algorithm, shows the computed judgment, and lets you override if ",
-        "your clinical judgment differs - a written rationale is required ",
-        "for every manual override. You can move freely between tabs, but ",
-        "the final certainty and the Step 4 export stay marked incomplete ",
-        "until every domain has been reviewed and confirmed."
-      ),
-      why   = NULL
-    ),
-    step4 = list(
-      title = "Step 4: Export",
-      what  = paste0(
-        "This step bundles every artifact you have generated into a single ",
-        "ZIP - including a fully reproducible analysis.R script. Anyone ",
-        "(including future-you) can re-run the analysis from the CSV and ",
-        "the script alone, with library(pmatools). This is what makes the ",
-        "work reproducible and citable."
-      ),
-      why   = NULL
-    )
+    step1 = list(title = "Step 1: Data"),
+    step2 = list(title = "Step 2: Meta-analysis"),
+    step3 = list(title = "Step 3: Certainty assessment (Core GRADE series)"),
+    step4 = list(title = "Step 4: Export")
+  ),
+
+  # Shown once per session, from app.R's server body, before the reviewer
+  # touches anything. This is the one claim in the app that is about the work
+  # AROUND the analysis rather than about a control on screen, so it is stated
+  # once and dismissed rather than reprinted above every step.
+  intro_modal = list(
+    title = "Before you start",
+    body  = htmltools::HTML(paste0(
+      "<p><strong>Statistical pooling is only a small part of a systematic ",
+      "review. A high-quality SR&amp;MA also needs a detailed, prespecified ",
+      "and pre-registered protocol (e.g., on PROSPERO, OSF or other ",
+      "platforms), a comprehensive search, dual independent screening and ",
+      "data extraction, and risk-of-bias assessment - all completed BEFORE ",
+      "the analysis.</strong></p>",
+      "<p>This app handles the pooling and Core GRADE certainty steps; make ",
+      "sure the upstream review work is in place first.</p>"
+    )),
+    dismiss = "Got it"
   ),
 
   pmid_url = function(pmid) paste0("https://pubmed.ncbi.nlm.nih.gov/", pmid, "/"),

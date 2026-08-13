@@ -3,10 +3,14 @@
 # There is no package here, so nothing can be library()'d. The files below are
 # sourced straight out of R/, in the order app.R sources them, and every one of
 # them only DEFINES things at source time - no Shiny session is created, no
-# reactive is touched. That is why only these three are listed: R/step1_data.R,
-# R/step2_ma.R, R/step3_grade.R and R/step4_export.R define server functions
-# whose bodies need `input` / `output` / `session` / `state`, and testing those
-# would need a Shiny test harness this app does not have.
+# reactive is touched.
+#
+# R/step2_ma.R is on the list for its UI half only: step2_ui() is a pure
+# function of `state` and can be rendered to HTML and inspected (see
+# test-step2-layout.R). Its other half, step2_server(), is merely defined here
+# and never called - like R/step1_data.R, R/step3_grade.R and R/step4_export.R,
+# whose server functions need `input` / `output` / `session` / `state` and a
+# Shiny test harness this app does not have.
 
 # testthat::test_dir() sets the working directory to tests/testthat before
 # sourcing helpers, so walking up from getwd() lands on the app root -- which
@@ -39,7 +43,8 @@ for (.f in c(file.path(PMA_APP_ROOT, "R", "_pmatools", "utils.R"),
   }
 }
 
-for (.f in c("R/ui_helpers.R", "R/educational_copy.R", "R/step3_threshold.R")) {
+for (.f in c("R/ui_helpers.R", "R/educational_copy.R", "R/step3_threshold.R",
+             "R/step2_ma.R")) {
   source(file.path(PMA_APP_ROOT, .f))
 }
 rm(.f)

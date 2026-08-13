@@ -4,7 +4,7 @@ step4_ui <- function() {
   s <- EDU_COPY$steps$step4
 
   htmltools::tagList(
-    pma_step_header(s$title, s$what),
+    pma_step_header(s$title),
 
     # Multi-outcome Summary of Findings, assembled from the assessments
     # saved on the Step 3 "Final certainty" tab. Shown before the bundle
@@ -95,17 +95,10 @@ step4_ui <- function() {
           htmltools::tags$a(href = "https://doi.org/10.1136/bmj-2024-083865",
                             target = "_blank",
                             "Guyatt G, et al. Core GRADE 5: Indirectness. BMJ 2025."))
-      ),
-      htmltools::p(
-        style = "margin-top: 1rem; font-style: italic;",
-        htmltools::HTML(paste0(
-          "<strong>Statistical pooling is only a small part of a systematic review. ",
-          "A high-quality SR&amp;MA also needs a detailed, prespecified and pre-registered protocol ",
-          "(e.g., on PROSPERO, OSF or other platforms), a comprehensive search, dual independent ",
-          "screening and data extraction, and risk-of-bias assessment - all ",
-          "completed BEFORE the analysis.</strong>"
-        ))
       )
+      # The "pooling is only a small part of a systematic review" paragraph
+      # used to be restated here, verbatim, from the Step 1 header. It is now
+      # EDU_COPY$intro_modal and is shown once at the start of the session.
     ),
 
     pma_wizard_nav(current_step = 4)

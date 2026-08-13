@@ -12,13 +12,14 @@ pma_card <- function(..., title = NULL, subtitle = NULL, id = NULL) {
   )
 }
 
-# Step header with title + "What this step does"
-pma_step_header <- function(title, what, why = NULL) {
+# Step header: the title, and nothing else. The descriptive paragraph and the
+# Step 1 "why this matters" note that used to render here are gone -- the
+# once-per-session claim is EDU_COPY$intro_modal (shown from app.R), and what
+# described a single control now sits beside that control.
+pma_step_header <- function(title) {
   htmltools::div(
     class = "pma-step-header",
-    htmltools::h2(title, style = "margin-top: 0;"),
-    htmltools::p(class = "pma-card-subtitle", what),
-    if (!is.null(why)) htmltools::p(class = "pma-why", why) else NULL
+    htmltools::h2(title, style = "margin-top: 0;")
   )
 }
 
@@ -991,6 +992,40 @@ pma_step2_required_unset <- function(outcome_name, small_values) {
     unset <- c(unset, "small_values")
   }
   unset
+}
+
+# ----- Step 2 column mapping ----------------------------------------------
+# The mapping selects are required too, but the set of them is not fixed: a
+# binary outcome needs `event`, a continuous one `mean` and `sd`. They ride on
+# the same `pma_required_fields` message as the two fields above -- the client
+# paints them with the same two-tier mark, and (once ARMED) opens the accordion
+# panel hiding any that is blank, so pressing Run analysis can never leave the
+# reviewer looking at a collapsed panel with no idea what is wrong.
+#
+# ALL is what the message declares it manages, and stays fixed on purpose: the
+# client caches per-id flags, so an id dropped from the list would keep its
+# last mark rather than losing it when the outcome type changes.
+PMA_STEP2_MAPPING_ALL <- c("col_studlab", "col_treat", "col_n",
+                           "col_event", "col_mean", "col_sd")
+
+pma_step2_mapping_required <- function(outcome_type) {
+  measure <- if (identical(outcome_type, "continuous")) {
+    c("col_mean", "col_sd")
+  } else {
+    "col_event"
+  }
+  c("col_studlab", "col_treat", "col_n", measure)
+}
+
+# `values` is a named list of the current select values, keyed by input id.
+pma_step2_mapping_unset <- function(outcome_type, values) {
+  required <- pma_step2_mapping_required(outcome_type)
+  is_blank <- function(id) {
+    v <- values[[id]]
+    is.null(v) || length(v) != 1L || is.na(v) ||
+      !nzchar(trimws(as.character(v)))
+  }
+  required[vapply(required, is_blank, logical(1))]
 }
 
 # Render a base R plot to a temp PNG and trim white margins via {magick}.

@@ -45,6 +45,37 @@
     return el.closest ? el.closest('.shiny-input-container') : null;
   }
 
+  // A mark nobody can see is not a mark. The Step 2 sidebar is a bslib
+  // accordion, so a blank required field may sit inside a collapsed panel;
+  // open it.
+  //
+  // Only when ARMED, and only once per panel per DOM build. Before the
+  // reviewer has asked for an analysis the panel state is theirs to choose,
+  // and the column selects are legitimately blank for the first few hundred
+  // milliseconds of every build while the server populates them - opening on
+  // that would fight the user and flash on every return from Step 3. The
+  // once-only latch is stored on the panel element, which the renderUI
+  // rebuild throws away along with the rest of the DOM, so the next Run
+  // analysis on a fresh body opens it again.
+  function reveal(box) {
+    if (window.pmaRequiredArmed !== true) return;
+    if (!box.closest) return;
+    var panel = box.closest('.accordion-collapse');
+    if (!panel || panel.classList.contains('show')) return;
+    if (panel.dataset && panel.dataset.pmaRevealed === '1') return;
+    if (panel.dataset) panel.dataset.pmaRevealed = '1';
+    panel.classList.add('show');
+    // Navigate to the toggle through the item rather than by id: bslib
+    // generates the panel id at render time and it needs escaping in a
+    // selector.
+    var item = panel.closest('.accordion-item');
+    var btn = item && item.querySelector('.accordion-button');
+    if (btn) {
+      btn.classList.remove('collapsed');
+      btn.setAttribute('aria-expanded', 'true');
+    }
+  }
+
   function applyAll() {
     var armed = window.pmaRequiredArmed === true;
     Object.keys(state).forEach(function (id) {
@@ -57,6 +88,7 @@
       // a red border behind on a field that is still blank.
       if (state[id] && armed) box.classList.add(ARMED_CLASS);
       else box.classList.remove(ARMED_CLASS);
+      if (state[id]) reveal(box);
     });
   }
 

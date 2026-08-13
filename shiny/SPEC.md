@@ -143,7 +143,32 @@ Four Step 3 outputs read it, all through the pure helpers in `R/step3_threshold.
 
 - **Header**: app title "pmatools — pairwise meta-analysis with GRADE", small nav with link to docs (pmatools README on GitHub) and shinyapps.io status.
 - **Stepper**: horizontal 4-step indicator under the header. Steps shown as: `1 Data — 2 Meta-analysis — 3 GRADE — 4 Export`. Current step bold + filled circle; completed steps green check; future steps muted.
-- **Footer**: small print "Powered by pmatools v{version}; see github.com/ykfrkw/pmatools"; citation hint "If you use this in published work, please cite pmatools and the BMJ 2025 Core GRADE series."
+- **Footer**: small print "Powered by yukifurukawa.jp/pmatools/", followed by the running pmatools version from `pma_pmatools_version()` (`R/ui_helpers.R`). The version is footer chrome because it belongs to the whole session, not to one step; it was previously reachable only by opening Step 2's "Text results" tab, which is no place to look for the version of the tool you are about to cite.
+
+#### 3.1.1 Orientation modal
+
+`EDU_COPY$intro_modal` (title / body / dismiss) is shown from `app.R`'s server
+body with `showModal(modalDialog(...))`, **once per session**, before the
+reviewer touches anything.
+
+It carries the one claim in the app that is about the work *around* the
+analysis: statistical pooling is a small part of a systematic review, which
+also needs a prespecified and pre-registered protocol, a comprehensive search,
+dual independent screening and extraction, and risk-of-bias assessment, all
+completed before the analysis.
+
+Two rules:
+
+- **Session-scoped guard, never client storage.** A `reactiveVal(FALSE)` in the
+  server body. No `localStorage`, no cookie: a returning reviewer is a new
+  session rating a new review, not someone who has already been told today.
+- **It must not re-appear on a step change.** The guard is set before the modal
+  is shown, and the observer that shows it takes no reactive dependency on
+  `state$step`.
+
+The text was formerly `EDU_COPY$steps$step1$why`, rendered as body copy at the
+top of Step 1 and restated verbatim in Step 4's "How to cite" card. Both copies
+are gone.
 
 ### 3.2 Step 1 — Data
 
@@ -155,11 +180,18 @@ Single column (`bslib::page_fluid`), 3 cards stacked:
 2. **Column mapping** — visible after data is loaded
 3. **Preview & edit** — `DT::DTOutput` with editable cells
 
-Below: Step header banner with `What this step does`, and **Next →** button (disabled until `state$data` is non-NULL and validates).
+Below: the step header, and a **Next →** button (disabled until `state$data` is non-NULL and validates).
 
-#### 3.2.2 Step header copy
+#### 3.2.2 Step header
 
-> **Step 1: Data.** This step loads your study-level dataset and validates it. The app accepts data in two formats: **long format** (one row per study-arm pair, used internally by `{meta}`) and **wide format** (one row per study with paired columns like `event_e`/`event_c`). The app converts wide → long automatically. You can paste from Excel, upload a `.csv` or `.xlsx`, or load the bundled sample dataset.
+The title, and nothing else — `pma_step_header(EDU_COPY$steps$step1$title)`.
+
+`pma_step_header()` takes a title and no other argument. Every step used to
+open with a `$what` paragraph describing the step and, on Step 1, a `$why`
+note; all five fields are deleted. The paragraphs were re-read on every visit
+to the step, pushed the first control below the fold, and said much the same
+thing four times. What was genuinely once-per-session became §3.1.1's modal;
+what described a single control now sits beside that control.
 
 #### 3.2.3 Inputs
 
@@ -191,32 +223,56 @@ When the user clicks **Next →**:
 
 #### 3.2.5 Why this matters
 
-> **Why this matters.** Clean data is the foundation of every analysis that follows. Meta-analysis tools assume specific column names and types — if your `n` column is read as text or your event counts include decimals, the pooled estimate will be wrong or the analysis will fail. The mapping screen lets you point your column names to the canonical names without renaming columns in your source file.
+Not a screen. The Step 1 "why this matters" copy is §3.1.1's once-per-session modal.
 
 ### 3.3 Step 2 — Meta-analysis
 
 #### 3.3.1 Layout
 
-Two columns: left sidebar with model controls, right pane with tabbed plots and result text.
+Two columns in one flex row: left sidebar with model controls, right pane with tabbed plots and result text.
 
-#### 3.3.2 Step header copy
+Both columns must be able to shrink. The sidebar is `flex: 1 1 320px` and the
+right pane `flex: 1; min-width: min(480px, 100%)`. A fixed `flex: 0 0 320px`
+basis and a flat `min-width: 480px` floor were what made a 375px viewport
+render a 492px document and scroll the whole page sideways; the rule the app
+has to satisfy is `document.scrollWidth <= document.clientWidth` at 375px.
+`tests/testthat/test-step2-layout.R` pins both declarations — there is no
+browser driver here, so what is asserted is the CSS, not the measurement.
 
-> **Step 2: Meta-analysis.** This step pools effect estimates across studies using the `{meta}` R package. You choose the **outcome type** (binary or continuous), the **effect measure** (e.g., OR, RR, SMD), the **pooling method**, and the **heterogeneity estimator**. The forest plot visualizes individual study estimates and the pooled effect with its 95% confidence interval; the funnel plot helps detect small-study effects and possible publication bias.
+#### 3.3.2 Step header
+
+The title, and nothing else. See §3.2.2.
 
 #### 3.3.3 Inputs (sidebar)
 
-- `radioButtons("outcome_type", c("Binary" = "binary", "Continuous" = "continuous"))`
-- For binary: `radioButtons("sm", c("OR", "RR"))`
-- For continuous: `radioButtons("sm", c("SMD", "MD", "RoM"))`
-- `radioButtons("model", c("Random" = "random", "Common (Fixed)" = "common"))`
-- `selectInput("method", "Pooling method")` — depends on sm (Inverse / MH / Peto)
-- `selectInput("method_tau", "Heterogeneity estimator", c("REML", "DL"), selected = "REML")` — only when random
-- `numericInput("incr", "Continuity correction", value = 0.5, min = 0)` — only when binary
-- `radioButtons("use_subgroup", "Subgroup analysis", c("No", "Yes"))`
-- If yes: `selectInput("subgroup_col", "Subgroup column", choices = ...)`
-- `actionButton("run_ma", "Run analysis", class = "btn-primary")`
+One `pma_card("Model configuration")` holding a `bslib::accordion(multiple = TRUE)` of four panels, then a sticky action bar.
 
-Inline help (`bslib::tooltip()`) on each input, e.g. for REML: *"Restricted maximum likelihood. Generally preferred over DerSimonian-Laird (DL); produces tau-squared estimates with better small-sample properties (Viechtbauer 2005)."*
+| Panel (`value`) | Contents | Open on build |
+|---|---|---|
+| Outcome (`outcome`) | `outcome_name`, `small_values`, `outcome_type`, `outcome_filter_ui`, `outcome_follow_up`, `outcome_unit` (continuous only) | always |
+| Data mapping (`mapping`) | `col_studlab`, `col_treat`, `arm_assignment_ui`, `col_n`, `col_event` (binary) / `col_mean` + `col_sd` (continuous) | while `state$ma` is NULL |
+| Model details (`model`) | `sm_bin` / `sm_cont_ui`, `model`, `method`, `method_tau`, `incr` | never |
+| Subgroup (`subgroup`) | `subgroup_col`, `subgroup_order_ui` | never |
+
+- **Outcome type is identity, not mapping.** `outcome_type` and
+  `outcome_filter_ui` sit in the Outcome panel: they say *which* outcome is
+  being rated, and `outcome_type` decides which of the panel's own optional
+  fields (`outcome_unit`) applies.
+- **Data mapping's open state is decided at build time from `state$ma`**, not
+  from the selects themselves — the selects are populated by the server
+  *after* this UI is built, so at build time they are all blank whatever the
+  data holds. A non-NULL `state$ma` is proof the mapping resolved, so the
+  panel stays shut on every return trip from Step 3. A select that is blank
+  when the reviewer actually asks for an analysis is handled from the other
+  end, by `www/required-fields.js` (§3.3.6).
+- **Every input id is unchanged by the restructure.** Step 3 reads most of
+  these off `input$` directly, so a rename is silent everywhere else;
+  `tests/testthat/test-step2-layout.R` asserts each id renders.
+- **Sticky action bar** (`.pma-step2-actions`, `position: sticky; bottom: 0`)
+  closing the card, holding `actionButton("run_ma")` and
+  `checkboxInput("auto_rerun")`. The sidebar is taller than a laptop viewport
+  with every panel open, and the primary action used to sit at the bottom of
+  it, so changing a model setting meant scrolling back down to act on it.
 
 #### 3.3.4 Outputs (right pane)
 
@@ -228,9 +284,20 @@ Tabset with 3 tabs:
 
 Below the tabset: collapsible "Forest plot adjustments" with title, label_e, label_c, xlim min/max overrides.
 
+Before the first run the tabset would be three empty tabs, so the card is
+**hidden** and one line shows in its place: "Press **Run analysis** to pool the
+studies." The swap is two `conditionalPanel()`s on a single server flag,
+`output$pma_has_ma` (`reactive(!is.null(state$ma))`, with
+`outputOptions(suspendWhenHidden = FALSE)` because the flag is never itself on
+screen). It is deliberately not a `renderUI()` swap: the Results card holds the
+forest- and funnel-display widgets, and re-rendering it would reset every value
+typed into them — the same hazard `output$step2_nav` exists to avoid. The
+conditions are written so the placeholder, not the empty card, is what shows
+before the flag has arrived from the server.
+
 #### 3.3.5 Why this matters
 
-> **Why this matters.** The pooled estimate and confidence interval you see here drive every GRADE judgment in the next step. The choice between random and fixed-effects models, and between REML and DL, can meaningfully change tau-squared and the prediction interval. Random-effects with REML and Hartung-Knapp adjustment is the modern default for clinical evidence synthesis.
+Not a screen; see §3.2.5.
 
 #### 3.3.6 Required fields — two visual tiers
 
@@ -238,6 +305,24 @@ Below the tabset: collapsible "Forest plot adjustments" with title, label_e, lab
 proceed without: `outcome_name` and `small_values`. Which of them is still
 blank is decided by the pure `pma_step2_required_unset()`, so the rule is
 testable without a session; `www/required-fields.js` paints it.
+
+The **column-mapping selects ride on the same message**, and there is
+deliberately no second mechanism for them. `PMA_STEP2_MAPPING_ALL` is what the
+message declares it manages and is fixed; `pma_step2_mapping_required()` names
+the subset that applies to the current outcome type (`col_event` for binary,
+`col_mean` + `col_sd` for continuous) and `pma_step2_mapping_unset()` the
+subset of that which is blank. `ALL` stays fixed because the client caches a
+flag per id: an id dropped from the list would keep its last mark rather than
+lose it when the outcome type changes.
+
+Because §3.3.3's accordion can hide a blank select, `required-fields.js` also
+**opens the panel** containing one — but only when `armed`, and only once per
+panel per DOM build. Before the reviewer has asked for an analysis the panel
+state is theirs, and every mapping select is legitimately blank for the first
+few hundred milliseconds of each build while the server populates it; opening
+on that would fight the user and flash on every return from Step 3. The
+once-only latch lives on the panel element, which the `renderUI` rebuild throws
+away with the rest of the DOM.
 
 | state | classes | appearance |
 |---|---|---|

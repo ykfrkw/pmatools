@@ -111,7 +111,14 @@ ui <- bslib::page_fluid(
     style = "color: hsl(var(--muted-foreground)); font-size: 0.8rem; padding: 1rem 0;",
     htmltools::HTML(
       "Powered by <a href='https://yukifurukawa.jp/pmatools/' target='_blank'>yukifurukawa.jp/pmatools/</a>."
-    )
+    ),
+    # Which pmatools produced the numbers on screen. It was reachable only by
+    # opening Step 2's "Text results" tab, which is no place to look for the
+    # version of the tool you are citing. pma_pmatools_version() is the one
+    # supported way to ask -- the app sources pmatools instead of installing
+    # it, so utils::packageVersion() errors here.
+    htmltools::span(style = "margin-left: 0.5rem;",
+                    paste0("pmatools ", pma_pmatools_version()))
   )
 )
 
@@ -198,6 +205,30 @@ server <- function(input, output, session) {
       `4` = step4_ui(),
       step1_ui()
     )
+  })
+
+  # ================== Orientation modal ==================
+  #
+  # Shown once, at the start of the session, and never again. The claim it
+  # carries used to head Step 1 as body copy, where it was reprinted on every
+  # return to the step and read by nobody.
+  #
+  # The guard is a session-scoped reactiveVal on purpose. localStorage or a
+  # cookie would suppress the modal for a returning reviewer, and a returning
+  # reviewer is a new session rating a new review, not someone who has already
+  # been told today. An observe() with no reactive dependency also fires only
+  # once, but the flag says so out loud and keeps that true if this ever gains
+  # a dependency.
+  intro_modal_shown <- shiny::reactiveVal(FALSE)
+  shiny::observe({
+    if (isTRUE(shiny::isolate(intro_modal_shown()))) return()
+    intro_modal_shown(TRUE)
+    shiny::showModal(shiny::modalDialog(
+      title     = EDU_COPY$intro_modal$title,
+      EDU_COPY$intro_modal$body,
+      easyClose = TRUE,
+      footer    = shiny::modalButton(EDU_COPY$intro_modal$dismiss)
+    ))
   })
 
   # Wire up each step's server logic

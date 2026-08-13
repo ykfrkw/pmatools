@@ -49,6 +49,36 @@ test_that("the Risk of Bias copy states the one-level cap on rule 5", {
                fixed = TRUE)
 })
 
+test_that("a step header carries a title and nothing else", {
+  # The `what` paragraph each step used to open with is gone: it was re-read
+  # on every visit, pushed the first control below the fold, and said the same
+  # thing four times over. pma_step_header() takes the title alone now, so a
+  # resurrected `$what` would be silently dropped rather than rendered - hence
+  # the assertion on the shape, not just on the header.
+  for (step in c("step1", "step2", "step3", "step4")) {
+    entry <- EDU_COPY$steps[[step]]
+    expect_named(entry, "title", info = step)
+    expect_true(nzchar(entry$title), info = step)
+  }
+  expect_identical(names(formals(pma_step_header)), "title")
+})
+
+test_that("the once-per-session intro modal carries the SR&MA caveat", {
+  # Formerly EDU_COPY$steps$step1$why, and restated verbatim in the Step 4
+  # "How to cite" card. It is the one claim in the app about the work AROUND
+  # the analysis, so it is now stated once, from app.R, as a modal.
+  intro <- EDU_COPY$intro_modal
+  expect_setequal(names(intro), c("title", "body", "dismiss"))
+  for (field in c("title", "dismiss")) {
+    expect_true(nzchar(intro[[field]]), info = field)
+  }
+  body <- as.character(intro$body)
+  expect_match(body, "pre-registered protocol", fixed = TRUE)
+  expect_match(body, "dual independent screening and data extraction",
+               fixed = TRUE)
+  expect_match(body, "completed BEFORE the analysis", fixed = TRUE)
+})
+
 test_that("every rated domain still carries its Core GRADE reference", {
   for (d in c("rob", "inconsistency", "indirectness", "imprecision", "pubias")) {
     entry <- EDU_COPY$domains[[d]]

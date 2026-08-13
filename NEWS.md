@@ -157,6 +157,26 @@
 
 ## Behaviour changes
 
+* **The Shiny app's Steps 1 and 2 stop lecturing and start fitting on a
+  phone.** Three changes, all user-visible, none breaking. (1) Every step used
+  to open with a paragraph describing the step, and Step 1 with a further note
+  that pooling is only a small part of a systematic review — reprinted verbatim
+  in Step 4's "How to cite" card. The paragraphs are deleted and the note is
+  now a modal shown **once per session**, guarded by a session-scoped
+  `reactiveVal` rather than `localStorage`, so a returning reviewer sees it
+  again but a reviewer changing step does not. (2) Step 2's sidebar is four
+  `bslib` accordion panels — Outcome, Data mapping, Model details, Subgroup —
+  with only what needs an answer open, and the *Run analysis* button and
+  *Auto-rerun* checkbox in a bar stuck to the bottom of the card instead of
+  below a column of controls taller than the viewport. Every input id is
+  unchanged. A blank required column select opens the panel hiding it, using
+  the existing required-field message rather than a second mechanism. (3) Step
+  2's two columns can now shrink: at a 375px viewport the document no longer
+  scrolls sideways. Also: the right pane says "Press **Run analysis** to pool
+  the studies" before the first run instead of showing three empty tabs, and
+  the running pmatools version moved from inside Step 2's "Text results" tab to
+  the page footer. See `shiny/SPEC.md` §3.1.1, §3.2.2, §3.3.1 and §3.3.3.
+
 * **`inconsistency_subgroup_explained` now works on the automated path**, which
   is where the domain notes had been telling reviewers to use it all along.
   When `inconsistency_ci_diff` is `NULL` the automated zone tally runs, and its
