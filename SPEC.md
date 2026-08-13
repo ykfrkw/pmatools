@@ -587,9 +587,10 @@ AUTO Step 2 ({{threshold_label}}): zone counts (k = {{k}}): above_threshold = {{
 
 In `assess_imprecision()`, when no explicit `ois_*` is provided:
 
-- **Binary (v0.5.0): `ois_p1 = ois_p0 * (1 - ois_rrr)`, default `ois_rrr = 0.20`.** The MID is *not* used. Core GRADE 2 (p6): "For binary outcomes, these involve specifying the acceptable error rates: α (typically 0.05) and β (typically 0.20), the control group event rate (chosen from the context), and **a modest relative risk reduction, typically 20% or 25%**." `ois_p0` still comes from the ARD baseline risk when `threshold_scale = "ard"`, otherwise from the pooled control-arm rate.
+- **Binary (v0.5.0): `ois_p1 = ois_p0 * (1 ∓ ois_rrr)`, default `ois_rrr = 0.20`.** The MID is *not* used. (v0.5.1: the sign follows the outcome direction and the observed effect — §5.5, "OIS inputs".) Core GRADE 2 (p6): "For binary outcomes, these involve specifying the acceptable error rates: α (typically 0.05) and β (typically 0.20), the control group event rate (chosen from the context), and **a modest relative risk reduction, typically 20% or 25%**." `ois_p0` still comes from the ARD baseline risk when `threshold_scale = "ard"`, otherwise from the pooled control-arm rate.
 - Continuous (MD): `ois_delta = threshold_internal` (raw outcome units) — the same paragraph writes the continuous case out separately and *does* send it to the MID ("by specifying the smallest difference between intervention and control that one would want to avoid missing (ie, the MID)").
 - Continuous (SMD): `ois_delta = threshold_internal × pooled_SD` *(see §5.4 for pooled_SD computation)*.
+- Continuous (v0.5.1): `ois_sd = compute_pooled_sd(meta_obj)` when the caller supplies none.
 
 **Comparison unit (v0.5.0): participants, not events.** Core GRADE 2 Fig 4 caption: "N=number of participants; OIS=optimal information size"; body: "If the total sample size of all the studies included in a meta-analysis exceeds the OIS, one does not rate down". The auto-computed binary OIS is therefore a target **N** compared against `sum(n.e) + sum(n.c)`; the implied event count is reported in the notes for information. Supplying `ois_events` explicitly still selects an event-based comparison (backward compatible).
 
@@ -1247,7 +1248,9 @@ If the weight share cannot be computed the count share is used and the notes say
 | 2 | `za == zl`, non-trivial, inflation ≤ `rob_inflation_threshold` | `"no"` |
 | 3 | `za == zl`, non-trivial, inflation > `rob_inflation_threshold` | `"some_concerns"` (−1) |
 | 4 | `za != zl`, no sign flip across null | `"some_concerns"` (−1) |
-| 5 | `za != zl`, sign flip (`above` ↔ `below`) | `"serious"` (−2) |
+| 5 | `za != zl`, sign flip (`above` ↔ `below`) | `"some_concerns"` (−1) |
+
+Rule 5 rated down **two** levels up to v0.4. Since v0.5.0 every automated risk-of-bias path is capped at one level: Core GRADE 4 describes no two-level risk-of-bias downgrade (every leaf of Fig 2 reads "rate down" / "do not rate down"), and `.ROB_CAP_NOTE` is appended to the judgment note wherever the cap bites. `"serious"` stays reachable only through the scalar `rob` override, which requires `rob_rationale`.
 
 `inflation_ratio = (|TE_all| - |TE_low|) / |TE_low|` is evaluated **only** when the shift runs in the bias-favouring direction implied by `small_values`; a deflation in that direction never triggers a downgrade. When the direction gate blocks a downgrade that the inflation threshold would otherwise have caused, the notes say so explicitly, including the direction reasoning, so readers do not conclude the threshold was ignored (v0.4.0).
 
@@ -1524,6 +1527,26 @@ Does the CI cross the chosen threshold?
 
 **Operationalisation of "implausibly large".** The BMJ text operationalises this for binary outcomes only ("certainly relative risk reduction >40%, possibly >30%"). For continuous outcomes pmatools uses Cohen's convention (standardised effect ≥ 0.8) and **says so in the notes**, flagging it as a pmatools choice rather than a Core GRADE rule.
 
+The ratio-scale magnitude is `1 - exp(-|log ratio|)`, which is symmetric: RR 0.60 and RR 1.667 both read 40%. Its **wording** is not symmetric, and up to v0.5.0 the note always said "relative risk reduction", so a pooled OR of 2.33 was reported as a 57% *reduction*. Since v0.5.1 an effect above the null is labelled a relative risk **increase**, stated as the equivalent reduction with the arms exchanged so the printed number keeps its meaning.
+
+#### OIS inputs (v0.5.1)
+
+**Direction of the binary alternative rate.** `assess_imprecision()` takes `small_values` (forwarded by `grade_meta()`, the same value `assess_rob()` receives) and derives `ois_p1` from `ois_p0` accordingly:
+
+| `small_values` | meaning for a binary outcome | `ois_p1` |
+|---|---|---|
+| `NULL` | direction unknown | `ois_p0 * (1 - ois_rrr)` — the pre-v0.5.1 behaviour, unchanged |
+| `"undesirable"` | a smaller value is worse ⇒ **events are desirable** (response, remission), and a benefit is an *increase* | `ois_p0 * (1 + ois_rrr)` |
+| `"desirable"` | a smaller value is better ⇒ **events are undesirable** (mortality, relapse), and a benefit is a *reduction* | `ois_p0 * (1 - ois_rrr)` |
+
+**The declared direction decides, not the observed effect.** The OIS is an a-priori power calculation for the smallest effect worth not missing, which is a property of the question — a modest *benefit* — and `small_values` is what states which way that runs. Letting the pooled estimate pick the side would make the target partly data-driven and would collapse `"desirable"` and `"undesirable"` onto the same answer whenever the estimate sits above the null. The pooled effect is nevertheless read and reported: the note says whether it agrees, and when it does not (the evidence describes a harm on this outcome) it says so explicitly rather than silently powering against the other tail.
+
+`ois_p1` is clamped into (0, 1) — `ois_p0 * (1 + ois_rrr)` can exceed 1 on a high control-group risk — and the note says so when it clamps. An explicitly supplied `ois_p1` still takes precedence and no direction is applied to it.
+
+**Auto-derived `ois_sd` (continuous).** `.calc_ois()` needs both `ois_delta` and `ois_sd`. `ois_delta` has always fallen back to the Threshold; `ois_sd` had no fallback, so a continuous outcome with no reviewer-supplied SD reached Fig 4's large-effect path, found no OIS and landed on "do not rate down" with no explanation. `ois_sd` now falls back to `compute_pooled_sd(meta_obj)`, and the notes and the `ois_sd_source` fact record that it was derived rather than supplied.
+
+**"OIS could not be computed" names the missing input.** When the OIS is still unavailable, the Fig 4 path string names which of `ois_p0` / `ois_p1` / `ois_delta` / `ois_sd` was missing, or says that the analysis carries no complete arm-level sample sizes to compare against.
+
 **CI ratio** (Fig 4 caption) is the upper CI limit divided by the lower limit on the ratio scale.
 
 **Notes** record which Fig 4 path produced the judgment, including which CI-ratio rule fired and the continuous 400-per-group (total N 800) rule of thumb.
@@ -1551,6 +1574,8 @@ The container is **domain-agnostic**: `.fact(key, label, value, numeric = NA)` b
 | | `crosses_null` | — (`"yes"` / `"no"`) |
 | | `threshold_position` | — (omitted when no MID zone applies) |
 | | `ois` | observed / target ratio; the `value` says `"not applied on this Fig 4 path"` when Fig 4 did not consult it |
+| | `ois_target_rate` | `ois_p1` (v0.5.1; recorded only when `ois_p1` was derived rather than supplied — the `value` names the direction and why it was chosen) |
+| | `ois_sd_source` | `ois_sd` (v0.5.1; recorded only when the pooled SD was derived rather than supplied) |
 | | `fig4_path` | — |
 | | `ois_used` | — (`"yes"` / `"no"`) |
 | Indirectness, Publication bias | none recorded | — |

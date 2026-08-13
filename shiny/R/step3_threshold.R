@@ -7,6 +7,73 @@
 # adding to this file. Sourced BEFORE R/step3_grade.R (see local_files in
 # app.R), though R only needs the definitions to exist by call time.
 
+# ----- Why is there no analysis? ------------------------------------------
+#
+# When Step 2 cannot run, `ma()` sets state$ma to NULL and records WHAT WAS
+# MISSING in state$ma_blocked, a character vector of human labels. Step 3 then
+# has to explain itself instead of printing "Run analysis and configure
+# domains." at a reviewer who did run one and then emptied a required field.
+#
+# Three Step 3 outputs say it (final_certainty, sof_preview,
+# cert_incomplete_banner) and a fourth reads the identity subset
+# (outcome_name_echo), so the sentence is built here, once, rather than four
+# times. Pure: labels in, string out, no session.
+
+# The Step 2 outcome-identity fields, spelled exactly as ma() records them in
+# state$ma_blocked. Kept beside the message builder because these two are the
+# only things that must agree on the wording; step2_ma.R reads this constant
+# rather than repeating the strings.
+STEP2_IDENTITY_FIELD_LABELS <- c(
+  outcome_name = "Outcome name",
+  small_values = "Direction (smaller = favorable?)"
+)
+
+# Readable names for the column-mapping selectors, so a blocked message can
+# name a missing column the way the Step 2 label does rather than by its
+# canonical data-frame name.
+STEP2_COLUMN_FIELD_LABELS <- c(
+  studlab = "Study label column",
+  treat   = "Arm / treatment column",
+  n       = "Sample size column",
+  event   = "Events column",
+  mean    = "Mean column",
+  sd      = "SD column"
+)
+
+# Canonical column name -> the label a blocked message prints. An unmapped
+# name is passed through rather than dropped, so a new required column shows
+# up as itself instead of vanishing from the sentence.
+step2_column_labels <- function(cols) {
+  if (is.null(cols) || !length(cols)) return(character(0))
+  cols <- as.character(cols)
+  lab <- unname(STEP2_COLUMN_FIELD_LABELS[cols])
+  ifelse(is.na(lab), cols, lab)
+}
+
+step3_blocked_fields <- function(blocked) {
+  if (is.null(blocked)) return(character(0))
+  blocked <- as.character(blocked)
+  blocked <- blocked[!is.na(blocked) & nzchar(blocked)]
+  unique(blocked)
+}
+
+# The subset of state$ma_blocked that names an outcome-identity field, i.e.
+# something the reviewer answers in Step 2's first card rather than in the
+# column mapping. output$outcome_name_echo uses it to stop printing a stale
+# outcome name as though it were still in force.
+step3_blocked_identity <- function(blocked) {
+  intersect(step3_blocked_fields(blocked), unname(STEP2_IDENTITY_FIELD_LABELS))
+}
+
+# The one sentence. NULL when nothing is recorded, which callers read as
+# "no analysis has been attempted" and answer with their idle placeholder.
+step3_blocked_message <- function(blocked) {
+  fields <- step3_blocked_fields(blocked)
+  if (!length(fields)) return(NULL)
+  paste0("No analysis. Step 2 is missing: ", paste(fields, collapse = ", "),
+         ". Go back to Step 2 and complete it.")
+}
+
 # Map a suggest_threshold() return onto the two threshold reactiveVals used by
 # the Configuration tab.
 #

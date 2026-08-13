@@ -92,6 +92,8 @@ state <- reactiveValues(
   data_raw  = NULL,                # original input pre-mapping
   ma_args   = list(),              # arguments passed to run_ma()
   ma        = NULL,                # meta object from pmatools::run_ma()
+  ma_blocked= NULL,                # chr: the Step 2 fields that withdrew it
+  outcome_type = NULL,             # "binary" / "continuous", mirrored from Step 2
   grade_args= list(),              # arguments passed to grade_meta()
   grade     = NULL,                # pmatools object from pmatools::grade_meta()
   display   = list(                # SoF display options
@@ -110,6 +112,25 @@ Step transitions (`Next` / `Back` buttons) update `state$step`. Each step's UI i
 
 - `state$data` recomputes when Step 1 inputs change (debounced 300ms).
 - `state$ma` recomputes only when user clicks **"Run analysis"** in Step 2.
+- **`state$ma` is withdrawn only by something that genuinely invalidates it.** Step 1's commit observer depends on `state$rob_table` (so a Step 3 risk-of-bias edit cannot revert Step 1 cell edits), which means it re-runs on every RoB edit; it nulls `state$ma` / `state$grade` **only when `pma_dataset_signature()` changes**. A per-study RoB or indirectness relabel is a property of the studies, not of the outcome — the same contract `begin_new_outcome()` states — and the signature already excludes those two columns. Before v0.5.1 the null was unconditional and unrecoverable: `observeEvent(ma())` returns early on `NULL`, and after a Step 3 → Step 2 → Step 3 round trip `input$run_ma` is a rebuilt button reporting 0, so `ma()` never re-ran.
+- **A withdrawn analysis is never silent.** Every path in `ma()` that returns `NULL` after a successful run has been recorded either notifies or records why. Missing required inputs set `state$ma_blocked` to a character vector of Step 2 field labels; arm labels absent from the data raise a notification once `state$regular_ma` exists.
+
+#### `state$ma_blocked`
+
+`NULL` when no analysis has been attempted or when one succeeded; otherwise the Step 2 fields that were empty when the analysis was withdrawn (`"Outcome name"`, `"Direction (smaller = favorable?)"`, `"Events column"`, …). Written by `ma()` in `R/step2_ma.R`; cleared by **every** writer that sets a non-`NULL` `state$ma`.
+
+Four Step 3 outputs read it, all through the pure helpers in `R/step3_threshold.R` so the wording cannot drift:
+
+| output | with a block recorded | otherwise |
+|---|---|---|
+| `final_certainty` | amber box naming the missing fields | amber "no threshold" box, or the plain idle line |
+| `sof_preview` | the same amber box | the SoF, or the plain idle line (was a bare `"..."`) |
+| `cert_incomplete_banner` | amber "Assessment blocked" | the unconfirmed-domains banner |
+| `outcome_name_echo` | `"(cleared in Step 2)"` plus a line naming the missing identity fields | the mirrored `state$outcome_name` |
+
+`state$outcome_name` is mirrored only on a successful run and is deliberately never cleared, so the echo must read the live block rather than the mirror; otherwise it prints an outcome name that is no longer in the form.
+
+**Sticky `state$outcome_type`.** Binary/continuous is mirrored into state and re-seeded into the Step 2 radio, like `outcome_name` and `small_values`, because a rebuilt widget otherwise pushes its hard-coded `"binary"` default back on every 3 → 2 → 3 round trip. `grade_obj()` derives `outcome_type` for `grade_meta()` from the fitted object via `step3_is_binary_outcome()` rather than from the raw input.
 - `state$grade` recomputes whenever `state$ma` is set OR any Step 3 input changes (debounced 500ms; cheap to compute).
 - Forest/funnel plots are rendered from `state$ma`.
 - SoF preview rendered from `state$grade` and `state$display`.

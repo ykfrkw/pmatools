@@ -1763,12 +1763,18 @@ step3_server <- function(input, output, session, state) {
         paste0("Set a control-group risk on the Configuration tab to see the ",
                "absolute-scale equivalent of this relative risk reduction.")))
     }
+    # Which way the modest RRR moves the rate is the package's decision, not a
+    # second one taken here: .ois_target_increase() is vendored with the rest
+    # of R/, so the echo and assess_imprecision() cannot disagree.
+    dirn <- .ois_target_increase(state$small_values, step3_pooled_te(state$ma))
+    up   <- isTRUE(dirn$increase)
     # Round the control-group risk before applying the RRR so the three
     # displayed numbers add up; the calculation itself uses the unrounded
     # rate (ois_p0 = threshold baseline / 1,000).
     p0d <- round(tb)
-    p1d <- round(p0d * (1 - rrr))
-    dif <- p0d - p1d
+    p1d <- round(p0d * (if (up) 1 + rrr else 1 - rrr))
+    p1d <- min(max(p1d, 0), 1000)
+    dif <- abs(p0d - p1d)
     htmltools::div(
       style = paste0(
         "padding: 0.5rem 0.75rem; background: #f5f5f5; ",
@@ -1776,8 +1782,9 @@ step3_server <- function(input, output, session, state) {
         "font-size: 0.85rem;"),
       htmltools::p(style = "margin: 0;",
         htmltools::strong(sprintf(
-          "RRR %.0f%% = %.0f -> %.0f per 1,000 (%.0f fewer per 1,000)",
-          100 * rrr, p0d, p1d, dif))),
+          "Relative risk %s %.0f%% = %.0f -> %.0f per 1,000 (%.0f %s per 1,000)",
+          if (up) "increase" else "reduction",
+          100 * rrr, p0d, p1d, dif, if (up) "more" else "fewer"))),
       htmltools::p(style = "margin: 0.25rem 0 0;",
         sprintf(paste0("The OIS is powered to detect this difference at ",
                        "alpha = 0.05 and beta = 0.20, using the ",
@@ -1785,6 +1792,7 @@ step3_server <- function(input, output, session, state) {
                        "Configuration tab. It is a separate quantity from ",
                        "the decision threshold and is not derived from it."),
                 tb)),
+      htmltools::p(style = "margin: 0.25rem 0 0;", dirn$reason, "."),
       htmltools::p(style = paste0("margin: 0.35rem 0 0; font-style: italic; ",
                                   "color: hsl(var(--muted-foreground));"),
         paste0("Core GRADE 2, verbatim: 'For binary outcomes, these involve ",
@@ -1811,6 +1819,10 @@ step3_server <- function(input, output, session, state) {
       "Pooled SD for OIS (auto from data)",
       value = val, min = 0, step = 0.1)
   })
+  # Inside a conditionalPanel keyed on input$outcome_type, so it is hidden
+  # whenever the analysis is binary -- and a suspended output never runs, which
+  # left input$ois_sd NULL on the continuous path this widget exists to serve.
+  shiny::outputOptions(output, "ois_sd_ui", suspendWhenHidden = FALSE)
 
   # Which side of the binary low/high split "some concerns" (and, through the
   # "*" default of the rob vector, an unrated study) falls on. Reviewer
@@ -2044,7 +2056,20 @@ step3_server <- function(input, output, session, state) {
       threshold          = th_args$threshold,
       threshold_scale    = th_args$threshold_scale,
       threshold_baseline = th_args$threshold_baseline,
-      outcome_type = if (identical(input$outcome_type, "binary")) "relative" else "absolute",
+      # Derived from the fitted object, not from input$outcome_type. The Step 2
+      # radio is rebuilt on every step change and, before state$outcome_type
+      # existed, reported "binary" again on every 3 -> 2 -> 3 round trip; a
+      # metacont fit was then sent outcome_type = "relative", for which
+      # .calc_ois() wants ois_p0 / ois_p1 that a continuous analysis cannot
+      # supply, and the OIS silently vanished. step3_is_binary_outcome() reads
+      # the class and the arm-level counts first and only falls back to the
+      # radio, and it is what .threshold_grade_args() and config_status
+      # already use.
+      outcome_type = if (step3_is_binary_outcome(obj, state$outcome_type)) {
+        "relative"
+      } else {
+        "absolute"
+      },
       # Same control-group risk the Configuration tab shows, not a second
       # crude computation of its own.
       ois_p0       = ois_p0_value(),
@@ -2381,6 +2406,13 @@ step3_server <- function(input, output, session, state) {
 
   # Banner on the Final certainty tab while domains remain unconfirmed.
   output$cert_incomplete_banner <- shiny::renderUI({
+    # A withdrawn analysis outranks an unfinished one: with no analysis there
+    # is nothing provisional to warn about, only a Step 2 field to go and fill
+    # in. Same sentence as the panel below it (step3_blocked_message()).
+    blocked <- step3_blocked_message(state$ma_blocked)
+    if (is.null(state$ma) && !is.null(blocked)) {
+      return(.alert_box("Assessment blocked. ", blocked))
+    }
     unconf <- pma_unconfirmed_domains(domain_confirmed())
     if (!length(unconf)) return(NULL)
     htmltools::div(
@@ -2484,10 +2516,19 @@ step3_server <- function(input, output, session, state) {
     )
   })
 
+  # suspendWhenHidden = FALSE on all four. A suspended output keeps whatever
+  # the browser last painted, so standing on the Final certainty tab while the
+  # analysis is withdrawn used to leave the domain tabs showing a full
+  # evaluation of an analysis that no longer exists -- next to a Final
+  # certainty panel saying there was none. Cheap to keep live: each is one
+  # string off an already-computed object.
   output$rob_notes    <- shiny::renderText(domain_notes("Risk of bias"))
   output$incon_notes  <- shiny::renderText(domain_notes("Inconsistency"))
   output$impre_notes  <- shiny::renderText(domain_notes("Imprecision"))
   output$pubias_notes <- shiny::renderText(domain_notes("Publication bias"))
+  for (.id in c("rob_notes", "incon_notes", "impre_notes", "pubias_notes")) {
+    shiny::outputOptions(output, .id, suspendWhenHidden = FALSE)
+  }
 
   # ----- Which Core GRADE 2 Fig 4 branch the analysis took ----------------
   # Parsed from the "Fig 4 path: ..." fragment pmatools writes into the
@@ -3146,24 +3187,46 @@ step3_server <- function(input, output, session, state) {
     pma_banner(EDU_COPY$domains$indirectness$banner)
   })
 
+  # The amber "you cannot get a rating until you do X" box, in one place: the
+  # Final certainty panel, the SoF preview and the incomplete banner all use
+  # it, and an actionable blocked state must not look different depending on
+  # which of the three the reviewer is looking at.
+  .alert_box <- function(head, ...) {
+    htmltools::div(
+      style = paste0(
+        "padding: 0.75rem 1rem; background: ", PMA_ALERT_BG,
+        "; border-left: 4px solid ", PMA_ALERT_FG,
+        "; border-radius: 4px; font-size: 0.9rem;"),
+      htmltools::strong(head), ...)
+  }
+
+  # Why is there no rating? Three answers, and until 0.5.1 two of them printed
+  # the third one's text. `NULL` means "nothing has been attempted yet", which
+  # is the only case the idle placeholder is honest about.
+  #
+  #   1. Step 2 could not run           -> amber, names the missing fields
+  #   2. no decision threshold          -> amber, unchanged
+  #   3. nothing attempted yet          -> the plain idle line
+  no_rating_reason <- shiny::reactive({
+    blocked <- step3_blocked_message(state$ma_blocked)
+    if (is.null(state$ma) && !is.null(blocked)) {
+      return(list(kind = "blocked", text = blocked))
+    }
+    if (!is.null(state$ma) && threshold_missing()) {
+      return(list(kind = "threshold", text = paste0(
+        "The decision threshold is empty. Risk of Bias, Inconsistency and ",
+        "Imprecision are all judged against it, so no rating is computed ",
+        "until it is set on the Configuration tab.")))
+    }
+    list(kind = "idle", text = "Run analysis and configure domains.")
+  })
+
   output$final_certainty <- shiny::renderUI({
     g <- grade_obj()
     if (is.null(g)) {
-      # Distinguish "no analysis yet" from "no threshold": the latter is a
-      # state the reviewer can create at any time by clearing the field, and
-      # it must say why nothing is being rated rather than fail silently.
-      if (!is.null(state$ma) && threshold_missing()) {
-        return(htmltools::div(
-          style = paste0(
-            "padding: 0.75rem 1rem; background: ", PMA_ALERT_BG,
-            "; border-left: 4px solid ", PMA_ALERT_FG,
-            "; border-radius: 4px; font-size: 0.9rem;"),
-          htmltools::strong("No certainty rating. "),
-          "The decision threshold is empty. Risk of Bias, Inconsistency and ",
-          "Imprecision are all judged against it, so no rating is computed ",
-          "until it is set on the Configuration tab."))
-      }
-      return(htmltools::p("Run analysis and configure domains."))
+      why <- no_rating_reason()
+      if (identical(why$kind, "idle")) return(htmltools::p(why$text))
+      return(.alert_box("No certainty rating. ", why$text))
     }
     other_dg <- suppressWarnings(as.integer(input$other_downgrade %||% "0"))
     if (is.na(other_dg)) other_dg <- 0L
@@ -3183,6 +3246,10 @@ step3_server <- function(input, output, session, state) {
                                                       conditionMessage(e))))
     )
   })
+  # Matches cert_incomplete_banner, which sits directly above it on the same
+  # tab: the panel has to be computed before the tab is revealed, or the
+  # reviewer sees the previous state for a beat.
+  shiny::outputOptions(output, "final_certainty", suspendWhenHidden = FALSE)
 
   # Whether the SoF can safely be rendered through the responder conversion.
   # sof_table() HARD-ABORTS when convert_smd_to_or = TRUE and baseline_risk
@@ -3227,7 +3294,13 @@ step3_server <- function(input, output, session, state) {
 
   output$sof_preview <- shiny::renderUI({
     g <- grade_obj()
-    if (is.null(g)) return(htmltools::p("..."))
+    if (is.null(g)) {
+      # Was a bare "...", which told the reviewer nothing at all. Same three
+      # answers as the certainty panel above, from the same reactive.
+      why <- no_rating_reason()
+      if (identical(why$kind, "idle")) return(htmltools::p(why$text))
+      return(.alert_box("No Summary of Findings table. ", why$text))
+    }
     args <- c(
       list(x          = g,
            # Core GRADE 6 layout for every SoF the app renders or exports;
@@ -3257,6 +3330,7 @@ step3_server <- function(input, output, session, state) {
       pma_sof_limitations_ui()
     )
   })
+  shiny::outputOptions(output, "sof_preview", suspendWhenHidden = FALSE)
 
   # The responder-conversion settings are owned by Step 3 (Configuration
   # tab), not by app.R's display observer. Step 4's export_bundle() gets the
@@ -3279,7 +3353,18 @@ step3_server <- function(input, output, session, state) {
   # it (the SoF row label depends on it) without offering a second, divergent
   # field to edit.
   output$outcome_name_echo <- shiny::renderUI({
-    nm <- state$outcome_name %||% "(not set)"
+    # state$outcome_name is only ever written on a SUCCESSFUL run and is
+    # deliberately never cleared (see the observer in step2_ma.R), so once the
+    # reviewer empties the Step 2 field this echo goes on printing the old name
+    # next to a Final certainty panel that says there is no analysis. Read the
+    # live blocked state instead: when the analysis is held up on an
+    # outcome-identity field, say that rather than a value that is no longer in
+    # the form.
+    identity_missing <- step3_blocked_identity(state$ma_blocked)
+    name_missing <- STEP2_IDENTITY_FIELD_LABELS[["outcome_name"]] %in%
+                    identity_missing
+    nm <- if (name_missing) "(cleared in Step 2)" else
+            state$outcome_name %||% "(not set)"
     # Raw value, not sof_follow_up(): that one already carries the
     # "Follow-up: " prefix the table cell needs, and the label supplies it
     # here.
@@ -3287,6 +3372,12 @@ step3_server <- function(input, output, session, state) {
     if (!is.null(fu) && !nzchar(trimws(fu))) fu <- NULL
     un <- sof_unit()
     htmltools::tagList(
+      if (length(identity_missing)) htmltools::p(
+        class = "pma-card-subtitle",
+        htmltools::tags$strong("No analysis. "),
+        "Step 2 is missing: ", paste(identity_missing, collapse = ", "),
+        ". Nothing below is being rated until it is filled in."
+      ) else NULL,
       htmltools::p(class = "pma-card-subtitle",
         "Outcome name: ", htmltools::tags$strong(nm),
         " - set in Step 2 (Model configuration)."),

@@ -28,6 +28,12 @@ step2_ui <- function(state = NULL) {
   # for the same reason the two required fields are.
   follow_up_default     <- ""
   unit_default          <- ""
+  # The outcome type is sticky for exactly the same reason, and was not.
+  # A hard-coded selected = "binary" reset it on every 3 -> 2 -> 3 round trip,
+  # which on continuous data pushed ma() onto the "missing Events column"
+  # branch and sent grade_meta() outcome_type = "relative" for a metacont fit,
+  # where the OIS cannot be computed at all.
+  outcome_type_default  <- "binary"
   if (!is.null(state)) {
     nm <- shiny::isolate(state$outcome_name)
     if (!is.null(nm) && length(nm) == 1 && !is.na(nm)) outcome_name_default <- nm
@@ -37,6 +43,10 @@ step2_ui <- function(state = NULL) {
     if (!is.null(fu) && length(fu) == 1 && !is.na(fu)) follow_up_default <- fu
     un <- shiny::isolate(state$outcome_unit)
     if (!is.null(un) && length(un) == 1 && !is.na(un)) unit_default <- un
+    ot <- shiny::isolate(state$outcome_type)
+    if (!is.null(ot) && length(ot) == 1 && ot %in% c("binary", "continuous")) {
+      outcome_type_default <- ot
+    }
   }
 
   htmltools::tagList(
@@ -112,7 +122,7 @@ step2_ui <- function(state = NULL) {
 
           shiny::radioButtons("outcome_type", "Outcome type",
             choices = c("Binary" = "binary", "Continuous" = "continuous"),
-            selected = "binary", inline = TRUE),
+            selected = outcome_type_default, inline = TRUE),
           shiny::uiOutput("outcome_filter_ui"),
 
           shiny::selectInput("col_n", "Sample size (n)",
@@ -558,19 +568,38 @@ step2_server <- function(input, output, session, state) {
     # are columns.
     missing_required <- character()
     if (!isTRUE(args$outcome_name_set)) {
-      missing_required <- c(missing_required, "Outcome name")
+      missing_required <- c(missing_required,
+                            STEP2_IDENTITY_FIELD_LABELS[["outcome_name"]])
     }
     if (!isTRUE(args$small_values_set)) {
-      missing_required <- c(missing_required, "Direction (smaller = favorable?)")
+      missing_required <- c(missing_required,
+                            STEP2_IDENTITY_FIELD_LABELS[["small_values"]])
     }
 
     if (length(missing_cols) > 0 || length(missing_required) > 0) {
+      # Step 3 renders off state$ma and had no way to say WHY it was empty, so
+      # a blanked required field showed up there as "Run analysis and
+      # configure domains." - the screen blaming the reviewer for the one
+      # thing they had already done. Record what is missing, in labels Step 3
+      # can print as they stand (see step3_blocked_message()).
+      had_ma <- !is.null(shiny::isolate(state$ma))
       state$ma <- NULL
+      state$ma_blocked <- c(
+        step2_column_labels(unique(missing_cols)),
+        missing_required
+      )
       # The existing gate keeps the first page load quiet (auto_rerun defaults
       # to TRUE and run_ma has not been clicked), so the user only gets told
-      # off once they actually ask for an analysis.
-      if (!auto || clicked) {
+      # off once they actually ask for an analysis. `had_ma` is the exception:
+      # withdrawing an analysis that WAS working is never a quiet event, no
+      # matter how the reviewer got there.
+      if (!auto || clicked || had_ma) {
         msgs <- character()
+        if (had_ma) {
+          msgs <- c(msgs, paste0(
+            "The analysis has been cleared, and every Step 3 judgment with ",
+            "it."))
+        }
         if (length(missing_cols) > 0) {
           msgs <- c(msgs, paste("Select required column(s):",
                                 paste(unique(missing_cols), collapse = ", ")))
@@ -606,6 +635,22 @@ step2_server <- function(input, output, session, state) {
     arms_in_data <- arms_in_data[!is.na(arms_in_data) & nzchar(arms_in_data)]
     if (!(args$experimental_label %in% arms_in_data) ||
         !(args$control_label %in% arms_in_data)) {
+      # "Wait silently for arm_assignment_ui to re-render" holds only while
+      # Step 2 is on screen: it is a Step 2 uiOutput and cannot re-render from
+      # Step 3, so the wait can last the rest of the session while Step 3 shows
+      # either nothing or the previous run's numbers. Once this outcome has run
+      # successfully at least once (state$regular_ma), say so. A fresh form
+      # stays quiet, which is what the silence was protecting.
+      if (!is.null(shiny::isolate(state$regular_ma))) {
+        shiny::showNotification(
+          paste0("The analysis did not re-run: the selected intervention / ",
+                 "control arms (", args$experimental_label, ", ",
+                 args$control_label, ") are not present in the data. Anything ",
+                 "still on screen is from the previous run. Go back to Step 2 ",
+                 "and pick the arms again."),
+          id = "step2_arm_labels", type = "warning", duration = 10
+        )
+      }
       return(NULL)
     }
 
@@ -827,6 +872,7 @@ step2_server <- function(input, output, session, state) {
           state$rare_primary_method <- rare$primary_method
           if (isTRUE(.rare_mode_on())) {
             state$ma <- rare$primary
+            state$ma_blocked <- NULL
             state$rare_mode_active <- TRUE
             return()
           }
@@ -835,6 +881,9 @@ step2_server <- function(input, output, session, state) {
     }
     if (!isTRUE(checked_rare)) state$rare_diagnostics <- NULL
     state$ma <- obj
+    # Every writer of state$ma clears the blocked record alongside it, so
+    # Step 3 can never explain a NULL that is no longer NULL.
+    state$ma_blocked <- NULL
   }, ignoreNULL = FALSE)
 
   # User toggled the rare-workflow checkbox: swap state$ma between cached
@@ -846,9 +895,11 @@ step2_server <- function(input, output, session, state) {
     if (requested && diag_flow && !is.null(state$rare) &&
         inherits(state$rare$primary, "meta")) {
       state$ma <- state$rare$primary
+      state$ma_blocked <- NULL
       state$rare_mode_active <- TRUE
     } else if (!is.null(state$regular_ma)) {
       state$ma <- state$regular_ma
+      state$ma_blocked <- NULL
       state$rare_mode_active <- FALSE
     }
   }, ignoreInit = TRUE)
@@ -895,6 +946,7 @@ step2_server <- function(input, output, session, state) {
       state$rare_primary_method <- rare$primary_method
       if (isTRUE(state$rare_mode_active)) {
         state$ma <- rare$primary
+        state$ma_blocked <- NULL
       }
     }
   }, ignoreInit = TRUE)
@@ -1132,6 +1184,8 @@ step2_server <- function(input, output, session, state) {
     }
     sv <- input$small_values
     if (!is.null(sv) && length(sv) == 1 && nzchar(sv)) state$small_values <- sv
+    ot <- input$outcome_type
+    if (!is.null(ot) && length(ot) == 1 && nzchar(ot)) state$outcome_type <- ot
     # Follow-up and unit are optional, so an empty value is a legitimate
     # answer and IS written back - otherwise a follow-up could never be
     # cleared. Safe here because step2_ui() seeds both widgets from state, so

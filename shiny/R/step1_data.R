@@ -392,9 +392,30 @@ step1_server <- function(input, output, session, state) {
       }
     }
 
+    # This function is called from a plain observe() that depends on
+    # state$rob_table (see the comment above that observer), so it re-runs on
+    # every per-study Risk-of-Bias / Indirectness edit made in Step 3 - and it
+    # used to null the analysis and the rating unconditionally. That withdrew
+    # the analysis under the reviewer's feet, and nothing put it back: the
+    # observeEvent(ma()) handler in step2_ma.R returns early on NULL, and after
+    # a Step 3 -> Step 2 -> Step 3 round trip input$run_ma is a rebuilt
+    # actionButton reporting 0, so ma() exits before it can recompute. It was
+    # also silent, because pma_analysis_signature(NULL) is NA and app.R's
+    # provenance guard ignores NA.
+    #
+    # Only a change to the DATASET invalidates the analysis. A RoB relabel is a
+    # property of the studies, not of the outcome - which is exactly what
+    # begin_new_outcome() already promises - and pma_dataset_signature()
+    # already excludes the `rob` and `indirectness` columns for that reason
+    # (PMA_SIGNATURE_IGNORE_COLS), so it is the right comparator here.
+    changed <- !identical(pma_dataset_signature(state$data),
+                          pma_dataset_signature(res))
     state$data <- res
-    state$ma <- NULL
-    state$grade <- NULL
+    if (changed) {
+      state$ma <- NULL
+      state$ma_blocked <- NULL
+      state$grade <- NULL
+    }
     TRUE
   }
 

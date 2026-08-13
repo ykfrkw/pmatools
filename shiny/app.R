@@ -125,6 +125,12 @@ server <- function(input, output, session) {
     data_edits     = NULL,
     rob_table      = NULL,
     ma             = NULL,
+    # Why `ma` is NULL, when Step 2 knows: a character vector of the required
+    # Step 2 fields that were empty at the moment the analysis was withdrawn
+    # (see step3_blocked_message() in step3_threshold.R). Cleared by every
+    # writer that sets a non-NULL `ma`. Step 3 reads it so a blanked field
+    # cannot show up there as "Run analysis and configure domains."
+    ma_blocked     = NULL,
     regular_ma     = NULL,
     rare           = NULL,
     rare_diagnostics = NULL,
@@ -153,6 +159,10 @@ server <- function(input, output, session) {
     # are destroyed whenever another step's body is rendered.
     outcome_name   = NULL,
     small_values   = NULL,
+    # Binary / continuous. Mirrored for the same reason as the two above: the
+    # Step 2 radio is destroyed whenever another step's body renders, and a
+    # rebuilt widget pushes its own default back to the server.
+    outcome_type   = NULL,
     # Optional presentation fields for the Core GRADE 6 Summary of Findings
     # table: the follow-up printed under the outcome name, and the unit of a
     # continuous scale. Collected in Step 2 beside the outcome name because
@@ -228,9 +238,11 @@ server <- function(input, output, session) {
     if (isTRUE(identity)) {
       state$outcome_name       <- NULL
       state$small_values       <- NULL
+      state$outcome_type       <- NULL
       state$outcome_follow_up  <- NULL
       state$outcome_unit       <- NULL
       state$ma                 <- NULL
+      state$ma_blocked         <- NULL
       state$regular_ma         <- NULL
       state$rare               <- NULL
       state$rare_diagnostics   <- NULL

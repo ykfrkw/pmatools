@@ -31,6 +31,20 @@ test_that("edu_domain_how() ignores arguments a string domain does not take", {
                    edu_domain_how("imprecision", 0.10, "high"))
 })
 
+test_that("the Risk of Bias copy states the one-level cap on rule 5", {
+  # The copy said "(5) zones differ across the null (above <-> below) -> rate
+  # down 2" for two releases after .assess_bias_direction() stopped doing it.
+  # This is the sentence users actually read, so it gets its own guard.
+  how <- edu_domain_how("rob", 0.10, "high")
+  expect_match(how, "(5) zones differ across the null (above <-> below) -> rate down 1",
+               fixed = TRUE)
+  expect_false(grepl("rate down 2", how, fixed = TRUE))
+  # And it explains the cap the way .ROB_CAP_NOTE does, rather than leaving
+  # the reader to wonder where the second level went.
+  expect_match(how, "no automatic two-level downgrade for risk of bias",
+               fixed = TRUE)
+})
+
 test_that("every rated domain still carries its Core GRADE reference", {
   for (d in c("rob", "inconsistency", "indirectness", "imprecision", "pubias")) {
     entry <- EDU_COPY$domains[[d]]

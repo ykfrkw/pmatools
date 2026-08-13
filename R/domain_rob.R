@@ -911,7 +911,12 @@ assess_rob <- function(rob, meta_obj,
 #   za == zl, non-trivial, no bias-favouring inflation > 10%  -> "no"            (rule 2)
 #   za == zl, non-trivial, bias-favouring inflation > 10%     -> "some_concerns" (rule 3)
 #   za != zl, no sign flip across null                        -> "some_concerns" (rule 4)
-#   za != zl, sign flip (above <-> below)                     -> "serious"       (rule 5)
+#   za != zl, sign flip (above <-> below)                     -> "some_concerns" (rule 5)
+#
+# Rule 5 returned "serious" (-2) up to v0.4. Since v0.5.0 every automated
+# risk-of-bias path is capped at one level (see .ROB_CAP_NOTE above): Core
+# GRADE 4 describes no two-level risk-of-bias downgrade. "serious" is reachable
+# only through the scalar `rob` override, which requires rob_rationale.
 #
 # CAVEAT — TE_low is ALWAYS a fixed-effect (common-effect) estimate.
 #   te_low <- sum(w * TE) / sum(w) with w = 1 / seTE^2, computed over the

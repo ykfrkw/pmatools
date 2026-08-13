@@ -343,7 +343,13 @@
 #'   calculation. When supplied it takes precedence over \code{ois_rrr}.
 #' @param ois_rrr (v0.5) For binary outcomes: the "modest relative risk
 #'   reduction" the OIS is powered to detect, used to derive \code{ois_p1}
-#'   from \code{ois_p0} as \eqn{p_1 = p_0 (1 - ois\_rrr)}. Default \code{0.20}.
+#'   from \code{ois_p0} as \eqn{p_1 = p_0 (1 \mp ois\_rrr)}. Default \code{0.20}.
+#'   \strong{Which sign} depends on \code{small_values} and on the pooled
+#'   effect (v0.5.1): the paper writes "reduction" because its worked example
+#'   has an undesirable event, but when \code{small_values = "undesirable"} the
+#'   events themselves are the desirable outcome and the intervention raises
+#'   them, so the alternative rate is \eqn{p_0 (1 + ois\_rrr)}. With
+#'   \code{small_values = NULL} the reduction is used, as before.
 #'   Core GRADE 2 specifies exactly this input for binary outcomes: "For binary
 #'   outcomes, these involve specifying the acceptable error rates: alpha
 #'   (typically 0.05) and beta (typically 0.20), the control group event rate
@@ -356,7 +362,12 @@
 #'   from the MID for binary outcomes too.
 #' @param ois_delta For continuous outcomes: minimally important difference for OIS
 #'   calculation. Used with \code{ois_sd}.
-#' @param ois_sd For continuous outcomes: pooled SD for OIS calculation.
+#' @param ois_sd For continuous outcomes: pooled SD for OIS calculation. When
+#'   left \code{NULL} it is derived from the contributing studies with
+#'   \code{\link{compute_pooled_sd}()} (v0.5.1); before that the continuous OIS
+#'   was simply unavailable unless the caller supplied one, and Fig 4's
+#'   large-effect path fell through to "do not rate down" without saying why.
+#'   The domain notes state when the value was derived rather than supplied.
 #' @param baseline_risk Baseline (control-arm) event rate used for computing
 #'   absolute risk differences (ARD per 1,000) in the SoF table. Accepts:
 #'   \itemize{
@@ -722,6 +733,11 @@ grade_meta <- function(meta_obj,
       ois_rrr            = ois_rrr,
       ois_delta          = ois_delta,
       ois_sd             = ois_sd,
+      # Same outcome direction assess_rob() receives above. Imprecision needs
+      # it because Core GRADE 2's "modest relative risk REDUCTION" assumes an
+      # undesirable event; when the events are the desirable thing the OIS has
+      # to be powered against p0 * (1 + rrr) instead.
+      small_values       = small_values,
       threshold_internal = threshold_internal,
       threshold_kind     = threshold_kind,
       threshold_ard      = threshold_ard,

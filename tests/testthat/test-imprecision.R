@@ -367,3 +367,206 @@ test_that("Crosses null but not both Thresholds, OIS met (>=100%) -> some_concer
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_true(row$judgment %in% c("no", "some_concerns"))
 })
+
+# --------------------------------------------------------------------------
+# Outcome direction and the binary OIS alternative rate (v0.5.1).
+#
+# Core GRADE 2 writes "a modest relative risk REDUCTION" because its worked
+# example has an undesirable event. small_values = "undesirable" says the
+# opposite -- a smaller outcome VALUE is worse, so the EVENTS are the good
+# thing -- and the OIS then has to be powered against p0 * (1 + rrr).
+# --------------------------------------------------------------------------
+
+# One dataset for all three direction cases: a clear increase in the event
+# rate, so the CI is well clear of the null and the direction is unambiguous.
+direction_meta <- function() {
+  metabin(
+    event.e = c(40, 45, 50),
+    n.e     = c(100, 110, 120),
+    event.c = c(20, 22, 25),
+    n.c     = c(100, 110, 120),
+    studlab = c("A", "B", "C"),
+    sm = "RR", method = "Inverse", random = TRUE, common = FALSE
+  )
+}
+
+# The OIS target N assess_imprecision() computed, read back off the note.
+ois_target_from_notes <- function(notes) {
+  m <- regmatches(notes, regexpr("target N=[0-9]+", notes))
+  if (!length(m)) return(NA_integer_)
+  as.integer(sub("target N=", "", m))
+}
+
+test_that("small_values decides which side of ois_p0 the OIS target sits on", {
+  m <- direction_meta()
+  args <- list(outcome_type = "relative", threshold_internal = log(1.25),
+               ois_p0 = 0.20, ois_rrr = 0.20)
+
+  r_null <- do.call(assess_imprecision, c(list(m), args))
+  r_und  <- do.call(assess_imprecision,
+                    c(list(m), args, list(small_values = "undesirable")))
+  r_des  <- do.call(assess_imprecision,
+                    c(list(m), args, list(small_values = "desirable")))
+
+  # Undesirable outcome VALUE => desirable EVENT => a benefit is an increase.
+  expect_match(r_und$notes, "ois_p1 = 0.2400", fixed = TRUE)
+  expect_match(r_und$notes, "modest relative risk increase", fixed = TRUE)
+  # Desirable outcome value => undesirable event => a benefit is a reduction.
+  expect_match(r_des$notes, "ois_p1 = 0.1600", fixed = TRUE)
+  expect_match(r_des$notes, "modest relative risk reduction", fixed = TRUE)
+  # No direction supplied: the pre-0.5.1 reduction, and the note says why
+  # rather than implying a direction was known.
+  expect_match(r_null$notes, "ois_p1 = 0.1600", fixed = TRUE)
+  expect_match(r_null$notes, "small_values = NULL", fixed = TRUE)
+
+  # The two directions therefore power the OIS to different sample sizes.
+  n_und  <- ois_target_from_notes(r_und$notes)
+  n_des  <- ois_target_from_notes(r_des$notes)
+  n_null <- ois_target_from_notes(r_null$notes)
+  expect_true(is.finite(n_und) && is.finite(n_des))
+  expect_false(identical(n_und, n_des))
+  # NULL keeps exactly the reduction arithmetic, so it matches "desirable".
+  expect_identical(n_null, n_des)
+})
+
+test_that("small_values = NULL leaves the ois_p1 clause as it was", {
+  # The regression guard for "nothing changes for callers that do not supply
+  # it". The only text the direction work adds on the NULL path is the reason
+  # clause, so compare with that stripped out.
+  m <- direction_meta()
+  r <- assess_imprecision(m, outcome_type = "relative",
+                          threshold_internal = log(1.25),
+                          ois_p0 = 0.20, ois_rrr = 0.20)
+  stripped <- sub("; direction: [^;]+;", ";", r$notes)
+  expect_match(
+    stripped,
+    paste0("(ois_p1 from a modest relative risk reduction, ois_rrr = 20%: ",
+           "ois_p1 = 0.1600; Core GRADE 2 specifies an RRR rather than the ",
+           "MID for binary outcomes)"),
+    fixed = TRUE
+  )
+})
+
+test_that("the direction reaches assess_imprecision() through grade_meta()", {
+  m <- direction_meta()
+  note_of <- function(g) {
+    g$domain_assessments$notes[g$domain_assessments$domain == "Imprecision"]
+  }
+  g_und <- suppressWarnings(grade_meta(
+    m, threshold = 1.25, threshold_scale = "ratio",
+    small_values = "undesirable", ois_p0 = 0.20))
+  g_des <- suppressWarnings(grade_meta(
+    m, threshold = 1.25, threshold_scale = "ratio",
+    small_values = "desirable", ois_p0 = 0.20))
+  expect_match(note_of(g_und), "modest relative risk increase", fixed = TRUE)
+  expect_match(note_of(g_des), "modest relative risk reduction", fixed = TRUE)
+})
+
+test_that("ois_p1 is clamped into (0, 1) and the note says so", {
+  m <- direction_meta()
+  r <- assess_imprecision(m, outcome_type = "relative",
+                          threshold_internal = log(1.25),
+                          ois_p0 = 0.95, ois_rrr = 0.25,
+                          small_values = "undesirable")
+  # 0.95 * 1.25 = 1.1875, which is not a probability.
+  expect_match(r$notes, "clamped into (0, 1) from 1.1875", fixed = TRUE)
+  expect_match(r$notes, "ois_p1 = 1.0000", fixed = TRUE)
+})
+
+test_that("an explicit ois_p1 is never re-signed by the direction", {
+  m <- direction_meta()
+  r <- assess_imprecision(m, outcome_type = "relative",
+                          threshold_internal = log(1.25),
+                          ois_p0 = 0.20, ois_p1 = 0.05,
+                          small_values = "undesirable")
+  expect_match(r$notes, "p1=0.050", fixed = TRUE)
+  expect_false(grepl("modest relative risk", r$notes, fixed = TRUE))
+})
+
+test_that("the ois_target_rate fact records the rate and the direction", {
+  m <- direction_meta()
+  g <- suppressWarnings(grade_meta(
+    m, threshold = 1.25, threshold_scale = "ratio",
+    small_values = "undesirable", ois_p0 = 0.20))
+  f <- domain_facts(g, "Imprecision")
+  expect_true("ois_target_rate" %in% f$key)
+  row <- f[f$key == "ois_target_rate", ]
+  expect_equal(row$numeric[1], 0.24, tolerance = 1e-8)
+  expect_match(row$value[1], "an increase", fixed = TRUE)
+})
+
+test_that("an effect above the null is not called a relative risk reduction", {
+  # The magnitude 1 - exp(-|log RR|) is right either way; the word was not.
+  m <- direction_meta()
+  r <- assess_imprecision(m, outcome_type = "relative", threshold_type = "null")
+  expect_match(r$notes, "relative risk increase", fixed = TRUE)
+  expect_false(grepl("effect implausibly large (relative risk reduction",
+                     r$notes, fixed = TRUE))
+})
+
+test_that("an effect below the null still reads as a reduction", {
+  m <- metabin(
+    event.e = c(20, 22, 25),
+    n.e     = c(100, 110, 120),
+    event.c = c(40, 45, 50),
+    n.c     = c(100, 110, 120),
+    studlab = c("A", "B", "C"),
+    sm = "RR", method = "Inverse", random = TRUE, common = FALSE
+  )
+  r <- assess_imprecision(m, outcome_type = "relative", threshold_type = "null")
+  expect_match(r$notes, "relative risk reduction", fixed = TRUE)
+  expect_false(grepl("relative risk increase", r$notes, fixed = TRUE))
+})
+
+# --------------------------------------------------------------------------
+# Continuous OIS: ois_sd is derived rather than demanded (v0.5.1).
+# --------------------------------------------------------------------------
+
+continuous_meta <- function() {
+  metacont(
+    n.e    = c(40, 45, 50),
+    mean.e = c(10.0, 10.5, 9.8),
+    sd.e   = c(4.0, 4.2, 3.9),
+    n.c    = c(40, 45, 50),
+    mean.c = c(14.0, 14.6, 13.7),
+    sd.c   = c(4.1, 4.0, 4.2),
+    studlab = c("A", "B", "C"),
+    sm = "MD", random = TRUE, common = FALSE
+  )
+}
+
+test_that("a continuous outcome derives ois_sd instead of skipping the OIS", {
+  m <- continuous_meta()
+  r <- assess_imprecision(m, outcome_type = "absolute",
+                          threshold_internal = 2)
+  expect_match(r$notes, "derived from the pooled within-study SD", fixed = TRUE)
+  expect_match(r$notes, "OIS: delta=2.000", fixed = TRUE)
+  expect_false(grepl("OIS could not be computed", r$notes, fixed = TRUE))
+  # Recorded as derived, not as something the caller supplied.
+  f <- attr(r, "facts")
+  expect_true("ois_sd_source" %in% f$key)
+  expect_equal(f$numeric[f$key == "ois_sd_source"],
+               compute_pooled_sd(m), tolerance = 1e-8)
+})
+
+test_that("a supplied ois_sd still wins and is not reported as derived", {
+  m <- continuous_meta()
+  r <- assess_imprecision(m, outcome_type = "absolute",
+                          threshold_internal = 2, ois_sd = 10)
+  expect_match(r$notes, "sigma=10.000", fixed = TRUE)
+  expect_false(grepl("derived from the pooled within-study SD", r$notes,
+                     fixed = TRUE))
+})
+
+test_that("'OIS could not be computed' names the input that was missing", {
+  # No MID, so ois_delta cannot be derived and the pooled SD alone is useless.
+  m <- meta::metagen(TE = c(1.0, 1.1, 0.9), seTE = c(0.1, 0.1, 0.1),
+                     studlab = c("A", "B", "C"), sm = "SMD",
+                     random = TRUE, common = FALSE)
+  m$n.e <- c(100, 100, 100)
+  m$n.c <- c(100, 100, 100)
+  r <- suppressWarnings(assess_imprecision(m, outcome_type = "absolute",
+                                           threshold_type = "null"))
+  expect_match(r$notes, "OIS could not be computed (missing ois_delta",
+               fixed = TRUE)
+})

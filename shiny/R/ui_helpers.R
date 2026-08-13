@@ -275,8 +275,8 @@ pma_analysis_signature <- function(ma, small_values = NULL) {
 # every forest / funnel display field (presentation, re-derived per plot).
 PMA_OUTCOME_INPUT_IDS <- list(
   # Step 2 - outcome identity
-  identity = c("outcome_name", "small_values", "outcome_follow_up",
-               "outcome_unit"),
+  identity = c("outcome_name", "small_values", "outcome_type",
+               "outcome_follow_up", "outcome_unit"),
   # Step 3 - Configuration tab (threshold, control-group risk, responder
   # conversion). Only some of these exist at a time: the binary and continuous
   # branches of output$threshold_panel build different widgets.

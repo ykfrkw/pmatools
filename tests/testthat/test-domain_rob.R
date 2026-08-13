@@ -138,6 +138,25 @@ test_that("Rule 5: 'above' <-> 'below' sign flip -> some_concerns (capped at -1)
   expect_match(rob_row$notes, "capped at one level", fixed = TRUE)
 })
 
+test_that("Rule 5's own wording says one level, not two", {
+  # Three documents claimed "rate down 2" for rule 5 long after the code
+  # stopped doing it (SPEC.md's rule table, the block comment duplicating that
+  # table in R/domain_rob.R, and the Shiny app's "How is this judged?" copy).
+  # This pins the sentence the code itself emits, so a doc that drifts back can
+  # be caught against something executable.
+  m <- make_mock_dominated(te_all = 0.50, te_low_only = -0.50)
+  g <- grade_meta(m, rob = c("serious", "no", "no"),
+                  small_values = "undesirable",
+                  threshold = 1.20, threshold_scale = "ratio",
+                  rob_inflation_threshold = 0.10)
+  rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
+  expect_match(rob_row$notes,
+               "Rule 5: zone changes across null (benefit <-> harm) -> rate down 1",
+               fixed = TRUE)
+  expect_false(grepl("rate down 2", rob_row$notes, fixed = TRUE))
+  expect_true(rob_row$downgrade >= -1L)
+})
+
 test_that("Rule 5 can still reach -2 through the scalar rob override", {
   m <- make_mock_dominated(te_all = 0.50, te_low_only = -0.50)
   g <- grade_meta(m, rob = "serious",

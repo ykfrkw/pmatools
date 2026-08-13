@@ -110,11 +110,26 @@
 #        group event rate (chosen from the context), and a modest relative risk
 #        reduction, typically 20% or 25%."
 #     すなわち二値の OIS は MID ではなく「控えめな相対リスク減少」で決める。
-#     pmatools は ois_rrr (既定 0.20) を用いて ois_p1 = ois_p0 * (1 - ois_rrr)
-#     とする。ois_p1 を明示指定した場合はそちらが優先される。
+#     pmatools は ois_rrr (既定 0.20) を用いて ois_p1 を導出する。
+#     ois_p1 を明示指定した場合はそちらが優先される。
 #     連続アウトカムは同じ段落で書き分けられており ("by specifying the smallest
 #     difference between intervention and control that one would want to avoid
 #     missing (ie, the MID)")、従来どおり MID を ois_delta に使う。
+#
+#   Direction of the binary OIS alternative rate (v0.5.1):
+#     Core GRADE 2 writes "reduction" because its worked example has an
+#     UNDESIRABLE event. For an outcome whose events are desirable (response,
+#     remission) a benefit is an INCREASE in the event rate, and powering the
+#     OIS against p0 * (1 - rrr) targets the wrong tail. `small_values` decides
+#     the sign and the pooled effect is reported alongside it; see
+#     .ois_target_increase(). With small_values = NULL the pre-0.5.1
+#     behaviour (p0 * (1 - rrr)) is preserved exactly.
+#
+#   ois_sd の自動導出 (連続, v0.5.1):
+#     .calc_ois() は連続アウトカムで ois_delta と ois_sd の両方を要求するが、
+#     ois_sd は利用者が入力しなければ NULL のままだった。結果として連続
+#     アウトカムの OIS は黙って計算不能になっていた。ois_sd 未指定時は
+#     compute_pooled_sd() から導出し、導出した旨を note に書く。
 
 assess_imprecision <- function(meta_obj,
                                outcome_type       = "relative",
@@ -127,6 +142,13 @@ assess_imprecision <- function(meta_obj,
                                ois_delta          = NULL,
                                ois_sd             = NULL,
                                ois_rrr            = 0.20,
+                               # Outcome direction, as collected in the app's
+                               # Step 2 and already forwarded to assess_rob():
+                               # "desirable" / "undesirable" / NULL. It decides
+                               # which way the modest RRR moves the OIS
+                               # alternative rate, and the wording of the
+                               # large-effect note.
+                               small_values       = NULL,
                                threshold_internal = NULL,
                                threshold_kind     = NULL,
                                threshold_ard      = NULL,
@@ -242,10 +264,20 @@ assess_imprecision <- function(meta_obj,
   if (!is.null(ois_delta)  && (length(ois_delta)  == 0 || is.na(ois_delta)))  ois_delta  <- NULL
   if (!is.null(ois_sd)     && (length(ois_sd)     == 0 || is.na(ois_sd)))     ois_sd     <- NULL
 
+  # The summary measure and the pooled effect are wanted twice: here, to decide
+  # which way the modest RRR moves the OIS alternative rate, and below for
+  # Fig 4's large-effect check. Computed once.
+  sm       <- meta_obj$sm
+  te_point <- .pooled_te(meta_obj)
+
   # Derive the OIS inputs that were not supplied explicitly.
   #   binary     : ois_p0 (control-arm risk) + ois_rrr (modest RRR, Core GRADE 2)
   #   continuous : ois_delta = MID           (Core GRADE 2, same paragraph)
+  #                ois_sd    = pooled within-study SD, when not supplied
   threshold_used_note <- ""
+  ois_direction   <- .ois_target_increase(small_values, te_point)
+  ois_p1_derived  <- FALSE
+  ois_sd_derived  <- FALSE
   has_mid_for_ois <- !is.null(threshold_internal) && !is.na(threshold_internal) &&
                      threshold_internal != 0
   if (is.null(ois_events) && is.null(ois_n)) {
@@ -276,25 +308,60 @@ assess_imprecision <- function(meta_obj,
         # Core GRADE 2 (p6): binary OIS uses "a modest relative risk reduction,
         # typically 20% or 25%" -- NOT the MID. The MID is reserved for the
         # continuous branch, which the same paragraph writes out separately.
-        rrr    <- .check_ois_rrr(ois_rrr)
-        ois_p1 <- ois_p0 * (1 - rrr)
-        ois_p1 <- max(min(ois_p1, 1 - 1e-6), 1e-6)
+        # Which SIDE of ois_p0 the alternative rate sits on is decided by
+        # .ois_target_increase(); the paper's "reduction" wording assumes an
+        # undesirable event and does not generalise on its own.
+        rrr     <- .check_ois_rrr(ois_rrr)
+        raw_p1  <- if (isTRUE(ois_direction$increase)) {
+          ois_p0 * (1 + rrr)
+        } else {
+          ois_p0 * (1 - rrr)
+        }
+        ois_p1  <- max(min(raw_p1, 1 - 1e-6), 1e-6)
+        clamped <- !isTRUE(all.equal(ois_p1, raw_p1))
+        ois_p1_derived <- TRUE
         threshold_used_note <- paste0(threshold_used_note, sprintf(
-          paste0(" (ois_p1 from a modest relative risk reduction, ois_rrr = ",
-                 "%.0f%%: ois_p1 = %.4f; Core GRADE 2 specifies an RRR rather ",
-                 "than the MID for binary outcomes)"),
-          100 * rrr, ois_p1
+          paste0(" (ois_p1 from a modest relative risk %s, ois_rrr = ",
+                 "%.0f%%: ois_p1 = %.4f%s; direction: %s; Core GRADE 2 ",
+                 "specifies an RRR rather than the MID for binary outcomes)"),
+          if (isTRUE(ois_direction$increase)) "increase" else "reduction",
+          100 * rrr, ois_p1,
+          if (clamped) sprintf(
+            paste0(", clamped into (0, 1) from %.4f -- the control-group risk ",
+                   "is too high for a %.0f%% relative increase to stay a ",
+                   "probability, so the OIS below is powered against the ",
+                   "clamped rate"), raw_p1, 100 * rrr) else "",
+          ois_direction$reason
         ))
       }
-    } else if (has_mid_for_ois) {
+    } else {
       # Continuous outcomes: Core GRADE 2 keeps the MID here ("by specifying
       # the smallest difference between intervention and control that one would
       # want to avoid missing (ie, the MID)").
-      if (is.null(ois_delta)) {
+      if (is.null(ois_delta) && has_mid_for_ois) {
         ois_delta <- threshold_internal
         threshold_used_note <- sprintf(
           " (ois_delta = Threshold = %.4f)", ois_delta
         )
+      }
+      # .calc_ois() needs a standard deviation as well, and nothing ever
+      # derived one: an ois_sd left blank meant the continuous OIS was silently
+      # unavailable and Fig 4's large-effect path fell through to "OIS could
+      # not be computed -> do not rate down". The pooled within-study SD is the
+      # natural default and is already computed a few lines below for the
+      # large-effect check, so derive it here rather than skipping the OIS.
+      if (is.null(ois_sd) && !is.null(ois_delta)) {
+        sd_auto <- tryCatch(compute_pooled_sd(meta_obj), error = function(e) NULL)
+        if (!is.null(sd_auto) && length(sd_auto) == 1L &&
+            is.finite(sd_auto) && sd_auto > 0) {
+          ois_sd <- as.numeric(sd_auto)
+          ois_sd_derived <- TRUE
+          threshold_used_note <- paste0(threshold_used_note, sprintf(
+            paste0(" (ois_sd = %.4f, derived from the pooled within-study SD ",
+                   "of the contributing studies -- not supplied by the caller)"),
+            ois_sd
+          ))
+        }
       }
     }
   }
@@ -317,9 +384,42 @@ assess_imprecision <- function(meta_obj,
   ois_pct  <- ois_info$pct
   ois_met  <- if (is.na(ois_pct)) NA else (ois_pct >= 1.0)
 
+  # When the OIS is unavailable, name the input that was missing. Fig 4's
+  # large-effect path used to report a bare "OIS could not be computed", which
+  # reads as a property of the evidence rather than of the arguments supplied.
+  ois_missing_reason <- if (!is.na(ois_pct)) {
+    NULL
+  } else if (is.null(ois_events) && is.null(ois_n)) {
+    miss <- character()
+    if (identical(outcome_type, "relative")) {
+      if (is.null(ois_p0)) {
+        miss <- c(miss, paste0("ois_p0, the control-group event rate (no ",
+                               "arm-level event counts to derive it from)"))
+      }
+      if (is.null(ois_p1)) miss <- c(miss, "ois_p1, the alternative event rate")
+    } else {
+      if (is.null(ois_delta)) {
+        miss <- c(miss, paste0("ois_delta, the smallest difference worth ",
+                               "detecting (no Threshold/MID was supplied)"))
+      }
+      if (is.null(ois_sd)) {
+        miss <- c(miss, paste0("ois_sd, the pooled SD (not supplied, and it ",
+                               "could not be derived from the study data)"))
+      }
+    }
+    if (!length(miss)) {
+      miss <- paste0("the OIS target could not be derived from the inputs ",
+                     "supplied (outcome_type = '", outcome_type, "')")
+    }
+    paste0("missing ", paste(miss, collapse = " and "))
+  } else {
+    paste0("an OIS target was computed but the observed total is unknown: ",
+           "the analysis carries no complete arm-level sample sizes ",
+           "(n.e / n.c)")
+  }
+
   # --- Core GRADE 2 Fig 4 -------------------------------------------------
-  sm        <- meta_obj$sm
-  te_point  <- .pooled_te(meta_obj)
+  # `sm` and `te_point` were computed above, before the OIS derivation.
   is_binary <- .is_binary_outcome(meta_obj)
   large     <- .is_implausibly_large(te_point, sm,
                                      sd_pooled = if (is_binary) NULL
@@ -338,6 +438,7 @@ assess_imprecision <- function(meta_obj,
     n_total                 = n_total,
     ci_ratio                = ci_ratio,
     ci_ratio_cut            = ci_ratio_cut,
+    ois_missing_reason      = ois_missing_reason,
     threshold_label         = if (has_threshold) "the Threshold (+/-MID)"
                               else "the null threshold",
     two_level_label         = if (has_threshold) {
@@ -468,6 +569,21 @@ assess_imprecision <- function(meta_obj,
       },
       ois_pct
     ),
+    if (ois_p1_derived) {
+      .fact("ois_target_rate", "OIS alternative event rate",
+            sprintf("%.4f (%s on a control-group risk of %.4f) -- %s",
+                    ois_p1,
+                    if (isTRUE(ois_direction$increase)) "an increase"
+                    else "a reduction",
+                    ois_p0, ois_direction$reason),
+            ois_p1)
+    } else NULL,
+    if (ois_sd_derived) {
+      .fact("ois_sd_source", "OIS standard deviation",
+            sprintf(paste0("%.4f, derived from the pooled within-study SD ",
+                           "(not supplied by the caller)"), ois_sd),
+            ois_sd)
+    } else NULL,
     .fact("fig4_path", "Core GRADE 2 Fig 4 path",
           sub("^Fig 4 path: ", "", fig4$path)),
     .fact("ois_used", "OIS approach applied",
@@ -499,6 +615,91 @@ assess_imprecision <- function(meta_obj,
     ))
   }
   as.numeric(x)
+}
+
+# Which side of the control-group risk does the binary OIS alternative rate
+# sit on? Returns list(increase = <logical>, reason = <character>).
+#
+# WHY THIS IS NOT SIMPLY "REDUCTION"
+# ----------------------------------
+# `ois_rrr` is Core GRADE 2's "modest relative risk reduction". The paper says
+# *reduction* because its worked example has an undesirable event: the good
+# intervention makes the event rarer. Two facts decide the sign in general.
+#
+#   1. `small_values` describes the OUTCOME VALUE, not the event. For a binary
+#      outcome the value is the event rate, so small_values = "undesirable"
+#      ("a smaller value is worse") means the EVENTS ARE THE GOOD THING --
+#      response, remission -- and a beneficial intervention makes them MORE
+#      common. small_values = "desirable" (mortality, relapse) is the mirror.
+#   2. The pooled effect says which way THIS body of evidence actually moves
+#      the event rate. On Fig 4's OIS path the CI is clear of the chosen
+#      threshold, so the sign of the pooled effect is unambiguous.
+#
+# WHICH OF THE TWO DECIDES, AND WHY IT IS THE DIRECTION
+# -----------------------------------------------------
+# `small_values` decides; the pooled effect is consulted, reported, and does
+# NOT override it. The OIS is an a-priori power calculation: it asks how many
+# participants a body of evidence would need to detect the smallest effect
+# worth not missing. That effect is a property of the QUESTION -- a modest
+# benefit -- and the direction of benefit is exactly what `small_values`
+# states. Letting the observed estimate pick the side would make the target
+# partly data-driven, and, worse, would collapse the distinction this argument
+# exists to draw: with a pooled ratio above the null, "desirable" and
+# "undesirable" would then produce the identical OIS.
+#
+# The pooled effect still earns its place in the reason string. When the two
+# agree, the sentence reads as one fact ("the intervention increases a
+# desirable event"). When they disagree the evidence describes a HARM on this
+# outcome, and the note says so, because the reader is then looking at an OIS
+# powered for the benefit direction while the estimate runs the other way --
+# which is worth seeing, not worth silently papering over.
+#
+# small_values = NULL keeps the pre-0.5.1 behaviour EXACTLY -- p0 * (1 - rrr),
+# whatever the data show -- so no existing caller changes silently.
+.ois_target_increase <- function(small_values, te_point) {
+  if (is.null(small_values) || length(small_values) != 1L ||
+      is.na(small_values) || !nzchar(as.character(small_values))) {
+    return(list(
+      increase = FALSE,
+      reason   = paste0("no outcome direction supplied (small_values = NULL), ",
+                        "so Core GRADE 2's relative risk REDUCTION is used as ",
+                        "written")
+    ))
+  }
+  sv <- as.character(small_values)
+  # "undesirable" = a smaller outcome value is bad = the events are desirable.
+  events_desirable <- identical(sv, "undesirable")
+  increase <- events_desirable
+  te_known <- !is.null(te_point) && length(te_point) == 1L &&
+              !is.na(te_point) && is.finite(te_point) && te_point != 0
+  base <- sprintf(
+    paste0("small_values = '%s' (events are %s), so a benefit is a modest %s ",
+           "in the event rate"),
+    sv,
+    if (events_desirable) "desirable" else "undesirable",
+    if (increase) "increase" else "reduction")
+  if (!te_known) {
+    return(list(increase = increase,
+                reason   = paste0(base, "; no usable pooled effect to compare ",
+                                  "it with")))
+  }
+  observed_increase <- te_point > 0
+  list(
+    increase = increase,
+    reason   = paste0(
+      base,
+      if (identical(observed_increase, events_desirable)) {
+        sprintf("; the pooled effect is %s the null, i.e. the intervention %s",
+                if (observed_increase) "above" else "below",
+                if (observed_increase) "increases a desirable event"
+                else "reduces an undesirable event")
+      } else {
+        sprintf(paste0("; NOTE the pooled effect runs the other way (%s the ",
+                       "null), i.e. this evidence describes a harm -- the OIS ",
+                       "is still powered for the benefit direction"),
+                if (observed_increase) "above" else "below")
+      })
+  )
 }
 
 .calc_ois <- function(outcome_type, ois_alpha, ois_beta,
@@ -605,6 +806,24 @@ assess_imprecision <- function(meta_obj,
 #       （標準化効果量 |d| >= 0.8 = large）を pmatools の操作的定義として使う。
 #       MD は pooled SD で標準化する。これは Core GRADE 2 の記述ではない。
 # --------------------------------------------------------------------------
+# Wording for the ratio-scale magnitude 1 - exp(-|log ratio|).
+#
+# The number is symmetric: RR 0.60 and RR 1.667 both give 40%, and Core GRADE
+# 2's ">40% / >30%" cut-offs are applied to it either way. The WORDING is not
+# symmetric, and up to v0.5.0 this always said "relative risk reduction", so a
+# pooled OR of 2.33 -- an increase -- was reported as a 57% reduction. Above
+# the null the same magnitude is the reduction seen with the two arms
+# exchanged, and the label says so rather than renaming 57% as an increase
+# (as an increase, RR 1.667 is +67%, a different number).
+.rrr_direction_label <- function(te, rrr) {
+  if (!is.na(te) && te > 0) {
+    sprintf(paste0("relative risk increase, equivalent to a %.0f%% reduction ",
+                   "with the arms exchanged"), 100 * rrr)
+  } else {
+    sprintf("relative risk reduction %.0f%%", 100 * rrr)
+  }
+}
+
 .is_implausibly_large <- function(te, sm, sd_pooled = NULL) {
   none <- list(large = FALSE, level = NA_character_,
                note = "effect moderate")
@@ -616,22 +835,19 @@ assess_imprecision <- function(meta_obj,
   ratio_sm <- c("OR", "RR", "HR", "RoM", "IRR")
   if (!is.null(sm) && sm %in% ratio_sm) {
     rrr <- 1 - exp(-abs(te))   # |log ratio| -> relative risk reduction
+    lab <- .rrr_direction_label(te, rrr)
     if (rrr > 0.40) {
       return(list(large = TRUE, level = "certain",
                   note = sprintf(
-                    "effect implausibly large (relative risk reduction %.0f%% > 40%%)",
-                    100 * rrr)))
+                    "effect implausibly large (%s > 40%%)", lab)))
     }
     if (rrr > 0.30) {
       return(list(large = TRUE, level = "possible",
                   note = sprintf(
-                    "effect possibly implausibly large (relative risk reduction %.0f%% > 30%%)",
-                    100 * rrr)))
+                    "effect possibly implausibly large (%s > 30%%)", lab)))
     }
     return(list(large = FALSE, level = NA_character_,
-                note = sprintf(
-                  "effect moderate (relative risk reduction %.0f%% <= 30%%)",
-                  100 * rrr)))
+                note = sprintf("effect moderate (%s <= 30%%)", lab)))
   }
 
   # Continuous outcomes: standardize, then apply Cohen's large-effect
@@ -746,6 +962,7 @@ assess_imprecision <- function(meta_obj,
                                   n_total,
                                   ci_ratio,
                                   ci_ratio_cut,
+                                  ois_missing_reason = NULL,
                                   threshold_label = "the Threshold",
                                   two_level_label =
                                     "TWO thresholds (important benefit and important harm)",
@@ -801,8 +1018,11 @@ assess_imprecision <- function(meta_obj,
   }
 
   if (is.na(ois_met)) {
-    return(out("no", sprintf(paste0(
-      "%s: OIS could not be computed -> do not rate down"), prefix),
+    return(out("no", sprintf(
+      "%s: OIS could not be computed (%s) -> do not rate down",
+      prefix,
+      if (is.null(ois_missing_reason)) "inputs unavailable"
+      else ois_missing_reason),
       ois_used = TRUE))
   }
   if (isTRUE(ois_met)) {

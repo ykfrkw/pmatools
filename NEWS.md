@@ -99,8 +99,55 @@
   `sof_table.docx` (and the appendix's embedded table) moves. Pass
   `style = "gradepro"` to `export_bundle()` to keep the old layout.
 
+* **Imprecision now knows which way the outcome runs.** `grade_meta()` forwards
+  `small_values` to `assess_imprecision()` as well as to `assess_rob()`, and the
+  binary OIS alternative rate follows it: Core GRADE 2's "modest relative risk
+  reduction" is written for an undesirable event, so an outcome whose events are
+  the desirable thing (`small_values = "undesirable"` — response, remission) is
+  now powered against `ois_p0 * (1 + ois_rrr)` rather than
+  `ois_p0 * (1 - ois_rrr)`. On the bundled
+  CBT-I example that moves the OIS target rate from 125 to 187 per 1,000, which
+  changes the OIS and can change the Fig 4 verdict. `ois_p1` is clamped into
+  (0, 1) and the note says so if it clamps. **Callers that do not pass
+  `small_values` are unaffected**: with `small_values = NULL` the reduction is
+  used exactly as before. New fact key `ois_target_rate`; see SPEC.md §5.5.
+* Continuous outcomes get an OIS. `ois_sd` now falls back to
+  `compute_pooled_sd(meta_obj)` when the caller supplies none, instead of
+  leaving `.calc_ois()` without a standard deviation. Previously every
+  continuous outcome that reached Fig 4's large-effect path found no OIS and
+  landed on "do not rate down" with no explanation. New fact key
+  `ois_sd_source`; where the OIS is still unavailable, the Fig 4 path string
+  now names the input that was missing.
+
 ## Bug fixes
 
+* Imprecision's large-effect note called every ratio-scale effect a "relative
+  risk reduction", so a pooled odds ratio of 2.33 — an increase — was reported
+  as "relative risk reduction 57%". The magnitude was right (the statistic is
+  symmetric) but the wording was direction-blind; an effect above the null is
+  now labelled a relative risk increase, given as the equivalent reduction with
+  the arms exchanged.
+* Three places still stated that risk-of-bias rule 5 (the pooled estimate's
+  zone flipping across the null) rates down **two** levels. It has been capped
+  at one level since v0.5.0, which `.assess_bias_direction()` implements and
+  `.ROB_CAP_NOTE` explains. SPEC.md §5.1's rule table, the duplicated table in
+  the `R/domain_rob.R` block comment, and the Shiny app's own "How is this
+  judged?" copy are corrected.
+* Shiny app: an analysis could be withdrawn silently and never come back.
+  Editing a per-study risk-of-bias or indirectness cell in Step 3 re-ran Step
+  1's commit observer, which nulled `state$ma` and `state$grade`
+  unconditionally; nothing restored them, because `observeEvent(ma())` returns
+  early on `NULL` and a Step 3 → Step 2 → Step 3 round trip resets the "Run
+  analysis" button to 0. The commit now nulls them only when the dataset
+  signature actually changes — a risk-of-bias relabel is a property of the
+  studies, not of the outcome. Alongside it: clearing a required Step 2 field
+  now records what is missing, so the Final certainty tab, the SoF preview, the
+  incomplete banner and the outcome-name echo say *which* field instead of
+  printing "Run analysis and configure domains." (or a bare `"..."`) at a
+  reviewer who had run one; the outcome type is sticky across step changes
+  rather than silently reverting to Binary, which used to send a continuous
+  analysis into the binary OIS branch; and the five domain panels no longer
+  keep a stale evaluation painted while a later tab is on screen.
 * Two internal helpers were both named `.total_n()`, one in
   `R/domain_imprecision.R` and one in `R/sof_table.R`. Because R collates
   `R/*.R` alphabetically, the `sof_table.R` definition silently won
