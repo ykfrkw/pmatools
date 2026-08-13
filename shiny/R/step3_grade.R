@@ -260,84 +260,23 @@ step3_ui <- function() {
         #     depend on is established and confirmed here, in the order a
         #     reviewer needs to decide it: control-group risk, then the
         #     threshold, then how the effect is presented) ---
+        # The 115-word `EDU_COPY$config_tab$intro` that opened this tab is
+        # gone. Every boxed section below states its own purpose beside the
+        # control it belongs to, which is where a reviewer reads it.
         shiny::tabPanel(.tab_title("threshold"), value = "Configuration",
           htmltools::h4("Configuration",
                         style = "margin: 0 0 0.5rem; font-size: 1.1rem;"),
-          htmltools::p(class = "pma-card-subtitle",
-            EDU_COPY$config_tab$intro),
           shiny::uiOutput("threshold_panel"),
           # How event rates are DISPLAYED, for the whole app. It used to be a
           # numericInput on the Final certainty tab, three screens away from
           # the control-group risk and the absolute threshold it relabels.
           shiny::uiOutput("per_panel"),
-          # The two risk-of-bias conventions. They were under a closed
-          # <details> on the Risk of Bias tab, which is the wrong home: both
-          # are review-wide decisions, and between them they drive the
-          # dominance gate, the low-risk-only comparison estimate, the refit
-          # on the low-risk set and (since this release) which side of the
-          # stratified forest each study is drawn on. Configuration is where
-          # the reviewer settles the things the five domains depend on.
-          .config_section(
-            "Risk-of-bias conventions",
-            # Where the low/high boundary falls. Core GRADE 4 endorses the
-            # binary split but declines to fix the cut-off, so this is a
-            # review decision rather than a rule taken from the source.
-            shiny::radioButtons("rob_some_concerns",
-              paste0("Where do studies rated 'some concerns' belong? ",
-                     "(Core GRADE 4 leaves this boundary open; it is not a ",
-                     "Core GRADE rule)"),
-              choices = c(
-                "Some concerns count as high risk of bias (default)" = "high",
-                "Some concerns count as low risk of bias"            = "low"),
-              selected = "high"),
-            .config_note(
-              "Studies left unrated follow whichever side 'some concerns' ",
-              "takes. The choice feeds the dominance gate, the ",
-              "low-risk-only comparison estimate, any refit on the low-risk ",
-              "set, and the two groups of the stratified forest plot on the ",
-              "Risk of Bias tab."),
-            shiny::sliderInput("rob_inf_threshold",
-              "Sensitivity-analysis change threshold (Risk of Bias only)",
-              min = 0.05, max = 0.5, value = 0.10, step = 0.05),
-            htmltools::tags$details(
-              htmltools::tags$summary("What the change threshold does"),
-              htmltools::div(
-                class = "pma-card-subtitle",
-                htmltools::p(
-                  "The analysis is pooled twice: once over all studies ",
-                  "(TE_all) and once over the low risk-of-bias studies only ",
-                  "(TE_low). This slider is how far the estimate must move ",
-                  "between the two before the domain is rated down. The ",
-                  "comparison is strict: a relative change of exactly the ",
-                  "threshold does not rate down, only a change greater than ",
-                  "it."),
-                htmltools::p(
-                  "The shift must also run in the direction that means the ",
-                  "high risk-of-bias studies were inflating the effect. ",
-                  "Which direction that is follows the outcome direction set ",
-                  "in Step 2: when small values are undesirable, inflation ",
-                  "means TE_all above TE_low; when small values are ",
-                  "desirable, it means TE_all below TE_low. A shift of any ",
-                  "size in the opposite direction does not rate down."),
-                htmltools::p(
-                  "Only one of the five decision rules consults this value ",
-                  "(rule 3, a bias-favouring change within the same ",
-                  "non-trivial zone). It has a second effect outside the ",
-                  "five rules: when high risk-of-bias studies do not ",
-                  "dominate the evidence, the same threshold decides whether ",
-                  "the two estimates count as substantially different and ",
-                  "the analysis is therefore restricted to the low ",
-                  "risk-of-bias studies."),
-                htmltools::p(
-                  htmltools::em("Caveat: "),
-                  "TE_low is always a fixed-effect inverse-variance mean, ",
-                  "even when the parent model is random-effects. Part of any ",
-                  "observed shift is therefore an estimator difference ",
-                  "rather than bias, and the gap widens with heterogeneity ",
-                  "and with unequal study sizes.")
-              )
-            )
-          ),
+          # The risk-of-bias conventions used to be a boxed section here. Both
+          # have gone: `rob_inf_threshold` is deleted outright (the package
+          # default of 0.10 applies unconditionally), and `rob_some_concerns`
+          # moved to the Risk of Bias tab, next to the verdict it produces.
+          # Its SCOPE is unchanged - still one review-wide setting that
+          # persists across outcomes - only the point of edit moved.
           shiny::uiOutput("config_status"),
           .confirm_checkbox("threshold_confirm",
             paste0("I have reviewed and confirm this configuration ",
@@ -356,19 +295,27 @@ step3_ui <- function() {
         shiny::tabPanel(.tab_title("rob"), value = "Risk of Bias",
           .domain_header("Risk of Bias", "rob_badge", "rob_chip"),
           shiny::uiOutput("analysis_set_banner_rob"),
-          # The body is a live output, not a fixed string: the Risk of Bias
-          # copy behind edu_domain_how("rob", ...) interpolates the
-          # sensitivity-analysis change threshold, so the explanation always
-          # quotes the value the algorithm used.
-          # inline = TRUE keeps it a <span> inside the <p> pma_how_collapse()
-          # builds, and re-rendering the span leaves the <details> open.
-          pma_how_collapse(shiny::uiOutput("rob_how_body", inline = TRUE)),
+          # The "How is this judged?" accordion is gone from all five domain
+          # tabs; the flowchart under the verdict draws the same algorithm and
+          # lights up the branch taken. output$rob_how_body went with it, and
+          # so did output$rob_rule_note before that.
           pma_reference(EDU_COPY$domains$rob$ref_text, EDU_COPY$domains$rob$doi),
-          # output$rob_rule_note (a ~180-word standing statement of the binary
-          # rule) and the "See also RoB 2" paragraph were deleted here. The
-          # rule is now the Configuration setting that states it, plus the
-          # two-group forest below that SHOWS it; pma_reference() above
-          # already carries the source.
+          # Review-wide, and edited here because this is the tab where it
+          # decides something: it sets which side of the binary split each
+          # study falls on, and the stratified forest below draws exactly that
+          # split. It persists across outcomes, unchanged by this move.
+          .inputs_details(open = TRUE, title = "Inputs for this domain",
+            shiny::radioButtons("rob_some_concerns",
+              "Where do studies rated 'some concerns' belong?",
+              choices = c(
+                "Some concerns count as high risk of bias (default)" = "high",
+                "Some concerns count as low risk of bias"            = "low"),
+              selected = "high"),
+            htmltools::p(class = "pma-card-subtitle",
+              paste0("Core GRADE 4 leaves this boundary open, so it is a ",
+                     "review decision. Unrated studies follow the same ",
+                     "side."))
+          ),
           shiny::uiOutput("threshold_block_rob"),
           shiny::uiOutput("rob_evaluation"),
           htmltools::tags$details(
@@ -384,9 +331,8 @@ step3_ui <- function() {
             htmltools::div(
               class = "pma-edit-body",
               htmltools::p(class = "pma-card-subtitle",
-                           "Click a cell in the table to type a value (low / some / high). ",
-                           "Use the bulk buttons to set all studies at once. ",
-                           "Changes here are synced with Step 1."),
+                           "Click a cell to type low / some / high, or set ",
+                           "them all at once. Synced with Step 1."),
               htmltools::div(
                 style = "display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem;",
                 shiny::actionButton("step3_rob_set_low",  "Set all to Low",  class = "btn-sm"),
@@ -408,10 +354,6 @@ step3_ui <- function() {
               type = 4, color = "#0f172a", size = 0.6,
               proxy.height = "320px")),
           pma_forest_display_panel("rob"),
-          # rob_some_concerns and rob_inf_threshold moved to the Configuration
-          # tab: both are review-wide decisions, not answers about this
-          # outcome, and they were sitting under a closed <details> on one
-          # domain tab while driving four separate parts of the assessment.
           .override_details(
             shiny::selectInput("rob_override", NULL,
               choices = pma_judgment_choices()),
@@ -424,7 +366,6 @@ step3_ui <- function() {
         # --- Inconsistency ---
         shiny::tabPanel(.tab_title("inconsistency"), value = "Inconsistency",
           .domain_header("Inconsistency", "incon_badge", "incon_chip"),
-          pma_how_collapse(edu_domain_how("inconsistency")),
           pma_reference(EDU_COPY$domains$inconsistency$ref_text,
                         EDU_COPY$domains$inconsistency$doi),
           shiny::uiOutput("threshold_block_inco"),
@@ -453,10 +394,8 @@ step3_ui <- function() {
             "output.incon_subgroup_relevant === true",
             .inputs_details(open = TRUE, title = "Inputs for this domain",
               htmltools::p(class = "pma-card-subtitle",
-                paste0("The automated assessment found study estimates on ",
-                       "both sides of the decision threshold. Core GRADE 3's ",
-                       "third step asks whether a credible subgroup explains ",
-                       "that, which no algorithm can decide.")),
+                paste0("Study estimates fall on both sides of the threshold. ",
+                       "Does a credible subgroup explain that?")),
               shiny::radioButtons("subgroup_explained",
                 "Explained by a credible subgroup analysis?",
                 choices = c("Yes" = "yes", "No" = "no"),
@@ -475,74 +414,46 @@ step3_ui <- function() {
         # --- Indirectness ---
         shiny::tabPanel(.tab_title("indirectness"), value = "Indirectness",
           .domain_header("Indirectness", "indir_badge", "indir_chip"),
-          shiny::uiOutput("indirectness_banner"),
-          pma_how_collapse(edu_domain_how("indirectness")),
           pma_reference(EDU_COPY$domains$indirectness$ref_text,
                         EDU_COPY$domains$indirectness$doi),
 
           # ----- The four Core GRADE 5 PICO questions ----------------------
-          # Answerable, so they stay OPEN and get the standard Inputs wrapper
-          # every other domain tab has - they used to float at top level with
-          # no heading of their own. What collapsed instead: the two boxed
-          # departure notes and the three per-element footnotes, which are
-          # source commentary rather than anything the reviewer answers. The
-          # EDU_COPY$domains$indirectness$mapping paragraph was deleted
-          # outright: it restates the "How is this judged?" copy above.
+          # Every one PRESELECTED to "yes" - the default is now on screen
+          # rather than in the code. Leaving them blank used to send
+          # indirectness = "no" to grade_meta() (see grade_obj()), so the
+          # domain scored no downgrade while the screen showed four unanswered
+          # questions. The judgment is identical either way; what changes is
+          # that the reviewer can see what they are accepting, and downgrades
+          # the elements they have a concern about.
+          #
+          # This is why pma_domain_confirmations() no longer counts
+          # "substantive input": a preselected radio would satisfy it the
+          # moment it mounts. The checkbox below is the whole gate.
           .inputs_details(open = TRUE,
             title = "Inputs for this domain (Core GRADE 5 subdomains)",
             htmltools::p(class = "pma-card-subtitle",
-              paste0("Core GRADE 5 asks the indirectness question separately ",
-                     "for each PICO element. Answer each on the four-point ",
-                     "scale - 'Is the evidence sufficiently direct?' - and ",
-                     "the answers drive the domain judgment. Leave an ",
-                     "element blank to omit it.")),
+              paste0("Is the evidence sufficiently direct? Answer each PICO ",
+                     "element; the worst answer decides the domain.")),
             shiny::radioButtons("indir_population",
               "Population - trial population sufficiently similar to target patients?",
               choices = STEP3_INDIR_ANSWERS, inline = TRUE,
-              selected = character(0)),
+              selected = "yes"),
             shiny::radioButtons("indir_intervention",
               "Intervention - deliverable as studied?",
               choices = STEP3_INDIR_ANSWERS, inline = TRUE,
-              selected = character(0)),
+              selected = "yes"),
             shiny::radioButtons("indir_comparator",
               "Comparison - representative of usual care?",
               choices = STEP3_INDIR_ANSWERS, inline = TRUE,
-              selected = character(0)),
+              selected = "yes"),
             shiny::radioButtons("indir_outcome",
               "Outcome - patient-important, rather than a surrogate?",
               choices = STEP3_INDIR_ANSWERS, inline = TRUE,
-              selected = character(0))
-          ),
-          htmltools::tags$details(
-            htmltools::tags$summary(
-              "How Core GRADE 5 weights the four elements, and where pmatools departs"),
-            htmltools::div(
-              class = "pma-card-subtitle",
-              htmltools::p(
-                htmltools::strong("Departure from the source, stated rather than implied: "),
-                EDU_COPY$domains$indirectness$gradient),
-              htmltools::p(EDU_COPY$domains$indirectness$surrogate),
-              htmltools::tags$ul(
-                htmltools::tags$li(
-                  htmltools::strong("Population. "),
-                  "Core GRADE 5 Table 2 rates it the LEAST likely element to ",
-                  "justify rating down; differences in trial population ",
-                  "rarely affect relative effects in most clinical contexts (",
-                  htmltools::tags$a(href = "https://doi.org/10.1503/cmaj.200077",
-                                    target = "_blank",
-                                    "ICEMAN; Schandelmaier et al., CMAJ 2020"),
-                  ")."),
-                htmltools::tags$li(
-                  htmltools::strong("Intervention. "),
-                  "Core GRADE 5 lists non-adherence to interventions as one ",
-                  "of three situations that warrant considering a downgrade ",
-                  "even on an ordinary search for direct evidence."),
-                htmltools::tags$li(
-                  htmltools::strong("Comparison. "),
-                  "Problematic comparators are the second of those three ",
-                  "situations.")
-              )
-            )
+              selected = "yes"),
+            htmltools::p(class = "pma-card-subtitle",
+                         EDU_COPY$domains$indirectness$surrogate),
+            htmltools::p(class = "pma-card-subtitle",
+                         EDU_COPY$domains$indirectness$gradient)
           ),
 
           # The subdomain table pmatools built from those answers. Surfaced
@@ -552,19 +463,14 @@ step3_ui <- function() {
           # next to the judgment rather than only in the collapsed copy.
           shiny::uiOutput("indir_subdomain_table"),
 
-          # No preselected value (W4-A). With subdomain answers present this
-          # radio OVERRIDES their worst-case fold; with none it is the whole
-          # judgment. Either way a rating that differs from the automatic
-          # value requires a written rationale.
+          # Still no preselected value: blank means "accept the fold", which
+          # is a different statement from any of the three ratings, and the
+          # four PICO radios above are where the default now shows itself.
           htmltools::h5("Overall indirectness rating",
                         style = "margin-top: 1.25rem;"),
           htmltools::p(class = "pma-card-subtitle",
-            paste0("Leave this blank to accept the worst case across the ",
-                   "subdomains above. Selecting a rating overrides it - use ",
-                   "this when the symmetric fold misplaces the judgment, for ",
-                   "example when the only concern sits on Population (low ",
-                   "likelihood in Core GRADE 5 Table 2) or on Outcome ",
-                   "(high).")),
+            paste0("Blank accepts the worst case above. Choose a rating to ",
+                   "override it, with a written reason.")),
           shiny::radioButtons("indirectness", NULL,
             choices = pma_judgment_choices(include_blank = FALSE),
             selected = character(0), inline = TRUE),
@@ -596,9 +502,8 @@ step3_ui <- function() {
             htmltools::div(
               class = "pma-edit-body",
               htmltools::p(class = "pma-card-subtitle",
-                           "Click a cell in the table to type a value (low / some / high). ",
-                           "Use the bulk buttons to set all studies at once. ",
-                           "Changes here are synced with Step 1."),
+                           "Click a cell to type low / some / high, or set ",
+                           "them all at once. Synced with Step 1."),
               htmltools::div(
                 style = "display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem;",
                 shiny::actionButton("step3_indir_set_low",  "Set all to Low",  class = "btn-sm"),
@@ -618,7 +523,6 @@ step3_ui <- function() {
         # --- Imprecision ---
         shiny::tabPanel(.tab_title("imprecision"), value = "Imprecision",
           .domain_header("Imprecision", "impre_badge", "impre_chip"),
-          pma_how_collapse(edu_domain_how("imprecision")),
           pma_reference(EDU_COPY$domains$imprecision$ref_text,
                         EDU_COPY$domains$imprecision$doi),
           shiny::uiOutput("threshold_block_impre"),
@@ -652,10 +556,9 @@ step3_ui <- function() {
               "input.outcome_type == 'continuous'",
               shiny::uiOutput("ois_sd_ui"),
               htmltools::p(class = "pma-card-subtitle",
-                paste0("For continuous outcomes Core GRADE 2 directs the OIS ",
-                       "to the threshold rather than to a relative risk ",
-                       "reduction, so the Configuration threshold is used as ",
-                       "the target difference and no RRR is asked for."))
+                paste0("Core GRADE 2 points the continuous OIS at the ",
+                       "threshold rather than a relative risk reduction, so ",
+                       "none is asked for."))
             ),
             shiny::numericInput("ois_events_override",
               "Override OIS - target events (binary)",
@@ -663,32 +566,20 @@ step3_ui <- function() {
             shiny::numericInput("ois_n_override",
               "Override OIS - target N (continuous)",
               value = NA, min = 0, step = 1),
+            # The Figure 4 quotation that used to follow was the caption of
+            # the imprecision flowchart on this same tab.
             htmltools::p(class = "pma-card-subtitle",
-              paste0("Either override replaces the calculated OIS. Figure 4 ",
-                     "compares the OIS against participants, not events: ",
-                     "'If the total sample size of all the studies included ",
-                     "in a meta-analysis exceeds the OIS, one does not rate ",
-                     "down.' The events override is kept for backward ",
-                     "compatibility and switches the comparison to total ",
-                     "events."))
+              paste0("Either override replaces the calculated OIS. The events ",
+                     "override also switches the comparison from participants ",
+                     "to events."))
           ),
-          # The preamble that used to sit here restated the branch text
-          # output$impre_branch already prints two screens up, so it was
-          # deleted rather than collapsed. What the reviewer needs at the
-          # override itself is one sentence naming the judgment Figure 4
-          # leaves to them; the rest is in "How is this judged?".
           .override_details(
-            htmltools::tags$details(
-              htmltools::tags$summary(
-                "When Figure 4 asks for a second level down"),
-              htmltools::p(class = "pma-card-subtitle",
-                paste0("Figure 4's second two-level condition is a reviewer ",
-                       "judgment and is not assessed automatically: consider ",
-                       "rating down two levels when the most appropriate ",
-                       "plain language summary of the result warrants 'may' ",
-                       "rather than 'likely'. Read the Summary of Findings ",
-                       "wording against the message you intend to convey, ",
-                       "and record the conclusion here."))),
+            # The only sentence at the override, out of the nested <details>
+            # it used to hide in: Figure 4's second two-level condition is the
+            # one judgment the algorithm cannot make.
+            htmltools::p(class = "pma-card-subtitle",
+              paste0("Rate down two levels when the plain language summary ",
+                     "warrants 'may' rather than 'likely'.")),
             shiny::selectInput("impre_override", NULL,
               choices = pma_judgment_choices()),
             .override_rationale("impre_override", "impre_override_rationale")
@@ -700,7 +591,6 @@ step3_ui <- function() {
         # --- Publication bias ---
         shiny::tabPanel(.tab_title("pubias"), value = "Publication bias",
           .domain_header("Publication bias", "pubias_badge", "pubias_chip"),
-          pma_how_collapse(edu_domain_how("pubias")),
           pma_reference(EDU_COPY$domains$pubias$ref_text,
                         EDU_COPY$domains$pubias$doi),
           # ----- Figure 5 as a wizard, one node at a time -------------------
@@ -736,14 +626,10 @@ step3_ui <- function() {
               htmltools::tags$summary("Reference: trim-and-fill"),
               htmltools::div(
                 htmltools::p(class = "pma-card-subtitle",
-                  "Filled (imputed) studies appear alongside observed studies ",
-                  "on the funnel plot. The numerical summary shows how the ",
-                  "pooled estimate would shift if these imputed studies ",
-                  "actually existed. ",
+                  "How the pooled estimate would shift if the imputed studies ",
+                  "existed. ",
                   htmltools::HTML(paste0(
-                    "This is <strong>not part of the automated Core GRADE ",
-                    "algorithm</strong>; consider it when finalising the ",
-                    "judgment manually."))),
+                    "<strong>Not part of the Core GRADE algorithm</strong>."))),
                 shinycssloaders::withSpinner(
                   shiny::imageOutput("pubias_trimfill_funnel", height = "auto"),
                   type = 4, color = "#0f172a", size = 0.6,
@@ -768,29 +654,24 @@ step3_ui <- function() {
                 "Reference: available vs missing results (RoB-ME)"),
               htmltools::div(
                 htmltools::p(class = "pma-card-subtitle",
-                  "Studies with no extractable effect estimate are ",
-                  "automatically moved into the Missing-results subgroup. You ",
-                  "can also add trials that exist (registry / protocol / ",
-                  "conference abstract) but were not loaded into this ",
-                  "meta-analysis. The forest plot renders Available and ",
-                  "Missing results as two subgroups, mirroring ",
+                  "Studies with no extractable estimate arrive here ",
+                  "automatically; add trials that exist but were never loaded. ",
+                  "After ",
                   htmltools::tags$a(href = "https://doi.org/10.1136/bmj-2023-076754",
                                     target = "_blank",
                                     "Page et al., BMJ 2023 (RoB-ME)"),
                   htmltools::HTML(paste0(
-                    ". This is <strong>not part of the automated Core GRADE ",
-                    "algorithm</strong>; use the override below to act on ",
-                    "it."))),
+                    ". <strong>Not part of the Core GRADE algorithm</strong> - ",
+                    "act on it through the override below."))),
                 htmltools::div(
                   style = "display: flex; gap: 0.5rem; margin-bottom: 0.5rem;",
                   shiny::actionButton("pubias_missing_add",
                                       "+ Add missing trial", class = "btn-sm")
                 ),
                 htmltools::p(class = "pma-card-subtitle",
-                  "Click any cell to edit. The Results known cell offers an ",
-                  "autocomplete list of recommended RoB-ME labels but also ",
-                  "accepts free text. Auto-classified rows from the dataset ",
-                  "cannot be removed; user-added rows remain fully editable."),
+                  "Click any cell to edit; Results known suggests RoB-ME ",
+                  "labels and accepts free text. Auto-classified rows cannot ",
+                  "be removed."),
                 # Datalist powering the in-cell autocomplete for results_known.
                 htmltools::tags$datalist(id = "pubias_rk_datalist",
                   htmltools::tags$option(value = "Reported but data not extractable"),
@@ -1407,29 +1288,24 @@ step3_server <- function(input, output, session, state) {
     provenance <- if (identical(cr$method, "metaprop")) {
       htmltools::tagList(
         .ok_badge("pooled (random-effects metaprop)"),
-        .config_note(sprintf(paste0(
-          "Prefilled from a random-effects pooled proportion of the ",
-          "control arms (meta::metaprop, GLMM with a logit link, ",
-          "back-transformed), over %d stud%s%s. The crude ratio of total ",
-          "events to total control participants is %s; the ",
-          "pooled value shown is %s."),
-          cr$k_used, if (cr$k_used == 1L) "y" else "ies",
+        # The badge names the method; what the sentence has to carry is the
+        # NUMBERS a reviewer weighs before replacing the value - how many
+        # studies it rests on, and how far the crude ratio sits from it.
+        .config_note(sprintf(
+          "%s pooled over %d stud%s%s; crude ratio %s.",
+          step3_per_label(auto, per), cr$k_used,
+          if (cr$k_used == 1L) "y" else "ies",
           if (cr$k_dropped > 0L) {
-            sprintf(" (%d study with no control-arm count excluded)",
-                    cr$k_dropped)
+            sprintf(", %d excluded for no control-arm count", cr$k_dropped)
           } else "",
-          step3_per_label(1000 * cr$crude, per, digits = 1),
-          step3_per_label(auto, per)))
+          step3_per_label(1000 * cr$crude, per, digits = 1)))
       )
     } else if (identical(cr$method, "simple_fallback")) {
       htmltools::tagList(
         .warn_badge("not pooled: crude event rate"),
         .config_note(sprintf(paste0(
-          "The random-effects pooled proportion (metaprop, GLMM) did not ",
-          "converge on these data, so this is the crude ratio of total ",
-          "control events to total control participants (%s) ",
-          "over %d stud%s. It is not a pooled estimate; treat it as a rough ",
-          "summary and replace it if you have a better one."),
+          "metaprop did not converge, so this is the crude ratio %s over %d ",
+          "stud%s. Replace it if you have a pooled estimate."),
           step3_per_label(1000 * cr$crude, per, digits = 1), cr$k_used,
           if (cr$k_used == 1L) "y" else "ies"))
       )
@@ -1453,10 +1329,9 @@ step3_server <- function(input, output, session, state) {
         # patients, and "15.6 per 100" is not one.
         min = 0, max = step3_per_unit(per), step = 1),
       .config_note(
-        "Used to convert an absolute threshold to the analysis scale, and ",
-        "as the Optimal Information Size baseline in Imprecision. Replace ",
-        "it with a better estimate for your target population if you have ",
-        "one."),
+        "Converts the absolute threshold to the analysis scale, and seeds ",
+        "the Optimal Information Size. Replace it if you have a better ",
+        "estimate."),
       # Same pattern as the domain-tab overrides: replacing an automated
       # value requires a written justification (Core GRADE transparency).
       shiny::conditionalPanel(
@@ -1487,13 +1362,9 @@ step3_server <- function(input, output, session, state) {
         selected = as.character(shiny::isolate(display_per_state())),
         inline = TRUE),
       .config_note(
-        "One setting for the whole app: the control-group risk and the ",
-        "absolute threshold above, the Optimal Information Size figures in ",
-        "Imprecision, the Summary of Findings table and the export all read ",
-        "it. It changes how rates are shown, never what is computed - the ",
-        "app stores them per 1,000 throughout. Entered values are whole ",
-        "numbers of events in the unit chosen here, so per 100 is a ten ",
-        "times coarser grid than per 1,000.")
+        "One setting for the whole app - display only, never what is ",
+        "computed. Values are entered as whole events in the unit chosen ",
+        "here.")
     )
   })
   shiny::outputOptions(output, "per_panel", suspendWhenHidden = FALSE)
@@ -1595,11 +1466,9 @@ step3_server <- function(input, output, session, state) {
           shiny::conditionalPanel(
             "input.threshold_mode == 'absolute'",
             .config_note(
-              "Core GRADE recommends expressing the threshold on the ",
-              "absolute scale: the smallest difference in events ",
-              step3_per_unit_label(per),
-              " patients that would matter for a decision. It is converted ",
-              "to the ", sm, " scale at the control-group risk above."),
+              "The smallest difference in events ", step3_per_unit_label(per),
+              " patients that would change a decision. Converted to the ",
+              sm, " scale at the control-group risk above."),
             shiny::numericInput("threshold_abs",
               sprintf("Threshold (events %s patients)",
                       step3_per_unit_label(per)),
@@ -1614,8 +1483,7 @@ step3_server <- function(input, output, session, state) {
                 "Threshold for clinical importance",
               value = .rel_value(), min = 0, step = 0.01),
             .config_note(EDU_COPY$threshold_help[[sm]] %||% "")
-          ),
-          .mic_note()
+          )
         )
       )
     } else {
@@ -1635,20 +1503,16 @@ step3_server <- function(input, output, session, state) {
             htmltools::p(
               class = "pma-card-subtitle", style = "font-style: italic;",
               paste0(
-                "Core GRADE 6 describes a standardized mean difference of ",
-                "0.2 as the threshold for a small and important effect, and ",
-                "immediately qualifies it: clinicians may be appropriately ",
-                "sceptical of this threshold, which is limited by large ",
-                "variability in the methods investigators use to calculate ",
-                "the standardized mean difference."))
+                "Core GRADE 6 calls 0.2 a small important effect, then warns ",
+                "that scepticism is appropriate: standardized mean ",
+                "differences vary widely with how they are calculated."))
           } else {
             .config_note(
-              "This prefill is a pmatools convention (",
+              "Prefilled at ",
               if (identical(sm, "MD")) "0.20 x the pooled SD" else "1.10",
-              "), not a value taken from Core GRADE. Replace it with a ",
-              "published threshold for this instrument whenever one exists.")
-          },
-          .mic_note()
+              ". Replace it with a published threshold for this instrument ",
+              "whenever one exists.")
+          }
         )
       )
     }
@@ -1680,10 +1544,8 @@ step3_server <- function(input, output, session, state) {
       return(htmltools::p(
         class = "pma-card-subtitle", style = "font-style: italic;",
         sprintf(paste0(
-          "Enter a positive threshold and a control-group risk between 0 and ",
-          "%s (threshold + control-group risk must stay below %s) to see the ",
-          "equivalent relative effect."),
-          format(step3_per_unit(per), big.mark = ","),
+          "Threshold plus control-group risk must be positive and stay below ",
+          "%s to convert."),
           format(step3_per_unit(per), big.mark = ","))))
     }
     dir <- step3_directed_threshold(eq, .threshold_direction())
@@ -1760,12 +1622,23 @@ step3_server <- function(input, output, session, state) {
 
   # Read-only threshold display inside RoB / Inconsistency / Imprecision.
   #
-  # `domain = "impre"` adds the residual-asymmetry sentence, because
-  # Imprecision is the domain it bites in: its two-level rule tests the
-  # confidence interval against both the important-benefit and the
-  # important-harm threshold, and by construction only one of those two is
-  # exact on the absolute scale.
-  .render_threshold_readonly <- function(domain = NULL) {
+  # `detail = FALSE` prints the head line alone. The equivalence block below it
+  # says what the absolute threshold becomes on the analysis scale in each
+  # direction, and which of the two conversions is exact - a derivation, not an
+  # answer, on every tab but one. Risk of Bias compares two pooled estimates
+  # against the band and Inconsistency reads a zone tally the algorithm has
+  # already computed; on neither does a reviewer do anything with the numbers.
+  #
+  # `detail = TRUE` is Imprecision, where they ARE operative: Core GRADE 2's
+  # two-level rule tests the confidence interval against the important-benefit
+  # AND important-harm thresholds by eye, so both bounds have to be on screen -
+  # and the residual-asymmetry sentence with them, because by construction only
+  # one of the two conversions is exact on the absolute scale.
+  #
+  # The trailing "change it in the Configuration tab" sentence is now the tab's
+  # own name, as a link. One id prefix per domain: all seven tab panels live in
+  # the DOM at once, so three copies of one actionLink id would collide.
+  .render_threshold_readonly <- function(domain = NULL, detail = TRUE) {
     ts <- threshold_summary()
     htmltools::div(
       style = paste0(
@@ -1773,13 +1646,13 @@ step3_server <- function(input, output, session, state) {
         "border: 1px solid #e5e5e5; border-radius: 6px; margin: 0.5rem 0;"),
       htmltools::p(style = "margin: 0; font-size: 0.9rem;",
         htmltools::strong(ts$head)),
-      if (length(ts$lines)) {
+      if (isTRUE(detail) && length(ts$lines)) {
         htmltools::div(
           style = paste0("margin: 0.25rem 0 0; font-size: 0.85rem; ",
                          "color: hsl(var(--muted-foreground));"),
           lapply(ts$lines, htmltools::div))
       },
-      if (identical(domain, "impre") && length(ts$approx %||% character())) {
+      if (isTRUE(detail) && length(ts$approx %||% character())) {
         htmltools::div(
           style = paste0("margin: 0.35rem 0 0; font-size: 0.85rem; ",
                          "font-style: italic; ",
@@ -1789,16 +1662,32 @@ step3_server <- function(input, output, session, state) {
       htmltools::p(
         class = "pma-card-subtitle",
         style = "margin: 0.25rem 0 0;",
-        "This decision threshold is shared by Risk of Bias, Inconsistency, ",
-        "and Imprecision. Change it in the Configuration tab.")
+        pma_domain_jump_links("threshold",
+                              paste0("threshold_block_jump_", domain, "_"),
+                              before = "Set in ", after = "."))
     )
   }
-  output$threshold_block_rob   <- shiny::renderUI(.render_threshold_readonly("rob"))
-  output$threshold_block_inco  <- shiny::renderUI(.render_threshold_readonly("inco"))
-  output$threshold_block_impre <- shiny::renderUI(.render_threshold_readonly("impre"))
+  output$threshold_block_rob   <-
+    shiny::renderUI(.render_threshold_readonly("rob",   detail = FALSE))
+  output$threshold_block_inco  <-
+    shiny::renderUI(.render_threshold_readonly("inco",  detail = FALSE))
+  output$threshold_block_impre <-
+    shiny::renderUI(.render_threshold_readonly("impre", detail = TRUE))
   shiny::outputOptions(output, "threshold_block_rob",   suspendWhenHidden = FALSE)
   shiny::outputOptions(output, "threshold_block_inco",  suspendWhenHidden = FALSE)
   shiny::outputOptions(output, "threshold_block_impre", suspendWhenHidden = FALSE)
+
+  # The observers behind those links, beside the message they belong to (the
+  # same pattern as cert_jump_* below).
+  for (.block_domain in c("rob", "inco", "impre")) {
+    local({
+      jump_id <- paste0("threshold_block_jump_", .block_domain, "_threshold")
+      shiny::observeEvent(input[[jump_id]], {
+        shiny::updateTabsetPanel(session, "grade_tabs",
+                                 selected = PMA_DOMAIN_LABELS[["threshold"]])
+      }, ignoreInit = TRUE)
+    })
+  }
 
   # grade_meta() threshold arguments derived from the active mode.
   # Gated on the outcome type, matching output$threshold_panel: a binary
@@ -1938,27 +1827,18 @@ step3_server <- function(input, output, session, state) {
           if (up) "increase" else "reduction", 100 * rrr,
           step3_per_label(p0d, per), step3_per_label(p1d, per),
           step3_per_label(dif, per), if (up) "more" else "fewer"))),
+      # The parameters, because they are what the OIS is; and the warning that
+      # this is not the decision threshold, because the two are both rates on
+      # the same scale and a reviewer WILL read one for the other.
       htmltools::p(style = "margin: 0.25rem 0 0;",
-        sprintf(paste0("The OIS is powered to detect this difference at ",
-                       "alpha = 0.05 and beta = 0.20, using the ",
-                       "control-group risk of %s set on the ",
-                       "Configuration tab. It is a separate quantity from ",
-                       "the decision threshold and is not derived from it."),
+        sprintf(paste0("Powered at alpha 0.05 and beta 0.20 from the ",
+                       "control-group risk of %s. Not the decision ",
+                       "threshold."),
                 step3_per_label(tb, per))),
-      htmltools::p(style = "margin: 0.25rem 0 0;", dirn$reason, "."),
-      # The Core GRADE 2 verbatim quotation that used to sit open here is the
-      # provenance of the two RRR values, not something the reviewer answers.
-      htmltools::tags$details(
-        htmltools::tags$summary("Core GRADE 2 on the binary OIS (verbatim)"),
-        htmltools::p(style = paste0("margin: 0.35rem 0 0; font-style: italic; ",
-                                    "color: hsl(var(--muted-foreground));"),
-          paste0("'For binary outcomes, these involve specifying the ",
-                 "acceptable error rates: alpha (typically 0.05) and beta ",
-                 "(typically 0.20), the control group event rate (chosen ",
-                 "from the context), and a modest relative risk reduction, ",
-                 "typically 20% or 25%.' Core GRADE's separate advice that ",
-                 "binary thresholds belong on the absolute scale concerns ",
-                 "thresholds, not the OIS.")))
+      htmltools::p(style = "margin: 0.25rem 0 0;", dirn$reason, ".")
+      # The Core GRADE 2 verbatim quotation that sat here in a <details> is
+      # deleted. Its own comment said it: provenance of the two RRR values,
+      # not something the reviewer answers. A <details> is for content.
     )
   })
   shiny::outputOptions(output, "ois_rrr_equiv", suspendWhenHidden = FALSE)
@@ -2211,7 +2091,11 @@ step3_server <- function(input, output, session, state) {
       # the binary split but leaves the boundary open, so it is a reviewer
       # choice, exposed on the tab.
       rob_some_concerns        = .rob_some_concerns_setting(),
-      rob_inflation_threshold  = input$rob_inf_threshold %||% 0.10,
+      # rob_inflation_threshold is deliberately NOT passed. The app used to
+      # expose it as a slider; it is a pmatools convention rather than a Core
+      # GRADE 4 rule, and a reviewer had no basis on which to move it. The
+      # package default of 0.10 (R/domain_rob.R) now applies unconditionally,
+      # and export_bundle() writes the same 0.10 into the bundled analysis.R.
       small_values             = sv,
       indirectness             = indir_arg,
       indirectness_rationale   = indir_rationale,
@@ -2700,30 +2584,21 @@ step3_server <- function(input, output, session, state) {
   output$analysis_set_banner_cert <- shiny::renderUI(
     pma_analysis_set_banner(grade_obj()))
 
-  # Live "How is this judged?" body for Risk of Bias. Rendered rather than
-  # baked into the UI so the sensitivity-analysis change threshold quoted in
-  # the copy is the one the algorithm actually used.
-  output$rob_how_body <- shiny::renderUI(
-    htmltools::HTML(htmltools::htmlEscape(
-      edu_domain_how("rob", input$rob_inf_threshold %||% 0.10,
-                     .rob_some_concerns_setting()))))
-  # It lives inside a collapsed <details>, so without this the copy is only
-  # filled in after the user opens the block.
-  shiny::outputOptions(output, "rob_how_body", suspendWhenHidden = FALSE)
-
-  # output$rob_rule_note was deleted here. It was a ~180-word standing
-  # statement of the binary low/high rule, sitting open above the evaluation.
-  # Two things now say the same thing better: the Configuration setting that
-  # establishes the boundary states it in one sentence beside the control, and
-  # the two-group forest plot on this tab SHOWS which side each study fell on.
+  # output$rob_how_body was deleted here, with pma_how_collapse() and the five
+  # EDU_COPY `how` bodies. It was live only because it interpolated
+  # input$rob_inf_threshold, and that slider is gone too - producer and
+  # consumer in one change. The flowchart under the verdict draws the five
+  # rules and lights up the one that fired.
 
   # ----- One evaluation shape for all five domain tabs --------------------
-  # Every tab used to print domain_notes() raw into a verbatimTextOutput
-  # under the heading "Evaluation" - several hundred characters of
-  # machine-generated prose, open, with the numbers buried in the middle of
-  # it. Three parts now: the verdict in Core GRADE's words, the numbers the
-  # assessor recorded as a short list, and the full note one click away.
-  # NOTHING is deleted - the note is still there, verbatim, in the <details>.
+  # The verdict in Core GRADE's words, the numbers the assessor recorded as a
+  # short list, and the flowchart with the branch taken lit up.
+  #
+  # The verbatim note used to hang below all three in a <details>. It is gone
+  # from the screen, and it is NOT lost: domain_notes() still reaches
+  # evidence_profile() and the exported .docx unchanged, which is where a
+  # verbatim record is read. What the screen owed the reviewer was why this
+  # judgment, and the picture answers that better than the prose did.
   #
   # `keys` picks which facts come forward and in what order; NULL takes them
   # as the assessor emitted them.
@@ -2741,6 +2616,12 @@ step3_server <- function(input, output, session, state) {
     tryCatch(domain_facts(g, domain), error = function(e) NULL)
   }
 
+  # A backend failure must not print R's error text where the judgment badge
+  # belongs. Seen live: a domain tab rendered the string "Error: could not
+  # find function '.grade_level_wording'" as its verdict, which reads as a
+  # rating rather than as a broken build. tryCatch() around the whole body,
+  # not around each helper: any of them can be the one that fails, and the
+  # reviewer's next move is the same whichever it was.
   .domain_evaluation <- function(domain, keys = NULL) {
     if (is.null(grade_obj())) {
       return(htmltools::tagList(
@@ -2749,18 +2630,25 @@ step3_server <- function(input, output, session, state) {
                      "Run the analysis and set a threshold to see this domain's judgment.")
       ))
     }
-    facts <- domain_fact_table(domain)
-    htmltools::tagList(
-      htmltools::h5("Evaluation"),
-      pma_domain_verdict(domain_judgment(domain) %||% "no",
-                         domain_downgrade(domain)),
-      pma_facts_list(facts, keys = keys),
-      # The picture of the decision, with the branch this analysis took lit
-      # up, directly under the verdict it explains. NULL for Indirectness,
-      # which has no flowchart to draw (Core GRADE 5 Table 2 is a gradient).
-      pma_flowchart_details(domain, facts),
-      pma_notes_collapse(domain_notes(domain))
-    )
+    tryCatch({
+      facts <- domain_fact_table(domain)
+      htmltools::tagList(
+        htmltools::h5("Evaluation"),
+        pma_domain_verdict(domain_judgment(domain) %||% "no",
+                           domain_downgrade(domain)),
+        pma_facts_list(facts, keys = keys),
+        # The picture of the decision, with the branch this analysis took lit
+        # up, directly under the verdict it explains. NULL for Indirectness,
+        # which has no flowchart to draw (Core GRADE 5 Table 2 is a gradient).
+        pma_flowchart_details(domain, facts)
+      )
+    }, error = function(e) {
+      htmltools::tagList(
+        htmltools::h5("Evaluation"),
+        .alert_box("This domain could not be evaluated. ",
+                   "Re-run Step 2, or report this.")
+      )
+    })
   }
 
   # suspendWhenHidden = FALSE on all four. A suspended output keeps whatever
@@ -2889,9 +2777,7 @@ step3_server <- function(input, output, session, state) {
     if (is.null(indir_subdomains())) {
       return(htmltools::p(
         class = "pma-card-subtitle", style = "font-style: italic;",
-        paste0("Answer at least one subdomain question above to record a ",
-               "subdomain table. Until then the domain rests on the overall ",
-               "rating alone.")))
+        "No subdomain answers, so the domain rests on the overall rating."))
     }
     g <- grade_obj()
     if (is.null(g) || is.null(g$indirectness_subdomains)) {
@@ -3163,9 +3049,8 @@ step3_server <- function(input, output, session, state) {
       return(htmltools::tagList(
         htmltools::h5("Q1. Most or all studies small AND industry-sponsored?"),
         htmltools::p(class = "pma-card-subtitle",
-          paste0("Core GRADE 4 Figure 5's first node. A 'yes' answer is ",
-                 "sufficient evidence on its own (rate down 1) and ends the ",
-                 "assessment; nothing after it can undo the concern.")),
+          paste0("A 'yes' rates down 1 on its own and ends the assessment; ",
+                 "nothing after it can undo the concern.")),
         shiny::radioButtons("pubias_small_industry", NULL,
           choices = c("No" = "no", "Yes" = "yes"),
           selected = character(0), inline = TRUE)
@@ -3175,28 +3060,20 @@ step3_server <- function(input, output, session, state) {
     if (identical(node, "extra")) {
       return(htmltools::tagList(
         htmltools::h5("Overall reporting-bias judgment"),
+        # The provenance paragraph that used to open this node is deleted: the
+        # three radio labels below already say what each answer does.
+        #
+        # The criteria that follow are not. They are the grounds for a
+        # judgment the algorithm cannot compute, so they are two visible
+        # sentences rather than a <details> full of examples.
         htmltools::p(class = "pma-card-subtitle",
-          paste0("Not one of Figure 5's four nodes - a pmatools convenience ",
-                 "input, evaluated straight after Q1. 'Yes' ends the ",
-                 "assessment with no rate down; 'No' forces rate down 1 ",
-                 "regardless of the remaining nodes; leaving it to Figure 5 ",
-                 "carries on to the statistical nodes below.")),
-        htmltools::tags$details(
-          htmltools::tags$summary("What argues for and against reporting bias"),
-          htmltools::div(class = "pma-card-subtitle",
-            htmltools::p(htmltools::strong("Suspect reporting bias when:")),
-            htmltools::tags$ul(
-              htmltools::tags$li("Unpublished data and grey literature were not searched."),
-              htmltools::tags$li("The synthesis rests on a small number of positive early findings (eg, a newly marketed drug, where early evidence tends to overestimate efficacy and safety)."),
-              htmltools::tags$li("Prior empirical evidence documents reporting bias for this comparison (eg, Turner et al. 2008 for placebo-controlled antidepressant trials).")
-            ),
-            htmltools::p(htmltools::strong("Reporting bias is unlikely when:")),
-            htmltools::tags$ul(
-              htmltools::tags$li("Unpublished studies have been identified and their findings agree with the published evidence."),
-              htmltools::tags$li("Prospective trial registration is the field standard, and registered protocols / registries do not show important discrepancies with published reports.")
-            )
-          )
-        ),
+          paste0("Suspect reporting bias when grey literature went ",
+                 "unsearched, the evidence is a few early positive trials, ",
+                 "or prior work documents it for this comparison.")),
+        htmltools::p(class = "pma-card-subtitle",
+          paste0("It is unlikely when unpublished studies were found and ",
+                 "agree, or prospective registration is the field standard ",
+                 "with no discrepancies.")),
         shiny::radioButtons("pubias_registry_complete",
           "Overall, does the situation argue against reporting bias?",
           choices = c(
@@ -3211,19 +3088,12 @@ step3_server <- function(input, output, session, state) {
     if (identical(node, "q3")) {
       return(htmltools::tagList(
         htmltools::h5("Q3. Does funnel plot asymmetry strongly suggest publication bias?"),
+        # The <details> under this used to give the provenance of p < 0.05.
+        # Deleted: the flowchart caption on this tab names the implementing
+        # function, and the sentence changed no answer.
         htmltools::p(class = "pma-card-subtitle",
-          paste0("Egger's p < 0.05 rates down 1; p >= 0.05 does not rate ",
-                 "down. There is no second tier - Core GRADE 4 never rates ",
-                 "down two levels for publication bias. The test is run ",
-                 "automatically on the funnel plot below; accept it, or ",
-                 "replace it with your own visual judgment.")),
-        htmltools::tags$details(
-          htmltools::tags$summary("Provenance of the p < 0.05 cut-off"),
-          htmltools::p(class = "pma-card-subtitle",
-            paste0("The cut-off is a pmatools operational convention, not a ",
-                   "Core GRADE criterion. Figure 5 asks this node ",
-                   "qualitatively - whether asymmetry 'strongly suggests ",
-                   "publication bias' - and names no threshold."))),
+          paste0("Egger's test is run on the funnel plot below, at p < 0.05. ",
+                 "Accept it, or replace it with your own visual judgment.")),
         shiny::selectInput("pubias_funnel_asymmetry",
           "Your answer",
           choices = c(
@@ -3248,10 +3118,9 @@ step3_server <- function(input, output, session, state) {
       return(htmltools::tagList(
         htmltools::h5("Q4. Documentation of unpublished studies"),
         htmltools::p(class = "pma-card-subtitle",
-          sprintf(paste0("Egger's test would be unreliable with k = %d < 10, ",
-                         "so Figure 5 routes here instead. If unpublished ",
-                         "trials are documented in a registry (eg, ",
-                         "ClinicalTrials.gov, FDA), rate down 1."), k)),
+          sprintf(paste0("Egger's test is unreliable at k = %d, so Figure 5 ",
+                         "routes here. Documented unpublished trials rate ",
+                         "down 1."), k)),
         shiny::radioButtons("pubias_unpublished",
           "Unpublished studies documented?",
           choices = c("No" = "no", "Yes" = "yes"),
@@ -3573,24 +3442,12 @@ step3_server <- function(input, output, session, state) {
     )
   }, deleteFile = TRUE)
 
-  shiny::observeEvent(input$indirectness, {
-    state$indir_reviewed <- TRUE
-  })
-  # The four subdomain answers are the primary input of the domain, so any of
-  # them clears the "no judgment recorded yet" banner too.
-  for (.indir_id in unname(STEP3_INDIR_SUBDOMAINS)) {
-    local({
-      id <- .indir_id
-      shiny::observeEvent(input[[id]], {
-        state$indir_reviewed <- TRUE
-      })
-    })
-  }
-
-  output$indirectness_banner <- shiny::renderUI({
-    if (isTRUE(state$indir_reviewed)) return(NULL)
-    pma_banner(EDU_COPY$domains$indirectness$banner)
-  })
+  # output$indirectness_banner and the state$indir_reviewed flag behind it were
+  # deleted here. The banner said "no indirectness judgment recorded yet", and
+  # with the four PICO radios preselected there is always one - it would have
+  # been dismissed by its own widgets on mount, every time. What it was really
+  # reporting is now the tab's own progress marker and the Final certainty
+  # banner, both driven by the confirmation checkbox.
 
   # The amber "you cannot get a rating until you do X" box, in one place: the
   # Final certainty panel, the SoF preview and the incomplete banner all use
@@ -3800,10 +3657,13 @@ step3_server <- function(input, output, session, state) {
     )
   })
 
-  # Read-only echo of the outcome direction, in the same style. small_values
-  # is set in Step 2 and was invisible in Step 3 even though it flips the
-  # direction gate in Risk of Bias (and, on the continuous path, the sign of
-  # the responder odds ratio). Shown here; editing stays in Step 2.
+  # Read-only echo of the outcome direction. small_values is set in Step 2 and
+  # was invisible in Step 3 even though it flips the direction gate in Risk of
+  # Bias (and, on the continuous path, the sign of the responder odds ratio).
+  # Boxed like Control-group risk, Decision threshold, Presentation of event
+  # rates: it is one of the things the five domains depend on, and it used to
+  # float between the boxes as though it were a caption for one of them.
+  # Editing stays in Step 2.
   output$direction_echo <- shiny::renderUI({
     sv <- state$small_values
     label <- if (identical(sv, "desirable")) {
@@ -3813,12 +3673,11 @@ step3_server <- function(input, output, session, state) {
     } else {
       "(not set)"
     }
-    htmltools::div(
-      style = "margin: 0 0 1rem;",
-      htmltools::p(class = "pma-card-subtitle",
-        "Outcome direction: ", htmltools::tags$strong(label),
-        " - set in Step 2 (Model configuration). It sets the bias direction ",
-        "used by the Risk-of-Bias check.")
+    .config_section(
+      "Outcome direction",
+      htmltools::p(class = "pma-card-subtitle", style = "margin: 0;",
+        htmltools::tags$strong(label),
+        " - set in Step 2. It sets the bias direction Risk of Bias checks.")
     )
   })
   shiny::outputOptions(output, "direction_echo", suspendWhenHidden = FALSE)

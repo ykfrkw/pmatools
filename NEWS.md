@@ -31,6 +31,37 @@
   navigation is locked — the tab strip and the stepper still move freely, and
   what a domain is *rated* as is untouched. See `shiny/SPEC.md` §3.4.13.
 
+* **Shiny app: the Risk of Bias sensitivity-analysis change threshold is no
+  longer settable.** `rob_inf_threshold` — the slider on the Configuration tab
+  labelled "Sensitivity-analysis change threshold (Risk of Bias only)" — is
+  deleted, and the app no longer passes `rob_inflation_threshold` to
+  `grade_meta()` at all. The package default of `0.10` now applies
+  unconditionally, so a review that had moved the slider will rate Risk of Bias
+  against 10 percent instead, and the judgment can change on the one rule that
+  consults it (a bias-favouring shift within the same non-trivial zone) and on
+  whether the analysis is restricted to the low risk-of-bias studies. The
+  control was a pmatools convention rather than a Core GRADE 4 rule, and a
+  reviewer had no basis on which to move it. `grade_meta()` still takes the
+  argument, so a script that sets it is unaffected; the bundled `analysis.R`
+  writes the same `0.10` it always did when the app had not been touched.
+
+* **Shiny app: Indirectness now takes the subdomain path by default, which
+  changes the exported bundle.** The four Core GRADE 5 PICO radios ship
+  preselected to "yes" instead of blank. The *rating* is unchanged — blank used
+  to send `indirectness = "no"`, four "yes" answers fold worst-case to the same
+  "no", and certainty, every domain judgment and every downgrade are identical
+  either way — but `indirectness_subdomains` is now populated for every outcome
+  rather than absent. Consequently `indirectness_table()` stops aborting on an
+  app-rated object; the multi-outcome bundle gains
+  `outcomes/<nn>_<outcome>/indirectness_table.docx`, which it writes only when
+  subdomain judgments exist; the bundled `analysis.R` carries an
+  `indirectness_subdomains = data.frame(...)` literal in place of `NULL`; and
+  `results.txt` reports the four answers rather than "Overall judgment provided
+  by user." A pipeline that keys on the presence of the indirectness artifact
+  will start seeing it. The point of the change is that the old default was
+  silent: the domain scored no downgrade while the screen showed four
+  unanswered questions.
+
 ## New features
 
 * **Shiny app: Step 3 says how far through it you are, and where the next click
@@ -42,6 +73,22 @@
   banner and the Step 4 download lock — now names it as a link that opens that
   tab. The seven-tab strip scrolls sideways on its own rather than widening the
   page, which is what it was doing on a phone.
+
+* **Shiny app: Step 3 stops explaining itself at length.** The five collapsed
+  "How is this judged?" accordions are gone (about 600 words), and so is the
+  Configuration tab's 115-word opener, the verbatim machine-generated note
+  parked under every domain verdict, the Indirectness "no judgment recorded
+  yet" banner, the MIC warning under the Decision threshold, and the
+  provenance notes on Publication bias and Imprecision. What replaces them is
+  what was already on screen: the flowchart under each verdict draws the
+  algorithm and lights up the branch taken, and the reference line names the
+  source paper. Nothing is hidden instead of deleted, and nothing is lost from
+  the record — the verbatim note still travels into the Evidence Profile and
+  the exported `.docx`. Muted explanatory lines are now capped at one desktop
+  line and a test enforces it. Two other things moved: the outcome-direction
+  echo gained a box of its own on Configuration, and `rob_some_concerns` moved
+  from Configuration to the Risk of Bias tab, next to the verdict it produces
+  (its review-wide scope is unchanged).
 
 * pmatools now ships **drawings of the decision flowcharts it implements**, and
   the app highlights the path a given analysis actually took. Four domains have

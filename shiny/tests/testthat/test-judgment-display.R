@@ -106,18 +106,16 @@ test_that("the facts list brings the numbers forward, in the order asked", {
   expect_null(pma_facts_list(facts, keys = "no_such_key"))
 })
 
-test_that("the verbatim note is collapsed, never dropped", {
-  html <- as.character(pma_notes_collapse("AUTO Step 1: ... | I2 = 70.0%"))
-  expect_match(html, "<details")
-  expect_match(html, "Full reasoning")
-  # The whole string survives: this is the authoritative record of why the
-  # domain was rated as it was, and it has to stay reachable.
-  expect_match(html, "AUTO Step 1", fixed = TRUE)
-  expect_match(html, "I2 = 70.0%", fixed = TRUE)
-
-  expect_null(pma_notes_collapse(NULL))
-  expect_null(pma_notes_collapse(""))
-  expect_null(pma_notes_collapse("   "))
+test_that("the on-screen prose helpers are gone and stay gone", {
+  # pma_notes_collapse() parked the machine-generated note under every domain
+  # verdict; pma_how_collapse() wrapped the five EDU_COPY `how` bodies; and
+  # pma_help() was a Bootstrap tooltip nothing ever initialised. All three are
+  # deleted (v0.5.1). The note itself is NOT lost - it still travels into
+  # evidence_profile() and the exported .docx - so a re-introduced helper here
+  # would be a second, screen-only copy of a record that already ships.
+  for (fn in c("pma_notes_collapse", "pma_how_collapse", "pma_help")) {
+    expect_false(exists(fn, mode = "function"), info = fn)
+  }
 })
 
 # ----- Step 2 required fields ---------------------------------------------

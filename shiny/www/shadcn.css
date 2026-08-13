@@ -289,13 +289,11 @@ a.pma-domain-jump { font-weight: 600; text-decoration: underline; }
   overflow-y: auto;
 }
 
-/* How-this-is-judged block */
-.pma-how p { margin: 0.25rem 0 0.75rem 0; line-height: 1.5; font-size: 0.9rem; }
-
 /* ---------------------------------------------------------------------------
-   The shared domain-evaluation shape (pma_domain_verdict / pma_facts_list /
-   pma_notes_collapse in R/ui_helpers.R). One verdict line, the numbers behind
-   it as a compact list, and the machine-generated note one click away.
+   The shared domain-evaluation shape (pma_domain_verdict / pma_facts_list in
+   R/ui_helpers.R). One verdict line, and the numbers behind it as a compact
+   list. The .pma-how and .pma-notes-* rules that used to sit here went with
+   pma_how_collapse() and pma_notes_collapse().
    --------------------------------------------------------------------------- */
 .pma-domain-verdict {
   font-size: 1rem;
@@ -316,22 +314,6 @@ a.pma-domain-jump { font-weight: 600; text-decoration: underline; }
 @media (max-width: 560px) {
   .pma-facts { grid-template-columns: 1fr; gap: 0 0; }
   .pma-facts dd { margin-bottom: 0.4rem; }
-}
-
-.pma-notes-details > summary {
-  font-size: 0.85rem;
-  color: hsl(var(--muted-foreground));
-  cursor: pointer;
-}
-.pma-notes-pre {
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: 0.8rem;
-  line-height: 1.5;
-  background: hsl(var(--muted));
-  border-radius: var(--radius);
-  padding: 0.6rem 0.85rem;
-  margin: 0.4rem 0 0;
 }
 
 /* ---------------------------------------------------------------------------
@@ -417,10 +399,6 @@ a.pma-domain-jump { font-weight: 600; text-decoration: underline; }
 }
 .pma-crumb strong { color: hsl(var(--foreground)); }
 .pma-crumb-auto { font-style: italic; }
-
-/* Inline help icon */
-.pma-help { color: hsl(var(--muted-foreground)); cursor: help; margin-left: 0.25rem; font-size: 0.8rem; }
-.pma-help:hover { color: hsl(var(--foreground)); }
 
 /* Buttons (work alongside bslib bs5 .btn) */
 .btn-primary {

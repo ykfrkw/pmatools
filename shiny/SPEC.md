@@ -423,7 +423,7 @@ Resulting judgment: {{judgment}}
 
 - `selectInput("rob_override", "Override RoB judgment", c("(use auto)" = "", "No" = "no", "Some" = "some", "Serious" = "serious", "Very serious" = "very_serious"))`
 - `sliderInput("rob_dom_threshold", "Dominance threshold", min = 0.5, max = 0.7, value = 0.6, step = 0.05)`
-- `sliderInput("rob_inf_threshold", "Inflation threshold", min = 0.05, max = 0.5, value = 0.1, step = 0.05)`
+- ~~`sliderInput("rob_inf_threshold", …)`~~ — deleted in 0.5.1; see §3.4.11
 - `radioButtons("small_values", "Small values are...", c("Desirable (e.g., mortality, severity)" = "desirable", "Undesirable (e.g., response rate)" = "undesirable", "(use auto)" = ""))`
 
 #### 3.4.5 Educational copy — Inconsistency
@@ -589,23 +589,59 @@ Below the accordion, a `pma-card` with:
 
 #### 3.4.11 Information design — what is open, what is collapsed, what was deleted
 
-> The governing rule, from the reviewer this app is for: **delete duplicated and
-> verbose explanation outright; collapse what survives; never collapse anything
-> the reviewer has to answer.** Figure configuration and detailed algorithm
-> narration collapse. Inputs, questions and confirmations stay open. A change
+> The governing rule, from the reviewer this app is for: **delete first,
+> shorten second, hide never.** A muted explanatory sentence survives only if a
+> reviewer cannot answer the control it sits under without it. Provenance,
+> source-departure notes and "where this number comes from" are deleted
+> outright — the flowchart caption and the one-line reference already carry
+> them. `<details>` is for *content* (reference plots, per-study grids, verbatim
+> tables), never a parking space for prose that failed the first test. A change
 > to a Step 3 tab is measured against that rule, not against a character count.
 
+**The operational cap: 25 words.** A `.pma-card-subtitle` is the muted line
+under a control, read while the reviewer decides that control; past one desktop
+line it stops being read. `EDU_COPY_SUBTITLE_FIELDS` /
+`EDU_COPY_SUBTITLE_WORD_CAP` (`R/educational_copy.R`) name the copy-deck strings
+that render as one and pin the cap; `test-edu-copy.R` asserts it. Step headers,
+the intro modal and the saved-outcome copy are deliberately outside the
+registry, and the comment there says why.
+
+**There are no tooltips, and there will not be.** `pma_help()` — a `(?)` span
+with a Bootstrap tooltip — had no call site and nothing ever initialised
+Bootstrap tooltips, so it had never rendered. It is deleted rather than wired
+up: a tooltip is still a sentence somebody has to write, review and keep true,
+and it hides that sentence from the reviewer who needed it.
+
 **One evaluation shape on every domain tab.** Each tab replaced its raw
-`verbatimTextOutput("<domain>_notes")` under the heading "Evaluation" with three
-parts, built by `pma_domain_verdict()` / `pma_facts_list()` /
-`pma_notes_collapse()` (`R/ui_helpers.R`):
+`verbatimTextOutput("<domain>_notes")` under the heading "Evaluation" with
+`pma_domain_verdict()` / `pma_facts_list()` / `pma_flowchart_details()`
+(`R/ui_helpers.R`):
 
 1. the verdict, one line, in Core GRADE's own words plus the downgrade;
 2. the numbers behind it, 3–6 rows of a `<dl>` read from `domain_facts()`;
-3. the full machine-generated note, verbatim, inside a closed `<details>`.
+3. the flowchart, with the branch this analysis took lit up (§3.4.12).
 
-Nothing is deleted by this: the note remains the authoritative record of why the
-domain was rated as it was, and it is one click away.
+`pma_notes_collapse()`, which parked the verbatim machine-generated note under
+all three, is **deleted** (v0.5.1). The picture answers "why this judgment"
+better than the prose did, and a `<details>` full of prose is exactly what the
+rule above forbids. **The note is not lost:** `domain_notes()` still travels
+into `evidence_profile()` and into the exported `.docx` unchanged, which is
+where a verbatim record is read.
+
+**A failed evaluation renders a card, not an error string.** `.domain_evaluation()`
+wraps its whole body in `tryCatch()`; a backend failure emits *"This domain
+could not be evaluated. Re-run Step 2, or report this."* in the standard alert
+box. Seen live before this: a domain tab printed `Error: could not find
+function ".grade_level_wording"` where the judgment badge belongs, which reads
+as a rating rather than as a broken build.
+
+**The five "How is this judged?" accordions are deleted.** `pma_how_collapse()`
+and the five `EDU_COPY$domains$*$how` bodies (≈600 words) are gone with their
+accessor `edu_domain_how()` and the live `output$rob_how_body`. Four of the five
+domains draw their algorithm as a flowchart with the branch taken lit up;
+Indirectness has no flowchart and its PICO question labels and subdomain table
+carry the same ground. `pma_reference()` still names the source paper on every
+tab, and is now the only pointer to it.
 
 **Judgment wording.** Badges, verdict lines and the four override
 `selectInput`s read `.grade_level_wording()` from the package (SPEC.md §5.0),
@@ -614,17 +650,30 @@ are unchanged (`no` / `some_concerns` / `serious`), and their labels carry the
 downgrade — `"Serious (-1)"` — because "serious" alone is ambiguous between
 Core GRADE's −1 and the internal level name for −2.
 
-**Configuration owns the cross-cutting settings.** Three inputs moved onto the
-Configuration tab, which is where the app settles everything the five domains
-depend on:
+**Configuration owns the cross-cutting settings**, and each is in a
+`.config_section()` box of its own — Control-group risk, **Outcome direction**,
+Decision threshold, Presentation of event rates. `output$direction_echo` gained
+its box in 0.5.1; it used to float between the others as though it were a
+caption for one of them.
 
-| input | was | why it moved |
+The tab opens on the first box. `EDU_COPY$config_tab$intro` (115 words) is
+**deleted**: every section states its own purpose beside the control it belongs
+to, and the threshold's cross-cutting role is the caption of three flowcharts.
+So is `config_tab$continuous_intro`, which recited what Core GRADE 6 ranks. The
+`continuous_departure` note stays — it tells the reviewer their inferences about
+magnitude must be weaker, which they cannot read off the screen.
+
+`.mic_note()` — the paragraph under both Decision threshold boxes warning
+against equating the threshold with a Minimally Important Change — is
+**deleted** (0.5.1). MIC is a term this project is retiring; the API is
+`threshold` / `threshold_type` / `threshold_scale`, and this was the last place
+the UI still named MIC at all.
+
+| input | where it lives | why |
 |---|---|---|
-| `per` | a `numericInput` on Final certainty | it relabels the control-group risk, the absolute threshold and the OIS figures, none of which are on Final certainty |
-| `rob_some_concerns` | closed `<details>` on Risk of Bias | a review-wide decision driving the dominance gate, the comparator estimate, the refit and the forest strata |
-| `rob_inf_threshold` | closed `<details>` on Risk of Bias | same: a review convention, not an answer about this outcome |
-
-Final certainty keeps a one-line read-only echo of `per`.
+| `per` | Configuration | it relabels the control-group risk, the absolute threshold and the OIS figures, none of which are on Final certainty (Final certainty keeps a read-only echo) |
+| `rob_some_concerns` | **Risk of Bias**, under `Inputs for this domain` | it decides which side of the binary split each study falls on, and the stratified forest on that tab draws exactly that split. Its **scope is unchanged** — still one review-wide setting that persists across outcomes, still absent from `PMA_OUTCOME_INPUT_IDS$rob`. Only the point of edit moved (0.5.1; it was on Configuration for one release, and on a closed `<details>` on Risk of Bias before that) |
+| `rob_inf_threshold` | **deleted** (0.5.1) | a pmatools convention rather than a Core GRADE 4 rule, and a reviewer had no basis on which to move it. The package default `rob_inflation_threshold = 0.10` (`R/domain_rob.R`) now applies unconditionally; the app no longer passes the argument at all, and `export_bundle()` writes the same 0.10 into the bundled `analysis.R`. Deleting the slider also removed the only consumer of the RoB `how` closure's `inflation_threshold` argument — producer and consumer died together |
 
 **The per-N display unit.** `radioButtons("per", …)` offers 100 or 1,000 and is
 backed by the `display_per_state()` reactiveVal, seeded under `isolate()` and
@@ -712,22 +761,74 @@ branch, via a `conditionalPanel` on `output.incon_subgroup_relevant`
 
 **Risk of Bias.** `output$rob_rule_note` (a ~180-word standing statement of the
 binary rule) and the "See also RoB 2" paragraph are deleted, not collapsed: the
-Configuration setting states the rule in one sentence beside the control that
-sets it, the two-group forest *shows* it, and `pma_reference()` already carries
-the source. `output$rob_forest` passes
+`rob_some_concerns` radio states the rule in one sentence beside itself, the
+two-group forest *shows* it, and `pma_reference()` already carries the source.
+`output$rob_forest` passes
 `plot_forest_rob(some_concerns_as = .rob_some_concerns_setting())`, so the plot
 and the judgment beside it agree about how many groups there are.
 
-**Indirectness.** The four PICO radios and the overall override stay open and
-gain the standard `Inputs` wrapper they never had. The two boxed departure
-notes and the three per-element footnotes are collapsed into one shared
-`<details>`; the `EDU_COPY$domains$indirectness$mapping` paragraph is deleted
-(it restated the "How is this judged?" copy).
+**The read-only threshold block takes a `detail` argument.**
+`.render_threshold_readonly(domain, detail)` prints the head line
+("Absolute threshold: 50 per 1,000 at a control-group risk of 156 per 1,000")
+always, and the equivalence block only when `detail = TRUE`.
+
+| tab | `detail` | why |
+|---|---|---|
+| Risk of Bias | `FALSE` | it compares two pooled estimates against the band; the conversion arithmetic answers nothing |
+| Inconsistency | `FALSE` | the zone tally is computed for the reviewer and reported through `pma_facts_list()`; they never read a bound themselves |
+| Imprecision | `TRUE` | Core GRADE 2's two-level rule tests the confidence interval against the important-benefit **and** important-harm thresholds by eye, so both bounds — and the residual-asymmetry sentence, since only one conversion is exact on the absolute scale — are operative |
+
+The trailing *"This decision threshold is shared by … Change it in the
+Configuration tab"* sentence is now the tab's own name as a link, built by
+`pma_domain_jump_links()` (§3.4.13). One id prefix per domain
+(`threshold_block_jump_<domain>_`): all seven tab panels are in the DOM at once,
+so three copies of one `actionLink` id would collide.
+
+**Indirectness: the default is on screen.** All four PICO radios are
+**preselected to `"yes"`** (0.5.1). Leaving them blank used to send
+`indirectness = "no"` to `grade_meta()` while the screen showed four unanswered
+questions — the domain scored no downgrade silently. Preselection makes that
+default visible and leaves the reviewer to downgrade the elements they have
+concerns about.
+
+The **judgment is unchanged** and this is verified, not assumed:
+`indir_subdomains()` now returns four rows instead of `NULL`, so `grade_obj()`
+takes the *subdomain* path rather than the scalar one; `indir_worst_case()`
+folds four `"yes"` answers to `"no"`; and the override-rationale logic compares
+`input$indirectness` against `indir_worst %||% "no"`, which is the same value it
+compared against before. Rated on the bundled CBT-I sample, certainty, all five
+domain judgments and every downgrade are identical either way.
+
+One downstream effect is real, and is the reason this is a breaking change:
+`grade$indirectness_subdomains` is now populated for every outcome, so
+
+- `indirectness_table(g)` **stops aborting** and returns a four-row table;
+- the multi-outcome bundle gains
+  `outcomes/<nn>_<outcome>/indirectness_table.docx`, which
+  `export_bundle.pmatools_set()` writes only when subdomain judgments exist;
+- the bundled `analysis.R` carries an `indirectness_subdomains = data.frame(…)`
+  literal in place of `NULL`, and `results.txt` reports the four answers instead
+  of *"Overall judgment provided by user."*
+
+Nothing else branches on subdomains being present: `evidence_profile()`,
+`sof_table()` and the SoF footnotes are byte-identical across the change.
+
+The two boxed departure notes and the three per-element footnotes that sat in a
+shared `<details>` are **deleted**; what survives is two capped subtitles beside
+the questions — `EDU_COPY$domains$indirectness$surrogate` (a surrogate outcome
+is grounds to consider rating down; never pool the two) and `$gradient` (the
+fold is symmetric and ignores Table 2's ranking, which is why the override
+exists). `$mapping` and `$banner` are gone, and with `$banner` went
+`output$indirectness_banner` and `state$indir_reviewed`: the banner said "no
+indirectness judgment recorded yet", and with the radios preselected there
+always is one.
 
 **Imprecision.** `output$impre_branch` reads the `fig4_path` / `ois_used`
-**facts** instead of regex-parsing the note string. The Core GRADE 2 verbatim
-quotation in `ois_rrr_equiv` and the override explanation collapse; the
-`.override_details` preamble is deleted (it restated the branch text).
+**facts** instead of regex-parsing the note string. The `.override_details`
+preamble is deleted (it restated the branch text), and the nested `<details>`
+inside it is unwrapped: the one sentence a reviewer needs at the override —
+*"Rate down two levels when the plain language summary warrants 'may' rather
+than 'likely'"* — is now the only thing there, visible.
 `.inputs_details(open = TRUE)` stays open.
 
 **Final certainty.** `other_text` / `other_downgrade` are answers and stay
@@ -1181,7 +1282,7 @@ input$subgroup / input$run_ma (action)     │     ↓ (on "Run analysis")    �
                                                           ↓
                                            ┌──────────────────────────────┐
 input$rob_override / rob_dom_threshold /   │ Step 3 (debounced 500ms)     │
-input$rob_inf_threshold / small_values /   │   pmatools::grade_meta()     │
+input$rob_some_concerns / small_values /  │   pmatools::grade_meta()     │
 input$mid /                                 │     ↓                         │
 input$inconsistency_override /              │   state$grade ← pmatools obj │
 input$indirectness /                        │     ↓                         │

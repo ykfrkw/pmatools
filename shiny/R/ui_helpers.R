@@ -23,16 +23,11 @@ pma_step_header <- function(title) {
   )
 }
 
-# Inline tooltip help (?) icon
-pma_help <- function(text) {
-  htmltools::tags$span(
-    class = "pma-help",
-    title = text,
-    `data-bs-toggle` = "tooltip",
-    `data-bs-placement` = "top",
-    "(?)"
-  )
-}
+# pma_help() was deleted here: a "(?)" span with a Bootstrap tooltip. It had
+# no call site and nothing in the app ever initialised Bootstrap tooltips, so
+# it had never rendered anything. It is not coming back - a tooltip is still a
+# sentence somebody has to write, review and keep true, and the rule this
+# release applies is that such a sentence either earns a visible line or goes.
 
 # Stepper (4 steps) - each step is a clickable actionLink.
 #
@@ -389,8 +384,11 @@ PMA_OUTCOME_INPUT_IDS <- list(
                     "baseline_risk_chinn", "responder_p0_rationale",
                     "responder_p0_confirm", "threshold_label",
                     "threshold_confirm"),
-  # Step 3 - Risk of Bias. rob_some_concerns / rob_inf_threshold are review-
-  # wide conventions with defaults, not per-outcome answers, so they stay.
+  # Step 3 - Risk of Bias. rob_some_concerns is absent on purpose: it is a
+  # review-wide convention rather than an answer about this outcome, and it
+  # persists across a change of outcome. Moving its widget to this tab did not
+  # change that. (rob_inf_threshold used to sit beside it here; the slider is
+  # gone and the package default applies unconditionally.)
   rob = c("rob_override", "rob_override_rationale", "rob_confirm_na"),
   # Step 3 - Inconsistency. ci_diff and threshold_side are gone: Core GRADE
   # 3's Steps 1 and 2 are derived by .auto_inconsistency(), and the app no
@@ -548,7 +546,10 @@ pma_arg_spec <- function(value) {
 # call re-derives the baseline from the pooled control-arm risk, which is not
 # in general the number the reviewer set.
 PMA_GRADE_ARGS_EXPORTED <- c(
-  "rob", "rob_rationale", "rob_some_concerns", "rob_inflation_threshold",
+  # rob_inflation_threshold is off this list as of 0.5.1: the app no longer
+  # sets it, so it could never be emitted, and export_bundle() already writes
+  # the package default of 0.10 into the bundled analysis.R.
+  "rob", "rob_rationale", "rob_some_concerns",
   "small_values",
   "indirectness", "indirectness_rationale", "indirectness_subdomains",
   "inconsistency", "inconsistency_rationale", "inconsistency_ci_diff",
@@ -1060,19 +1061,12 @@ pma_flowchart_details <- function(domain, facts,
   )
 }
 
-# The full machine-generated note, one click away. Collapsed, never deleted:
-# it is the authoritative record of why the domain was rated the way it was,
-# and the reviewer has to be able to reach it.
-pma_notes_collapse <- function(notes,
-                               title = "Full reasoning (verbatim)") {
-  txt <- paste(as.character(notes %||% ""), collapse = "\n")
-  if (!nzchar(trimws(txt))) return(NULL)
-  htmltools::tags$details(
-    class = "pma-notes-details",
-    htmltools::tags$summary(title),
-    htmltools::tags$pre(class = "pma-notes-pre", txt)
-  )
-}
+# pma_notes_collapse() was deleted here. It parked the machine-generated note
+# under every domain verdict, in a <details> that was a place to put prose
+# rather than content: the flowchart above it draws the same decision and
+# lights up the branch taken. The note itself is NOT lost - it travels into
+# evidence_profile() and into the exported .docx exactly as before, which is
+# where a verbatim record belongs.
 
 # ----- Step 2 required fields ---------------------------------------------
 # Which of the two required Step 2 fields are still blank. Pure, so the rule
@@ -1595,19 +1589,12 @@ pma_reference <- function(text, doi = NULL) {
   )
 }
 
-# Collapsible "How is this judged?" block — clickable to expand long
-# educational copy.
-pma_how_collapse <- function(body) {
-  htmltools::tags$details(
-    class = "pma-how-details",
-    htmltools::tags$summary("How is this judged? (click to expand)"),
-    htmltools::div(
-      class = "pma-how-body",
-      style = "margin-top: 0.6rem; line-height: 1.55; font-size: 0.9rem;",
-      htmltools::p(body)
-    )
-  )
-}
+# pma_how_collapse() was deleted here, with the five EDU_COPY `how` bodies it
+# wrapped (600 words between them). Four of the five domains draw their
+# decision as a flowchart with the branch taken lit up, and a picture of the
+# algorithm beats a paragraph describing it; Indirectness has no flowchart and
+# its PICO question labels and subdomain table carry the same ground.
+# pma_reference() still names the source paper on every tab.
 
 # Wizard navigation buttons (Back / Next).
 # Use HTML entities to dodge Latin-1 encoding issues on shinyapps.io build.

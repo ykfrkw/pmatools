@@ -1,52 +1,57 @@
-# edu_domain_how() (R/educational_copy.R) is the single accessor for the
-# "How is this judged?" copy. It exists because `how` has two shapes - a
-# finished string for four domains, a function for Risk of Bias - and callers
-# used to have to know which. The test locks the contract: a string comes back
-# either way.
+# EDU_COPY (R/educational_copy.R) is the app's copy deck. Two things are
+# asserted here: the shape the UI reads it through, and the one-line cap on
+# the strings that render as a `.pma-card-subtitle`.
+#
+# The five `how` bodies and their accessor `edu_domain_how()` are gone as of
+# 0.5.1, together with `pma_how_collapse()` and `EDU_COPY$config_tab$intro`.
+# Four of the five domains draw their algorithm as a flowchart with the branch
+# taken lit up, and Indirectness has no flowchart because its PICO question
+# labels and subdomain table cover the same ground. The assertions below are
+# what stops the accordion coming back: it is one line to re-add, and each
+# body was 100+ words that sat behind a click nobody made.
 
-test_that("edu_domain_how() returns a string for every rated domain", {
-  domains <- c("rob", "inconsistency", "indirectness", "imprecision", "pubias")
-  for (d in domains) {
-    how <- edu_domain_how(d)
-    expect_type(how, "character")
-    expect_length(how, 1L)
-    expect_true(nzchar(how), info = d)
+test_that("the collapsed 'How is this judged?' copy is gone", {
+  expect_false(exists("edu_domain_how", mode = "function"))
+  for (d in c("rob", "inconsistency", "indirectness", "imprecision", "pubias")) {
+    expect_null(EDU_COPY$domains[[d]]$how, info = d)
+  }
+  # The Configuration tab's 115-word opener went the same way, and so did the
+  # recitation of the three presentations Core GRADE 6 ranks. The DEPARTURE
+  # from it stays: that one tells the reviewer their inferences must be weaker,
+  # which is not a thing they can read off the screen.
+  expect_null(EDU_COPY$config_tab$intro)
+  expect_null(EDU_COPY$config_tab$continuous_intro)
+  expect_true(nzchar(EDU_COPY$config_tab$continuous_departure))
+})
+
+test_that("every EDU_COPY subtitle fits one desktop line", {
+  # The operational form of "delete first, shorten second, hide never". A muted
+  # line under a control is read while the reviewer decides that control; past
+  # EDU_COPY_SUBTITLE_WORD_CAP words it wraps to a second line and stops being
+  # read at all, and a sentence that cannot be said in one line was not
+  # answering the control it sat under.
+  expect_gt(length(EDU_COPY_SUBTITLE_FIELDS), 0L)
+  for (path in EDU_COPY_SUBTITLE_FIELDS) {
+    text <- edu_copy_field(path)
+    expect_true(is.character(text) && length(text) == 1L,
+                info = paste(path, "- stale entry in EDU_COPY_SUBTITLE_FIELDS"))
+    expect_lte(edu_copy_word_count(text), EDU_COPY_SUBTITLE_WORD_CAP)
   }
 })
 
-test_that("edu_domain_how() interpolates the Risk of Bias arguments", {
-  expect_match(edu_domain_how("rob", 0.10, "high"), "10 percent")
-  expect_match(edu_domain_how("rob", 0.25, "high"), "25 percent")
-  # The low/high boundary switches which sentence is used.
-  expect_match(edu_domain_how("rob", 0.10, "high"),
-               "only studies explicitly", fixed = TRUE)
-  expect_match(edu_domain_how("rob", 0.10, "low"),
-               "count as low, together with studies rated low", fixed = TRUE)
+test_that("edu_copy_word_count() counts what a reader sees", {
+  expect_equal(edu_copy_word_count("one two three"), 3L)
+  # Copy is assembled with paste0() across source lines, so a joined string can
+  # carry runs of whitespace. They are not words.
+  expect_equal(edu_copy_word_count("  one   two\nthree  "), 3L)
+  expect_equal(edu_copy_word_count(""), 0L)
 })
 
-test_that("edu_domain_how() ignores arguments a string domain does not take", {
-  # This is the whole point: a call site does not have to change when a
-  # domain's copy gains or loses an interpolated slot.
-  expect_identical(edu_domain_how("imprecision"),
-                   edu_domain_how("imprecision", 0.10, "high"))
-})
-
-test_that("the Risk of Bias copy states the one-level cap on rule 5", {
-  # The copy said "(5) zones differ across the null (above <-> below) -> rate
-  # down 2" for two releases after .assess_bias_direction() stopped doing it.
-  # The enumeration itself now lives in the flowchart above the copy
-  # (inst/figures/rob.svg, whose rule 5 row reads "rate down 1", pinned by
-  # the package's test-flowchart-nodes.R), so what is guarded here is the
-  # sentence that explains WHY there is no second level - the part a diagram
-  # cannot carry.
-  how <- edu_domain_how("rob", 0.10, "high")
-  expect_match(how, "Rule 5 rated down 2 up to pmatools 0.4 and no longer does",
-               fixed = TRUE)
-  expect_false(grepl("-> rate down 2", how, fixed = TRUE))
-  # And it explains the cap the way .ROB_CAP_NOTE does, rather than leaving
-  # the reader to wonder where the second level went.
-  expect_match(how, "no automatic two-level downgrade for risk of bias",
-               fixed = TRUE)
+test_that("edu_copy_field() returns NULL for a path that no longer exists", {
+  # So a stale registry entry is reported as one, by name, rather than
+  # erroring out of the loop above with nothing to identify it.
+  expect_null(edu_copy_field("domains$rob$how"))
+  expect_null(edu_copy_field("no_such$path"))
 })
 
 test_that("a step header carries a title and nothing else", {
@@ -80,29 +85,12 @@ test_that("the once-per-session intro modal carries the SR&MA caveat", {
 })
 
 test_that("every rated domain still carries its Core GRADE reference", {
+  # The domain tabs lost their `how` bodies; the reference line under each is
+  # now the ONLY pointer to the source paper, so it is load-bearing.
   for (d in c("rob", "inconsistency", "indirectness", "imprecision", "pubias")) {
     entry <- EDU_COPY$domains[[d]]
     expect_true(nzchar(entry$header), info = d)
     expect_true(nzchar(entry$doi), info = d)
     expect_true(nzchar(entry$ref_text), info = d)
   }
-})
-
-test_that("the domain-confirmation labels match the state keys they name", {
-  # PMA_DOMAIN_LABELS is keyed by the names of state$domain_confirmed; Step 3
-  # writes it and Step 4's export gate reads it, so a drifting key silently
-  # opens the gate.
-  expect_setequal(names(PMA_DOMAIN_LABELS),
-                  c("threshold", "rob", "inconsistency", "indirectness",
-                    "imprecision", "pubias"))
-  expect_equal(pma_unconfirmed_domains(NULL), unname(PMA_DOMAIN_LABELS))
-  expect_equal(pma_unconfirmed_domains(c(threshold = TRUE, rob = TRUE,
-                                         inconsistency = TRUE,
-                                         indirectness = TRUE,
-                                         imprecision = TRUE, pubias = TRUE)),
-               character(0))
-  expect_equal(pma_unconfirmed_domains(c(threshold = TRUE)),
-               unname(PMA_DOMAIN_LABELS[c("rob", "inconsistency",
-                                          "indirectness", "imprecision",
-                                          "pubias")]))
 })

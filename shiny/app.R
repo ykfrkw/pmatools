@@ -144,7 +144,6 @@ server <- function(input, output, session) {
     rare_mode_requested = TRUE,
     rare_mode_active = FALSE,
     grade          = NULL,
-    indir_reviewed = FALSE,
     # Certainty assessments banked on the Step 3 "Final certainty" tab, as a
     # named list of pmatools objects keyed by outcome label (see
     # pma_outcomes_list() in ui_helpers.R), plus the subset the reviewer has
@@ -274,7 +273,6 @@ server <- function(input, output, session) {
     state$outcome_gen      <- (state$outcome_gen %||% 1L) + 1L
     state$grade            <- NULL
     state$domain_confirmed <- NULL
-    state$indir_reviewed   <- FALSE
     state$pubias_missing   <- NULL
     # Presentation values describing the outcome rather than a plot.
     state$display$threshold_label <- NULL

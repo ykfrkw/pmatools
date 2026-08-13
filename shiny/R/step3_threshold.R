@@ -657,19 +657,10 @@ step3_append_domain_note <- function(d, domain, note) {
 # the reviewer confirms or replaces it.
 RESPONDER_P0_DEFAULT <- 0.20
 
-.mic_note <- function() {
-  htmltools::p(
-    class = "pma-card-subtitle",
-    style = "font-style: italic;",
-    paste0(
-      "Note: do not equate this threshold with a Minimally Important ",
-      "Change (MIC). MIC is a within-individual change over time, while ",
-      "a meta-analysis pools between-group differences across studies. ",
-      "These are distinct quantities and should not be substituted for ",
-      "each other when judging clinical importance."
-    )
-  )
-}
+# .mic_note() was deleted here. It warned the reviewer not to equate the
+# decision threshold with a Minimally Important Change - a term this project
+# is retiring. The API is threshold / threshold_type / threshold_scale, and
+# this was the last place the UI still named MIC at all.
 
 # Section heading + note helpers, so the Configuration blocks look alike.
 .config_section <- function(title, ...) {
@@ -712,9 +703,11 @@ RESPONDER_P0_DEFAULT <- 0.20
 # ----- Configuration tab: responder conversion block (continuous) ------
 # Core GRADE 6 ranks three presentations of a continuous outcome and
 # recommends the mean difference and the responder proportion together.
-# This app implements the responder proportion only; the departure is
-# stated on screen rather than left implicit, and so is the fact that the
-# conversion used is Chinn's formula, not Core GRADE 6's own procedure.
+# This app implements the responder proportion only, through Chinn's formula
+# rather than Core GRADE 6's own procedure. Both departures are still stated
+# on screen; the recitation of what Core GRADE 6 ranks
+# (EDU_COPY$config_tab$continuous_intro) is not, because a reviewer answered
+# nothing with it.
 #
 # `p0` is the seed for the proportion box, passed in by the caller from the
 # reactiveVal that owns it - the widget must not re-assert the constant on
@@ -729,15 +722,12 @@ RESPONDER_P0_DEFAULT <- 0.20
   if (!convertible) {
     return(.config_section(
       "Presentation of this outcome",
-      .config_note(EDU_COPY$config_tab$continuous_intro),
-      .config_note(EDU_COPY$config_tab$continuous_departure),
       htmltools::p(
         class = "pma-card-subtitle", style = "font-style: italic;",
         sprintf(paste0(
-          "The responder conversion is unavailable for %s: it is defined ",
-          "on the standardized mean difference (and on the mean ",
-          "difference via the pooled SD) only. The Summary of Findings ",
-          "table will report the %s itself."), sm, sm))
+          "The responder conversion is defined on the standardized mean ",
+          "difference only, so the Summary of Findings table reports the %s ",
+          "itself."), sm))
     ))
   }
   # The badge is its own output on purpose: if this renderUI depended on
@@ -747,7 +737,6 @@ RESPONDER_P0_DEFAULT <- 0.20
     htmltools::tagList(
       "Proportion of control patients meeting the threshold",
       shiny::uiOutput("responder_p0_badge", inline = TRUE)),
-    .config_note(EDU_COPY$config_tab$continuous_intro),
     .config_note(EDU_COPY$config_tab$continuous_departure),
     .config_note(EDU_COPY$config_tab$chinn_caveat),
     shiny::checkboxInput("convert_smd_to_or",
