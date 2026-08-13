@@ -643,6 +643,23 @@ Indirectness has no flowchart and its PICO question labels and subdomain table
 carry the same ground. `pma_reference()` still names the source paper on every
 tab, and is now the only pointer to it.
 
+**Citation style [v0.5.1].** Every reference the app renders is written in one
+house style: **first author, `et al.`, journal abbreviation, year**. No volume,
+no pages, **no DOI and no `<a href>`** — a hyperlink bought nothing the citation
+itself did not carry, and it made the same paper render four different ways
+depending on which call site rendered it. `pma_reference(...)` takes citation
+strings and nothing else; its `doi` argument and the `<a href>` branch are gone,
+as is the unused `EDU_COPY$pmid_url()`. Each rated domain carries its reference
+as the single field `EDU_COPY$domains$*$ref`, replacing the `$ref_text` / `$doi`
+pair. The six BMJ 2025 Core GRADE papers are all Guyatt, all BMJ, all 2025, so
+the bare form cannot tell them apart; a specific paper carries its series number
+as a prefix — `Core GRADE 4. Guyatt G, et al. BMJ. 2025`. Risk of Bias and
+Publication bias both cite Core GRADE 4 and so render identically, which is
+correct. `test-edu-copy.R` pins the shape with a regex over every `$ref`, so the
+format cannot drift back. The rule reaches the whole app, not just Step 3: the
+Step 1 sample-dataset line, the Step 2 rare-events references, the RoB-ME notes
+on Steps 1 and 3, and the Step 4 "How to cite" card all follow it.
+
 **Judgment wording.** Badges, verdict lines and the four override
 `selectInput`s read `.grade_level_wording()` from the package (SPEC.md §5.0),
 so they say *Not serious* / *Serious* / *Very serious*. The override **values**
@@ -1230,8 +1247,7 @@ EDU_COPY <- list(
   domains = list(
     rob = list(
       header       = "Risk of Bias",
-      reference    = "BMJ Core GRADE 4 (Guyatt et al., 2025)",
-      pmid         = "40360206",
+      ref          = "Core GRADE 4. Guyatt G, et al. BMJ. 2025",
       how_judged   = "GRADE rates down for risk of bias when...",
       result_template = "• Per-study RoB labels: ...",
       override_help = "..."

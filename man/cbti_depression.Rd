@@ -20,7 +20,7 @@ variables is bundled as \code{inst/extdata/cbti_depression.csv}):
 }
 }
 \source{
-Furukawa Y et al. (2024) J Affect Disord. doi:10.1016/j.jad.2024.09.017
+Furukawa Y, et al. J Affect Disord. 2024.
 }
 \usage{
 cbti_depression
@@ -39,10 +39,7 @@ Seventeen trials report the outcome and enter the pooled estimate; the
 remaining trial has \code{d_r = NA} and serves as a missing-results
 example for the publication-bias / ROB-ME workflow.
 
-Source: Furukawa Y, Nagaoka D, Sato S, et al. Cognitive behavioral
-therapy for insomnia to treat major depressive disorder with comorbid
-insomnia: A systematic review and meta-analysis. J Affect Disord.
-2024;367:359-366. doi:10.1016/j.jad.2024.09.017.
+Source: Furukawa Y, et al. J Affect Disord. 2024.
 
 Multi-arm CBT-I trials are aggregated to a single CBT-I row per study
 by summing events and sample sizes across CBT-I arms.
@@ -53,9 +50,6 @@ table(cbti_depression$rob_d)
 
 }
 \references{
-Furukawa Y, Nagaoka D, Sato S, et al. Cognitive behavioral therapy for
-insomnia to treat major depressive disorder with comorbid insomnia: A
-systematic review and meta-analysis. J Affect Disord. 2024;367:359-366.
-\doi{10.1016/j.jad.2024.09.017}
+Furukawa Y, et al. J Affect Disord. 2024.
 }
 \keyword{datasets}

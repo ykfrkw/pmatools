@@ -310,8 +310,7 @@ grade_table <- function(outcomes,
   # Footer
   footnote <- paste0(
     "Certainty of the evidence (Core GRADE series). ",
-    "Based on the BMJ 2025 Core GRADE series (Guyatt et al.); ",
-    "not an official GRADE Working Group assessment. ",
+    .PMA_CORE_GRADE_FOOTNOTE, " ",
     CERTAINTY_SYMBOLS[["High"]], "=High  ",
     CERTAINTY_SYMBOLS[["Moderate"]], "=Moderate  ",
     CERTAINTY_SYMBOLS[["Low"]], "=Low  ",

@@ -207,8 +207,8 @@ indirectness_table <- function(x, summary_text = NULL, ...) {
   ft <- flextable::add_footer_lines(ft, values = c(
     paste0(
       "Indirectness subdomain judgments, implemented by pmatools from the ",
-      "per-PICO reasoning in Core GRADE 5 (Guyatt et al. BMJ 2025;389:e083865); ",
-      "not an official GRADE Working Group assessment. This table layout, the ",
+      "per-PICO reasoning in ", .core_grade_ref(5), ". ",
+      "Not an official GRADE Working Group assessment. This table layout, the ",
       "4-point answer scale and the wording 'Is the evidence sufficiently ",
       "direct?' are pmatools conventions and do not appear in the Core GRADE 5 ",
       "article body. ",

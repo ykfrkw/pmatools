@@ -231,6 +231,31 @@
 
 ## Behaviour changes
 
+* **Every reference is written the same way, and none of them is a link.** The
+  house style is now first author, `et al.`, journal abbreviation, year —
+  `Furukawa Y, et al. J Affect Disord. 2024` — with no volume, no pages, no DOI
+  and no hyperlink. It applies to everything either artifact renders: the
+  flextable footnotes on the Evidence Profile, both Summary of Findings
+  layouts, both `grade_table()` layouts and the Indirectness table; the `.docx`
+  header paragraphs of `grade_report()` and `export_bundle()`; the caveat
+  strings that reach `notes`; and, in the app, the reference line on all five
+  Step 3 domain tabs, the Step 1 sample-dataset line, the Step 2 rare-events
+  references, the RoB-ME notes and the Step 4 "How to cite" card. The six BMJ
+  2025 Core GRADE papers are all Guyatt, all BMJ, all 2025, so the bare form
+  collapses them into one indistinguishable string; a specific paper carries
+  its series number as a prefix instead — `Core GRADE 4. Guyatt G, et al. BMJ.
+  2025`. The phrase "BMJ 2025 Core GRADE series (Guyatt et al.)" existed as
+  eight literals across seven files with four different lead-ins ("Reference:",
+  "Based on the", "Assessment based on", "rated with the"); it is now one
+  internal constant, `.PMA_CORE_GRADE_FOOTNOTE` in `R/utils.R`. Nothing about
+  what any of these documents *says* changed, only how the citation in it is
+  set. Short parentheticals that point at a figure — "(Core GRADE 4 Fig 2)" —
+  are pointers rather than citations and are untouched. In the app,
+  `pma_reference()` loses its `doi` argument, `EDU_COPY$domains$*$ref_text` and
+  `$doi` collapse to a single `$ref`, and the unused `EDU_COPY$pmid_url()` is
+  deleted; a regex test over every `$ref` now pins the format. See SPEC.md
+  §"Citation style" and `shiny/SPEC.md` §3.4.11.
+
 * **Every table is set in one font, and the app's tables are set in the app's
   font.** Two mismatches, one of them a live bug. (1) `add_footer_lines()`
   creates its rows *after* `font(part = "all")` has run, and a row added later

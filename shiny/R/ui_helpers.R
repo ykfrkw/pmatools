@@ -1573,19 +1573,17 @@ pma_analysis_set_banner <- function(g) {
   )
 }
 
-# Reference line with optional DOI link.
-# Call as pma_reference(text, doi) or pma_reference(text) for plain text.
-pma_reference <- function(text, doi = NULL) {
-  ref_content <- if (!is.null(doi) && nzchar(doi)) {
-    htmltools::tags$a(
-      href = paste0("https://doi.org/", doi),
-      target = "_blank",
-      text
-    )
-  } else text
+# The one reference line in the app. `...` takes the citation strings in house
+# style (first author, "et al.", journal abbreviation, year), joined by the
+# caller when there is more than one.
+#
+# The DOI argument is gone. A hyperlink here bought nothing a reviewer could
+# not get from the citation itself, and it made the same paper render four
+# different ways across the wizard depending on which call site rendered it.
+pma_reference <- function(...) {
   htmltools::p(class = "pma-reference",
     style = "font-style: italic; color: hsl(var(--muted-foreground)); font-size: 0.85rem;",
-    "Reference: ", ref_content
+    "Reference: ", ...
   )
 }
 
@@ -1818,8 +1816,7 @@ PMA_SOF_LIMITATIONS_NOTE <- paste0(
 PMA_SOF_CER_EER_NOTE <- paste0(
   "Recommended: report both the control event rate (CER) and the intervention ",
   "event rate (EER) alongside the relative effect, to aid clinical ",
-  "interpretation (Heimke et al., BMJ Ment Health 2024; ",
-  "doi:10.1136/bmjment-2023-300978)."
+  "interpretation (Heimke F, et al. BMJ Ment Health. 2024)."
 )
 
 # Append free-text footer lines to a Summary of Findings flextable, keeping

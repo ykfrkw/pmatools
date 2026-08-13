@@ -90,7 +90,34 @@ test_that("every rated domain still carries its Core GRADE reference", {
   for (d in c("rob", "inconsistency", "indirectness", "imprecision", "pubias")) {
     entry <- EDU_COPY$domains[[d]]
     expect_true(nzchar(entry$header), info = d)
-    expect_true(nzchar(entry$doi), info = d)
-    expect_true(nzchar(entry$ref_text), info = d)
+    expect_true(nzchar(entry$ref), info = d)
+    # The `$ref_text` / `$doi` pair it replaced, so a half-done revert is a
+    # failure here rather than a reference line that renders two ways.
+    expect_null(entry$ref_text, info = d)
+    expect_null(entry$doi, info = d)
   }
+})
+
+test_that("every domain reference is in the app's one citation style", {
+  # First author, "et al.", journal abbreviation, year - and nothing else. The
+  # six Core GRADE papers are all Guyatt / BMJ / 2025, so they carry the series
+  # number as a prefix; without it the five tabs would cite one string. The
+  # regex is what stops a volume, a page range or a DOI creeping back in.
+  house_style <- "^(Core GRADE \\d\\. )?[A-Z][a-z]+ [A-Z]{1,2}, et al\\. .+\\. \\d{4}$"
+  for (d in c("rob", "inconsistency", "indirectness", "imprecision", "pubias")) {
+    expect_match(EDU_COPY$domains[[d]]$ref, house_style, info = d)
+  }
+  # Risk of bias and publication bias are both Core GRADE 4, so they render
+  # identically. That is the source paper, not a copy-paste slip.
+  expect_identical(EDU_COPY$domains$rob$ref, EDU_COPY$domains$pubias$ref)
+})
+
+test_that("the app renders no reference as a link", {
+  # pma_reference() lost its `doi` argument with the <a href> branch it fed.
+  expect_false("doi" %in% names(formals(pma_reference)))
+  ref <- as.character(pma_reference(EDU_COPY$domains$rob$ref))
+  expect_match(ref, "Core GRADE 4. Guyatt G, et al. BMJ. 2025", fixed = TRUE)
+  expect_false(grepl("<a ", ref, fixed = TRUE))
+  # Deleted with the DOIs it built URLs from; it had no call sites left.
+  expect_null(EDU_COPY$pmid_url)
 })

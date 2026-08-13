@@ -121,9 +121,7 @@ step1_ui <- function() {
         " blank. Such studies are auto-classified into the Missing-results ",
         "subgroup in Step 3 (Publication bias) and feed the RoB-ME forest ",
         "plot (",
-        htmltools::tags$a(href = "https://doi.org/10.1136/bmj-2023-076754",
-                          target = "_blank", "Page et al., BMJ 2023"),
-        ")."
+        "Page MJ, et al. BMJ. 2023)."
       ),
       shiny::actionButton("load_data", "Load data",
                           class = "btn btn-primary",
@@ -223,10 +221,7 @@ step1_server <- function(input, output, session, state) {
       htmltools::HTML(paste0(
         "Sample dataset: 17 RCTs of CBT-I for depression response in MDD ",
         "with comorbid insomnia. Source: ",
-        "<a href='https://doi.org/10.1016/j.jad.2024.09.017' target='_blank'>",
-        "Furukawa Y, Nagaoka D, Sato S, et al. ",
-        "<i>J Affect Disord</i>. 2024;367:359-366. ",
-        "doi:10.1016/j.jad.2024.09.017</a>."
+        "Furukawa Y, et al. <i>J Affect Disord</i>. 2024."
       ))
     )
   })

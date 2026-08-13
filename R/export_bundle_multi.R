@@ -433,8 +433,7 @@ export_bundle.pmatools_set <- function(x,
   doc <- officer::body_add_par(doc, "Evidence profiles (Core GRADE series)",
                                style = "heading 1")
   doc <- officer::body_add_par(doc, paste0(
-    "Reference: BMJ 2025 Core GRADE series (Guyatt et al.). ",
-    "Not an official GRADE Working Group assessment. Generated: ",
+    .PMA_CORE_GRADE_FOOTNOTE, " Generated: ",
     format(Sys.time(), "%Y-%m-%d %H:%M")), style = "Normal")
 
   for (nm in set$order) {

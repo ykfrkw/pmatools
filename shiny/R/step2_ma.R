@@ -1080,21 +1080,9 @@ step2_server <- function(input, output, session, state) {
         "Mode: ",
         if (isTRUE(state$rare_mode_active)) "Rare-events workflow" else "Regular workflow"
       ),
-      htmltools::p(class = "pma-reference",
-        style = "font-style: italic; color: hsl(var(--muted-foreground)); font-size: 0.85rem;",
-        "References: ",
-        htmltools::tags$a(
-          href = "https://pmc.ncbi.nlm.nih.gov/articles/PMC10270432/",
-          target = "_blank",
-          "Efthimiou 2018"
-        ),
-        "; ",
-        htmltools::tags$a(
-          href = "https://doi.org/10.1002/jrsm.1720",
-          target = "_blank",
-          "Tsujimoto et al. 2024"
-        ),
-        "."
+      pma_reference(
+        "Efthimiou O. Evid Based Ment Health. 2018; ",
+        "Tsujimoto Y, et al. Res Synth Methods. 2024."
       ),
       .rare_events_control_ui()
     )

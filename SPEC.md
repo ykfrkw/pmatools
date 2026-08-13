@@ -566,7 +566,7 @@ Step 3:
   Subgroup credibility cannot be auto-checked. Core GRADE 3 keys it to the
   interaction P value, within-study vs between-study comparison, and a small
   number of direction-specifying a priori hypotheses, assessed with ICEMAN
-  (www.iceman.help; Schandelmaier 2020, CMAJ 2020;192:E901-6). Supply
+  (Schandelmaier S, et al. CMAJ. 2020). Supply
   inconsistency_subgroup_explained = "yes" to take the credible-subgroup
   branch. NOTE: Core GRADE 3 says "a conclusion of moderate or high
   credibility warrants the creation of separate PICO questions for each
@@ -657,6 +657,8 @@ sof_table(
 **Per-domain rate-down footnotes [v0.5.1].** `sof_table()`, `grade_table()` (both layouts) and `evidence_profile()` render the structured domain facts of §4.15 as numbered footnotes for the domains that pulled the rating down, with the marker on the certainty cell — after the symbol in the GRADEpro layouts, and beside the domain name inside the BMJ "Due to serious risk of bias [1] …" sentence. In `grade_table()` these continue the same `[n]` register as the per-outcome analysis-set notes and name the outcome they belong to, so one footer never shows two different `[1]`s; the analysis-set and publication-bias sentences keep their existing numbering and wording.
 
 **Not-reported outcomes.** `sof_table()` **aborts** on a `pmatools_not_reported` (§4.14) with a message pointing at `grade_table()`.
+
+**Citation style [v0.5.1].** Every bibliographic reference pmatools renders — flextable footnotes, the `.docx` header paragraphs of `grade_report()` and `export_bundle()`, and the caveat strings that reach `notes` — is written in one house style: **first author, `et al.`, journal abbreviation, year**. No volume, no pages, no DOI, no URL. The six BMJ 2025 Core GRADE papers defeat the bare form (all Guyatt, all BMJ, all 2025), so a specific paper carries its series number as a prefix — `Core GRADE 4. Guyatt G, et al. BMJ. 2025` — and the series as a whole is `Core GRADE series. Guyatt G, et al. BMJ. 2025`. Both shapes come from the internal `.core_grade_ref()` in `R/utils.R`, and the disclaimer that follows the series citation on every table is the single constant `.PMA_CORE_GRADE_FOOTNOTE` (`"Reference: … . Not an official GRADE Working Group assessment."`), which replaced eight literals wording it four ways. Short parentheticals that point at a figure rather than a paper — "(Core GRADE 4 Fig 2)", "(Core GRADE 5 Table 2)" — are pointers, not citations, and are unchanged.
 
 **Table typography [v0.5.1].** Every flextable pmatools builds — `sof_table()` (both layouts), `grade_table()` (both layouts), `evidence_profile()`, `indirectness_table()` and the domain-detail table inside `grade_report()` — is set in one family, the internal constant `.PMA_TABLE_FONT` (`"Arial"`). Arial is chosen for the **document**: these tables are built to be dropped into a .docx, where a named face beats a stack the word processor cannot resolve. The Shiny app restyles the *screen* copy to the page font in CSS instead (`shiny/SPEC.md` §4.1); the exported document is unaffected.
 

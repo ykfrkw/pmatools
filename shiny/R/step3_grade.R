@@ -314,7 +314,7 @@ step3_ui <- function(state = NULL) {
           # tabs; the flowchart under the verdict draws the same algorithm and
           # lights up the branch taken. output$rob_how_body went with it, and
           # so did output$rob_rule_note before that.
-          pma_reference(EDU_COPY$domains$rob$ref_text, EDU_COPY$domains$rob$doi),
+          pma_reference(EDU_COPY$domains$rob$ref),
           # Review-wide, and edited here because this is the tab where it
           # decides something: it sets which side of the binary split each
           # study falls on, and the stratified forest below draws exactly that
@@ -381,8 +381,7 @@ step3_ui <- function(state = NULL) {
         # --- Inconsistency ---
         shiny::tabPanel(.tab_title("inconsistency"), value = "Inconsistency",
           .domain_header("Inconsistency", "incon_badge", "incon_chip"),
-          pma_reference(EDU_COPY$domains$inconsistency$ref_text,
-                        EDU_COPY$domains$inconsistency$doi),
+          pma_reference(EDU_COPY$domains$inconsistency$ref),
           shiny::uiOutput("threshold_block_inco"),
           shiny::uiOutput("incon_evaluation"),
           htmltools::h5("Forest plot"),
@@ -429,8 +428,7 @@ step3_ui <- function(state = NULL) {
         # --- Indirectness ---
         shiny::tabPanel(.tab_title("indirectness"), value = "Indirectness",
           .domain_header("Indirectness", "indir_badge", "indir_chip"),
-          pma_reference(EDU_COPY$domains$indirectness$ref_text,
-                        EDU_COPY$domains$indirectness$doi),
+          pma_reference(EDU_COPY$domains$indirectness$ref),
 
           # ----- The four Core GRADE 5 PICO questions ----------------------
           # Every one PRESELECTED to "yes" - the default is now on screen
@@ -538,8 +536,7 @@ step3_ui <- function(state = NULL) {
         # --- Imprecision ---
         shiny::tabPanel(.tab_title("imprecision"), value = "Imprecision",
           .domain_header("Imprecision", "impre_badge", "impre_chip"),
-          pma_reference(EDU_COPY$domains$imprecision$ref_text,
-                        EDU_COPY$domains$imprecision$doi),
+          pma_reference(EDU_COPY$domains$imprecision$ref),
           shiny::uiOutput("threshold_block_impre"),
           # Which Fig 4 branch this analysis took. Stated on the tab because
           # the branch decides whether sample size is consulted at all: on
@@ -606,8 +603,7 @@ step3_ui <- function(state = NULL) {
         # --- Publication bias ---
         shiny::tabPanel(.tab_title("pubias"), value = "Publication bias",
           .domain_header("Publication bias", "pubias_badge", "pubias_chip"),
-          pma_reference(EDU_COPY$domains$pubias$ref_text,
-                        EDU_COPY$domains$pubias$doi),
+          pma_reference(EDU_COPY$domains$pubias$ref),
           # ----- Figure 5 as a wizard, one node at a time -------------------
           # The whole of Fig 5 used to render at once: a static Q1, a static
           # non-Fig-5 overall judgment with two bulleted lists, a
@@ -671,10 +667,7 @@ step3_ui <- function(state = NULL) {
                 htmltools::p(class = "pma-card-subtitle",
                   "Studies with no extractable estimate arrive here ",
                   "automatically; add trials that exist but were never loaded. ",
-                  "After ",
-                  htmltools::tags$a(href = "https://doi.org/10.1136/bmj-2023-076754",
-                                    target = "_blank",
-                                    "Page et al., BMJ 2023 (RoB-ME)"),
+                  "After RoB-ME (Page MJ, et al. BMJ. 2023)",
                   htmltools::HTML(paste0(
                     ". <strong>Not part of the Core GRADE algorithm</strong> - ",
                     "act on it through the override below."))),

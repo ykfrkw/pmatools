@@ -142,7 +142,8 @@ INCONSISTENCY_I2_CUT <- 30
 .INCONSISTENCY_ZONE_CAVEAT <- paste0(
   "Core GRADE 3 Fig 2 words this node qualitatively ('Majority are on one ",
   "side of threshold' / 'substantial proportion') and defines no numbers; the ",
-  "80% majority share follows CINeMA (Nikolakopoulou 2020) and the 20% ",
+  "80% majority share follows CINeMA (Nikolakopoulou A, et al. PLoS Med. ",
+  "2020) and the 20% ",
   "each-side share is a pmatools convention."
 )
 
@@ -151,8 +152,8 @@ INCONSISTENCY_I2_CUT <- 30
   "Subgroup credibility is not auto-detectable. Core GRADE 3 keys it to the ",
   "interaction P value, whether the comparison is within-study, and whether a ",
   "small number of direction-specifying a priori hypotheses was made, and ",
-  "points at ICEMAN (www.iceman.help; Schandelmaier 2020, CMAJ ",
-  "2020;192:E901-6). Core GRADE 3 also states that 'a conclusion of moderate ",
+  "points at ICEMAN (Schandelmaier S, et al. CMAJ. 2020). Core GRADE 3 also ",
+  "states that 'a conclusion of moderate ",
   "or high credibility warrants the creation of separate PICO questions for ",
   "each subgroup', so a credible subgroup effect should be split into ",
   "separate ratings rather than reported as a single pooled estimate."

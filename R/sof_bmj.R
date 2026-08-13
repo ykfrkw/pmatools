@@ -393,8 +393,7 @@
 .bmj_base_note <- function(label_intervention = "intervention",
                            prediction = FALSE, rate_arms = TRUE) {
   paste0(
-    "Certainty of the evidence rated with the BMJ 2025 Core GRADE series ",
-    "(Guyatt et al.); not an official GRADE Working Group assessment. ",
+    .PMA_CORE_GRADE_FOOTNOTE, " ",
     "CI = confidence interval.",
     if (prediction) " PrI = 95 percent prediction interval." else "",
     if (rate_arms) paste0(

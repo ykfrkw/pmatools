@@ -118,6 +118,25 @@ CERTAINTY_PALETTES <- list(
   flextable::font(ft, fontname = .PMA_TABLE_FONT, part = "footer")
 }
 
+# House style for every citation this package renders: first author, "et al.",
+# journal abbreviation, year. No volume, no pages, no DOI, no URL.
+#
+# The Core GRADE papers defeat the bare form -- all six are Guyatt, all BMJ,
+# all 2025, so they collapse into one indistinguishable string. They carry the
+# series number as a prefix instead, and .core_grade_ref() is the only place
+# that shape is written down.
+.core_grade_ref <- function(number = NULL) {
+  series <- if (is.null(number)) "Core GRADE series" else paste0("Core GRADE ", number)
+  paste0(series, ". Guyatt G, et al. BMJ. 2025")
+}
+
+# The disclaimer that follows the series citation on every table this package
+# builds. One literal, because eight footnotes used to word it four ways.
+.PMA_CORE_GRADE_FOOTNOTE <- paste0(
+  "Reference: ", .core_grade_ref(),
+  ". Not an official GRADE Working Group assessment."
+)
+
 # スコアを確実性ラベルに変換
 score_to_certainty <- function(score) {
   score <- max(1L, min(4L, as.integer(round(score))))

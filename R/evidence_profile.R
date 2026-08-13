@@ -212,8 +212,7 @@ evidence_profile <- function(grade,
       "Evidence Profile (Core GRADE series). Certainty levels: ",
       paste(CERTAINTY_SYMBOLS_UNICODE, names(CERTAINTY_SYMBOLS_UNICODE),
             sep = " ", collapse = "  "),
-      ". Based on the BMJ 2025 Core GRADE series (Guyatt et al.); ",
-      "not an official GRADE Working Group assessment."
+      ". ", .PMA_CORE_GRADE_FOOTNOTE
     )
   )
 

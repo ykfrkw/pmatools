@@ -266,8 +266,7 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
 
   base_note <- paste0(
     "Certainty rating (Core GRADE series): ", certainty_label, ". ",
-    "Assessment based on BMJ 2025 Core GRADE series (Guyatt et al.); ",
-    "not an official GRADE Working Group assessment. ",
+    .PMA_CORE_GRADE_FOOTNOTE, " ",
     "CI = confidence interval.", pi_note,
     if (arm$continuous) "" else paste0(
       " Intervention rate (Risk with ", label_intervention, ") = ",
@@ -328,11 +327,8 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
       "assumes a logistic latent variable, uses no MID and is applied to the ",
       "pooled SMD. The two do not generally agree.",
       " Recommended reading: ",
-      "Chinn S. Stat Med 2000;19:3127-3131. ",
-      "doi:10.1002/1097-0258(20001130)19:22<3127::aid-sim784>3.0.co;2-m. ",
-      "Heimke F, Furukawa Y, Siafis S, et al. ",
-      "BMJ Ment Health 2024;27:e300978. ",
-      "doi:10.1136/bmjment-2023-300978."
+      "Chinn S. Stat Med. 2000; ",
+      "Heimke F, et al. BMJ Ment Health. 2024."
     )
     ft <- flextable::add_footer_lines(ft, values = chinn_note)
   }

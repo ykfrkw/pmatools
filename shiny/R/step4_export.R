@@ -61,40 +61,22 @@ step4_ui <- function() {
       title = "How to cite",
       htmltools::p(paste0(
         "Pairwise meta-analysis was performed using the {meta} R package ",
-        "(Balduzzi et al. 2019). Certainty of evidence was rated following ",
-        "the BMJ 2025 Core GRADE series (Guyatt et al. ",
-        "2025), implemented in pmatools (Furukawa Y, ",
-        "https://yukifurukawa.jp/pmatools/).")),
+        "(Balduzzi S, et al. Evid Based Ment Health. 2019). Certainty of ",
+        "evidence was rated following the BMJ 2025 Core GRADE series ",
+        "(Guyatt G, et al. BMJ. 2025), implemented in pmatools ",
+        "(Furukawa Y).")),
+      # The list is the citation list, so it carries citations and nothing
+      # else. pmatools has no paper of its own; the tool is named here and the
+      # reviewer reaches it the way they reached this app.
       htmltools::tags$ul(
+        htmltools::tags$li("Furukawa Y. pmatools. 2025."),
         htmltools::tags$li(
-          "Furukawa Y. pmatools. ",
-          htmltools::tags$a(href = "https://yukifurukawa.jp/pmatools/",
-                            target = "_blank", "https://yukifurukawa.jp/pmatools/"),
-          "."),
-        htmltools::tags$li(paste0(
-          "Balduzzi S, Ruecker G, Schwarzer G. ",
-          "How to perform a meta-analysis with R: a practical tutorial. ",
-          "Evid Based Ment Health. 2019;22(4):153-160.")),
-        htmltools::tags$li(
-          htmltools::tags$a(href = "https://doi.org/10.1136/bmj-2024-081903",
-                            target = "_blank",
-                            "Guyatt G, et al. Core GRADE 1: Overview. BMJ 2025.")),
-        htmltools::tags$li(
-          htmltools::tags$a(href = "https://doi.org/10.1136/bmj-2024-081904",
-                            target = "_blank",
-                            "Guyatt G, et al. Core GRADE 2: Certainty rating target, imprecision. BMJ 2025.")),
-        htmltools::tags$li(
-          htmltools::tags$a(href = "https://doi.org/10.1136/bmj-2024-081905",
-                            target = "_blank",
-                            "Guyatt G, et al. Core GRADE 3: Inconsistency. BMJ 2025.")),
-        htmltools::tags$li(
-          htmltools::tags$a(href = "https://doi.org/10.1136/bmj-2024-083864",
-                            target = "_blank",
-                            "Guyatt G, et al. Core GRADE 4: Risk of bias, publication bias. BMJ 2025.")),
-        htmltools::tags$li(
-          htmltools::tags$a(href = "https://doi.org/10.1136/bmj-2024-083865",
-                            target = "_blank",
-                            "Guyatt G, et al. Core GRADE 5: Indirectness. BMJ 2025."))
+          "Balduzzi S, et al. Evid Based Ment Health. 2019."),
+        htmltools::tags$li("Core GRADE 1. Guyatt G, et al. BMJ. 2025."),
+        htmltools::tags$li("Core GRADE 2. Guyatt G, et al. BMJ. 2025."),
+        htmltools::tags$li("Core GRADE 3. Guyatt G, et al. BMJ. 2025."),
+        htmltools::tags$li("Core GRADE 4. Guyatt G, et al. BMJ. 2025."),
+        htmltools::tags$li("Core GRADE 5. Guyatt G, et al. BMJ. 2025.")
       )
       # The "pooling is only a small part of a systematic review" paragraph
       # used to be restated here, verbatim, from the Step 1 header. It is now

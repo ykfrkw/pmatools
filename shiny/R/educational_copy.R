@@ -38,26 +38,26 @@ EDU_COPY <- list(
     dismiss = "Got it"
   ),
 
-  pmid_url = function(pmid) paste0("https://pubmed.ncbi.nlm.nih.gov/", pmid, "/"),
-
+  # `$ref` is the whole reference for a domain tab: one string, house style,
+  # no DOI and no link (see shiny/SPEC.md). The six Core GRADE papers are all
+  # Guyatt / BMJ / 2025, so the bare form cannot tell them apart and they carry
+  # the series number as a prefix. `pmid_url()` was deleted with the DOIs; it
+  # had no call sites left.
   domains = list(
 
     rob = list(
       header   = "Risk of Bias",
-      doi      = "10.1136/bmj-2024-083864",
-      ref_text = "BMJ Core GRADE 4 (Guyatt et al., 2025)"
+      ref      = "Core GRADE 4. Guyatt G, et al. BMJ. 2025"
     ),
 
     inconsistency = list(
       header   = "Inconsistency",
-      doi      = "10.1136/bmj-2024-081905",
-      ref_text = "BMJ Core GRADE 3 (Guyatt et al., 2025)"
+      ref      = "Core GRADE 3. Guyatt G, et al. BMJ. 2025"
     ),
 
     indirectness = list(
       header   = "Indirectness",
-      doi      = "10.1136/bmj-2024-083865",
-      ref_text = "BMJ Core GRADE 5 (Guyatt et al., 2025)",
+      ref      = "Core GRADE 5. Guyatt G, et al. BMJ. 2025",
       # Sits beside the four subdomain questions, because it is the reason the
       # overall override below them exists.
       gradient = paste0(
@@ -76,14 +76,12 @@ EDU_COPY <- list(
 
     imprecision = list(
       header   = "Imprecision",
-      doi      = "10.1136/bmj-2024-081904",
-      ref_text = "BMJ Core GRADE 2 (Guyatt et al., 2025)"
+      ref      = "Core GRADE 2. Guyatt G, et al. BMJ. 2025"
     ),
 
     pubias = list(
       header   = "Publication bias",
-      doi      = "10.1136/bmj-2024-083864",
-      ref_text = "BMJ Core GRADE 4 (Guyatt et al., 2025)"
+      ref      = "Core GRADE 4. Guyatt G, et al. BMJ. 2025"
     )
   ),
 
