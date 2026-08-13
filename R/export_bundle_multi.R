@@ -13,10 +13,17 @@
 #     forest_plot_full.*       all studies - only when a low-RoB refit happened
 #     forest_plot_rob.*        stratified by RoB - only when labels are known
 #     funnel_plot.*
+#     funnel_trimfill.pdf      only when k >= 10
+#     pubias_missing_forest.pdf  only when k >= 10
 #     results.txt
 #     data_long.csv            this outcome only
 #     evidence_profile.docx
 #     indirectness_table.docx  only when subdomain judgments were recorded
+#     rare_event_*             only when the outcome carries a rare-event fit
+#
+# Everything below outcomes/NN_slug/ is shaped by that outcome's own display
+# arguments where it carries them (PMATOOLS_DISPLAY_ATTR, multi_outcome.R) and
+# by this function's set-wide arguments otherwise.
 
 #' Export a multi-outcome analysis bundle as a ZIP
 #'
@@ -42,7 +49,8 @@
 #' @param bundle_name Bundle base name (no extension).
 #' @param include Which artifacts to include. Any of `"data"`, `"script"`,
 #'   `"results"`, `"forest"`, `"forest_full"`, `"forest_rob"`, `"funnel"`,
-#'   `"sof"`, `"evidence_profile"`, `"indirectness"`, `"readme"`.
+#'   `"funnel_trimfill"`, `"pubias_missing_forest"`, `"sof"`,
+#'   `"evidence_profile"`, `"indirectness"`, `"readme"`.
 #' @param style Summary-of-findings layout, `"bmj"` (default) or
 #'   `"gradepro"`. Passed to \code{\link{grade_table}} for
 #'   `summary_of_findings.docx` and rendered into the bundled `analysis.R`.
@@ -60,9 +68,31 @@
 #'   for every outcome. Defaults to the `rob` column of the set's data.
 #' @param forest_display Optional named list of \code{\link{plot_forest}}
 #'   display arguments applied to every outcome.
+#' @param forest_display_rob Optional named list of \code{\link{plot_forest}}
+#'   display arguments for the RoB-stratified forest plot.
+#' @param rare Optional \code{pma_rare_meta} from \code{\link{run_rare_ma}};
+#'   when supplied, each outcome's directory gets the rare-event diagnostics,
+#'   the method table and the method-comparison forest plot.
+#' @param rare_forest_display Optional display arguments for
+#'   \code{\link{plot_rare_sensitivity_forest}}.
+#' @param pubias_missing_df Optional data.frame of studies with unavailable
+#'   results (columns `studlab`, `n`, `results_known`), forwarded to
+#'   \code{\link{plot_forest_pubias_subgroup}}.
 #' @param other_text,other_downgrade Passed to \code{\link{evidence_profile}}.
 #' @param label_intervention,label_control Arm labels for the SoF table.
 #' @param ... Unused; present for S3 consistency.
+#'
+#' @section Per-outcome display arguments:
+#' `rob`, `forest_display`, `forest_display_rob`, `rare`,
+#' `rare_forest_display` and `pubias_missing_df` describe one analysis, so a
+#' set assembled outcome by outcome has a different answer for each. Such a
+#' caller attaches the arguments to the rated object as the `"pmatools_display"`
+#' attribute — a named list holding any of `forest_display`,
+#' `forest_display_rob`, `rare`, `rare_forest_display`, `pubias_missing_df` —
+#' and this function reads them per outcome, falling back to the arguments
+#' above where an outcome carries none. It is the same arrangement that lets
+#' `follow_up` / `unit` differ per row of the summary table. An unrecognised
+#' name in the attribute aborts rather than being ignored.
 #'
 #' @return Character. Absolute path to the created ZIP file.
 #'
@@ -76,6 +106,8 @@ export_bundle.pmatools_set <- function(x,
                                                        "results", "forest",
                                                        "forest_full",
                                                        "forest_rob", "funnel",
+                                                       "funnel_trimfill",
+                                                       "pubias_missing_forest",
                                                        "sof",
                                                        "evidence_profile",
                                                        "indirectness",
@@ -85,7 +117,11 @@ export_bundle.pmatools_set <- function(x,
                                        per         = 1000,
                                        prediction  = FALSE,
                                        rob         = NULL,
-                                       forest_display = NULL,
+                                       forest_display     = NULL,
+                                       forest_display_rob = NULL,
+                                       rare                = NULL,
+                                       rare_forest_display = NULL,
+                                       pubias_missing_df   = NULL,
                                        other_text      = NULL,
                                        other_downgrade = 0L,
                                        label_intervention = "intervention",
@@ -147,6 +183,7 @@ export_bundle.pmatools_set <- function(x,
     ok <- tryCatch({
       .render_analysis_script_multi(set, per = per, prediction = prediction,
                                     style = style, sof_notes = sof_notes,
+                                    rare = rare,
                                     out_path = file.path(work_dir, "analysis.R"))
       TRUE
     }, error = function(e) {
@@ -183,8 +220,11 @@ export_bundle.pmatools_set <- function(x,
       next
     }
 
+    .check_outcome_display(g, nm)
+
     if ("forest" %in% include) {
-      fd <- if (is.list(forest_display)) forest_display else list()
+      fd <- .outcome_display(g, "forest_display", forest_display)
+      fd <- if (is.list(fd)) fd else list()
       if (is.null(fd$title) || !nzchar(fd$title %||% "")) fd$title <- nm
       add(.bundle_plot(function() do.call(plot_forest,
                                           c(list(meta_obj = g$meta), fd)),
@@ -207,10 +247,14 @@ export_bundle.pmatools_set <- function(x,
     if ("forest_rob" %in% include) {
       rob_vec <- .rob_labels_for_outcome(set, nm, g, rob)
       if (!is.null(rob_vec)) {
+        fdr <- .outcome_display(g, "forest_display_rob", forest_display_rob)
+        fdr <- if (is.list(fdr)) fdr else list()
+        if (is.null(fdr$title) || !nzchar(fdr$title %||% "")) {
+          fdr$title <- paste0(nm, " (stratified by RoB)")
+        }
         k_extra <- g$meta$k %||% 0L
-        add(.bundle_plot(function() plot_forest_rob(
-                           meta_obj = g$meta, rob = rob_vec,
-                           title = paste0(nm, " (stratified by RoB)")),
+        add(.bundle_plot(function() do.call(plot_forest_rob,
+                           c(list(meta_obj = g$meta, rob = rob_vec), fdr)),
                          sub_dir, sub_rel, "forest_plot_rob",
                          width  = max(8, 3 + 0.3 * k_extra),
                          height = max(7, 3 + 0.4 * (k_extra + 4))))
@@ -221,6 +265,36 @@ export_bundle.pmatools_set <- function(x,
       add(.bundle_plot(function() plot_funnel(g$meta),
                        sub_dir, sub_rel, "funnel_plot",
                        width = 7, height = 6))
+    }
+
+    # Both small-study diagnostics need enough studies to say anything, so
+    # they carry the same k >= 10 gate as the single-outcome bundle.
+    if ("funnel_trimfill" %in% include && (g$meta$k %||% 0L) >= 10) {
+      add(.bundle_plot(.trimfill_funnel_drawer(g$meta),
+                       sub_dir, sub_rel, "funnel_trimfill",
+                       width = 7, height = 6))
+    }
+
+    if ("pubias_missing_forest" %in% include && (g$meta$k %||% 0L) >= 10) {
+      spec <- .pubias_missing_drawer(
+        g$meta, .outcome_display(g, "pubias_missing_df", pubias_missing_df))
+      add(.bundle_plot(spec$draw, sub_dir, sub_rel, "pubias_missing_forest",
+                       width = spec$width, height = spec$height))
+    }
+
+    # Rare-event artifacts are gated on the outcome having a rare-event fit
+    # rather than on `include`, exactly as in the single-outcome bundle: they
+    # exist only for an outcome whose events are rare enough to have been
+    # re-analysed, and that is the question `include` cannot answer.
+    rare_i <- .outcome_display(g, "rare", rare)
+    if (inherits(rare_i, "pma_rare_meta")) {
+      add(file.path(sub_rel, .write_rare_tables(rare_i, sub_dir)))
+      spec <- .rare_forest_drawer(
+        rare_i, .outcome_display(g, "rare_forest_display",
+                                 rare_forest_display))
+      add(.bundle_plot(spec$draw, sub_dir, sub_rel,
+                       "rare_event_method_forest",
+                       width = spec$width, height = spec$height))
     }
 
     if ("results" %in% include) {
@@ -238,8 +312,9 @@ export_bundle.pmatools_set <- function(x,
     }
 
     if ("evidence_profile" %in% include) {
-      ep <- evidence_profile(g, other_text = other_text,
-                             other_downgrade = other_downgrade)
+      ep <- evidence_profile(g, other_text = .other_text(g, other_text),
+                             other_downgrade = .other_downgrade(g,
+                                                                other_downgrade))
       .save_landscape_docx(ep, file.path(sub_dir, "evidence_profile.docx"))
       add(file.path(sub_rel, "evidence_profile.docx"))
     }
@@ -276,6 +351,25 @@ export_bundle.pmatools_set <- function(x,
 # --------------------------------------------------------------------------
 # Per-outcome helpers
 # --------------------------------------------------------------------------
+
+# "Other considerations" is a judgment about one body of evidence, so an
+# outcome that carries its own wins over the set-wide argument - otherwise one
+# outcome's note would be printed against every evidence profile in the ZIP.
+.other_text <- function(g, fallback = NULL) {
+  # Exact, like every other lookup on a rated object here: `$` partial-matches
+  # and "other_" prefixes two fields.
+  v <- g[["other_text", exact = TRUE]]
+  if (is.null(v) || length(v) != 1L || is.na(v) || !nzchar(trimws(v))) {
+    return(fallback)
+  }
+  v
+}
+
+.other_downgrade <- function(g, fallback = 0L) {
+  v <- g[["other_downgrade", exact = TRUE]]
+  if (is.null(v) || length(v) != 1L || is.na(v)) return(fallback)
+  as.integer(v)
+}
 
 # Render one plot to PDF and return the relative path. A plot that cannot be
 # drawn (funnel plots of very small analyses, for instance) must not take the
@@ -461,8 +555,9 @@ export_bundle.pmatools_set <- function(x,
       doc <- officer::body_add_par(doc, paste0("Analysis set: ", note),
                                    style = "Normal")
     }
-    ft <- evidence_profile(g, other_text = other_text,
-                           other_downgrade = other_downgrade)
+    ft <- evidence_profile(g, other_text = .other_text(g, other_text),
+                           other_downgrade = .other_downgrade(g,
+                                                              other_downgrade))
     doc <- flextable::body_add_flextable(doc, ft)
     doc <- officer::body_add_par(doc, "", style = "Normal")
   }
@@ -548,7 +643,8 @@ export_bundle.pmatools_set <- function(x,
 # aborts, and export_bundle() then ships the bundle without a script instead of
 # shipping one that reproduces something else.
 .render_analysis_script_multi <- function(set, per, prediction, style,
-                                          out_path, sof_notes = NULL) {
+                                          out_path, sof_notes = NULL,
+                                          rare = NULL) {
   if (is.null(set$grade_args)) {
     rlang::abort(paste0(
       "This pmatools_set carries no record of the grade_meta() arguments it ",
@@ -595,6 +691,7 @@ export_bundle.pmatools_set <- function(x,
     sm_arg           = .multi_arg_lit(ma_args[["sm", exact = TRUE]]),
     outcome_type_arg = .multi_arg_lit(ma_args[["outcome_type", exact = TRUE]]),
     ma_extra_args    = ma_extra,
+    rare_block       = .rare_block_multi(set, rare),
     common_arg       = .multi_arg_lit(common_args, indent = 4L),
     per_outcome_arg  = .multi_arg_lit(po_args, indent = 4L),
     not_reported_block = .not_reported_block(set),
@@ -620,6 +717,52 @@ export_bundle.pmatools_set <- function(x,
 
   writeLines(rendered, out_path)
   invisible(out_path)
+}
+
+# Rare-event outcomes, for the generated analysis.R. run_ma_multi() pools every
+# outcome with run_ma(), which drops a double-zero study; an outcome the
+# reviewer analysed with the rare-event method suite was NOT rated on that
+# analysis, so the script re-runs run_rare_ma() for it and substitutes its
+# primary fit back into ma_list before anything is rated. Without this the
+# script reproduces a different analysis for that outcome without saying so.
+# Returns "" when no outcome carries a rare fit, so an ordinary bundle's script
+# is byte-for-byte what it was before.
+.rare_block_multi <- function(set, rare = NULL) {
+  dir_nms <- .outcome_dir_names(set$order)
+  lit <- function(s) paste(deparse(s, width.cutoff = 500L), collapse = "")
+
+  blocks <- character(0)
+  for (i in seq_along(set$order)) {
+    nm <- set$order[i]
+    r  <- .outcome_display(set$outcomes[[nm]], "rare", rare)
+    if (!inherits(r, "pma_rare_meta")) next
+    obj <- sprintf("rare_%02d", i)
+    blocks <- c(blocks, paste0(
+      "\n", obj, "_data <- data[!is.na(data$outcome) & data$outcome == ",
+      lit(nm), ", , drop = FALSE]\n",
+      obj, " <- run_rare_ma(\n",
+      "  ", obj, "_data,\n",
+      "  effect_scale = ", lit(r$effect_scale %||% "OR"), ",\n",
+      "  primary_method = ", lit(r$primary_method %||% "BB_CR"), "\n",
+      ")\n",
+      "ma_list[[", lit(nm), "]] <- ", obj, "$primary\n",
+      obj, "_dir <- file.path(\"outcomes\", ", lit(dir_nms[i]), ")\n",
+      "dir.create(", obj, "_dir, recursive = TRUE, showWarnings = FALSE)\n",
+      "write.csv(as.data.frame(", obj, "$method_table),\n",
+      "          file.path(", obj, "_dir, \"rare_event_method_table.csv\"),\n",
+      "          row.names = FALSE)\n",
+      "grDevices::pdf(file.path(", obj,
+      "_dir, \"rare_event_method_forest.pdf\"),\n",
+      "               width = 8, height = 5)\n",
+      "plot_rare_sensitivity_forest(", obj, ")\n",
+      "grDevices::dev.off()\n"))
+  }
+  if (length(blocks) == 0L) return("")
+
+  paste0("\n# ----- 2b. Rare-events outcomes -----\n",
+         "# Pooled with the rare-event method suite, not with run_ma(): the\n",
+         "# rating below was made on this fit.\n",
+         paste(blocks, collapse = ""))
 }
 
 # One add_not_reported() call per not-reported outcome, in set$order, for the

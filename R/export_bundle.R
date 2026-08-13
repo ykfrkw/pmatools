@@ -290,29 +290,12 @@ export_bundle.meta <- function(x,
 
   # 4c. rare-events sensitivity outputs
   if (!is.null(rare) && inherits(rare, "pma_rare_meta")) {
-    diag_path <- file.path(work_dir, "rare_event_diagnostics.csv")
-    method_path <- file.path(work_dir, "rare_event_method_table.csv")
-    utils::write.csv(.rare_diagnostics_table(rare$diagnostics),
-                     diag_path, row.names = FALSE)
-    utils::write.csv(as.data.frame(rare$method_table),
-                     method_path, row.names = FALSE)
-    files_in_zip <- c(files_in_zip, diag_path, method_path)
-
+    files_in_zip <- c(files_in_zip,
+                      file.path(work_dir, .write_rare_tables(rare, work_dir)))
+    spec <- .rare_forest_drawer(rare, rare_forest_display)
     pdf_path <- file.path(work_dir, "rare_event_method_forest.pdf")
-    rfd <- if (is.list(rare_forest_display)) rare_forest_display else list()
-    rfd <- rfd[intersect(names(rfd), c("title", "xlim",
-                                      "favors_left", "favors_right"))]
-    if (is.null(rfd$title) || !nzchar(rfd$title %||% "")) {
-      rfd$title <- "Rare-event method sensitivity"
-    }
-    n_methods <- nrow(as.data.frame(rare$method_table))
-    .save_plot_pdf(
-      function() do.call(plot_rare_sensitivity_forest,
-                         c(list(x = rare), rfd)),
-      pdf_path,
-      width = max(8, 4 + 0.4 * n_methods),
-      height = max(5, 2.5 + 0.45 * n_methods)
-    )
+    .save_plot_pdf(spec$draw, pdf_path,
+                   width = spec$width, height = spec$height)
     files_in_zip <- c(files_in_zip, pdf_path)
   }
 
@@ -330,64 +313,17 @@ export_bundle.meta <- function(x,
   # 5b. trim-and-fill funnel (k >= 10)
   if ("funnel_trimfill" %in% include && (ma$k %||% 0L) >= 10) {
     pdf_path <- file.path(work_dir, "funnel_trimfill.pdf")
-    tf <- tryCatch(suppressWarnings(meta::trimfill(ma)),
-                   error = function(e) NULL)
-    .save_plot_pdf(
-      function() {
-        if (is.null(tf)) {
-          graphics::plot.new()
-          graphics::title(main = "Trim-and-fill could not be computed")
-          return(invisible(NULL))
-        }
-        n_total <- length(tf$TE)
-        is_imp  <- if (!is.null(tf$trimfill)) {
-          as.logical(tf$trimfill)
-        } else {
-          k0 <- if (!is.null(tf$k0)) as.integer(tf$k0) else
-                (n_total - (ma$k %||% 0L))
-          c(rep(FALSE, n_total - k0), rep(TRUE, k0))
-        }
-        meta::funnel(tf,
-                     contour = c(0.9, 0.95, 0.99),
-                     pch = rep(21L, n_total),
-                     col = ifelse(is_imp, "red", "black"),
-                     bg  = ifelse(is_imp, "red", "darkgray"),
-                     cex = ifelse(is_imp, 1.6, 1.0))
-        graphics::legend(
-          "topright",
-          legend = c("Observed studies", "Imputed (filled) studies"),
-          pch    = c(21, 21),
-          col    = c("black", "red"),
-          pt.bg  = c("darkgray", "red"),
-          pt.cex = c(1.0, 1.4),
-          bty    = "o", bg = "#ffffff", cex = 0.8
-        )
-      },
-      pdf_path, width = 7, height = 6
-    )
+    .save_plot_pdf(.trimfill_funnel_drawer(ma), pdf_path,
+                   width = 7, height = 6)
     files_in_zip <- c(files_in_zip, pdf_path)
   }
 
   # 5c. publication bias missing-results forest (k >= 10)
   if ("pubias_missing_forest" %in% include && (ma$k %||% 0L) >= 10) {
     pdf_path <- file.path(work_dir, "pubias_missing_forest.pdf")
-    m_df <- if (is.data.frame(pubias_missing_df) &&
-                all(c("studlab", "n", "results_known") %in% names(pubias_missing_df))) {
-      pubias_missing_df
-    } else {
-      data.frame(studlab = character(0), n = integer(0),
-                 results_known = character(0), stringsAsFactors = FALSE)
-    }
-    k_avail <- length(ma$TE)
-    k_miss  <- nrow(m_df)
-    .save_plot_pdf(
-      function() plot_forest_pubias_subgroup(meta_obj    = ma,
-                                             missing_df  = m_df,
-                                             auto_detect = FALSE),
-      pdf_path,
-      width  = max(8, 3 + 0.3 * (k_avail + k_miss)),
-      height = max(7, 3 + 0.4 * (k_avail + k_miss + 4))
-    )
+    spec <- .pubias_missing_drawer(ma, pubias_missing_df)
+    .save_plot_pdf(spec$draw, pdf_path,
+                   width = spec$width, height = spec$height)
     files_in_zip <- c(files_in_zip, pdf_path)
   }
 
@@ -518,6 +454,100 @@ export_bundle.meta <- function(x,
       }
     }, character(1)),
     stringsAsFactors = FALSE
+  )
+}
+
+# --------------------------------------------------------------------------
+# Artifacts shared by the flat and the per-outcome layouts
+# --------------------------------------------------------------------------
+# Each returns what to draw rather than drawing it, because the two layouts
+# differ in what a failed plot costs: the flat bundle is one analysis and
+# aborts, the multi-outcome one warns and carries on with the other outcomes
+# (.bundle_plot(), export_bundle_multi.R).
+
+# The two rare-event tables. Returns the file names it wrote, relative to
+# `dir`, so a caller that records ZIP-relative paths can prefix them.
+.write_rare_tables <- function(rare, dir) {
+  utils::write.csv(.rare_diagnostics_table(rare$diagnostics),
+                   file.path(dir, "rare_event_diagnostics.csv"),
+                   row.names = FALSE)
+  utils::write.csv(as.data.frame(rare$method_table),
+                   file.path(dir, "rare_event_method_table.csv"),
+                   row.names = FALSE)
+  c("rare_event_diagnostics.csv", "rare_event_method_table.csv")
+}
+
+.rare_forest_drawer <- function(rare, rare_forest_display = NULL) {
+  rfd <- if (is.list(rare_forest_display)) rare_forest_display else list()
+  rfd <- rfd[intersect(names(rfd), c("title", "xlim",
+                                     "favors_left", "favors_right"))]
+  if (is.null(rfd$title) || !nzchar(rfd$title %||% "")) {
+    rfd$title <- "Rare-event method sensitivity"
+  }
+  n_methods <- nrow(as.data.frame(rare$method_table))
+  list(
+    draw   = function() do.call(plot_rare_sensitivity_forest,
+                                c(list(x = rare), rfd)),
+    width  = max(8, 4 + 0.4 * n_methods),
+    height = max(5, 2.5 + 0.45 * n_methods)
+  )
+}
+
+# Trim-and-fill funnel: the imputed studies are drawn in red so the reader can
+# see how many were filled and where. Trim-and-fill that cannot be computed
+# yields a titled blank page rather than an error, because the plot is a
+# diagnostic and its absence is itself the finding.
+.trimfill_funnel_drawer <- function(ma) {
+  tf <- tryCatch(suppressWarnings(meta::trimfill(ma)), error = function(e) NULL)
+  function() {
+    if (is.null(tf)) {
+      graphics::plot.new()
+      graphics::title(main = "Trim-and-fill could not be computed")
+      return(invisible(NULL))
+    }
+    n_total <- length(tf$TE)
+    is_imp  <- if (!is.null(tf$trimfill)) {
+      as.logical(tf$trimfill)
+    } else {
+      k0 <- if (!is.null(tf$k0)) as.integer(tf$k0) else
+            (n_total - (ma$k %||% 0L))
+      c(rep(FALSE, n_total - k0), rep(TRUE, k0))
+    }
+    meta::funnel(tf,
+                 contour = c(0.9, 0.95, 0.99),
+                 pch = rep(21L, n_total),
+                 col = ifelse(is_imp, "red", "black"),
+                 bg  = ifelse(is_imp, "red", "darkgray"),
+                 cex = ifelse(is_imp, 1.6, 1.0))
+    graphics::legend(
+      "topright",
+      legend = c("Observed studies", "Imputed (filled) studies"),
+      pch    = c(21, 21),
+      col    = c("black", "red"),
+      pt.bg  = c("darkgray", "red"),
+      pt.cex = c(1.0, 1.4),
+      bty    = "o", bg = "#ffffff", cex = 0.8
+    )
+  }
+}
+
+.pubias_missing_drawer <- function(ma, pubias_missing_df = NULL) {
+  m_df <- if (is.data.frame(pubias_missing_df) &&
+              all(c("studlab", "n", "results_known") %in%
+                  names(pubias_missing_df))) {
+    pubias_missing_df
+  } else {
+    data.frame(studlab = character(0), n = integer(0),
+               results_known = character(0), stringsAsFactors = FALSE)
+  }
+  k_avail <- length(ma$TE)
+  k_miss  <- nrow(m_df)
+  list(
+    draw   = function() plot_forest_pubias_subgroup(meta_obj    = ma,
+                                                    missing_df  = m_df,
+                                                    auto_detect = FALSE),
+    width  = max(8, 3 + 0.3 * (k_avail + k_miss)),
+    height = max(7, 3 + 0.4 * (k_avail + k_miss + 4))
   )
 }
 

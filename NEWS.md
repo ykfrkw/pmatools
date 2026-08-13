@@ -45,6 +45,27 @@
   `SPEC.md` §5.5 described the multiplication the code never performed and now
   describes what runs.
 
+* **Shiny app: the exported ZIP has the multi-outcome layout, always.** The app
+  used to build the flat single-outcome bundle for whichever outcome was on
+  screen and then append one extra `sof_table_combined.docx` covering the
+  saved ones. A ZIP therefore mixed two things: one outcome's plots, results
+  and tables at the root, and a summary table describing outcomes whose plots
+  were nowhere in the file. It now exports the layout `export_bundle()` already
+  had for a `pmatools_set`: `summary_of_findings.docx` / `.csv`,
+  `evidence_profile.docx`, `data_long.csv`, `analysis.R` and `README.txt` at the
+  root, and one numbered `outcomes/NN_name/` directory per outcome — with a
+  single outcome getting the same tree, one directory deep. Every path in the
+  ZIP moves: `forest_plot.pdf` is now `outcomes/01_<slug>/forest_plot.pdf`,
+  `grade_table.docx` is `outcomes/01_<slug>/evidence_profile.docx`,
+  `sof_table.docx` and `sof_table_combined.docx` are both now the root
+  `summary_of_findings.docx`, and `analysis.R` re-runs every outcome rather than
+  one. The Step 4 checkboxes change with it — their values are now the
+  bundler's own `include` vocabulary, so `grade_table` splits into `sof` and
+  `evidence_profile` and `sof_combined` becomes `sof`. One presentation is not
+  carried across: the combined table is built by `grade_table()`, which has no
+  SMD-to-odds-ratio conversion, so the responder presentation of a continuous
+  outcome remains an on-screen view and no longer reaches the .docx in the ZIP.
+
 * **Export bundles no longer contain PNG plots.** Every plot used to ship twice,
   once as a PDF and once as a raster PNG of the same figure, in both the
   single-outcome and the multi-outcome layout. Only the PDF ships now, so a ZIP

@@ -35,13 +35,21 @@ PMA_APP_ROOT <- local({
 # are tried and neither is required: a checkout with no staged bundle still
 # has ../../R relative to shiny/, and the guard keeps the helper usable in a
 # tree where the sources are laid out some third way.
-for (.f in c(file.path(PMA_APP_ROOT, "R", "_pmatools", "utils.R"),
-             file.path(dirname(PMA_APP_ROOT), "R", "utils.R"))) {
-  if (file.exists(.f)) {
-    source(.f)
-    break
+#
+# R/multi_outcome.R rides along for PMATOOLS_DISPLAY_ATTR and the set
+# constructor: the app's export helpers write that attribute and build a
+# pmatools_set out of the banked outcomes, so without it their tests would
+# fail on a missing object rather than on a wrong bundle.
+for (.stem in c("utils.R", "multi_outcome.R")) {
+  for (.f in c(file.path(PMA_APP_ROOT, "R", "_pmatools", .stem),
+               file.path(dirname(PMA_APP_ROOT), "R", .stem))) {
+    if (file.exists(.f)) {
+      source(.f)
+      break
+    }
   }
 }
+rm(.stem)
 
 for (.f in c("R/ui_helpers.R", "R/educational_copy.R", "R/step3_threshold.R",
              "R/step2_ma.R")) {

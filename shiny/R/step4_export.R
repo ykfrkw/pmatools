@@ -1,5 +1,13 @@
 # step4_export.R - Step 4: ZIP export
 
+# Every artifact export_bundle.pmatools_set() can write. Named here rather
+# than repeated in the checkbox and again in the download handler's fallback,
+# which is how the two drifted apart before.
+PMA_EXPORT_INCLUDE_DEFAULT <- c(
+  "data", "script", "results", "forest", "forest_full", "forest_rob",
+  "funnel", "funnel_trimfill", "pubias_missing_forest", "sof",
+  "evidence_profile", "indirectness", "readme")
+
 step4_ui <- function() {
   s <- EDU_COPY$steps$step4
 
@@ -36,22 +44,27 @@ step4_ui <- function() {
       title = "Bundle settings",
       shiny::textInput("bundle_name", "Bundle name (no extension)",
                        value = "pmatools_results"),
+      # The values ARE export_bundle()'s `include` vocabulary, passed through
+      # untranslated. A remap in the download handler would hide which
+      # artifact each box actually controls from the next reader of either
+      # side (shiny/SPEC.md 3.5.2).
       shiny::checkboxGroupInput("include", "Artifacts to include",
         choices = c(
           "Long-format CSV"                                      = "data",
           "Reproducible R script"                                = "script",
           "Results text"                                         = "results",
           "Forest plot (PDF)"                                    = "forest",
+          "Forest plot, all studies (PDF, after a low-RoB refit)" = "forest_full",
           "Forest plot stratified by RoB (PDF)"                  = "forest_rob",
           "Funnel plot (PDF)"                                    = "funnel",
           "Trim-and-fill funnel (PDF, k>=10)"                    = "funnel_trimfill",
           "Publication bias missing-results forest (PDF, k>=10)" = "pubias_missing_forest",
-          "Core GRADE Evidence Profile + SoF table (docx)"       = "grade_table",
-          "Combined SoF table across saved outcomes (docx)"      = "sof_combined"
+          "Summary of Findings table, all outcomes (docx + csv)" = "sof",
+          "Core GRADE Evidence Profile (docx)"                   = "evidence_profile",
+          "Indirectness table (docx)"                            = "indirectness",
+          "README"                                               = "readme"
         ),
-        selected = c("data","script","results","forest","forest_rob",
-                     "funnel","funnel_trimfill","pubias_missing_forest",
-                     "grade_table","sof_combined")),
+        selected = PMA_EXPORT_INCLUDE_DEFAULT),
       shiny::uiOutput("rare_export_note"),
       # The Download button is rendered server-side so it only appears once
       # Steps 2-3 have produced results (see output$download_zip_ui).
@@ -110,8 +123,11 @@ step4_server <- function(input, output, session, state) {
   # values when they exist so the combined table speaks the same
   # Intervention / Control vocabulary as the rest of the wizard.
   .arm_labels <- function() {
-    e <- input$experimental_label
-    c_ <- input$control_label
+    # state, not input: Step 2's widgets no longer exist by the time this step
+    # is on screen, so the inputs read NULL and both headers fell back to the
+    # generic wording.
+    e <- state$arm_e
+    c_ <- state$arm_c
     list(
       intervention = if (!is.null(e) && length(e) == 1 && nzchar(e)) e else "intervention",
       control      = if (!is.null(c_) && length(c_) == 1 && nzchar(c_)) c_ else "control"
@@ -222,49 +238,30 @@ step4_server <- function(input, output, session, state) {
     )
   })
 
-  # Write a flextable into a landscape .docx. Mirrors the helper that lives
-  # inside the vendored export_bundle(); duplicated here because that one is
-  # function-local and the vendored package must not be edited.
-  .save_landscape_docx <- function(ft, path) {
-    doc <- officer::read_docx()
-    doc <- flextable::body_add_flextable(doc, ft)
-    doc <- officer::body_end_section_landscape(doc, w = 11, h = 8.5)
-    print(doc, target = path)
-    invisible(path)
-  }
-
-  # Append sof_table_combined.docx to the ZIP that export_bundle() produced.
-  # Done here rather than inside export_bundle() so the vendored package
-  # stays untouched; zip::zip_append writes into the existing archive.
-  .append_combined_sof <- function(zip_path) {
+  # The outcomes the ZIP is built from. Normally the banked ones; the rating
+  # on screen when there are none. Step 3 banks an outcome once every domain
+  # is confirmed AND it has a name, while the download unlocks on the domains
+  # alone, so an unnamed outcome can reach this button with nothing banked.
+  .export_outcomes <- function() {
     outs <- saved_outcomes()
-    if (length(outs) == 0) return(invisible(FALSE))
-    ft <- combined_sof()
-    if (is.null(ft) || inherits(ft, "pma_sof_error")) {
-      shiny::showNotification(
-        paste0("Combined SoF table skipped: ",
-               if (inherits(ft, "pma_sof_error")) ft$message else "not available"),
-        type = "warning", duration = 8)
-      return(invisible(FALSE))
-    }
-    dir <- tempfile("pmatools_sof_combined_")
-    on.exit(unlink(dir, recursive = TRUE), add = TRUE)
-    dir.create(dir)
-    path <- file.path(dir, "sof_table_combined.docx")
-    ok <- tryCatch({
-      .save_landscape_docx(ft, path)
-      zip::zip_append(zipfile = zip_path,
-                      files   = basename(path),
-                      root    = dir)
-      TRUE
-    }, error = function(e) {
-      shiny::showNotification(
-        paste("Combined SoF table could not be added to the ZIP:",
-              conditionMessage(e)),
-        type = "warning", duration = 8)
-      FALSE
-    })
-    invisible(ok)
+    if (length(outs) > 0) return(outs)
+    g <- state$grade
+    if (is.null(g)) return(list())
+    g$follow_up <- state$display$follow_up
+    g$unit      <- state$display$unit
+    g <- pma_bank_export_material(
+      g, display = state$display, pubias_missing = state$pubias_missing,
+      rare = if (isTRUE(state$rare_mode_active)) state$rare,
+      data = state$data,
+      experimental_label = state$arm_e, control_label = state$arm_c)
+    named <- function(v) !is.null(v) && length(v) == 1L && nzchar(trimws(v))
+    nm <- if (named(state$outcome_name)) trimws(state$outcome_name)
+          else if (named(g$outcome_name)) trimws(g$outcome_name)
+          # The name is what every row of the table, every directory in the ZIP
+          # and every message about this outcome is keyed on. It cannot be
+          # blank, and this is the one path that can reach here without one.
+          else "Outcome"
+    stats::setNames(list(g), nm)
   }
 
   output$rare_export_note <- shiny::renderUI({
@@ -272,31 +269,48 @@ step4_server <- function(input, output, session, state) {
     htmltools::p(
       class = "pma-card-subtitle",
       style = "margin-top: 0.5rem;",
-      "Rare-events mode: the ZIP also includes rare-event diagnostics, ",
-      "the method table, the method-sensitivity forest plot, and ",
-      "analysis.R code to rerun the rare-event method set."
+      "Rare-events mode: the outcome's own directory in the ZIP also holds ",
+      "the rare-event diagnostics, the method table and the ",
+      "method-sensitivity forest plot."
     )
   })
 
-  .export_covariate <- function(ma, col, default = NA_character_) {
-    labels <- as.character(ma$studlab)
-    source <- NULL
-    rt <- state$rob_table
-    if (!is.null(rt) && col %in% names(rt)) {
-      source <- rt[, c("studlab", col), drop = FALSE]
-    } else {
-      d <- state$data
-      if (!is.null(d) && col %in% names(d)) {
-        first_per_study <- !duplicated(d$studlab)
-        source <- d[first_per_study, c("studlab", col), drop = FALSE]
+  # Risk-of-Bias labels for the stratified forest plots, keyed by outcome.
+  # Each outcome's labels are read from the data IT was rated on: a review
+  # whose outcomes came from separate files has a different study list per
+  # outcome, and the set-wide `rob` vector export_bundle() also accepts could
+  # only be right for one of them. A study with no label is drawn as "*"
+  # rather than dropping the whole plot.
+  .export_rob <- function(outs) {
+    labels <- lapply(names(outs), function(nm) {
+      g   <- outs[[nm]]
+      src <- attr(g, PMA_OUTCOME_SOURCE_ATTR, exact = TRUE)
+      d   <- if (is.list(src)) src$data else NULL
+      if (!is.data.frame(d) || !all(c("studlab", "rob") %in% names(d))) {
+        return(NULL)
       }
-    }
-    if (is.null(source)) return(NULL)
-    lookup <- as.character(source[[col]])
-    names(lookup) <- as.character(source$studlab)
-    out <- unname(lookup[labels])
-    if (!is.null(default)) out[is.na(out) | !nzchar(trimws(out))] <- default
-    out
+      lookup <- d[!duplicated(d$studlab), c("studlab", "rob"), drop = FALSE]
+      out <- as.character(lookup$rob[match(as.character(g$meta$studlab),
+                                           as.character(lookup$studlab))])
+      out[is.na(out) | !nzchar(trimws(out))] <- "*"
+      out
+    })
+    names(labels) <- names(outs)
+    labels[!vapply(labels, is.null, logical(1))]
+  }
+
+  # Footnotes for the exported Summary of Findings that the bundler cannot
+  # derive: one rare-event alert per outcome (Core GRADE 6) and the
+  # not-implemented note shown under every on-screen table. Built from the
+  # outcomes being exported rather than from combined_rare_alerts(), so the
+  # single rating on screen gets its alert too.
+  .export_sof_notes <- function(outs) {
+    alerts <- lapply(names(outs), function(nm) {
+      pma_rare_event_alert(outs[[nm]], label = nm)
+    })
+    alerts <- alerts[!vapply(alerts, is.null, logical(1))]
+    c(vapply(alerts, function(a) a$note, character(1)),
+      PMA_SOF_LIMITATIONS_NOTE)
   }
 
   # Gate the Download button on Steps 2-3 being complete. Without this,
@@ -414,13 +428,10 @@ step4_server <- function(input, output, session, state) {
         message = "Building export bundle", value = 0,
       tryCatch({
         shiny::incProgress(0.05, detail = "Collecting settings...")
-        include <- input$include %||% c("data","script","results",
-                                        "forest","forest_rob","funnel",
-                                        "funnel_trimfill",
-                                        "pubias_missing_forest",
-                                        "grade_table", "sof_combined")
+        include <- input$include %||% PMA_EXPORT_INCLUDE_DEFAULT
 
-        rob_vec <- .export_covariate(state$ma, "rob", default = "*")
+        outs <- .export_outcomes()
+        arms <- .arm_labels()
 
         # export_bundle() renders every plot, writes the tables and docx
         # report, and zips them in one vendored call, so the bulk of the
@@ -429,67 +440,31 @@ step4_server <- function(input, output, session, state) {
           0.10,
           detail = "Rendering plots, tables, and report (this may take a while)..."
         )
-        # Without grade_args, the analysis.R written into every bundle renders
-        # each grade_meta() argument the app supplied as its template default
-        # - `small_values = NULL` among them, even though Step 2 now REQUIRES
-        # the reviewer to answer it - so the "reproducible" script did not
-        # reproduce the rating it shipped with. The specs are built beside the
-        # grade_meta() call that used them and carried on the rated object
-        # (pma_grade_arg_specs(), ui_helpers.R).
-        grade_args <- attr(state$grade, PMA_GRADE_ARGS_ATTR, exact = TRUE)
 
-        # Footnotes the bundler cannot derive: the rare-event alert (computed
-        # from the same rates the SoF absolute columns rest on) and the
-        # not-implemented note shown under every on-screen table.
-        sof_notes <- c(
-          pma_rare_event_alert(
-            state$grade,
-            baseline_risk = if (isTRUE(state$display$convert)) {
-              state$display$baseline_risk
-            })$note,
-          PMA_SOF_LIMITATIONS_NOTE)
-
-        # export_bundle() is an S3 generic as of pmatools 0.5.0 and its first
-        # formal is 'x'; pass the meta object positionally.
+        # One pmatools_set for every outcome, so the ZIP gets the combined
+        # Summary of Findings at its root and one outcomes/NN_name/ directory
+        # per outcome. The per-outcome display arguments, the grade_meta()
+        # specs the bundled analysis.R is rendered from and the data each
+        # outcome was rated on all travel ON the outcomes (see
+        # pma_export_set(), ui_helpers.R): read from the live state here they
+        # would describe whichever outcome is on screen.
         out <- export_bundle(
-          state$ma,
-          grade        = state$grade,
-          grade_args   = grade_args,
+          pma_export_set(outs, primary = state$sof_primary),
           output_dir   = tmp_dir,
           bundle_name  = input$bundle_name %||% "pmatools_results",
           include      = include,
-          # Same Core GRADE 6 layout, follow-up line and footnotes as the
-          # on-screen table (pmatools >= 0.5.1); the bundler writes
-          # grade_table.docx and sof_table.docx itself, and the analysis.R it
-          # generates reproduces exactly what it wrote.
+          # Same Core GRADE 6 layout and footnotes as the combined table on
+          # this page; the bundler writes summary_of_findings.docx itself, and
+          # the analysis.R it generates reproduces exactly what it wrote.
           style        = PMA_SOF_STYLE,
-          follow_up    = state$display$follow_up,
-          unit         = state$display$unit,
-          sof_notes    = sof_notes,
-          per          = state$display$per             %||% 1000,
-          prediction   = state$display$prediction      %||% FALSE,
-          convert_smd_to_or = state$display$convert    %||% FALSE,
-          baseline_risk     = state$display$baseline_risk,
-          threshold_label   = state$display$threshold_label,
-          chinn_invert      = isTRUE(state$display$chinn_invert),
-          other_text         = state$display$other_text,
-          other_downgrade    = state$display$other_downgrade %||% 0L,
-          data               = state$data,
-          forest_display     = state$display$forest_step2,
-          rob                = rob_vec,
-          forest_display_rob = state$display$forest_rob,
-          rare               = if (isTRUE(state$rare_mode_active)) state$rare else NULL,
-          rare_forest_display = state$display$forest_step2,
-          pubias_missing_df  = state$pubias_missing
+          sof_notes    = .export_sof_notes(outs),
+          per          = state$display$per        %||% 1000,
+          prediction   = state$display$prediction %||% FALSE,
+          rob          = .export_rob(outs),
+          label_intervention = arms$intervention,
+          label_control      = arms$control
         )
         shiny::incProgress(0.75, detail = "Packaging ZIP...")
-        # Multi-outcome SoF: added to the archive after export_bundle() has
-        # built it. Additive - the single-outcome Evidence Profile and SoF
-        # docx above are untouched.
-        if ("sof_combined" %in% include) {
-          shiny::incProgress(0.02, detail = "Adding combined SoF table...")
-          .append_combined_sof(out)
-        }
         file.copy(out, file)
         shiny::incProgress(0.08, detail = "Done.")
       },

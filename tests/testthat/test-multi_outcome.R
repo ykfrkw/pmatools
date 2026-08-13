@@ -678,3 +678,190 @@ test_that("export_bundle on a single pmatools object produces the same flat ZIP"
 
   expect_error(export_bundle(data.frame(x = 1)), regexp = "must be a meta object")
 })
+
+# --------------------------------------------------------------------------
+# 14. Small-study diagnostics, per outcome
+# --------------------------------------------------------------------------
+
+# Ten studies per outcome, which is what both small-study diagnostics need
+# before they will draw anything.
+wide_data <- function() {
+  st  <- sprintf("Study %02d", 1:10)
+  rob <- rep("no", length(st))
+  raw <- rbind(
+    bin_rows("Mortality", st,
+             c(10, 12, 8, 15, 9, 11, 13, 7, 14, 10), rep(100, 10),
+             c(18, 20, 15, 25, 17, 19, 21, 14, 24, 18), rep(100, 10), rob),
+    bin_rows("Serious adverse events", st,
+             c(3, 4, 2, 5, 3, 4, 3, 2, 5, 4), rep(100, 10),
+             c(2, 3, 2, 4, 2, 3, 2, 2, 4, 3), rep(100, 10), rob)
+  )
+  suppressMessages(ingest_data(raw, format = "long"))
+}
+
+test_that("funnel_trimfill and pubias_missing_forest are written per outcome", {
+  ml  <- quiet_ma_multi(wide_data(), sm = "OR")
+  set <- quiet_grade_multi(
+    ml, common = list(study_design = "RCT", threshold_type = "null",
+                      indirectness = "no", small_values = "undesirable"))
+  out_dir <- tempfile(); dir.create(out_dir)
+  zip_path <- suppressWarnings(
+    export_bundle(set, output_dir = out_dir, bundle_name = "smallstudy",
+                  include = c("funnel_trimfill", "pubias_missing_forest")))
+  files <- zip::zip_list(zip_path)$filename
+
+  for (d in c("outcomes/01_mortality", "outcomes/02_serious_adverse_events")) {
+    expect_true(paste0(d, "/funnel_trimfill.pdf") %in% files, info = d)
+    expect_true(paste0(d, "/pubias_missing_forest.pdf") %in% files, info = d)
+  }
+  # Both diagnose one analysis, so neither belongs at the top level.
+  expect_false("funnel_trimfill.pdf" %in% files)
+  expect_false("pubias_missing_forest.pdf" %in% files)
+})
+
+test_that("the small-study diagnostics stay out of an analysis too small for them", {
+  set <- make_set()   # five studies per outcome
+  out_dir <- tempfile(); dir.create(out_dir)
+  zip_path <- suppressWarnings(
+    export_bundle(set, output_dir = out_dir, bundle_name = "toosmall",
+                  include = c("results", "funnel_trimfill",
+                              "pubias_missing_forest")))
+  files <- zip::zip_list(zip_path)$filename
+  expect_false(any(grepl("funnel_trimfill", files)))
+  expect_false(any(grepl("pubias_missing_forest", files)))
+})
+
+# --------------------------------------------------------------------------
+# 15. Per-outcome display arguments
+# --------------------------------------------------------------------------
+
+test_that("the display attribute overrides the set-wide argument per outcome", {
+  set <- make_set()
+  g   <- set$outcomes[["Mortality"]]
+  attr(g, PMATOOLS_DISPLAY_ATTR) <- list(forest_display = list(title = "Mine"))
+  set$outcomes[["Mortality"]] <- g
+
+  expect_equal(.outcome_display(set$outcomes[["Mortality"]], "forest_display",
+                                list(title = "Set-wide")),
+               list(title = "Mine"))
+  # A field the outcome does not carry falls back to the set-wide argument.
+  expect_equal(.outcome_display(set$outcomes[["Mortality"]],
+                                "forest_display_rob", list(title = "Set-wide")),
+               list(title = "Set-wide"))
+  # As does an outcome carrying no attribute at all.
+  expect_equal(.outcome_display(set$outcomes[["Depression severity"]],
+                                "forest_display", list(title = "Set-wide")),
+               list(title = "Set-wide"))
+})
+
+test_that("an unknown display field aborts rather than being ignored", {
+  set <- make_set()
+  g   <- set$outcomes[["Mortality"]]
+  attr(g, PMATOOLS_DISPLAY_ATTR) <- list(forest_displey = list(title = "Typo"))
+  set$outcomes[["Mortality"]] <- g
+
+  out_dir <- tempfile(); dir.create(out_dir)
+  expect_error(
+    suppressWarnings(
+      export_bundle(set, output_dir = out_dir, bundle_name = "typo",
+                    include = c("forest"))),
+    regexp = "forest_displey"
+  )
+})
+
+test_that("rare-event artifacts land in the directory of the outcome that has them", {
+  skip_if_not_installed("mmeta")
+  skip_if_not_installed("BiasedUrn")
+  rare_d <- suppressMessages(ingest_data(
+    system.file("extdata", "rare_events_mock.csv", package = "pmatools"),
+    format = "long"))
+  rare <- suppressWarnings(run_rare_ma(rare_d, effect_scale = "OR"))
+
+  set <- make_set()
+  g   <- set$outcomes[["Serious adverse events"]]
+  attr(g, PMATOOLS_DISPLAY_ATTR) <- list(rare = rare)
+  set$outcomes[["Serious adverse events"]] <- g
+
+  out_dir <- tempfile(); dir.create(out_dir)
+  zip_path <- suppressWarnings(
+    export_bundle(set, output_dir = out_dir, bundle_name = "rare",
+                  include = c("results")))
+  files <- zip::zip_list(zip_path)$filename
+
+  for (stem in c("rare_event_diagnostics.csv", "rare_event_method_table.csv",
+                 "rare_event_method_forest.pdf")) {
+    expect_true(paste0("outcomes/03_serious_adverse_events/", stem) %in% files,
+                info = stem)
+    expect_false(paste0("outcomes/01_mortality/", stem) %in% files, info = stem)
+    expect_false(stem %in% files, info = stem)
+  }
+
+  # And the script re-runs that outcome the way it was actually pooled: left to
+  # run_ma_multi() it would come back as an ordinary meta-analysis, minus the
+  # double-zero studies, without saying so.
+  zip_script <- suppressWarnings(
+    export_bundle(set, output_dir = out_dir, bundle_name = "rare_script",
+                  include = c("script")))
+  ex <- tempfile(); dir.create(ex)
+  zip::unzip(zip_script, exdir = ex)
+  script <- paste(readLines(file.path(ex, "analysis.R"), warn = FALSE),
+                  collapse = "\n")
+  expect_match(script, "run_rare_ma(", fixed = TRUE)
+  expect_match(script, 'ma_list[["Serious adverse events"]] <- rare_03$primary',
+               fixed = TRUE)
+  # Only that outcome: the other two were pooled with run_ma().
+  expect_equal(lengths(regmatches(script, gregexpr("run_rare_ma(", script,
+                                                   fixed = TRUE))), 1L)
+})
+
+test_that("an outcome's own Other considerations note beats the set-wide one", {
+  g <- make_set()$outcomes[["Mortality"]]
+  expect_equal(.other_text(g, "Set-wide"), "Set-wide")
+  expect_equal(.other_downgrade(g, -1L), -1L)
+
+  g$other_text      <- "Funded by the manufacturer."
+  g$other_downgrade <- -2L
+  expect_equal(.other_text(g, "Set-wide"), "Funded by the manufacturer.")
+  expect_equal(.other_downgrade(g, 0L), -2L)
+
+  # Blank is not an answer: an empty box must not silence the set-wide note.
+  g$other_text <- "   "
+  expect_equal(.other_text(g, "Set-wide"), "Set-wide")
+})
+
+# --------------------------------------------------------------------------
+# 16. One outcome has the same shape as many
+# --------------------------------------------------------------------------
+
+test_that("a one-element set produces the same tree shape as an N-element one", {
+  three <- make_set()
+  one   <- .new_pmatools_set(
+    outcomes    = three$outcomes["Mortality"],
+    order       = "Mortality",
+    primary     = "Mortality",
+    data        = three$data,
+    ma_args     = three$ma_args,
+    common      = three$common,
+    per_outcome = three$per_outcome,
+    grade_args  = three$grade_args["Mortality"]
+  )
+
+  layout <- function(set, nm) {
+    out_dir <- tempfile(); dir.create(out_dir)
+    zip_path <- suppressWarnings(
+      export_bundle(set, output_dir = out_dir, bundle_name = nm))
+    files <- zip::zip_list(zip_path)$filename
+    list(top   = sort(files[!grepl("^outcomes/", files)]),
+         first = sort(basename(files[grepl("^outcomes/01_mortality/", files)])))
+  }
+
+  one_files   <- layout(one,   "one")
+  three_files <- layout(three, "three")
+
+  # A single-outcome bundle is the multi-outcome layout with one directory in
+  # it, not a second layout that names the same table something else.
+  expect_equal(one_files$top,   three_files$top)
+  expect_equal(one_files$first, three_files$first)
+  expect_true("summary_of_findings.docx" %in% one_files$top)
+  expect_true("forest_plot.pdf" %in% one_files$first)
+})

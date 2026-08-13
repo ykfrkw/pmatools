@@ -979,34 +979,93 @@ did as page text.
 
 #### 3.5.2 Inputs
 
-- `textInput("bundle_name", "Bundle name", value = "pmatools_results")`
-- `checkboxGroupInput("include", "Include in bundle", choices = c("Long-format CSV" = "data", "R script" = "script", "Results text" = "results", "Forest plot" = "forest", "Funnel plot" = "funnel", "GRADE table (docx)" = "grade_table", "GRADE appendix (docx)" = "grade_appendix"), selected = all)`
+- `textInput("bundle_name", "Bundle name (no extension)", value = "pmatools_results")`
+- `checkboxGroupInput("include", "Artifacts to include", ...)`, all selected by default
 - `downloadButton("download_zip", "Download ZIP", class = "btn-primary")`
 
-Below: individual download buttons for each artifact (forest.pdf, funnel.pdf, grade_appendix.docx) for users who want them separately.
+The checkbox **values are `export_bundle.pmatools_set()`'s `include` vocabulary,
+verbatim** — `data`, `script`, `results`, `forest`, `forest_full`, `forest_rob`,
+`funnel`, `funnel_trimfill`, `pubias_missing_forest`, `sof`,
+`evidence_profile`, `indirectness`, `readme` (`PMA_EXPORT_INCLUDE_DEFAULT`,
+`R/step4_export.R`). Only the labels are the app's. Translating the values in
+the download handler would hide from the next reader of either side which
+artifact each box controls, and that is how the app's old `grade_table` /
+`sof_combined` values drifted away from what the bundler accepted.
 
 #### 3.5.3 Server logic
+
+The bundle is **always** built from a `pmatools_set`, even when there is one
+outcome, so the ZIP has one layout: the combined Summary of Findings at the
+root and one `outcomes/NN_name/` directory per outcome (SPEC.md §4.8.3).
 
 ```r
 output$download_zip <- downloadHandler(
   filename = function() paste0(input$bundle_name, ".zip"),
   content  = function(file) {
-    out <- pmatools::export_bundle(
-      ma          = state$ma,
-      grade       = state$grade,
-      output_dir  = tempdir(),
-      bundle_name = input$bundle_name,
-      include     = input$include,
-      per         = state$display$per,
-      prediction  = state$display$prediction,
-      convert_smd_to_or = state$display$convert,
-      baseline_risk     = state$display$baseline_risk,
-      threshold_label   = state$display$threshold_label
+    out <- export_bundle(
+      pma_export_set(.export_outcomes(), primary = state$sof_primary),
+      output_dir   = tmp_dir,
+      bundle_name  = input$bundle_name,
+      include      = input$include,
+      style        = PMA_SOF_STYLE,
+      sof_notes    = .export_sof_notes(outs),
+      per          = state$display$per,
+      prediction   = state$display$prediction,
+      rob          = .export_rob(outs),
+      label_intervention = arms$intervention,
+      label_control      = arms$control
     )
     file.copy(out, file)
   }
 )
 ```
+
+Everything else the bundler needs is **per outcome**, and travels on the rated
+object rather than being read from the live state at download time — which
+describes whichever outcome is on screen, not the ones banked before it. Two
+attributes carry it, stamped together by `pma_bank_export_material()` when
+Step 3 banks an outcome:
+
+| attribute | written by | read by |
+|---|---|---|
+| `pmatools_display` | `pma_outcome_display()` | `export_bundle.pmatools_set()`: `forest_display`, `forest_display_rob`, `rare`, `rare_forest_display`, `pubias_missing_df` (SPEC.md §4.8.3) |
+| `pma_outcome_source` | `pma_outcome_source()` | the app itself: the data the outcome was rated on and the arm values it was pooled with |
+
+`pma_export_set()` (`R/ui_helpers.R`) assembles the set from the banked
+outcomes:
+
+- **`data`** is every outcome's own data, bound row-wise with an `outcome`
+  column naming the outcome (`pma_export_data()`). A review whose outcomes came
+  from separate files therefore exports one `data_long.csv` that
+  `run_ma_multi()` can split back apart. An `outcome` column already in the
+  data is overwritten: there it names the measurement scale within one
+  analysis, here it has to name the analysis. The `treat` column is rewritten
+  to `experimental` / `control` using the arm values that outcome was pooled
+  with, keeping the reviewer's own words in `treat_label`
+  (`pma_name_arms()`). Which arm is which is a per-outcome answer and
+  `run_ma_multi()` takes one `experimental_label` for the whole set, so two
+  outcomes loaded from different files would otherwise fight over it — and
+  losing that argument does not merely relabel a column, it inverts the pooled
+  effect and every judgment that reads its direction.
+- **`ma_args`** carries `sm` and `outcome_type` per outcome and the `run_ma()`
+  settings the outcomes agree on (`method.tau`, `random`, `common`, `incr`,
+  `hakn`, the arm labels). A setting they disagree about is omitted rather
+  than claimed for all of them, because `run_ma_multi()` applies its `...` to
+  every outcome.
+- **`per_outcome`** is each outcome's `grade_meta()` argument specs
+  (`PMA_GRADE_ARGS_ATTR`), plus what the multi-outcome `analysis.R` template
+  cannot recover from the rated object the way the single-outcome one does:
+  `study_design`, `outcome_type`, `threshold_type`, `follow_up`, `unit`, and —
+  where they apply — `require_threshold`, `rob_refit`, `baseline_risk`. Without
+  `threshold_type` the regenerated call does not merely reproduce a different
+  rating, it aborts on the Core GRADE 2 entry gate.
+- **`common`** is empty: two outcomes rated in separate passes share no
+  argument by construction.
+
+With **no** banked outcomes the set holds the rating currently on screen. Step 3
+banks an outcome once every domain is confirmed *and* it has a name, while the
+download unlocks on the domains alone, so an unnamed outcome can reach the
+button with nothing banked.
 
 #### 3.5.4 "How to cite this analysis" expandable
 

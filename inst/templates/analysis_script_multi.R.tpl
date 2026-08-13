@@ -22,7 +22,7 @@ ma_list <- run_ma_multi(
   sm           = {{sm_arg}},
   outcome_type = {{outcome_type_arg}}{{ma_extra_args}}
 )
-
+{{rare_block}}
 # ----- 3. GRADE certainty assessment, one per outcome -----
 set <- grade_meta_multi(
   ma_list,

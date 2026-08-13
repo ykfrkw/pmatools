@@ -859,13 +859,18 @@ export_bundle(
   output_dir  = ".",
   bundle_name = "pmatools_results",
   include     = c("data", "script", "results", "forest", "forest_full",
-                  "forest_rob", "funnel", "sof", "evidence_profile",
+                  "forest_rob", "funnel", "funnel_trimfill",
+                  "pubias_missing_forest", "sof", "evidence_profile",
                   "indirectness", "readme"),
   style       = c("bmj", "gradepro"),      # as of v0.5.1 the meta method matches this default
   per         = 1000,
   prediction  = FALSE,
   rob         = NULL,                      # named list by outcome, or one vector for all
-  forest_display  = NULL,
+  forest_display      = NULL,
+  forest_display_rob  = NULL,
+  rare                = NULL,              # pma_rare_meta from run_rare_ma()
+  rare_forest_display = NULL,
+  pubias_missing_df   = NULL,
   other_text      = NULL,
   other_downgrade = 0L,
   label_intervention = "intervention",
@@ -890,14 +895,31 @@ export_bundle(
     │   ├── forest_plot_full.pdf            only when a low-RoB refit happened
     │   ├── forest_plot_rob.pdf             only when RoB labels are known
     │   ├── funnel_plot.pdf
+    │   ├── funnel_trimfill.pdf             "funnel_trimfill"; only when k >= 10
+    │   ├── pubias_missing_forest.pdf       "pubias_missing_forest"; only when k >= 10
     │   ├── results.txt
     │   ├── data_long.csv                   this outcome only
     │   ├── evidence_profile.docx
-    │   └── indirectness_table.docx         only when subdomains were recorded
+    │   ├── indirectness_table.docx         only when subdomains were recorded
+    │   ├── rare_event_diagnostics.csv      when this outcome carries a `rare` fit
+    │   ├── rare_event_method_table.csv     "
+    │   └── rare_event_method_forest.pdf    "
     └── 02_<slug>/ ...
 ```
 
 Directory names carry the set order as a zero-padded numeric prefix. A non-ASCII outcome name falls back to `outcome_NN`, so the ZIP stays portable.
+
+**A one-outcome set gets the same tree**, with a single `outcomes/01_<slug>/`. There is no flat fallback: the layout a reader learns from one bundle is the layout of the next.
+
+**Per-outcome display arguments [v0.5.1].** `rob`, `forest_display`, `forest_display_rob`, `rare`, `rare_forest_display` and `pubias_missing_df` describe **one analysis**. A set built by `grade_meta_multi()` in one call can answer for all of them at once; a set assembled outcome by outcome (which is what the Shiny app does) cannot. Such a caller attaches them to each rated object as the `"pmatools_display"` attribute — a named list holding any of `forest_display`, `forest_display_rob`, `rare`, `rare_forest_display`, `pubias_missing_df` — and this method reads them per outcome, falling back to the argument of the same name for an outcome that carries none. The same arrangement already lets `follow_up` / `unit` differ per row (§4.6, `.display_arg_from_outcomes()`).
+
+An unrecognised name in the attribute **aborts**, and so does an attribute that is not a fully named list. A misspelt field is read by nothing, so the artifact it was meant to shape would be written as if it had never been supplied — the same silent-drop failure `grade_args` name checking exists to prevent (§4.8.1).
+
+`other_text` / `other_downgrade` follow the same rule without an attribute: an outcome carrying its own `$other_text` (a non-blank single string) or `$other_downgrade` uses it for its own evidence profile, in the per-outcome directory and in the combined `evidence_profile.docx`, and the set-wide argument applies only to the outcomes that carry none.
+
+**Rare-event artifacts are gated on the outcome having a `rare` fit, not on `include`** — the same rule as the flat layout. `include` cannot answer "were this outcome's events rare enough to have been re-analysed?".
+
+The generated `analysis.R` gains a `# ----- 2b. Rare-events outcomes -----` block for each such outcome: it re-runs `run_rare_ma()` on that outcome's rows and substitutes the primary fit into `ma_list` before anything is rated. `run_ma_multi()` pools with `run_ma()`, which drops a double-zero study, so without the block the script would silently rate a different analysis than the one in the bundle. The block is absent from a set with no rare outcome, so an ordinary bundle's script is byte-for-byte what it was.
 
 **`analysis.R` template** (rendered via `glue` from `inst/templates/analysis_script.R.tpl`; the multi-outcome bundle uses `inst/templates/analysis_script_multi.R.tpl`, which re-issues the `run_ma_multi()` / `grade_meta_multi()` / `reorder_outcomes()` / `set_primary()` calls with the arguments actually used).
 

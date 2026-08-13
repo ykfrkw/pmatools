@@ -22,6 +22,53 @@
 PMATOOLS_DISPLAY_ARGS <- c("follow_up", "unit")
 
 # --------------------------------------------------------------------------
+# Per-outcome export display arguments
+# --------------------------------------------------------------------------
+# export_bundle.pmatools_set() takes one display argument for the whole set,
+# which is right for a set built in one grade_meta_multi() call and wrong for
+# one assembled outcome by outcome: the forest labels, the rare-event analysis
+# and the list of studies whose results are unavailable all belong to a single
+# outcome. Such a caller attaches them to the rated object as this attribute,
+# the way follow_up / unit ride on the object for grade_table() to read back
+# (.display_arg_from_outcomes(), grade_table.R).
+PMATOOLS_DISPLAY_ATTR <- "pmatools_display"
+
+# The names the attribute may carry, each the export_bundle.pmatools_set()
+# argument of the same name.
+PMATOOLS_DISPLAY_ATTR_FIELDS <- c("forest_display", "forest_display_rob",
+                                  "rare", "rare_forest_display",
+                                  "pubias_missing_df")
+
+# One per-outcome display argument, falling back to the set-wide argument.
+.outcome_display <- function(g, field, fallback = NULL) {
+  d <- attr(g, PMATOOLS_DISPLAY_ATTR, exact = TRUE)
+  if (!is.list(d)) return(fallback)
+  d[[field, exact = TRUE]] %||% fallback
+}
+
+# A misspelt field would be silently ignored, and the bundle would then ship a
+# forest plot without the labels the caller asked for - the same failure
+# .check_grade_arg_names() exists to prevent for the generated script.
+.check_outcome_display <- function(g, nm) {
+  d <- attr(g, PMATOOLS_DISPLAY_ATTR, exact = TRUE)
+  if (is.null(d)) return(invisible(TRUE))
+  if (!is.list(d) || is.null(names(d)) || !all(nzchar(names(d)))) {
+    rlang::abort(sprintf(paste0(
+      "The '%s' attribute of outcome '%s' must be a fully named list. Legal ",
+      "names are: %s."), PMATOOLS_DISPLAY_ATTR, nm,
+      paste(PMATOOLS_DISPLAY_ATTR_FIELDS, collapse = ", ")))
+  }
+  bad <- setdiff(names(d), PMATOOLS_DISPLAY_ATTR_FIELDS)
+  if (length(bad) == 0L) return(invisible(TRUE))
+  rlang::abort(sprintf(paste0(
+    "Unknown '%s' name(s) on outcome '%s': %s. Legal names are: %s. An ",
+    "unrecognised name is read by nothing, so the artifact it was meant to ",
+    "shape would be written as if it had never been supplied."),
+    PMATOOLS_DISPLAY_ATTR, nm, paste(bad, collapse = ", "),
+    paste(PMATOOLS_DISPLAY_ATTR_FIELDS, collapse = ", ")))
+}
+
+# --------------------------------------------------------------------------
 # Meta-analysis, one per outcome
 # --------------------------------------------------------------------------
 

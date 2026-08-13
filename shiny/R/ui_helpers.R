@@ -266,6 +266,235 @@ pma_upsert_outcome <- function(outcomes, name, g, uid = NULL) {
   outcomes
 }
 
+# ----- Per-outcome export material ----------------------------------------
+# The ZIP is built from a pmatools_set, so everything export_bundle() needs
+# about ONE outcome has to travel on that outcome rather than being read off
+# the live Step 2 / Step 3 fields at download time - which describe whichever
+# outcome is on screen, not the three banked before it. Two attributes carry
+# it, split by who reads them:
+#
+#   PMATOOLS_DISPLAY_ATTR   a pmatools contract: the display arguments
+#                           export_bundle.pmatools_set() reads per outcome.
+#   PMA_OUTCOME_SOURCE_ATTR the app's own: what it needs to rebuild a set that
+#                           can be re-run, i.e. the data the outcome was rated
+#                           on and the arm labels it was pooled with.
+PMA_OUTCOME_SOURCE_ATTR <- "pma_outcome_source"
+
+# The pmatools_display attribute for the outcome being banked. Only the
+# arguments that describe THIS analysis: `per`, `prediction` and the SoF
+# presentation settings are properties of the table, and the bundler takes
+# those once for the whole set.
+pma_outcome_display <- function(display = list(), pubias_missing = NULL,
+                                rare = NULL) {
+  display <- display %||% list()
+  out <- list(
+    forest_display      = display$forest_step2,
+    forest_display_rob  = display$forest_rob,
+    rare                = rare,
+    rare_forest_display = display$forest_step2,
+    pubias_missing_df   = pubias_missing
+  )
+  out[!vapply(out, is.null, logical(1))]
+}
+
+pma_outcome_source <- function(data = NULL, experimental_label = NULL,
+                               control_label = NULL) {
+  list(data = data,
+       experimental_label = experimental_label,
+       control_label      = control_label)
+}
+
+# Stamp both attributes onto the object about to be banked. One call so the
+# two can never be written apart.
+pma_bank_export_material <- function(g, display = list(),
+                                     pubias_missing = NULL, rare = NULL,
+                                     data = NULL,
+                                     experimental_label = NULL,
+                                     control_label = NULL) {
+  attr(g, PMATOOLS_DISPLAY_ATTR) <- pma_outcome_display(
+    display = display, pubias_missing = pubias_missing, rare = rare)
+  attr(g, PMA_OUTCOME_SOURCE_ATTR) <- pma_outcome_source(
+    data = data, experimental_label = experimental_label,
+    control_label = control_label)
+  g
+}
+
+# ----- Rebuilding a pmatools_set from the banked outcomes ------------------
+
+# Long-format data covering every banked outcome, which is what the bundled
+# analysis.R re-ingests and splits with run_ma_multi(). Each outcome brings the
+# dataset it was rated on and contributes it under its own name, so a review
+# whose outcomes came from separate files still exports one data_long.csv that
+# reproduces all of them. An `outcome` column already in the data is
+# overwritten: it describes the measurement scale within one analysis, and here
+# the column has to name the analysis.
+pma_export_data <- function(outcomes) {
+  outcomes <- pma_outcomes_list(outcomes)
+  if (length(outcomes) == 0L) return(NULL)
+  frames <- list()
+  for (nm in names(outcomes)) {
+    src <- attr(outcomes[[nm]], PMA_OUTCOME_SOURCE_ATTR, exact = TRUE)
+    d   <- if (is.list(src)) src$data else NULL
+    if (!is.data.frame(d) || nrow(d) == 0L) next
+    d <- pma_name_arms(d, src$experimental_label, src$control_label)
+    d$outcome <- nm
+    frames[[nm]] <- d
+  }
+  if (length(frames) == 0L) return(NULL)
+  pma_bind_rows_union(frames)
+}
+
+# Which arm is which is a per-outcome answer - the reviewer picks it from the
+# values of THIS outcome's data - and `run_ma_multi()` takes one
+# experimental_label for every outcome. Rather than let two outcomes with
+# different arm values fight over that one argument, the exported data says
+# which arm is which in the column itself, which is also what run_ma() falls
+# back to. Getting this wrong is not a cosmetic difference: the pooled effect
+# comes back inverted and every judgment that reads its direction with it.
+#
+# The reviewer's own words for the arms are kept in `treat_label`, so nothing
+# the dataset said is lost.
+pma_name_arms <- function(data, experimental_label = NULL,
+                          control_label = NULL) {
+  usable <- function(v) {
+    !is.null(v) && length(v) == 1L && !is.na(v) && nzchar(v)
+  }
+  if (!usable(experimental_label) || !usable(control_label)) return(data)
+  if (!"treat" %in% names(data)) return(data)
+  arms <- as.character(data$treat)
+  if (!all(c(experimental_label, control_label) %in% arms)) return(data)
+  data$treat_label <- arms
+  arms[arms == experimental_label] <- "experimental"
+  arms[arms == control_label]      <- "control"
+  data$treat <- arms
+  data
+}
+
+# rbind over frames whose columns need not match: two outcomes can come from
+# datasets that carry different optional columns (one has `rob`, one does not),
+# and dropping to the intersection would throw away the very column the rating
+# was made from.
+pma_bind_rows_union <- function(frames) {
+  cols <- unique(unlist(lapply(frames, names), use.names = FALSE))
+  frames <- lapply(frames, function(d) {
+    for (missing_col in setdiff(cols, names(d))) d[[missing_col]] <- NA
+    d[, cols, drop = FALSE]
+  })
+  do.call(rbind, c(frames, list(stringsAsFactors = FALSE,
+                                make.row.names = FALSE)))
+}
+
+# run_ma() settings for the bundled analysis.R, keyed by outcome where they can
+# differ and passed once where they cannot. run_ma_multi() applies its `...` to
+# every outcome, so a setting the outcomes disagree about is omitted and the
+# script falls back to run_ma()'s own default rather than claiming a value that
+# was true for only some of them.
+PMA_MA_UNIFORM_ARGS <- c("method.tau", "random", "common", "incr")
+
+pma_set_ma_args <- function(outcomes) {
+  outcomes <- pma_outcomes_list(outcomes)
+  per_outcome_value <- function(f) {
+    out <- lapply(outcomes, f)
+    out[!vapply(out, is.null, logical(1))]
+  }
+  list(
+    outcomes     = names(outcomes),
+    sm           = per_outcome_value(function(g) g$meta$sm),
+    outcome_type = per_outcome_value(function(g) {
+      if (!is.null(g$meta$event.e)) "binary" else "continuous"
+    }),
+    dots = pma_uniform_ma_dots(outcomes)
+  )
+}
+
+pma_uniform_ma_dots <- function(outcomes) {
+  uniform <- function(values) {
+    values <- values[!vapply(values, is.null, logical(1))]
+    if (!length(values)) return(NULL)
+    if (length(unique(values)) != 1L) return(NULL)
+    values[[1]]
+  }
+  dots <- list()
+  for (arg in PMA_MA_UNIFORM_ARGS) {
+    v <- uniform(lapply(outcomes, function(g) g$meta[[arg]]))
+    if (!is.null(v)) dots[[arg]] <- v
+  }
+  # hakn is `method.random.ci` on the fitted object; run_ma() takes the flag.
+  hk <- uniform(lapply(outcomes, function(g) {
+    identical(g$meta$method.random.ci %||% "classic", "HK")
+  }))
+  if (!is.null(hk)) dots$hakn <- hk
+  # No arm labels here on purpose: they are the one setting that cannot be
+  # left to a set-wide default, so the exported data names the arms instead
+  # (pma_name_arms()).
+  dots
+}
+
+# grade_meta() arguments for one outcome, as the bundled multi-outcome
+# analysis.R renders them. The single-outcome template recovers the arguments
+# it is not given from the rated object; the multi-outcome one renders the
+# grade_meta_multi(per_outcome = ) list and nothing else, so an argument
+# missing here comes back as grade_meta()'s default - and for threshold_type
+# that is not a different rating but an abort on the Core GRADE 2 entry gate.
+pma_outcome_grade_args <- function(g) {
+  # Exact lookups throughout: `$` partial-matches, and `threshold` is a prefix
+  # of four other fields of a rated object, so `g$threshold` on an outcome
+  # rated without a MID answers with whichever of them is unambiguous.
+  field <- function(nm) g[[nm, exact = TRUE]]
+  recovered <- list(
+    study_design   = field("study_design"),
+    outcome_type   = field("outcome_type"),
+    threshold_type = field("threshold_type"),
+    follow_up      = field("follow_up"),
+    unit           = field("unit")
+  )
+  # The reviewer rated without a MID on purpose; re-running under the gate's
+  # default would abort instead of reproducing that decision.
+  if (identical(field("threshold_type"), "mid") &&
+      is.null(field("threshold"))) {
+    recovered$require_threshold <- FALSE
+  }
+  # The low-RoB refit was offered and declined: without this the script refits
+  # and reports pooled numbers the rating was not made on.
+  if (identical(field("rob_analysis_set"), "low_only") &&
+      !isTRUE(field("rob_refit"))) {
+    recovered$rob_refit <- FALSE
+  }
+  if (!is.null(field("baseline_risk"))) {
+    recovered$baseline_risk <- field("baseline_risk")
+  }
+  recovered <- recovered[!vapply(recovered, is.null, logical(1))]
+  # The specs win: they are the arguments the app actually passed, recorded
+  # beside the grade_meta() call that used them.
+  utils::modifyList(recovered,
+                    attr(g, PMA_GRADE_ARGS_ATTR, exact = TRUE) %||% list())
+}
+
+# The pmatools_set the ZIP is built from. Always a set, even for one outcome:
+# the app ships one bundle layout, so a single-outcome download has the same
+# shape as a three-outcome one and a reader learns it once.
+pma_export_set <- function(outcomes, primary = character(0)) {
+  outcomes <- pma_outcomes_list(outcomes)
+  if (length(outcomes) == 0L) {
+    stop("pma_export_set: at least one rated outcome is required")
+  }
+  grade_args <- lapply(outcomes, pma_outcome_grade_args)
+  .new_pmatools_set(
+    outcomes    = outcomes,
+    order       = names(outcomes),
+    primary     = intersect(as.character(primary %||% character(0)),
+                            names(outcomes)),
+    data        = pma_export_data(outcomes),
+    ma_args     = pma_set_ma_args(outcomes),
+    # Every argument is per-outcome: two outcomes rated in separate passes
+    # share no argument by construction, so there is nothing `common` could
+    # hold that would not be a guess.
+    common      = list(),
+    per_outcome = grade_args,
+    grade_args  = grade_args
+  )
+}
+
 # ----- Dataset provenance guard -------------------------------------------
 # A saved outcome carries the signature of the dataset it was rated on, so
 # Step 3 / Step 4 can flag outcomes that came from a DIFFERENT dataset than

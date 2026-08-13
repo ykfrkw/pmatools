@@ -3954,6 +3954,19 @@ step3_server <- function(input, output, session, state) {
     # grade_table() labels rows by list name, so the object's own outcome_name
     # is aligned with the key for any downstream single-outcome use of it.
     g$outcome_name <- key
+    # Same reasoning one level up: the ZIP is built from every banked outcome
+    # at once, so the display arguments its plots are drawn with, and the data
+    # they were pooled from, have to travel on the outcome too. Read at
+    # download time they would all describe whichever outcome is on screen.
+    g <- pma_bank_export_material(g, display = state$display,
+                                  pubias_missing = state$pubias_missing,
+                                  rare = if (isTRUE(state$rare_mode_active))
+                                           state$rare,
+                                  data = state$data,
+                                  # state, not input: the Step 2 widgets are
+                                  # destroyed while Step 3 is on screen.
+                                  experimental_label = state$arm_e,
+                                  control_label      = state$arm_c)
     attr(g, PMA_SAVED_AT_ATTR) <- Sys.time()
     # Provenance stamp: which dataset this rating was made on.
     attr(g, PMA_DATASET_SIGNATURE_ATTR) <- pma_dataset_signature(state$data)

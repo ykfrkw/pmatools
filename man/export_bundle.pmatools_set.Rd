@@ -9,13 +9,18 @@
   output_dir = ".",
   bundle_name = "pmatools_results",
   include = c("data", "script", "results", "forest", "forest_full", "forest_rob",
-    "funnel", "sof", "evidence_profile", "indirectness", "readme"),
+    "funnel", "funnel_trimfill", "pubias_missing_forest", "sof", "evidence_profile",
+    "indirectness", "readme"),
   style = c("bmj", "gradepro"),
   sof_notes = NULL,
   per = 1000,
   prediction = FALSE,
   rob = NULL,
   forest_display = NULL,
+  forest_display_rob = NULL,
+  rare = NULL,
+  rare_forest_display = NULL,
+  pubias_missing_df = NULL,
   other_text = NULL,
   other_downgrade = 0L,
   label_intervention = "intervention",
@@ -32,7 +37,8 @@
 
 \item{include}{Which artifacts to include. Any of \code{"data"}, \code{"script"},
 \code{"results"}, \code{"forest"}, \code{"forest_full"}, \code{"forest_rob"}, \code{"funnel"},
-\code{"sof"}, \code{"evidence_profile"}, \code{"indirectness"}, \code{"readme"}.}
+\code{"funnel_trimfill"}, \code{"pubias_missing_forest"}, \code{"sof"},
+\code{"evidence_profile"}, \code{"indirectness"}, \code{"readme"}.}
 
 \item{style}{Summary-of-findings layout, \code{"bmj"} (default) or
 \code{"gradepro"}. Passed to \code{\link{grade_table}} for
@@ -56,6 +62,20 @@ for every outcome. Defaults to the \code{rob} column of the set's data.}
 
 \item{forest_display}{Optional named list of \code{\link{plot_forest}}
 display arguments applied to every outcome.}
+
+\item{forest_display_rob}{Optional named list of \code{\link{plot_forest}}
+display arguments for the RoB-stratified forest plot.}
+
+\item{rare}{Optional \code{pma_rare_meta} from \code{\link{run_rare_ma}};
+when supplied, each outcome's directory gets the rare-event diagnostics,
+the method table and the method-comparison forest plot.}
+
+\item{rare_forest_display}{Optional display arguments for
+\code{\link{plot_rare_sensitivity_forest}}.}
+
+\item{pubias_missing_df}{Optional data.frame of studies with unavailable
+results (columns \code{studlab}, \code{n}, \code{results_known}), forwarded to
+\code{\link{plot_forest_pubias_subgroup}}.}
 
 \item{other_text, other_downgrade}{Passed to \code{\link{evidence_profile}}.}
 
@@ -83,6 +103,20 @@ reaches the ZIP. It still occupies a row of \code{summary_of_findings.docx} / \c
 (certainty \code{"Not rated"}), a paragraph of \code{evidence_profile.docx}, and an
 \code{add_not_reported()} call in the generated \code{analysis.R}.
 }
+\section{Per-outcome display arguments}{
+
+\code{rob}, \code{forest_display}, \code{forest_display_rob}, \code{rare},
+\code{rare_forest_display} and \code{pubias_missing_df} describe one analysis, so a
+set assembled outcome by outcome has a different answer for each. Such a
+caller attaches the arguments to the rated object as the \code{"pmatools_display"}
+attribute — a named list holding any of \code{forest_display},
+\code{forest_display_rob}, \code{rare}, \code{rare_forest_display}, \code{pubias_missing_df} —
+and this function reads them per outcome, falling back to the arguments
+above where an outcome carries none. It is the same arrangement that lets
+\code{follow_up} / \code{unit} differ per row of the summary table. An unrecognised
+name in the attribute aborts rather than being ignored.
+}
+
 \seealso{
 \code{\link{export_bundle}} for the single-outcome layout.
 }
