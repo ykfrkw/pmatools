@@ -158,7 +158,7 @@ indirectness_table <- function(x, summary_text = NULL, ...) {
   ft <- flextable::merge_at(ft, i = 1:2, j = 2, part = "header")
   ft <- flextable::theme_vanilla(ft)
   ft <- flextable::fontsize(ft, size = 10, part = "all")
-  ft <- flextable::font(ft, fontname = "Arial", part = "all")
+  ft <- flextable::font(ft, fontname = .PMA_TABLE_FONT, part = "all")
 
   ft <- flextable::bg(ft,    bg = "#2C3E50", part = "header")
   ft <- flextable::color(ft, color = "white", part = "header")
@@ -227,8 +227,7 @@ indirectness_table <- function(x, summary_text = NULL, ...) {
       "outcomes'."
     )
   ))
-  ft <- flextable::fontsize(ft, size = 8, part = "footer")
-  ft <- flextable::color(ft, color = "#555555", part = "footer")
+  ft <- .style_table_footer(ft)
 
   ft
 }

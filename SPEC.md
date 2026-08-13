@@ -658,6 +658,10 @@ sof_table(
 
 **Not-reported outcomes.** `sof_table()` **aborts** on a `pmatools_not_reported` (§4.14) with a message pointing at `grade_table()`.
 
+**Table typography [v0.5.1].** Every flextable pmatools builds — `sof_table()` (both layouts), `grade_table()` (both layouts), `evidence_profile()`, `indirectness_table()` and the domain-detail table inside `grade_report()` — is set in one family, the internal constant `.PMA_TABLE_FONT` (`"Arial"`). Arial is chosen for the **document**: these tables are built to be dropped into a .docx, where a named face beats a stack the word processor cannot resolve. The Shiny app restyles the *screen* copy to the page font in CSS instead (`shiny/SPEC.md` §4.1); the exported document is unaffected.
+
+Footer notes are 8pt `#555555`, applied through `.style_table_footer()`. That helper re-applies the family as well as the size and colour, because `add_footer_lines()` creates its rows *after* `font(part = "all")` has run and a new row falls back to flextable's own default (Helvetica) rather than inheriting the table's — so a footer set before v0.5.1 rendered in a different face from the body it annotated. Host applications appending their own notes (`sof_add_notes()`, §4.8) go through the same helper and inherit the same guarantee.
+
 When `convert_smd_to_or = TRUE`:
 
 - Requires `x$outcome_type == "absolute"` and `x$meta$sm %in% c("SMD", "MD")` (MD must additionally have SD context, but spec accepts SMD as the canonical case).

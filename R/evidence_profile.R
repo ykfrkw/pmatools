@@ -169,7 +169,7 @@ evidence_profile <- function(grade,
   ft <- flextable::flextable(df)
   ft <- flextable::theme_vanilla(ft)
   ft <- flextable::fontsize(ft, size = 10, part = "all")
-  ft <- flextable::font(ft, fontname = "Arial", part = "all")
+  ft <- flextable::font(ft, fontname = .PMA_TABLE_FONT, part = "all")
 
   ft <- flextable::bg(ft,    bg    = "#2C3E50", part = "header")
   ft <- flextable::color(ft, color = "white",   part = "header")
@@ -217,8 +217,7 @@ evidence_profile <- function(grade,
     )
   )
 
-  ft <- flextable::fontsize(ft, size = 8,        part = "footer")
-  ft <- flextable::color(ft,    color = "#555555", part = "footer")
+  ft <- .style_table_footer(ft)
   ft
 }
 

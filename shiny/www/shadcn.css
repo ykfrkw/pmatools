@@ -10,7 +10,12 @@
   --secondary:                210 40% 96%;
   --secondary-foreground:     222 47% 11%;
   --muted:                    210 40% 96%;
-  --muted-foreground:         215 16% 47%;
+  /* Darkened one step from shadcn's 47%. Most of what this token colours is
+     set at 0.75-0.875rem -- captions, footnotes, step labels -- and 47% is
+     4.72:1 on white, an AA pass with nothing to spare. 40% is 6.08:1, and
+     close enough to the #555555 of the flextable footers that a note under a
+     table and a note inside it no longer read at different weights. */
+  --muted-foreground:         215 16% 40%;
   --accent:                   210 40% 96%;
   --accent-foreground:        222 47% 11%;
   --destructive:              0 84% 60%;
@@ -42,6 +47,19 @@ body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
 }
+
+/* flextable output (Evidence Profile, Summary of Findings, Indirectness).
+   The builders name Arial because these tables are made for the exported
+   .docx, where a word processor resolves a named face and not a CSS stack.
+   On screen that left an Arial table sitting in a system-ui page, so the
+   family -- and only the family -- is restyled back to the page font here.
+   flextable emits its per-cell styles as a <style> block inside .tabwid,
+   scoped to generated single-class selectors on the <span>s; the descendant
+   selector outranks those on specificity, so no !important is needed and the
+   sizes, colours and borders the builders set all still apply. */
+.tabwid table,
+.tabwid p,
+.tabwid span { font-family: var(--font-sans); }
 
 .container-fluid { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
 

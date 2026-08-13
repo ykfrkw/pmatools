@@ -920,7 +920,7 @@ phone scrolled the *whole page* sideways to read a paragraph. `.pma-card
   --secondary:             210 40% 96%;
   --secondary-foreground:  222 47% 11%;
   --muted:                 210 40% 96%;
-  --muted-foreground:      215 16% 47%;
+  --muted-foreground:      215 16% 40%;   /* v0.5.1: was 47% (4.72:1 on white) */
   --accent:                210 40% 96%;
   --accent-foreground:     222 47% 11%;
   --destructive:           0 84% 60%;
@@ -1023,7 +1023,39 @@ body {
 /* Inline help icon */
 .pma-help { color: hsl(var(--muted-foreground)); cursor: help; margin-left: 0.25rem; }
 .pma-help:hover { color: hsl(var(--foreground)); }
+
+/* flextable output: page font on screen, Arial in the .docx (v0.5.1) */
+.tabwid table,
+.tabwid p,
+.tabwid span { font-family: var(--font-sans); }
 ```
+
+**`--muted-foreground` is darker than shadcn's [v0.5.1].** `215 16% 40%`, not the
+`47%` this token carries upstream. Nearly everything it colours is set between
+0.75rem and 0.875rem — card subtitles, step labels, table captions, the help
+icon — and 47% is 4.72:1 on white, an AA pass with no margin at small sizes.
+40% is 6.08:1.
+
+**flextable output takes the page font [v0.5.1].** `pmatools` sets every table it
+builds in Arial (`SPEC.md` §4.6) because those tables exist to be dropped into a
+.docx, where a word processor resolves a named face and a CSS stack means
+nothing. On screen that put an Arial table inside a `var(--font-sans)` page, and
+the mismatch was plainest in the Summary of Findings preview. The rule above
+restyles the **family only**; the builders' sizes, colours, borders and column
+widths are untouched, so the exported document is unaffected.
+
+`flextable::htmltools_value()` wraps its output in `<div class="tabwid">` and
+emits a `<style>` block of generated `.cl-xxxxxxxx` selectors, one per distinct
+cell style, applied to the `<span>` inside each `<p>`. Those are single-class
+selectors, so the descendant selectors above outrank them and no `!important` is
+needed — the same reasoning as the `.pma-flowchart` rules in §3.4.12. The
+wrapper class name is flextable's, not this app's, and **has changed between
+flextable versions**: verify it against the rendered DOM before assuming this
+rule still bites.
+
+Note that `www/shadcn.css` is inlined by `htmltools::includeCSS()` when the UI
+object is built, so editing it requires restarting the Shiny process. A browser
+reload alone re-serves the old stylesheet.
 
 ### 4.2 bslib theme
 

@@ -209,7 +209,6 @@ step4_server <- function(input, output, session, state) {
     htmltools::tagList(
       lapply(combined_rare_alerts(), pma_rare_event_banner),
       pma_sof_scroller(body),
-      pma_sof_limitations_ui(),
       pma_saved_outcomes_ui(outs, delete_input_id = "outcome_delete",
                             signature = current_signature(),
                             primary = state$sof_primary)

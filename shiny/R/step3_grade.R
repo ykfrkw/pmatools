@@ -3735,8 +3735,7 @@ step3_server <- function(input, output, session, state) {
         tryCatch(flextable::htmltools_value(ft),
                  error = function(e)
                    htmltools::p(paste("SoF render error:",
-                                      conditionMessage(e))))),
-      pma_sof_limitations_ui()
+                                      conditionMessage(e)))))
     )
   })
   shiny::outputOptions(output, "sof_preview", suspendWhenHidden = FALSE)

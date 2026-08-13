@@ -380,6 +380,8 @@ grade_report <- function(outcomes,
     ft_detail <- flextable::flextable(detail_df)
     ft_detail <- flextable::theme_vanilla(ft_detail)
     ft_detail <- flextable::fontsize(ft_detail, size = 9, part = "all")
+    ft_detail <- flextable::font(ft_detail, fontname = .PMA_TABLE_FONT,
+                                 part = "all")
     ft_detail <- flextable::width(ft_detail, j = 1, width = 1.2)
     ft_detail <- flextable::width(ft_detail, j = 2, width = 1.0)
     ft_detail <- flextable::width(ft_detail, j = 3, width = 0.8)

@@ -369,7 +369,7 @@
 
   ft <- flextable::theme_vanilla(ft)
   ft <- flextable::fontsize(ft, size = 9, part = "all")
-  ft <- flextable::font(ft, fontname = "Arial", part = "all")
+  ft <- flextable::font(ft, fontname = .PMA_TABLE_FONT, part = "all")
   ft <- flextable::align(ft, align = "center", part = "header")
   ft <- flextable::align(ft, align = "left",   part = "body")
   ft <- flextable::align(ft, j = 2, align = "center", part = "body")
@@ -523,8 +523,7 @@
     ft <- flextable::add_footer_lines(ft, values = .bmj_plain_language_note())
   }
 
-  ft <- flextable::fontsize(ft, size = 8, part = "footer")
-  ft <- flextable::color(ft, color = "#555555", part = "footer")
+  ft <- .style_table_footer(ft)
   ft
 }
 
@@ -699,7 +698,6 @@
     ft <- flextable::add_footer_lines(ft, values = .bmj_plain_language_note())
   }
 
-  ft <- flextable::fontsize(ft, size = 8, part = "footer")
-  ft <- flextable::color(ft, color = "#555555", part = "footer")
+  ft <- .style_table_footer(ft)
   ft
 }

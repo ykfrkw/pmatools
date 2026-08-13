@@ -1806,9 +1806,9 @@ pma_rare_event_banner <- function(alert) {
 # left of two others: pmatools now fills the arm-level columns of a continuous
 # outcome from the control arms (but only when the analysis carries them), and
 # now footnotes the numbers behind a downgrade (but only for the three domains
-# that record them). Stated in the table footer and again under the table, so
-# a reader cannot take the table for a complete Core GRADE 6 summary of
-# findings.
+# that record them). It lives in the table footer only: a second copy used to
+# sit under the table as page text, which said the same thing twice in two
+# different fonts, and the footer is the copy that travels into the .docx.
 PMA_SOF_LIMITATIONS_NOTE <- paste0(
   "Not implemented in this table (Core GRADE 6 features pmatools does not yet ",
   "produce). \"Not reported\" rows: outcomes the evidence base did not ",
@@ -1835,25 +1835,6 @@ PMA_SOF_CER_EER_NOTE <- paste0(
   "doi:10.1136/bmjment-2023-300978)."
 )
 
-pma_sof_limitations_ui <- function() {
-  htmltools::div(
-    style = paste0(
-      "margin-top: 0.75rem; padding: 0.6rem 0.85rem; border-radius: 4px; ",
-      "border: 1px solid hsl(var(--border)); ",
-      "font-size: 0.82rem; color: hsl(var(--muted-foreground));"),
-    htmltools::strong("Not implemented in this table. "),
-    "Core GRADE 6 also asks for \"Not reported\" rows for outcomes the ",
-    "evidence base did not measure. Arm-level values for continuous outcomes ",
-    "are now reported, except where the analysis carries no arm-level means ",
-    "or uses a ratio-of-means measure. Per-domain footnotes now state what ",
-    "drove each downgrade for risk of bias, inconsistency and imprecision; a ",
-    "rated down indirectness or publication bias domain is still only named ",
-    "in the certainty cell, with its reasoning left in the Evidence Profile. ",
-    "The same statement is printed in the table footer, so it travels with ",
-    "the exported document."
-  )
-}
-
 # Append free-text footer lines to a Summary of Findings flextable, keeping
 # the footer styling the vendored builders apply. Used for the rare-event
 # caution and the limitations statement, so both reach the exported .docx.
@@ -1865,8 +1846,7 @@ pma_sof_add_notes <- function(ft, notes) {
   for (nt in notes) {
     ft <- flextable::add_footer_lines(ft, values = as.character(nt))
   }
-  ft <- flextable::fontsize(ft, size = 8, part = "footer")
-  ft <- flextable::color(ft, color = "#555555", part = "footer")
+  ft <- .style_table_footer(ft)
   ft
 }
 

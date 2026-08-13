@@ -240,7 +240,7 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
   ft <- flextable::set_header_labels(ft, .list = stats::setNames(as.list(headers), headers))
   ft <- flextable::theme_vanilla(ft)
   ft <- flextable::fontsize(ft, size = 10, part = "all")
-  ft <- flextable::font(ft, fontname = "Arial", part = "all")
+  ft <- flextable::font(ft, fontname = .PMA_TABLE_FONT, part = "all")
   ft <- flextable::align(ft, align = "center", part = "header")
   ft <- flextable::align(ft, align = "left",   part = "body")
   ft <- flextable::align(ft, j = 2, align = "center", part = "body")
@@ -337,8 +337,7 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
     ft <- flextable::add_footer_lines(ft, values = chinn_note)
   }
 
-  ft <- flextable::fontsize(ft, size = 8, part = "footer")
-  ft <- flextable::color(ft, color = "#555555", part = "footer")
+  ft <- .style_table_footer(ft)
 
   ft
 }
@@ -383,8 +382,7 @@ sof_add_notes <- function(x, notes) {
   # Re-applied over the whole footer, matching what sof_table() and
   # grade_table() do to their own footnotes, so appended lines cannot be told
   # apart from the built-in ones.
-  x <- flextable::fontsize(x, size = 8, part = "footer")
-  x <- flextable::color(x, color = "#555555", part = "footer")
+  x <- .style_table_footer(x)
   x
 }
 

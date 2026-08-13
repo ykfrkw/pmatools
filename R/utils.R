@@ -99,6 +99,25 @@ CERTAINTY_PALETTES <- list(
   )
 )
 
+# One family for every table this package builds, chosen for the .docx these
+# tables are made to be dropped into: a word processor resolves a named face,
+# not a CSS stack. The Shiny app restyles its on-screen copy in CSS instead of
+# changing this, so the exported document keeps the face it was designed for.
+.PMA_TABLE_FONT <- "Arial"
+
+# Footer notes: 8pt grey, and the same family as the body.
+#
+# The family has to be re-applied here rather than left to font(part = "all").
+# add_footer_lines() creates its rows AFTER that call has run, and a fresh row
+# takes flextable's own default (Helvetica) instead of inheriting the table's,
+# so every footer used to render in a different face from the body it annotated.
+# Re-applying at the end makes the footer independent of call order.
+.style_table_footer <- function(ft) {
+  ft <- flextable::fontsize(ft, size = 8, part = "footer")
+  ft <- flextable::color(ft, color = "#555555", part = "footer")
+  flextable::font(ft, fontname = .PMA_TABLE_FONT, part = "footer")
+}
+
 # スコアを確実性ラベルに変換
 score_to_certainty <- function(score) {
   score <- max(1L, min(4L, as.integer(round(score))))

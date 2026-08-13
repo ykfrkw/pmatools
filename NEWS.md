@@ -184,6 +184,31 @@
 
 ## Behaviour changes
 
+* **Every table is set in one font, and the app's tables are set in the app's
+  font.** Two mismatches, one of them a live bug. (1) `add_footer_lines()`
+  creates its rows *after* `font(part = "all")` has run, and a row added later
+  does not inherit the table's family — it takes flextable's own default. So
+  every footnote pmatools has ever rendered came out in Helvetica under an
+  Arial body, in the Evidence Profile, both Summary of Findings layouts, both
+  `grade_table()` layouts and the Indirectness table. The family is now
+  re-applied to the footer once the notes are in place, by the shared
+  `.style_table_footer()`, so it cannot drift from the body again whatever
+  order the calls come in; the domain-detail table in `grade_report()`, which
+  named no family at all, is set with the rest. The family itself is one
+  internal constant. (2) The exported .docx keeps **Arial** — a word processor
+  resolves a named face, and changing it would change every document pmatools
+  has produced — but the app's *on-screen* copy of the same table now inherits
+  the page's `--font-sans` through a CSS rule on flextable's `.tabwid`
+  wrapper, so a Summary of Findings preview no longer sits in the page like a
+  quotation from another document. Sizes, colours, borders and column widths
+  are untouched in both media. Also in the app: the Core GRADE 6 "Not
+  implemented in this table" statement was printed twice under every Summary of
+  Findings — once as page text and once in the table footer, in two different
+  fonts — and only the footer copy is kept, since that is the one that travels
+  into the export. `--muted-foreground` is darkened from 47% to 40% lightness
+  (4.72:1 to 6.08:1 on white); nearly everything it colours is set below
+  0.875rem. See `SPEC.md` §4.6 and `shiny/SPEC.md` §4.1.
+
 * **The Shiny app's Steps 1 and 2 stop lecturing and start fitting on a
   phone.** Three changes, all user-visible, none breaking. (1) Every step used
   to open with a paragraph describing the step, and Step 1 with a further note
