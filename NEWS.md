@@ -2,6 +2,33 @@
 
 ## New features
 
+* pmatools now ships **drawings of the decision flowcharts it implements**, and
+  the app highlights the path a given analysis actually took. Four domains have
+  one — Risk of bias (Core GRADE 4 Fig 2), Inconsistency (Core GRADE 3 Fig 2),
+  Imprecision (Core GRADE 2 Fig 4) and Publication bias (Core GRADE 4 Fig 5).
+  Indirectness does not, and that is not an omission: Core GRADE 5 Table 2
+  grades it on a gradient across the four PICO elements, so there is no branch
+  to draw. The figures live in `inst/figures/`, are documented under the new
+  `?grade_flowcharts` topic — which also names the function implementing each
+  algorithm — and are reproduced in `man/figures/` for the help pages, with a
+  test asserting the two copies never drift. They are pmatools' own diagrams
+  rather than reproductions of the BMJ figures, because the algorithm differs
+  from the source in ways a reader has to see: five enumerated direction rules
+  the source does not enumerate, a Figure 5 node that is not one of Figure 5's
+  four, and Inconsistency edges labelled with numeric surrogates Core GRADE
+  declines to quantify. Each figure says so.
+* Every flowcharted assessor now records the path it took as a `flow_path`
+  fact — a space-separated list of node ids matching the ids in the SVG — so a
+  renderer can highlight the route without parsing prose back out of `notes`.
+  The ids each assessor may emit are declared beside it and checked against the
+  drawing by `tests/testthat/test-flowchart-nodes.R`, so adding a branch without
+  drawing it fails the build. `flow_path` is machine-only and is filtered out
+  before facts are rendered as prose, so it never appears in a Summary of
+  Findings footnote.
+* `assess_pubias()` records facts for the first time (`k`, `egger_p` where the
+  test ran, and `flow_path`), and `grade_meta()` now lifts them into
+  `$domain_facts`. Indirectness remains the one domain with no facts, for the
+  reason above; `domain_facts()`'s documentation no longer implies otherwise.
 * The Risk of bias, Inconsistency and Imprecision assessors now record the
   numbers behind their judgment in a structured form, reachable with the new
   exported `domain_facts(x, domain = NULL)` and stored on the rated object as

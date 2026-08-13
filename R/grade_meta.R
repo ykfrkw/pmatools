@@ -467,11 +467,15 @@
 #'     \item{domain_facts}{A named list of tibbles (\code{key}, \code{label},
 #'       \code{value}, \code{numeric}), one per domain that recorded the
 #'       numbers behind its judgment: currently \code{"Risk of bias"},
-#'       \code{"Inconsistency"} and \code{"Imprecision"}. A domain with
-#'       nothing recorded is absent, and the list is empty when no domain
-#'       recorded anything. The prose in \code{domain_assessments$notes}
-#'       remains authoritative; this is its machine-readable companion. Read
-#'       it with \code{\link{domain_facts}}.}
+#'       \code{"Inconsistency"}, \code{"Imprecision"} and
+#'       \code{"Publication bias"}. Each of those four also records a
+#'       \code{flow_path} fact naming the decision nodes its judgment
+#'       traversed in the corresponding figure of
+#'       \code{\link{grade_flowcharts}}. A domain with nothing recorded is
+#'       absent, and the list is empty when no domain recorded anything. The
+#'       prose in \code{domain_assessments$notes} remains authoritative; this
+#'       is its machine-readable companion. Read it with
+#'       \code{\link{domain_facts}}.}
 #'     \item{certainty}{Final certainty label: "High", "Moderate", "Low", or "Very Low".}
 #'     \item{certainty_score}{Numeric score (1–4).}
 #'     \item{starting_quality}{Starting certainty label.}
@@ -510,6 +514,11 @@
 #' # Rating certainty in a true underlying effect instead (null threshold).
 #' g_null <- grade_meta(m, threshold_type = "null", outcome_name = "Mortality")
 #' }
+#'
+#' @seealso \code{\link{domain_facts}} for the structured numbers behind each
+#'   domain judgment, and \code{\link{grade_flowcharts}} for the decision
+#'   flowcharts those judgments follow, each naming the function that
+#'   implements it.
 #'
 #' @export
 grade_meta <- function(meta_obj,
@@ -783,14 +792,20 @@ grade_meta <- function(meta_obj,
     pubias_registry_complete = pubias_registry_complete,
     rationale                = pubias_rationale
   )
+  # bind_rows() below drops attributes, so every domain's facts have to be
+  # lifted off its row BEFORE the bind. Publication bias was the one assessor
+  # that recorded nothing at all until v0.5.2; forgetting this line is what
+  # would make it silently record nothing again.
+  pubias_facts <- attr(d_pubias, "facts")
 
   domains <- dplyr::bind_rows(d_rob, d_indir, d_incon, d_impre, d_pubias)
 
   # Named by GRADE domain; a domain that recorded nothing is simply absent.
   domain_facts <- list()
-  if (!is.null(rob_facts))   domain_facts[["Risk of bias"]]  <- rob_facts
-  if (!is.null(incon_facts)) domain_facts[["Inconsistency"]] <- incon_facts
-  if (!is.null(impre_facts)) domain_facts[["Imprecision"]]   <- impre_facts
+  if (!is.null(rob_facts))    domain_facts[["Risk of bias"]]     <- rob_facts
+  if (!is.null(incon_facts))  domain_facts[["Inconsistency"]]    <- incon_facts
+  if (!is.null(impre_facts))  domain_facts[["Imprecision"]]      <- impre_facts
+  if (!is.null(pubias_facts)) domain_facts[["Publication bias"]] <- pubias_facts
 
   # --- 確実性スコア計算 ---
   total_downgrade <- sum(domains$downgrade)

@@ -188,6 +188,13 @@ step3_ui <- function() {
   }
 
   htmltools::tagList(
+    # Highlights the branch each domain judgment took in its flowchart (see
+    # pma_flowchart_details() and www/flowchart.js). Loaded as part of the
+    # Step 3 body, exactly as R/step2_ma.R loads required-fields.js, so it
+    # re-executes on every renderUI rebuild of that body -- which is what
+    # repaints the highlight after the DOM is thrown away.
+    htmltools::tags$script(src = "flowchart.js"),
+
     pma_step_header(s$title, s$what),
 
     # Which studies the numbers on this step came from. Renders nothing when
@@ -2658,11 +2665,16 @@ step3_server <- function(input, output, session, state) {
                      "Run the analysis and set a threshold to see this domain's judgment.")
       ))
     }
+    facts <- domain_fact_table(domain)
     htmltools::tagList(
       htmltools::h5("Evaluation"),
       pma_domain_verdict(domain_judgment(domain) %||% "no",
                          domain_downgrade(domain)),
-      pma_facts_list(domain_fact_table(domain), keys = keys),
+      pma_facts_list(facts, keys = keys),
+      # The picture of the decision, with the branch this analysis took lit
+      # up, directly under the verdict it explains. NULL for Indirectness,
+      # which has no flowchart to draw (Core GRADE 5 Table 2 is a gradient).
+      pma_flowchart_details(domain, facts),
       pma_notes_collapse(domain_notes(domain))
     )
   }

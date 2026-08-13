@@ -439,6 +439,8 @@ sof_add_notes <- function(x, notes) {
 # does not produce "..".
 .domain_fact_body <- function(facts) {
   if (is.null(facts) || !is.data.frame(facts) || nrow(facts) == 0L) return(NULL)
+  facts <- .drop_machine_only_facts(facts)
+  if (nrow(facts) == 0L) return(NULL)
   clauses <- sprintf("%s: %s", facts$label, facts$value)
   clauses <- sub("\\.+$", "", clauses)
   clauses <- clauses[nzchar(clauses)]

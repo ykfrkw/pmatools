@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 476" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="incon-title incon-desc">
+  <title id="incon-title">Inconsistency: the Core GRADE 3 Figure 2 decision as pmatools implements it</title>
+  <desc id="incon-desc">Flowchart with three sequential steps. Step 1 asks whether there are important differences in point estimates and limited overlap of confidence intervals; pmatools automates this with an I-squared above 30% surrogate. No means do not rate down. Yes leads to Step 2, which asks where the point estimates fall relative to the chosen threshold; pmatools automates this with a zone tally, 80% in one zone counting as a majority and 20% on each side as substantial. A majority means do not rate down; a scattered tally means rate down one level; estimates on opposite sides lead to Step 3, which asks whether a credible subgroup explains the difference. Yes means do not rate down and report the subgroups separately; no means rate down one level. This is pmatools&#8217; operationalisation of the Core GRADE 3 Figure 2 decision, not a reproduction of the published figure: Core GRADE 3 words these nodes qualitatively and quantifies none of them.</desc>
+  <style>
+    .pma-fc-node rect, .pma-fc-leaf rect {
+      fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2;
+    }
+    .pma-fc-pmatools rect { stroke-dasharray: 5 3; }
+    .pma-fc-edge path { stroke: #cbd5e1; stroke-width: 1.5; fill: none; }
+    .pma-fc-node text, .pma-fc-leaf text, .pma-fc-edge text {
+      fill: #475569; font-size: 13px; font-weight: 400;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+    }
+    .pma-fc-edge-label { font-size: 12px; }
+    .pma-fc-caption { fill: #64748b; font-size: 12px; font-style: italic;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif; }
+    .pma-fc-heading { fill: #0f172a; font-size: 14px; font-weight: 600;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif; }
+    .pma-fc-on.pma-fc-node rect, .pma-fc-on.pma-fc-leaf rect {
+      stroke: #0f172a; stroke-width: 2.5;
+    }
+    .pma-fc-on.pma-fc-edge path { stroke: #0f172a; stroke-width: 3; }
+    .pma-fc-on text { fill: #0f172a; font-weight: 600; }
+  </style>
+  <text class="pma-fc-heading" x="20" y="26">Inconsistency &#8212; Core GRADE 3 Fig 2, as pmatools implements it</text>
+  <g id="pma-incon-edge-step1-no" class="pma-fc-edge">
+    <path d="M 490 84 L 560 84"/>
+    <path d="M 553 88.5 L 560 84 L 553 79.5"/>
+    <text class="pma-fc-edge-label" x="525" y="77" text-anchor="middle">No</text>
+  </g>
+  <g id="pma-incon-edge-step1-yes" class="pma-fc-edge">
+    <path d="M 255 121 L 255 180"/>
+    <path d="M 250.5 173 L 255 180 L 259.5 173"/>
+    <text class="pma-fc-edge-label" x="263" y="154" text-anchor="start">Yes</text>
+  </g>
+  <g id="pma-incon-edge-step2-majority" class="pma-fc-edge">
+    <path d="M 490 195 L 560 195"/>
+    <path d="M 553 199.5 L 560 195 L 553 190.5"/>
+    <text class="pma-fc-edge-label" x="525" y="188" text-anchor="middle">Majority</text>
+  </g>
+  <g id="pma-incon-edge-step2-scattered" class="pma-fc-edge">
+    <path d="M 490 240 L 560 240"/>
+    <path d="M 553 244.5 L 560 240 L 553 235.5"/>
+    <text class="pma-fc-edge-label" x="525" y="233" text-anchor="middle">Scattered</text>
+  </g>
+  <g id="pma-incon-edge-step2-opposite" class="pma-fc-edge">
+    <path d="M 255 253 L 255 305"/>
+    <path d="M 250.5 298 L 255 305 L 259.5 298"/>
+    <text class="pma-fc-edge-label" x="263" y="282" text-anchor="start">Opposite sides</text>
+  </g>
+  <g id="pma-incon-edge-step3-yes" class="pma-fc-edge">
+    <path d="M 490 320 L 560 320"/>
+    <path d="M 553 324.5 L 560 320 L 553 315.5"/>
+    <text class="pma-fc-edge-label" x="525" y="313" text-anchor="middle">Yes</text>
+  </g>
+  <g id="pma-incon-edge-step3-no" class="pma-fc-edge">
+    <path d="M 255 361 L 255 396 L 560 396"/>
+    <path d="M 553 400.5 L 560 396 L 553 391.5"/>
+    <text class="pma-fc-edge-label" x="263" y="388" text-anchor="start">No</text>
+  </g>
+  <g id="pma-incon-node-step1" class="pma-fc-node">
+    <rect x="20" y="48" width="470" height="73" rx="6" ry="6"/>
+    <text x="255" y="71" text-anchor="middle">
+      <tspan x="255" dy="0">Step 1  Are there important differences in point</tspan>
+      <tspan x="255" dy="17">estimates and limited overlap of confidence intervals?</tspan>
+      <tspan x="255" dy="17">pmatools surrogate for the visual step: I&#178; above 30%</tspan>
+    </text>
+  </g>
+  <g id="pma-incon-leaf-nodown1" class="pma-fc-leaf">
+    <rect x="560" y="48" width="380" height="39" rx="6" ry="6"/>
+    <text x="750" y="71" text-anchor="middle">
+      <tspan x="750" dy="0">Do not rate down</tspan>
+    </text>
+  </g>
+  <g id="pma-incon-node-step2" class="pma-fc-node">
+    <rect x="20" y="180" width="470" height="73" rx="6" ry="6"/>
+    <text x="255" y="203" text-anchor="middle">
+      <tspan x="255" dy="0">Step 2  Where do the point estimates fall</tspan>
+      <tspan x="255" dy="17">relative to the chosen threshold?</tspan>
+      <tspan x="255" dy="17">pmatools surrogates: 80% in one zone, 20% on each side</tspan>
+    </text>
+  </g>
+  <g id="pma-incon-leaf-nodown2" class="pma-fc-leaf">
+    <rect x="560" y="150" width="380" height="56" rx="6" ry="6"/>
+    <text x="750" y="173" text-anchor="middle">
+      <tspan x="750" dy="0">Do not rate down</tspan>
+      <tspan x="750" dy="17">A clear majority sits in one zone</tspan>
+    </text>
+  </g>
+  <g id="pma-incon-leaf-down1-scattered" class="pma-fc-leaf">
+    <rect x="560" y="222" width="380" height="56" rx="6" ry="6"/>
+    <text x="750" y="245" text-anchor="middle">
+      <tspan x="750" dy="0">Rate down 1 level</tspan>
+      <tspan x="750" dy="17">No zone holds a majority and neither side is substantial</tspan>
+    </text>
+  </g>
+  <g id="pma-incon-node-step3" class="pma-fc-node">
+    <rect x="20" y="305" width="470" height="56" rx="6" ry="6"/>
+    <text x="255" y="328" text-anchor="middle">
+      <tspan x="255" dy="0">Step 3  Is the opposite-sided difference</tspan>
+      <tspan x="255" dy="17">explained by a credible subgroup?</tspan>
+    </text>
+  </g>
+  <g id="pma-incon-leaf-nodown3" class="pma-fc-leaf">
+    <rect x="560" y="296" width="380" height="56" rx="6" ry="6"/>
+    <text x="750" y="319" text-anchor="middle">
+      <tspan x="750" dy="0">Do not rate down</tspan>
+      <tspan x="750" dy="17">Report the subgroups as separate questions</tspan>
+    </text>
+  </g>
+  <g id="pma-incon-leaf-down1" class="pma-fc-leaf">
+    <rect x="560" y="368" width="380" height="56" rx="6" ry="6"/>
+    <text x="750" y="391" text-anchor="middle">
+      <tspan x="750" dy="0">Rate down 1 level</tspan>
+      <tspan x="750" dy="17">(some concerns)</tspan>
+    </text>
+  </g>
+  <text class="pma-fc-caption" x="20" y="446">
+    <tspan x="20" dy="0">After BMJ Core GRADE 3 (Guyatt et al., 2025) Figure 2. pmatools&#8217; operationalisation, not a reproduction:</tspan>
+    <tspan x="20" dy="16">Core GRADE 3 words these nodes qualitatively and quantifies none of them; the numeric surrogates are pmatools&#8217; own.</tspan>
+  </text>
+</svg>
+

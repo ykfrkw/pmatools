@@ -248,6 +248,74 @@ h5 { font-size: 0.95rem; margin-top: 0.75rem; margin-bottom: 0.4rem; }
   margin: 0.4rem 0 0;
 }
 
+/* ---------------------------------------------------------------------------
+   Core GRADE decision flowcharts (pma_flowchart() in R/ui_helpers.R, the SVGs
+   in _pmatools_inst/figures/, the highlighter in www/flowchart.js).
+
+   EVERY SELECTOR HERE CARRIES `.pma-flowchart` ON PURPOSE. The SVGs ship with
+   a <style> block of their own so they still read correctly in the package's
+   help pages, where none of this exists — and because the SVG is inlined into
+   the body, that block comes LATER in document order than this file and would
+   win any tie at equal specificity. The extra class is what makes these rules
+   outrank it without reaching for !important.
+
+   The highlight is carried by stroke-width as well as colour, because some
+   reviewers print these.
+   --------------------------------------------------------------------------- */
+.pma-flowchart { margin: 0.35rem 0 0.5rem; }
+.pma-flowchart svg { width: 100%; height: auto; }
+
+.pma-flowchart .pma-fc-node rect,
+.pma-flowchart .pma-fc-leaf rect {
+  fill: hsl(var(--card));
+  stroke: hsl(var(--border));
+}
+.pma-flowchart .pma-fc-edge path,
+.pma-flowchart .pma-fc-edge line {
+  stroke: hsl(var(--border));
+  fill: none;
+}
+.pma-flowchart .pma-fc-node text,
+.pma-flowchart .pma-fc-leaf text,
+.pma-flowchart .pma-fc-edge text {
+  fill: hsl(var(--muted-foreground));
+}
+.pma-flowchart .pma-fc-heading { fill: hsl(var(--foreground)); }
+.pma-flowchart .pma-fc-caption { fill: hsl(var(--muted-foreground)); }
+
+.pma-flowchart .pma-fc-on.pma-fc-node rect,
+.pma-flowchart .pma-fc-on.pma-fc-leaf rect {
+  stroke: hsl(var(--primary));
+  stroke-width: 2.5;
+}
+.pma-flowchart .pma-fc-on.pma-fc-edge path,
+.pma-flowchart .pma-fc-on.pma-fc-edge line {
+  stroke: hsl(var(--primary));
+  stroke-width: 3;
+}
+.pma-flowchart .pma-fc-on text {
+  fill: hsl(var(--foreground));
+  font-weight: 600;
+}
+
+/* The <details> the highlighted chart sits in. Open by default: it answers
+   "why this judgment", which is the question the verdict above it raises. */
+.pma-flowchart-details {
+  margin: 0.25rem 0 0.85rem;
+  border-left: 3px solid hsl(var(--border));
+  padding-left: 0.7rem;
+}
+.pma-flowchart-details > summary {
+  font-size: 0.85rem;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+}
+.pma-flowchart-missing {
+  font-size: 0.85rem;
+  font-style: italic;
+  color: hsl(var(--muted-foreground));
+}
+
 /* Publication-bias wizard breadcrumb: the answered nodes, each re-openable,
    plus the computed Q2 step. Without it a one-question-at-a-time wizard is a
    trap. */

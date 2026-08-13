@@ -587,7 +587,9 @@ assess_imprecision <- function(meta_obj,
     .fact("fig4_path", "Core GRADE 2 Fig 4 path",
           sub("^Fig 4 path: ", "", fig4$path)),
     .fact("ois_used", "OIS approach applied",
-          if (isTRUE(fig4$ois_used)) "yes" else "no")
+          if (isTRUE(fig4$ois_used)) "yes" else "no"),
+    # The same route as `fig4_path`, in the vocabulary the figure understands.
+    .flow_path_fact(fig4$flow)
   )
 
   make_domain_row(
@@ -906,6 +908,48 @@ assess_imprecision <- function(meta_obj,
 # Which effect measures get the CI-ratio cut-off straight from Core GRADE 2.
 .CI_RATIO_SOURCED_SM <- c("OR", "RR")
 
+# --------------------------------------------------------------------------
+# Flowchart node vocabulary (inst/figures/impre.svg)
+#
+# See the note on .ROB_FIG2_NODE_IDS in domain_rob.R. The three OIS outcomes
+# are drawn as three edges out of one OIS node rather than one edge per
+# sub-rule: the sub-rule that fired is already recorded verbatim by the
+# "fig4_path" fact, and splitting the node six ways made the picture harder
+# to read than the sentence it was meant to replace.
+.IMPRE_FIG4_NODE_IDS <- c(
+  "pma-impre-node-crosses",
+  "pma-impre-edge-crosses-yes",
+  "pma-impre-node-both",
+  "pma-impre-edge-both-no",
+  "pma-impre-leaf-down1",
+  "pma-impre-edge-both-yes",
+  "pma-impre-leaf-down2-both",
+  "pma-impre-edge-crosses-no",
+  "pma-impre-node-large",
+  "pma-impre-edge-large-no",
+  "pma-impre-leaf-nodown-moderate",
+  "pma-impre-edge-large-yes",
+  "pma-impre-node-ois",
+  "pma-impre-edge-ois-nodown",
+  "pma-impre-leaf-nodown-ois",
+  "pma-impre-edge-ois-down1",
+  "pma-impre-leaf-down1-ois",
+  "pma-impre-edge-ois-down2",
+  "pma-impre-leaf-down2-ois"
+)
+
+# Shared prefixes, so a change to the shape of the figure is a change in one
+# place rather than in each of the nine returns of .classify_imprecision().
+.IMPRE_FLOW_CROSSES <- c("pma-impre-node-crosses",
+                         "pma-impre-edge-crosses-yes",
+                         "pma-impre-node-both")
+.IMPRE_FLOW_LARGE   <- c("pma-impre-node-crosses",
+                         "pma-impre-edge-crosses-no",
+                         "pma-impre-node-large")
+.IMPRE_FLOW_OIS     <- c(.IMPRE_FLOW_LARGE,
+                         "pma-impre-edge-large-yes",
+                         "pma-impre-node-ois")
+
 # 二値 (event ベース) アウトカムか。metabin 由来のイベント数があるか、
 # 効果指標が二値向けなら二値扱い。Fig 4 の連続／二値の分岐に使う
 # (grade_meta の outcome_type は OIS 計算用の "relative"/"absolute" であって
@@ -949,9 +993,12 @@ assess_imprecision <- function(meta_obj,
 # --------------------------------------------------------------------------
 # 判定分類 (Core GRADE 2 Fig 4)
 #
-# 返り値: list(judgment, path, ois_used)
+# 返り値: list(judgment, path, ois_used, flow)
 #   path     — 通過した Fig 4 の経路（notes に記録し、監査可能にする）
 #   ois_used — OIS 経路を実際に使ったか（notes の表現を切り替える）
+#   flow     — the same route as inst/figures/impre.svg node ids, so the
+#              caller can record it as the "flow_path" fact without parsing
+#              `path` back out of the prose (see .IMPRE_FIG4_NODE_IDS)
 # --------------------------------------------------------------------------
 .classify_imprecision <- function(crosses_threshold,
                                   crosses_both_thresholds,
@@ -972,10 +1019,11 @@ assess_imprecision <- function(meta_obj,
                    "relative risk (3) and odds ratio (2.5); applying 3 to %s ",
                    "is a pmatools extrapolation]"), sm)
   } else ""
-  out <- function(judgment, path, ois_used = FALSE) {
+  out <- function(judgment, path, ois_used = FALSE, flow = character(0)) {
     list(judgment = judgment,
          path     = paste0("Fig 4 path: ", path),
-         ois_used = ois_used)
+         ois_used = ois_used,
+         flow     = flow)
   }
 
   # --- Yes branch: CI crosses the chosen threshold -------------------------
@@ -983,18 +1031,24 @@ assess_imprecision <- function(meta_obj,
     if (isTRUE(crosses_both_thresholds)) {
       return(out("serious", sprintf(
         "CI crosses %s -> rate down; CI crosses %s -> rate down two levels",
-        threshold_label, two_level_label)))
+        threshold_label, two_level_label),
+        flow = c(.IMPRE_FLOW_CROSSES, "pma-impre-edge-both-yes",
+                 "pma-impre-leaf-down2-both")))
     }
     return(out("some_concerns", sprintf(paste0(
       "CI crosses %s -> rate down one level (sample size not considered on ",
-      "this path)"), threshold_label)))
+      "this path)"), threshold_label),
+      flow = c(.IMPRE_FLOW_CROSSES, "pma-impre-edge-both-no",
+               "pma-impre-leaf-down1")))
   }
 
   # --- No branch: CI does not cross the threshold --------------------------
   if (!isTRUE(large$large)) {
     return(out("no", sprintf(paste0(
       "CI does not cross %s -> %s -> do not rate down (OIS not applied)"),
-      threshold_label, large$note)))
+      threshold_label, large$note),
+      flow = c(.IMPRE_FLOW_LARGE, "pma-impre-edge-large-no",
+               "pma-impre-leaf-nodown-moderate")))
   }
 
   # Large effect -> OIS approach
@@ -1006,14 +1060,18 @@ assess_imprecision <- function(meta_obj,
       return(out("serious", sprintf(paste0(
         "%s (binary): CI ratio %.2f >= %.1f -> consider rating down two ",
         "levels%s"), prefix, ci_ratio, ci_ratio_cut, ci_ratio_src_note),
-        ois_used = TRUE))
+        ois_used = TRUE,
+        flow = c(.IMPRE_FLOW_OIS, "pma-impre-edge-ois-down2",
+                 "pma-impre-leaf-down2-ois")))
     }
   } else {
     # Continuous rule of thumb: 400 patients per group (total sample size 800).
     if (!is.na(n_total) && n_total >= 800) {
       return(out("no", sprintf(paste0(
         "%s (continuous): total N = %.0f >= 800 (rule of thumb) -> do not ",
-        "rate down"), prefix, n_total), ois_used = TRUE))
+        "rate down"), prefix, n_total), ois_used = TRUE,
+        flow = c(.IMPRE_FLOW_OIS, "pma-impre-edge-ois-nodown",
+                 "pma-impre-leaf-nodown-ois")))
     }
   }
 
@@ -1023,18 +1081,26 @@ assess_imprecision <- function(meta_obj,
       prefix,
       if (is.null(ois_missing_reason)) "inputs unavailable"
       else ois_missing_reason),
-      ois_used = TRUE))
+      ois_used = TRUE,
+      flow = c(.IMPRE_FLOW_OIS, "pma-impre-edge-ois-nodown",
+               "pma-impre-leaf-nodown-ois")))
   }
   if (isTRUE(ois_met)) {
     return(out("no", sprintf("%s: N >= OIS -> do not rate down", prefix),
-               ois_used = TRUE))
+               ois_used = TRUE,
+               flow = c(.IMPRE_FLOW_OIS, "pma-impre-edge-ois-nodown",
+                        "pma-impre-leaf-nodown-ois")))
   }
   # N < OIS
   if (!is_binary && !is.na(ois_pct) && ois_pct < 0.30) {
     return(out("serious", sprintf(paste0(
       "%s (continuous): N < 30%% of OIS -> consider rating down two levels"),
-      prefix), ois_used = TRUE))
+      prefix), ois_used = TRUE,
+      flow = c(.IMPRE_FLOW_OIS, "pma-impre-edge-ois-down2",
+               "pma-impre-leaf-down2-ois")))
   }
   out("some_concerns", sprintf("%s: N < OIS -> rate down one level", prefix),
-      ois_used = TRUE)
+      ois_used = TRUE,
+      flow = c(.IMPRE_FLOW_OIS, "pma-impre-edge-ois-down1",
+               "pma-impre-leaf-down1-ois"))
 }

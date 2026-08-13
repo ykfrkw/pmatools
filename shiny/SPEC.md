@@ -704,6 +704,43 @@ Certainty of evidence was rated using the GRADE approach following the BMJ 2025 
 (https://github.com/ykfrkw/pmatools)."
 ```
 
+### 3.4.12 Domain flowcharts (v0.5.1)
+
+Each of the four flowcharted domains — Risk of Bias, Inconsistency, Imprecision,
+Publication bias — shows the decision tree it was judged by, **with the path this
+analysis actually took highlighted**. Indirectness has no flowchart; Core GRADE 5
+Table 2 is a gradient, and its `indir_subdomain_table` stays the visual.
+
+Two renderings of the same file, both through `pma_flowchart()` in `R/ui_helpers.R`:
+
+| where | `on_ids` | why |
+|---|---|---|
+| under the verdict, in `<details class="pma-flowchart-details" open>` | the path taken | it answers "why this judgment", so it is open by default — but a reviewer who does not want it can shut it |
+| inside the collapsed "How is this judged?" accordion | none | the plain diagram, as reference |
+
+`pma_flowchart()` reads `_pmatools_inst/figures/<figkey>.svg` (staged path first, a
+local-development fallback second — the same shape `step1_data.R` uses for `extdata`,
+and deliberately **not** `system.file()`, which `stage_bundle.R` does not rewrite for
+anything but templates). A missing file yields a placeholder paragraph, never an error.
+
+The path comes from the package, not from parsing prose: `domain_facts(g, <domain>)`
+carries a `flow_path` fact listing the SVG node ids traversed (see `SPEC.md` §5.7).
+`pma_flowchart()` puts them on the wrapper as `data-pma-path`, and `www/flowchart.js`
+adds the class `pma-fc-on` to each. That script follows `required-fields.js`'s contract
+— idempotent, cached on `window`, re-applied on `shiny:value` — because the Step 3 body
+is rebuilt by `renderUI` and would otherwise lose the highlight.
+
+Styling lives in `www/shadcn.css` under `.pma-flowchart`. **Every selector there carries
+the wrapper class on purpose:** the SVG ships its own `<style>` block so it still reads
+correctly in the package help pages, and because the SVG is inlined into the body that
+block comes later in document order and would win any tie at equal specificity. The
+extra class is what lets the app rules outrank it without `!important` — asserted by a
+test. The highlight is carried by `stroke-width` as well as colour, because these get
+printed.
+
+`pma_algorithm_source(domain)` supplies the caption naming the implementing function, so
+the app and the roxygen topic `?grade_flowcharts` quote the same file and function.
+
 ---
 
 ## 4. Design system

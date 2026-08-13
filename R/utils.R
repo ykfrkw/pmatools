@@ -250,6 +250,20 @@ make_domain_row <- function(domain, judgment, auto, notes = NA_character_,
 #   label   : sentence-case label used when the fact is rendered as a footnote
 #   value   : single pre-formatted string, ready to print
 #   numeric : the raw number when the fact is scalar-numeric, else NA_real_
+# Facts that exist for a renderer to compute with, not for a reader. They are
+# returned by domain_facts() like any other -- that is the whole point of a
+# machine-readable companion -- but every PROSE renderer drops them, because
+# "Flowchart path: pma-rob-node-anyhigh pma-rob-edge-anyhigh-yes ..." is not a
+# footnote anybody wants under a Summary of Findings table.
+.FACT_KEYS_MACHINE_ONLY <- c("flow_path")
+
+.drop_machine_only_facts <- function(facts) {
+  if (is.null(facts) || !is.data.frame(facts) || !"key" %in% names(facts)) {
+    return(facts)
+  }
+  facts[!facts$key %in% .FACT_KEYS_MACHINE_ONLY, , drop = FALSE]
+}
+
 .fact <- function(key, label, value, numeric = NA_real_) {
   tibble::tibble(
     key     = as.character(key),

@@ -513,11 +513,15 @@ An S3 object of class \code{pmatools} containing:
 \item{domain_facts}{A named list of tibbles (\code{key}, \code{label},
 \code{value}, \code{numeric}), one per domain that recorded the
 numbers behind its judgment: currently \code{"Risk of bias"},
-\code{"Inconsistency"} and \code{"Imprecision"}. A domain with
-nothing recorded is absent, and the list is empty when no domain
-recorded anything. The prose in \code{domain_assessments$notes}
-remains authoritative; this is its machine-readable companion. Read
-it with \code{\link{domain_facts}}.}
+\code{"Inconsistency"}, \code{"Imprecision"} and
+\code{"Publication bias"}. Each of those four also records a
+\code{flow_path} fact naming the decision nodes its judgment
+traversed in the corresponding figure of
+\code{\link{grade_flowcharts}}. A domain with nothing recorded is
+absent, and the list is empty when no domain recorded anything. The
+prose in \code{domain_assessments$notes} remains authoritative; this
+is its machine-readable companion. Read it with
+\code{\link{domain_facts}}.}
 \item{certainty}{Final certainty label: "High", "Moderate", "Low", or "Very Low".}
 \item{certainty_score}{Numeric score (1–4).}
 \item{starting_quality}{Starting certainty label.}
@@ -610,4 +614,10 @@ sof_table(g)
 g_null <- grade_meta(m, threshold_type = "null", outcome_name = "Mortality")
 }
 
+}
+\seealso{
+\code{\link{domain_facts}} for the structured numbers behind each
+domain judgment, and \code{\link{grade_flowcharts}} for the decision
+flowcharts those judgments follow, each naming the function that
+implements it.
 }

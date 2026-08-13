@@ -27,7 +27,8 @@ Returns the numbers a domain assessor recorded when it made its judgment:
 how many studies were at high risk of bias and how much weight they carried,
 the heterogeneity statistics and the zone tally behind the Inconsistency
 verdict, the confidence interval and optimal information size behind the
-Imprecision one. Each fact carries a stable machine key, a human label, a
+Imprecision one, the study count and Egger p value behind the Publication
+bias one. Each fact carries a stable machine key, a human label, a
 pre-formatted display string, and the raw number when the fact is
 scalar-numeric.
 
@@ -37,10 +38,26 @@ why a domain was rated the way it was, and everything a fact reports is also
 stated there. Read the facts when you need to compute with the numbers or
 branch on them; read \code{notes} when you need the reasoning.
 
-Risk of bias, Inconsistency and Imprecision record facts. Indirectness and
-Publication bias do not yet, so they return \code{NULL} - a valid domain
-name with nothing recorded, not an error.
+Risk of bias, Inconsistency, Imprecision and Publication bias record facts.
+Indirectness does not, so it returns \code{NULL} - a valid domain name with
+nothing recorded, not an error. That is not an oversight: Core GRADE 5
+Table 2 grades indirectness on a gradient across the four PICO elements
+rather than routing it through a flowchart, so there is no branch to
+record. Its structured record is the subdomain table at
+\code{x$indirectness_subdomains} instead.
 }
+\section{The flow_path fact}{
+
+Each of the four flowcharted domains also records a fact keyed
+\code{"flow_path"}, whose \code{value} is a space-separated list of the
+decision nodes that judgment traversed and whose \code{numeric} is
+\code{NA}. The names are the element ids of the corresponding figure in
+\code{\link{grade_flowcharts}}, so a renderer can highlight the route the
+assessment actually took - which is what the companion Shiny app does. The
+vocabulary is fixed per figure and covered by a test that fails if an
+assessor emits an id the figure does not draw.
+}
+
 \examples{
 \dontrun{
 g <- grade_meta(m, rob = rob_vector, threshold = 1.2,
@@ -56,5 +73,6 @@ f$numeric[f$key == "i2"]
 }
 \seealso{
 \code{\link{grade_meta}}, \code{\link{sof_table}},
-\code{\link{evidence_profile}}.
+\code{\link{evidence_profile}}, and \code{\link{grade_flowcharts}} for
+the figures the \code{flow_path} fact indexes into.
 }

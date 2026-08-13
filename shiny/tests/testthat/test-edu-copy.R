@@ -34,11 +34,15 @@ test_that("edu_domain_how() ignores arguments a string domain does not take", {
 test_that("the Risk of Bias copy states the one-level cap on rule 5", {
   # The copy said "(5) zones differ across the null (above <-> below) -> rate
   # down 2" for two releases after .assess_bias_direction() stopped doing it.
-  # This is the sentence users actually read, so it gets its own guard.
+  # The enumeration itself now lives in the flowchart above the copy
+  # (inst/figures/rob.svg, whose rule 5 row reads "rate down 1", pinned by
+  # the package's test-flowchart-nodes.R), so what is guarded here is the
+  # sentence that explains WHY there is no second level - the part a diagram
+  # cannot carry.
   how <- edu_domain_how("rob", 0.10, "high")
-  expect_match(how, "(5) zones differ across the null (above <-> below) -> rate down 1",
+  expect_match(how, "Rule 5 rated down 2 up to pmatools 0.4 and no longer does",
                fixed = TRUE)
-  expect_false(grepl("rate down 2", how, fixed = TRUE))
+  expect_false(grepl("-> rate down 2", how, fixed = TRUE))
   # And it explains the cap the way .ROB_CAP_NOTE does, rather than leaving
   # the reader to wonder where the second level went.
   expect_match(how, "no automatic two-level downgrade for risk of bias",

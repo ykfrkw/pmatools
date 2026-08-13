@@ -56,6 +56,61 @@
 # trim-and-fill computation remains available via plot_trimfill_forest() for
 # the Reporting bias tab in the companion Shiny app.
 
+# --------------------------------------------------------------------------
+# Flowchart node vocabulary (inst/figures/pubias.svg)
+#
+# See the note on .ROB_FIG2_NODE_IDS in domain_rob.R. The registry node is
+# drawn dashed and named "pmatools input" because it is NOT a node of Core
+# GRADE 4 Fig 5; the figure's only registry node is Q4, reached when k < 10.
+#
+# Q3 and Q4 each carry their own "qualitative assessment required" leaf rather
+# than sharing one: the two are reached for different reasons (a test that
+# could not run, versus a question nobody answered) and an edge crossing the
+# figure to a shared terminal read as a route the algorithm never takes.
+.PUBIAS_FIG5_NODE_IDS <- c(
+  "pma-pubias-node-q1",
+  "pma-pubias-edge-q1-yes",
+  "pma-pubias-leaf-down1-q1",
+  "pma-pubias-edge-q1-no",
+  "pma-pubias-node-registry",
+  "pma-pubias-edge-registry-yes",
+  "pma-pubias-leaf-nodown-registry",
+  "pma-pubias-edge-registry-no",
+  "pma-pubias-node-q2",
+  "pma-pubias-edge-q2-yes",
+  "pma-pubias-node-q3",
+  "pma-pubias-edge-q3-yes",
+  "pma-pubias-leaf-down1-q3",
+  "pma-pubias-edge-q3-no",
+  "pma-pubias-leaf-nodown-q3",
+  "pma-pubias-edge-q3-na",
+  "pma-pubias-leaf-qual-q3",
+  "pma-pubias-edge-q2-no",
+  "pma-pubias-node-q4",
+  "pma-pubias-edge-q4-yes",
+  "pma-pubias-leaf-down1-q4",
+  "pma-pubias-edge-q4-no",
+  "pma-pubias-leaf-nodown-q4",
+  "pma-pubias-edge-q4-na",
+  "pma-pubias-leaf-qual-q4"
+)
+
+# Everything past Q1 has come through the registry node, whether or not the
+# reviewer answered it.
+.PUBIAS_FLOW_TO_Q2 <- c("pma-pubias-node-q1", "pma-pubias-edge-q1-no",
+                        "pma-pubias-node-registry",
+                        "pma-pubias-edge-registry-no",
+                        "pma-pubias-node-q2")
+
+# The study count the flowchart's Q2 actually branches on. Recorded on every
+# path: k is the one number the reviewer needs to see to check that Q2 was
+# answered the way they expect, and until v0.5.2 this domain recorded nothing
+# at all, so it was only available by re-reading the note.
+.pubias_k_fact <- function(k) {
+  .fact("k", "Studies contributing a usable estimate",
+        sprintf("%d (Q2 threshold: 10)", as.integer(k)), as.numeric(k))
+}
+
 # Marker prepended to the publication-bias note whenever no statistical test
 # and no manual input decided the judgment, so downstream outputs (SoF table,
 # Evidence Profile, grade_table, grade_report) can surface it prominently.
@@ -135,7 +190,10 @@ assess_pubias <- function(meta_obj,
             "small-and-industry-sponsored node, and asserting registry ",
             "coverage does not remove that concern."
           ) else ""
-        )
+        ),
+        facts    = .facts(.pubias_k_fact(k), .flow_path_fact(c(
+          "pma-pubias-node-q1", "pma-pubias-edge-q1-yes",
+          "pma-pubias-leaf-down1-q1")))
       ))
     }
     q1_note <- "Q1: Not dominated by small industry-sponsored studies. "
@@ -161,7 +219,11 @@ assess_pubias <- function(meta_obj,
         "evaluated -> do not rate down. This rule-out is a pmatools input, ",
         "not a decision node of Core GRADE 4 Fig 5, and rests entirely on ",
         "that assertion."
-      )
+      ),
+      facts     = .facts(.pubias_k_fact(k), .flow_path_fact(c(
+        "pma-pubias-node-q1", "pma-pubias-edge-q1-no",
+        "pma-pubias-node-registry", "pma-pubias-edge-registry-yes",
+        "pma-pubias-leaf-nodown-registry")))
     ))
   }
 
@@ -218,12 +280,14 @@ assess_pubias <- function(meta_obj,
     }
     if (pubias_funnel_asymmetry == "yes") {
       judgment <- "some_concerns"
+      flow_end <- c("pma-pubias-edge-q3-yes", "pma-pubias-leaf-down1-q3")
       asym_desc <- paste0(
         "Q3 (manual): visual inspection of contour-enhanced funnel plot ",
         "indicates asymmetry suggestive of publication bias -> rate down 1 (some_concerns)."
       )
     } else {
       judgment <- "no"
+      flow_end <- c("pma-pubias-edge-q3-no", "pma-pubias-leaf-nodown-q3")
       asym_desc <- paste0(
         "Q3 (manual): visual inspection rules out funnel-plot asymmetry ",
         "-> do not rate down."
@@ -238,7 +302,12 @@ assess_pubias <- function(meta_obj,
         sprintf("Q2: Statistical analysis feasible (k = %d >= 10). ", k),
         asym_desc, " [manual]"
       ),
-      rationale = rationale
+      rationale = rationale,
+      # The manual override answers the same Q3 node the test does, so it
+      # highlights the same route; only the note says which decided it.
+      facts     = .facts(.pubias_k_fact(k), .flow_path_fact(c(
+        .PUBIAS_FLOW_TO_Q2, "pma-pubias-edge-q2-yes",
+        "pma-pubias-node-q3", flow_end)))
     ))
   }
 
@@ -276,11 +345,16 @@ assess_pubias <- function(meta_obj,
         q1_note,
         sprintf("Q2: Statistical analysis feasible (k = %d >= 10) but ", k),
         "Egger's test failed to run. [auto (Egger's test)]"
-      )
+      ),
+      facts    = .facts(.pubias_k_fact(k), .flow_path_fact(c(
+        .PUBIAS_FLOW_TO_Q2, "pma-pubias-edge-q2-yes",
+        "pma-pubias-node-q3", "pma-pubias-edge-q3-na",
+        "pma-pubias-leaf-qual-q3")))
     ))
   } else if (pval < 0.05) {
     egger_note <- sprintf("Egger's test: p = %.4f.", pval)
     judgment   <- "some_concerns"
+    flow_end   <- c("pma-pubias-edge-q3-yes", "pma-pubias-leaf-down1-q3")
     asym_desc  <- paste0(
       "Q3 (auto): Egger's test p < 0.05 -> evidence of funnel-plot asymmetry ",
       "-> rate down 1 (some_concerns)."
@@ -288,6 +362,7 @@ assess_pubias <- function(meta_obj,
   } else {
     egger_note <- sprintf("Egger's test: p = %.3f.", pval)
     judgment   <- "no"
+    flow_end   <- c("pma-pubias-edge-q3-no", "pma-pubias-leaf-nodown-q3")
     asym_desc  <- "Q3 (auto): Egger's test p >= 0.05 -> no strong evidence of funnel-plot asymmetry -> do not rate down."
   }
 
@@ -300,6 +375,16 @@ assess_pubias <- function(meta_obj,
       sprintf("Q2: Statistical analysis feasible (k = %d >= 10). ", k),
       asym_desc, " ", egger_note, " ", .PUBIAS_EGGER_CONVENTION,
       " [auto (Egger's test)]"
+    ),
+    # The p value is the number the Q3 verdict turns on, so it belongs in the
+    # facts and not only in the sentence. Recorded only where it exists: the
+    # manual and failed-test paths above have none.
+    facts    = .facts(
+      .pubias_k_fact(k),
+      .fact("egger_p", "Egger's test p value",
+            sprintf("%.4f (pmatools cut-off: 0.05)", pval), pval),
+      .flow_path_fact(c(.PUBIAS_FLOW_TO_Q2, "pma-pubias-edge-q2-yes",
+                        "pma-pubias-node-q3", flow_end))
     )
   )
 }
@@ -337,12 +422,20 @@ assess_pubias <- function(meta_obj,
 
   if (unpublished == "yes") {
     judgment   <- "some_concerns"
+    flow_end   <- c("pma-pubias-edge-q4-yes", "pma-pubias-leaf-down1-q4")
     unpub_desc <- paste0(
       "Q4: Documentation of unpublished studies identified (registry/FDA) ",
       "-> rate down 1 (some_concerns)."
     )
   } else {
     judgment   <- "no"
+    # `auto_flag` is TRUE exactly when nobody answered and "no" was assumed,
+    # which is the qualitative-assessment leaf rather than the answered one.
+    flow_end   <- if (auto_flag) {
+      c("pma-pubias-edge-q4-na", "pma-pubias-leaf-qual-q4")
+    } else {
+      c("pma-pubias-edge-q4-no", "pma-pubias-leaf-nodown-q4")
+    }
     unpub_desc <- "Q4: No documentation of unpublished studies -> do not rate down."
   }
 
@@ -354,6 +447,9 @@ assess_pubias <- function(meta_obj,
       q1_note,
       sprintf("Q2: Statistical analysis not feasible (k = %d < 10). ", k),
       unpub_desc, src_note
-    )
+    ),
+    facts    = .facts(.pubias_k_fact(k), .flow_path_fact(c(
+      .PUBIAS_FLOW_TO_Q2, "pma-pubias-edge-q2-no",
+      "pma-pubias-node-q4", flow_end)))
   )
 }

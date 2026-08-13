@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 550" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="impre-title impre-desc">
+  <title id="impre-title">Imprecision: the Core GRADE 2 Figure 4 decision as pmatools implements it</title>
+  <desc id="impre-desc">Flowchart. Does the pooled 95% confidence interval cross the chosen threshold? If yes, does it also cross the second threshold, important benefit and important harm? No means rate down one level; yes means rate down two. If the interval does not cross the threshold, is the effect implausibly large? No means do not rate down, and the optimal information size is never consulted on that path. Yes leads to the optimal information size comparison: a total of 800 or more participants on the continuous rule of thumb, a total at or above the OIS, or an OIS that cannot be computed, all mean do not rate down; a total below the OIS means rate down one level; a confidence interval ratio of 3 for a relative risk or 2.5 for an odds ratio, or a total below 30% of the OIS, means rate down two. This is pmatools&#8217; operationalisation of the Core GRADE 2 Figure 4 decision, not a reproduction of the published figure.</desc>
+  <style>
+    .pma-fc-node rect, .pma-fc-leaf rect {
+      fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2;
+    }
+    .pma-fc-pmatools rect { stroke-dasharray: 5 3; }
+    .pma-fc-edge path { stroke: #cbd5e1; stroke-width: 1.5; fill: none; }
+    .pma-fc-node text, .pma-fc-leaf text, .pma-fc-edge text {
+      fill: #475569; font-size: 13px; font-weight: 400;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+    }
+    .pma-fc-edge-label { font-size: 12px; }
+    .pma-fc-caption { fill: #64748b; font-size: 12px; font-style: italic;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif; }
+    .pma-fc-heading { fill: #0f172a; font-size: 14px; font-weight: 600;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif; }
+    .pma-fc-on.pma-fc-node rect, .pma-fc-on.pma-fc-leaf rect {
+      stroke: #0f172a; stroke-width: 2.5;
+    }
+    .pma-fc-on.pma-fc-edge path { stroke: #0f172a; stroke-width: 3; }
+    .pma-fc-on text { fill: #0f172a; font-weight: 600; }
+  </style>
+  <text class="pma-fc-heading" x="20" y="26">Imprecision &#8212; Core GRADE 2 Fig 4, as pmatools implements it</text>
+  <g id="pma-impre-edge-crosses-yes" class="pma-fc-edge">
+    <path d="M 490 76 L 560 76"/>
+    <path d="M 553 80.5 L 560 76 L 553 71.5"/>
+    <text class="pma-fc-edge-label" x="525" y="69" text-anchor="middle">Yes</text>
+  </g>
+  <g id="pma-impre-edge-both-no" class="pma-fc-edge">
+    <path d="M 655 104 L 655 140"/>
+    <path d="M 650.5 133 L 655 140 L 659.5 133"/>
+    <text class="pma-fc-edge-label" x="663" y="126" text-anchor="start">No</text>
+  </g>
+  <g id="pma-impre-edge-both-yes" class="pma-fc-edge">
+    <path d="M 855 104 L 855 140"/>
+    <path d="M 850.5 133 L 855 140 L 859.5 133"/>
+    <text class="pma-fc-edge-label" x="863" y="126" text-anchor="start">Yes</text>
+  </g>
+  <g id="pma-impre-edge-crosses-no" class="pma-fc-edge">
+    <path d="M 255 104 L 255 200"/>
+    <path d="M 250.5 193 L 255 200 L 259.5 193"/>
+    <text class="pma-fc-edge-label" x="263" y="156" text-anchor="start">No</text>
+  </g>
+  <g id="pma-impre-edge-large-no" class="pma-fc-edge">
+    <path d="M 490 226 L 560 226"/>
+    <path d="M 553 230.5 L 560 226 L 553 221.5"/>
+    <text class="pma-fc-edge-label" x="525" y="219" text-anchor="middle">No</text>
+  </g>
+  <g id="pma-impre-edge-large-yes" class="pma-fc-edge">
+    <path d="M 255 273 L 255 325"/>
+    <path d="M 250.5 318 L 255 325 L 259.5 318"/>
+    <text class="pma-fc-edge-label" x="263" y="302" text-anchor="start">Yes</text>
+  </g>
+  <g id="pma-impre-edge-ois-nodown" class="pma-fc-edge">
+    <path d="M 490 360 L 560 360"/>
+    <path d="M 553 364.5 L 560 360 L 553 355.5"/>
+    <text class="pma-fc-edge-label" x="525" y="353" text-anchor="middle">Reached</text>
+  </g>
+  <g id="pma-impre-edge-ois-down1" class="pma-fc-edge">
+    <path d="M 160 398 L 160 440"/>
+    <path d="M 155.5 433 L 160 440 L 164.5 433"/>
+    <text class="pma-fc-edge-label" x="168" y="424" text-anchor="start">N below</text>
+  </g>
+  <g id="pma-impre-edge-ois-down2" class="pma-fc-edge">
+    <path d="M 350 398 L 350 440"/>
+    <path d="M 345.5 433 L 350 440 L 354.5 433"/>
+    <text class="pma-fc-edge-label" x="358" y="424" text-anchor="start">N far below</text>
+  </g>
+  <g id="pma-impre-node-crosses" class="pma-fc-node">
+    <rect x="20" y="48" width="470" height="56" rx="6" ry="6"/>
+    <text x="255" y="71" text-anchor="middle">
+      <tspan x="255" dy="0">Does the pooled 95% confidence interval</tspan>
+      <tspan x="255" dy="17">cross the chosen threshold?</tspan>
+    </text>
+  </g>
+  <g id="pma-impre-node-both" class="pma-fc-node">
+    <rect x="560" y="48" width="380" height="56" rx="6" ry="6"/>
+    <text x="750" y="71" text-anchor="middle">
+      <tspan x="750" dy="0">Does it also cross the second threshold</tspan>
+      <tspan x="750" dy="17">(important benefit and important harm)?</tspan>
+    </text>
+  </g>
+  <g id="pma-impre-leaf-down1" class="pma-fc-leaf">
+    <rect x="560" y="140" width="180" height="39" rx="6" ry="6"/>
+    <text x="650" y="163" text-anchor="middle">
+      <tspan x="650" dy="0">Rate down 1 level</tspan>
+    </text>
+  </g>
+  <g id="pma-impre-leaf-down2-both" class="pma-fc-leaf">
+    <rect x="760" y="140" width="180" height="39" rx="6" ry="6"/>
+    <text x="850" y="163" text-anchor="middle">
+      <tspan x="850" dy="0">Rate down 2 levels</tspan>
+    </text>
+  </g>
+  <g id="pma-impre-node-large" class="pma-fc-node">
+    <rect x="20" y="200" width="470" height="73" rx="6" ry="6"/>
+    <text x="255" y="223" text-anchor="middle">
+      <tspan x="255" dy="0">Is the effect implausibly large?</tspan>
+      <tspan x="255" dy="17">binary: relative risk reduction above 30 to 40% (source)</tspan>
+      <tspan x="255" dy="17">continuous: standardised effect 0.8 or more (pmatools)</tspan>
+    </text>
+  </g>
+  <g id="pma-impre-leaf-nodown-moderate" class="pma-fc-leaf">
+    <rect x="560" y="198" width="380" height="56" rx="6" ry="6"/>
+    <text x="750" y="221" text-anchor="middle">
+      <tspan x="750" dy="0">Do not rate down</tspan>
+      <tspan x="750" dy="17">The optimal information size is never consulted here</tspan>
+    </text>
+  </g>
+  <g id="pma-impre-node-ois" class="pma-fc-node">
+    <rect x="20" y="325" width="470" height="73" rx="6" ry="6"/>
+    <text x="255" y="348" text-anchor="middle">
+      <tspan x="255" dy="0">Optimal information size (OIS)</tspan>
+      <tspan x="255" dy="17">Compare the total number of participants</tspan>
+      <tspan x="255" dy="17">with the OIS for this outcome</tspan>
+    </text>
+  </g>
+  <g id="pma-impre-leaf-nodown-ois" class="pma-fc-leaf">
+    <rect x="560" y="330" width="380" height="73" rx="6" ry="6"/>
+    <text x="750" y="353" text-anchor="middle">
+      <tspan x="750" dy="0">Do not rate down</tspan>
+      <tspan x="750" dy="17">Total N of 800 or more (continuous rule of thumb),</tspan>
+      <tspan x="750" dy="17">N at or above the OIS, or the OIS is not computable</tspan>
+    </text>
+  </g>
+  <g id="pma-impre-leaf-down1-ois" class="pma-fc-leaf">
+    <rect x="20" y="440" width="225" height="56" rx="6" ry="6"/>
+    <text x="132.5" y="463" text-anchor="middle">
+      <tspan x="132.5" dy="0">Rate down 1 level</tspan>
+      <tspan x="132.5" dy="17">N below the OIS</tspan>
+    </text>
+  </g>
+  <g id="pma-impre-leaf-down2-ois" class="pma-fc-leaf">
+    <rect x="265" y="440" width="225" height="73" rx="6" ry="6"/>
+    <text x="377.5" y="463" text-anchor="middle">
+      <tspan x="377.5" dy="0">Rate down 2 levels</tspan>
+      <tspan x="377.5" dy="17">CI ratio of 3 (RR) or 2.5 (OR)</tspan>
+      <tspan x="377.5" dy="17">or N below 30% of the OIS</tspan>
+    </text>
+  </g>
+  <text class="pma-fc-caption" x="20" y="537">
+    <tspan x="20" dy="0">After BMJ Core GRADE 2 (Guyatt et al., 2025) Figure 4. pmatools&#8217; operationalisation, not a reproduction.</tspan>
+  </text>
+</svg>
+

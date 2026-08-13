@@ -157,6 +157,53 @@
 #                  TE_all < TE_low indicates inflation toward favorable
 #   NULL         : direction unknown; use |TE_all| > |TE_low| (further from null)
 
+# --------------------------------------------------------------------------
+# Flowchart node vocabulary (inst/figures/rob.svg)
+#
+# Every id below is a <g id="..."> in that file, and the "flow_path" fact
+# emitted by .flowchart_rob() names the subset this assessment traversed. The
+# Shiny app reads the fact, hands the ids to www/flowchart.js, and the picture
+# lights up the route the judgment actually took; ?grade_flowcharts renders
+# the same figure unhighlighted.
+#
+# The constant exists so the two halves cannot drift apart in silence:
+# tests/testthat/test-flowchart-nodes.R asserts that every id here is present
+# in the SVG and that no emitted path names an id that is not here. Adding a
+# branch without drawing it therefore fails the build.
+.ROB_FIG2_NODE_IDS <- c(
+  "pma-rob-node-anyhigh",
+  "pma-rob-edge-anyhigh-no",
+  "pma-rob-leaf-nohigh",
+  "pma-rob-edge-anyhigh-yes",
+  "pma-rob-node-dominance",
+  "pma-rob-edge-dominance-yes",
+  "pma-rob-node-direction",
+  "pma-rob-edge-direction-rules",
+  "pma-rob-leaf-rule1",
+  "pma-rob-leaf-rule2",
+  "pma-rob-leaf-rule3",
+  "pma-rob-leaf-rule4",
+  "pma-rob-leaf-rule5",
+  "pma-rob-leaf-rulena",
+  "pma-rob-edge-dominance-no",
+  "pma-rob-node-appreciable",
+  "pma-rob-edge-appreciable-no",
+  "pma-rob-edge-appreciable-yes",
+  "pma-rob-node-magnitude",
+  "pma-rob-edge-magnitude-similar",
+  "pma-rob-leaf-all",
+  "pma-rob-edge-magnitude-different",
+  "pma-rob-leaf-lowonly"
+)
+
+# The one place a traversed path is turned into a fact. Space-separated
+# because a fact's `value` is a single pre-formatted string; `numeric` stays
+# NA because a route is not a quantity.
+.flow_path_fact <- function(ids) {
+  .fact("flow_path", "Flowchart path",
+        paste(ids, collapse = " "), NA_real_)
+}
+
 # Note appended wherever an automated risk-of-bias path used to rate down two
 # levels. Core GRADE 4 does not describe a two-level risk-of-bias downgrade.
 .ROB_CAP_NOTE <- paste0(
@@ -653,7 +700,9 @@ assess_rob <- function(rob, meta_obj,
         "No high-RoB studies. ", weight_note, "; ", fold_note,
         ". -> Do not rate down. | ", tbl_note
       ),
-      facts    = .facts(f_high)
+      facts    = .facts(f_high, .flow_path_fact(c(
+        "pma-rob-node-anyhigh", "pma-rob-edge-anyhigh-no",
+        "pma-rob-leaf-nohigh")))
     ), analysis_set = "all", high_idx = high_idx))
   }
 
@@ -804,6 +853,12 @@ assess_rob <- function(rob, meta_obj,
       },
       as.numeric(dir$rule)
     )
+    # The rule number picks the leaf; an unassessable direction has its own.
+    rule_leaf <- if (is.na(dir$rule)) {
+      "pma-rob-leaf-rulena"
+    } else {
+      paste0("pma-rob-leaf-rule", dir$rule)
+    }
     return(.rob_row(make_domain_row(
       domain   = "Risk of bias",
       judgment = dir$judgment,
@@ -813,7 +868,14 @@ assess_rob <- function(rob, meta_obj,
         dir$note, " | ",
         tbl_note
       ),
-      facts    = .facts(f_high, f_weight, f_shift, f_branch)
+      facts    = .facts(f_high, f_weight, f_shift, f_branch,
+                        .flow_path_fact(c(
+                          "pma-rob-node-anyhigh", "pma-rob-edge-anyhigh-yes",
+                          "pma-rob-node-dominance",
+                          "pma-rob-edge-dominance-yes",
+                          "pma-rob-node-direction",
+                          "pma-rob-edge-direction-rules",
+                          rule_leaf)))
     ), analysis_set = "all", high_idx = high_idx))
   }
 
@@ -871,6 +933,25 @@ assess_rob <- function(rob, meta_obj,
     as.numeric(dir$rule)
   )
 
+  # Fig 2's non-dominated side has two nodes, and "not assessable" is the
+  # answer to the FIRST of them ("is there appreciable evidence from the low
+  # risk of bias studies?"), not a third answer to the second. Routing it
+  # through the appreciable node's "no" edge rather than the magnitude node's
+  # "similar" edge is what keeps the picture honest: the magnitude question
+  # was never asked.
+  flow_ids <- c("pma-rob-node-anyhigh", "pma-rob-edge-anyhigh-yes",
+                "pma-rob-node-dominance", "pma-rob-edge-dominance-no",
+                "pma-rob-node-appreciable")
+  flow_ids <- if (!assessable) {
+    c(flow_ids, "pma-rob-edge-appreciable-no", "pma-rob-leaf-all")
+  } else if (substantial) {
+    c(flow_ids, "pma-rob-edge-appreciable-yes", "pma-rob-node-magnitude",
+      "pma-rob-edge-magnitude-different", "pma-rob-leaf-lowonly")
+  } else {
+    c(flow_ids, "pma-rob-edge-appreciable-yes", "pma-rob-node-magnitude",
+      "pma-rob-edge-magnitude-similar", "pma-rob-leaf-all")
+  }
+
   .rob_row(make_domain_row(
     domain   = "Risk of bias",
     judgment = "no",
@@ -881,7 +962,8 @@ assess_rob <- function(rob, meta_obj,
       dir$diff_note %||% dir$note, " | ",
       tbl_note
     ),
-    facts    = .facts(f_high, f_weight, f_shift, f_branch)
+    facts    = .facts(f_high, f_weight, f_shift, f_branch,
+                      .flow_path_fact(flow_ids))
   ), analysis_set = if (substantial) "low_only" else "all",
      high_idx = high_idx)
 }

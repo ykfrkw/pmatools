@@ -80,12 +80,13 @@ make_refit <- function() {
 
 # --- 1. the container ------------------------------------------------------
 
-test_that("grade_meta() records facts for the three implemented domains", {
+test_that("grade_meta() records facts for the four flowcharted domains", {
   g <- make_facts()
 
   expect_type(g$domain_facts, "list")
   expect_setequal(names(g$domain_facts),
-                  c("Risk of bias", "Inconsistency", "Imprecision"))
+                  c("Risk of bias", "Inconsistency", "Imprecision",
+                    "Publication bias"))
 
   for (dm in names(g$domain_facts)) {
     f <- g$domain_facts[[dm]]
@@ -106,12 +107,22 @@ test_that("grade_meta() records facts for the three implemented domains", {
   expect_true(all(c("confidence_interval", "crosses_null", "threshold_position",
                     "ois", "fig4_path", "ois_used") %in%
                     g$domain_facts[["Imprecision"]]$key))
+  expect_true("k" %in% g$domain_facts[["Publication bias"]]$key)
+  # All four also record the route they took through their figure; see
+  # test-flowchart-nodes.R for the contract that keeps the ids honest.
+  for (dm in names(g$domain_facts)) {
+    expect_true("flow_path" %in% g$domain_facts[[dm]]$key, info = dm)
+  }
 })
 
-test_that("Indirectness and Publication bias record no facts yet", {
+test_that("Indirectness records no facts, and that is deliberate", {
+  # Core GRADE 5 Table 2 grades the four PICO elements on a gradient rather
+  # than routing them through a flowchart, so there is no branch to record.
+  # When the reviewer answers the subdomain questions the structured record
+  # is x$indirectness_subdomains instead; this fixture supplies a scalar, so
+  # there is neither, which is also correct.
   g <- make_facts()
   expect_false("Indirectness" %in% names(g$domain_facts))
-  expect_false("Publication bias" %in% names(g$domain_facts))
 })
 
 # --- 2. the numeric column really carries numbers --------------------------
@@ -161,9 +172,11 @@ test_that("domain_facts() returns the whole list, one domain, or NULL", {
 
   expect_identical(domain_facts(g), g$domain_facts)
   expect_identical(domain_facts(g, "Imprecision"), g$domain_facts[["Imprecision"]])
-  # A valid domain name that recorded nothing.
+  expect_identical(domain_facts(g, "Publication bias"),
+                   g$domain_facts[["Publication bias"]])
+  # A valid domain name that recorded nothing. Indirectness is now the only
+  # one; see the note on the gradient above.
   expect_null(domain_facts(g, "Indirectness"))
-  expect_null(domain_facts(g, "Publication bias"))
 })
 
 test_that("domain_facts() aborts on a bogus domain and on a non-pmatools input", {

@@ -787,6 +787,10 @@ pma_facts_list <- function(facts, keys = NULL, max_rows = 6L) {
     return(NULL)
   }
   if (!all(c("key", "label", "value") %in% names(facts))) return(NULL)
+  # flow_path exists for www/flowchart.js, not for a reader: it is a list of
+  # SVG element ids. The chart above this list is what it says.
+  facts <- facts[!facts$key %in% "flow_path", , drop = FALSE]
+  if (nrow(facts) == 0L) return(NULL)
   if (!is.null(keys)) {
     idx <- match(keys, facts$key)
     idx <- idx[!is.na(idx)]
@@ -802,6 +806,154 @@ pma_facts_list <- function(facts, keys = NULL, max_rows = 6L) {
         htmltools::tags$dd(facts$value[i])
       )
     })
+  )
+}
+
+# ----- Core GRADE decision flowcharts -------------------------------------
+# The picture of the decision, with the branch this analysis took highlighted.
+# Four of the five domains have one; Indirectness does not, because Core GRADE
+# 5 Table 2 is a gradient rather than a flowchart (the subdomain table on that
+# tab is its equivalent).
+#
+# WHY THE FILE IS READ HERE AND NOT IN THE PACKAGE. shiny/stage_bundle.R
+# rewrites system.file(..., package = "pmatools") lookups in the VENDORED
+# tree, but only ones asking for "templates" (TPL_LOOKUP_PAT), and it then
+# fails the deploy on any survivor. A figure lookup inside R/ would therefore
+# resolve to "" in the app AND break `stage_bundle.R --check-only`. The
+# loader lives app-side instead, reading the staged copy directly, exactly the
+# way R/step1_data.R reads _pmatools_inst/extdata/.
+
+# Which domain each figure belongs to, and the function that implements it.
+# One table so the caption under the chart and the roxygen in R/flowcharts.R
+# cannot drift into naming different functions.
+PMA_FLOWCHART_FIGS <- list(
+  "Risk of bias"     = list(fig = "rob",
+                            fn  = "assess_rob()",
+                            file = "R/domain_rob.R",
+                            src = "Core GRADE 4 Fig 2"),
+  "Inconsistency"    = list(fig = "incon",
+                            fn  = "assess_inconsistency()",
+                            file = "R/domain_inconsistency.R",
+                            src = "Core GRADE 3 Fig 2"),
+  "Imprecision"      = list(fig = "impre",
+                            fn  = "assess_imprecision()",
+                            file = "R/domain_imprecision.R",
+                            src = "Core GRADE 2 Fig 4"),
+  "Publication bias" = list(fig = "pubias",
+                            fn  = "assess_pubias()",
+                            file = "R/domain_pubias.R",
+                            src = "Core GRADE 4 Fig 5")
+)
+
+# The candidate locations, in the order they are tried. `dir` short-circuits
+# the search and exists so the helper is testable from tests/testthat, whose
+# working directory is neither the app root nor a package install.
+pma_flowchart_path <- function(figkey, dir = NULL) {
+  f <- paste0(figkey, ".svg")
+  candidates <- if (!is.null(dir)) {
+    file.path(dir, f)
+  } else {
+    c(
+      # Deployed / running app: pinned at startup by app.R, so a later
+      # setwd() cannot move the target.
+      file.path(getOption("pmatools.vendored_root", "."),
+                "_pmatools_inst", "figures", f),
+      # Same thing relative to the app root, for a run that never set it.
+      file.path("_pmatools_inst", "figures", f),
+      # Local development against an installed package.
+      {
+        p <- system.file("figures", f, package = "pmatools")
+        if (nzchar(p)) p else NULL
+      },
+      # Local development in the source tree, app not staged.
+      file.path("..", "inst", "figures", f)
+    )
+  }
+  hit <- Filter(function(p) !is.null(p) && nzchar(p) && file.exists(p),
+                candidates)
+  if (length(hit)) hit[[1L]] else NA_character_
+}
+
+# The chart itself. `on_ids` is the domain's `flow_path` fact, split; passing
+# character(0) renders the plain figure. Returns a placeholder rather than
+# erroring when the file is absent: a missing figure must never take a domain
+# tab down with it.
+pma_flowchart <- function(figkey, on_ids = character(0), caption = NULL,
+                          dir = NULL) {
+  path <- pma_flowchart_path(figkey, dir = dir)
+  if (is.na(path)) {
+    return(htmltools::p(
+      class = "pma-flowchart-missing",
+      "The decision flowchart for this domain is not available in this build."
+    ))
+  }
+  svg <- tryCatch(paste(readLines(path, warn = FALSE), collapse = "\n"),
+                  error = function(e) NULL)
+  if (is.null(svg) || !nzchar(trimws(svg))) {
+    return(htmltools::p(
+      class = "pma-flowchart-missing",
+      "The decision flowchart for this domain could not be read."
+    ))
+  }
+  ids <- on_ids
+  ids <- ids[!is.na(ids) & nzchar(ids)]
+  htmltools::tagList(
+    htmltools::div(
+      class = "pma-flowchart",
+      # www/flowchart.js reads this and adds pma-fc-on to the named elements.
+      # Empty when nothing is highlighted, which is a valid state, not a bug.
+      `data-pma-path` = paste(ids, collapse = " "),
+      htmltools::HTML(svg)
+    ),
+    if (!is.null(caption)) {
+      htmltools::p(class = "pma-card-subtitle", caption)
+    }
+  )
+}
+
+# "Where is this implemented?", in one sentence, from the same table the
+# figure is chosen from. Rendered as the chart's caption.
+pma_algorithm_source <- function(domain) {
+  spec <- PMA_FLOWCHART_FIGS[[domain]]
+  if (is.null(spec)) return(NULL)
+  sprintf("%s, as implemented by %s in %s of the pmatools package.",
+          spec$src, spec$fn, spec$file)
+}
+
+# The flow_path fact, split into ids. `facts` is a domain_facts() tibble or
+# NULL; anything else yields character(0), so a caller can hand the result
+# straight to pma_flowchart().
+pma_flow_path_ids <- function(facts) {
+  if (is.null(facts) || !is.data.frame(facts) ||
+      !all(c("key", "value") %in% names(facts))) {
+    return(character(0))
+  }
+  v <- facts$value[facts$key == "flow_path"]
+  if (length(v) != 1L || is.na(v) || !nzchar(trimws(v))) return(character(0))
+  ids <- strsplit(trimws(v), "\\s+")[[1L]]
+  ids[nzchar(ids)]
+}
+
+# The whole block that goes under a domain verdict: the chart in a <details>
+# the reviewer can shut, captioned with where the algorithm lives.
+#
+# Open by default. It answers "why this judgment", which is exactly the
+# question the verdict raises, and the user's rule is that answers stay
+# visible; <details> rather than a plain div so a reviewer who has seen it can
+# put it away.
+pma_flowchart_details <- function(domain, facts,
+                                  summary_text =
+                                    "Which path did this assessment take?",
+                                  dir = NULL) {
+  spec <- PMA_FLOWCHART_FIGS[[domain]]
+  if (is.null(spec)) return(NULL)
+  htmltools::tags$details(
+    class = "pma-flowchart-details", open = NA,
+    htmltools::tags$summary(summary_text),
+    pma_flowchart(spec$fig,
+                  on_ids  = pma_flow_path_ids(facts),
+                  caption = pma_algorithm_source(domain),
+                  dir     = dir)
   )
 }
 

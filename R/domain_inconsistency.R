@@ -84,6 +84,34 @@
 # I^2 / tau^2 / Q statistics are always shown in notes but never drive the
 # judgment beyond the Step 1 gate above.
 
+# --------------------------------------------------------------------------
+# Flowchart node vocabulary (inst/figures/incon.svg)
+#
+# See the note on .ROB_FIG2_NODE_IDS in domain_rob.R: these are the <g> ids in
+# that file, the "flow_path" fact names the ones this assessment traversed,
+# and tests/testthat/test-flowchart-nodes.R holds the two in step.
+#
+# The manual flowchart path (inconsistency_ci_diff etc.) and the automated one
+# answer the SAME three questions, so both emit paths through these ids; only
+# the scalar override records none, because it does not run the flowchart.
+.INCON_FIG2_NODE_IDS <- c(
+  "pma-incon-node-step1",
+  "pma-incon-edge-step1-no",
+  "pma-incon-leaf-nodown1",
+  "pma-incon-edge-step1-yes",
+  "pma-incon-node-step2",
+  "pma-incon-edge-step2-majority",
+  "pma-incon-leaf-nodown2",
+  "pma-incon-edge-step2-scattered",
+  "pma-incon-leaf-down1-scattered",
+  "pma-incon-edge-step2-opposite",
+  "pma-incon-node-step3",
+  "pma-incon-edge-step3-yes",
+  "pma-incon-leaf-nodown3",
+  "pma-incon-edge-step3-no",
+  "pma-incon-leaf-down1"
+)
+
 # Note appended whenever an automated / flowchart path would historically have
 # rated down two levels. Core GRADE 3 does not support that, so the judgment is
 # capped at -1 and the user is pointed at the explicit override.
@@ -210,7 +238,9 @@ assess_inconsistency <- function(meta_obj,
           "FLOWCHART Step 1: No important differences in point estimates / ",
           "adequate CI overlap -> do not rate down. | ", stat_note
         ),
-        facts    = .facts(stat_facts)
+        facts    = .facts(c(stat_facts, list(.flow_path_fact(c(
+          "pma-incon-node-step1", "pma-incon-edge-step1-no",
+          "pma-incon-leaf-nodown1")))))
       ))
     }
 
@@ -239,7 +269,10 @@ assess_inconsistency <- function(meta_obj,
           "(per BMJ Core GRADE 3 flowchart). | ",
           stat_note
         ),
-        facts    = .facts(stat_facts)
+        facts    = .facts(c(stat_facts, list(.flow_path_fact(c(
+          "pma-incon-node-step1", "pma-incon-edge-step1-yes",
+          "pma-incon-node-step2", "pma-incon-edge-step2-majority",
+          "pma-incon-leaf-nodown2")))))
       ))
     }
 
@@ -266,7 +299,11 @@ assess_inconsistency <- function(meta_obj,
           .INCONSISTENCY_SUBGROUP_CAVEAT, " | ",
           stat_note
         ),
-        facts    = .facts(stat_facts)
+        facts    = .facts(c(stat_facts, list(.flow_path_fact(c(
+          "pma-incon-node-step1", "pma-incon-edge-step1-yes",
+          "pma-incon-node-step2", "pma-incon-edge-step2-opposite",
+          "pma-incon-node-step3", "pma-incon-edge-step3-yes",
+          "pma-incon-leaf-nodown3")))))
       ))
     }
 
@@ -279,7 +316,11 @@ assess_inconsistency <- function(meta_obj,
         "-> rate down one level. ", .INCONSISTENCY_SUBGROUP_CAVEAT, " ",
         .INCONSISTENCY_CAP_NOTE, " | ", stat_note
       ),
-      facts    = .facts(stat_facts)
+      facts    = .facts(c(stat_facts, list(.flow_path_fact(c(
+        "pma-incon-node-step1", "pma-incon-edge-step1-yes",
+        "pma-incon-node-step2", "pma-incon-edge-step2-opposite",
+        "pma-incon-node-step3", "pma-incon-edge-step3-no",
+        "pma-incon-leaf-down1")))))
     ))
   }
 
@@ -328,7 +369,9 @@ assess_inconsistency <- function(meta_obj,
         stat_note
       ),
       # Step 2 never ran, so there are no zone facts to record.
-      facts    = .facts(stat_facts)
+      facts    = .facts(c(stat_facts, list(.flow_path_fact(c(
+        "pma-incon-node-step1", "pma-incon-edge-step1-no",
+        "pma-incon-leaf-nodown1")))))
     ))
   }
 
@@ -345,7 +388,12 @@ assess_inconsistency <- function(meta_obj,
                        "'some_concerns' (conservative). "), cut),
         .INCONSISTENCY_I2_CAVEAT, " | ", stat_note
       ),
-      facts    = .facts(stat_facts)
+      # The path stops at the Step 2 node on purpose: the question was
+      # reached but could not be answered, so no branch out of it is
+      # highlighted and the picture shows exactly how far the algorithm got.
+      facts    = .facts(c(stat_facts, list(.flow_path_fact(c(
+        "pma-incon-node-step1", "pma-incon-edge-step1-yes",
+        "pma-incon-node-step2")))))
     ))
   }
 
@@ -452,6 +500,11 @@ assess_inconsistency <- function(meta_obj,
   )
   zone_facts <- list(f_zone_counts, f_zone_decision)
 
+  # Everything below reached Step 2 through Step 1's "yes" edge; which edge it
+  # leaves by is the zone tally's verdict.
+  flow_to_step2 <- c("pma-incon-node-step1", "pma-incon-edge-step1-yes",
+                     "pma-incon-node-step2")
+
   if (judgment_auto == "no") {
     return(make_domain_row(
       domain   = "Inconsistency",
@@ -462,7 +515,9 @@ assess_inconsistency <- function(meta_obj,
         side_note,
         " | ", stat_note
       ),
-      facts    = .facts(c(stat_facts, zone_facts))
+      facts    = .facts(c(stat_facts, zone_facts, list(.flow_path_fact(c(
+        flow_to_step2, "pma-incon-edge-step2-majority",
+        "pma-incon-leaf-nodown2")))))
     ))
   }
 
@@ -486,7 +541,10 @@ assess_inconsistency <- function(meta_obj,
           .INCONSISTENCY_SUBGROUP_CAVEAT, " | ",
           stat_note
         ),
-        facts    = .facts(c(stat_facts, zone_facts))
+        facts    = .facts(c(stat_facts, zone_facts, list(.flow_path_fact(c(
+          flow_to_step2, "pma-incon-edge-step2-opposite",
+          "pma-incon-node-step3", "pma-incon-edge-step3-yes",
+          "pma-incon-leaf-nodown3")))))
       ))
     }
     step3_note <- if (identical(inconsistency_subgroup_explained, "no")) {
@@ -508,7 +566,13 @@ assess_inconsistency <- function(meta_obj,
         .INCONSISTENCY_CAP_NOTE, " | ",
         stat_note
       ),
-      facts    = .facts(c(stat_facts, zone_facts))
+      # Unanswered lands here too, and takes the same "no" edge: the default
+      # is the conservative one, and the picture should show which leaf the
+      # judgment actually came from rather than stopping at the question.
+      facts    = .facts(c(stat_facts, zone_facts, list(.flow_path_fact(c(
+        flow_to_step2, "pma-incon-edge-step2-opposite",
+        "pma-incon-node-step3", "pma-incon-edge-step3-no",
+        "pma-incon-leaf-down1")))))
     ))
   }
 
@@ -521,6 +585,8 @@ assess_inconsistency <- function(meta_obj,
       step1_note,
       side_note, " | ", stat_note
     ),
-    facts    = .facts(c(stat_facts, zone_facts))
+    facts    = .facts(c(stat_facts, zone_facts, list(.flow_path_fact(c(
+      flow_to_step2, "pma-incon-edge-step2-scattered",
+      "pma-incon-leaf-down1-scattered")))))
   )
 }
