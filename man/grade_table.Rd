@@ -68,6 +68,28 @@ A \code{flextable} object.
 \description{
 Summary of Findings table for multiple outcomes
 }
+\section{Presenting a continuous outcome as a proportion of responders}{
+
+\code{\link{sof_table}} takes the responder presentation as arguments
+(\code{convert_smd_to_or}, \code{baseline_risk}, \code{threshold_label},
+\code{chinn_invert}), which is right for a table of one row. A combined
+table has to answer it per row -- one continuous outcome converted, another
+not, a binary one that cannot be -- so the choice rides on each rated object
+as the \code{"pmatools_display"} attribute, a named list holding those four
+names (see \code{\link{export_bundle.pmatools_set}} for the same attribute's
+export arguments). Both layouts fill the converted row's two arm columns
+with the dichotomised rates, marked \code{*} and explained in a footnote
+written once for the table however many rows used it -- and not at all when
+none did.
+
+A row that asks for the conversion and cannot support it -- a non-SMD/MD
+effect measure, no responder proportion in (0, 1), no usable pooled estimate
+-- keeps its unconverted presentation rather than taking the table down, and
+the reason is stated as a numbered footnote against that row.
+\code{sof_table()} aborts on the same conditions because its table is that
+one row; here the other rows are still worth rendering.
+}
+
 \examples{
 \dontrun{
 g1 <- grade_meta(m1, outcome_name = "Depression response")

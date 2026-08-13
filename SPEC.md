@@ -704,7 +704,9 @@ When `convert_smd_to_or = TRUE`:
 
 When `convert_smd_to_or = FALSE` (default), behavior is identical to v0.1.0.
 
-**The conversion is a presentation, not a rating input.** `convert_smd_to_or` reaches `sof_table()` and nothing else — `grade_meta()` never sees it, and Imprecision is rated on the SMD/MD against `threshold_cont` whichever way this argument is set. The package default is and stays `FALSE`; as of the Shiny app's `input$sof_presentation` radio the app default matches it, where the app previously defaulted the conversion on.
+**The conversion is a presentation, not a rating input.** `convert_smd_to_or` reaches `sof_table()` and `grade_table()` and nothing else — `grade_meta()` never sees it, and Imprecision is rated on the SMD/MD against `threshold_cont` whichever way this argument is set. The package default is and stays `FALSE`; as of the Shiny app's `input$sof_presentation` radio the app default matches it, where the app previously defaulted the conversion on.
+
+**Per-row, in a combined table [v0.5.1].** `sof_table()` takes the four arguments above, which is right for a table of one row. `grade_table()` — the only Summary of Findings a multi-outcome bundle carries — reads the same four **per row** off each rated object's `"pmatools_display"` attribute (§4.8, `PMATOOLS_RESPONDER_FIELDS`), so one continuous outcome can be shown as responders while another is shown as its effect and a binary one is untouched. They ride on the attribute rather than in `grade_meta_multi()`'s `common` / `per_outcome` because `grade_meta()` takes none of them and its own `baseline_risk` means the control-arm event rate, not the proportion of control patients who respond. Details in §4.9.
 
 ### 4.7 `chinn_smd_to_or()` [new helper, exported]
 
@@ -913,7 +915,11 @@ Directory names carry the set order as a zero-padded numeric prefix. A non-ASCII
 
 **Per-outcome display arguments [v0.5.1].** `rob`, `forest_display`, `forest_display_rob`, `rare`, `rare_forest_display` and `pubias_missing_df` describe **one analysis**. A set built by `grade_meta_multi()` in one call can answer for all of them at once; a set assembled outcome by outcome (which is what the Shiny app does) cannot. Such a caller attaches them to each rated object as the `"pmatools_display"` attribute — a named list holding any of `forest_display`, `forest_display_rob`, `rare`, `rare_forest_display`, `pubias_missing_df` — and this method reads them per outcome, falling back to the argument of the same name for an outcome that carries none. The same arrangement already lets `follow_up` / `unit` differ per row (§4.6, `.display_arg_from_outcomes()`).
 
+The same attribute also carries **how a continuous outcome is presented** in `summary_of_findings.docx` / `.csv`: `convert_smd_to_or`, `baseline_risk`, `threshold_label` and `chinn_invert`, each the `sof_table()` argument of the same name (`PMATOOLS_RESPONDER_FIELDS`). `grade_table()` reads them per row (§4.9). They are not `grade_meta_multi()` arguments: `grade_meta()` takes none of them, and its own `baseline_risk` is a different quantity.
+
 An unrecognised name in the attribute **aborts**, and so does an attribute that is not a fully named list. A misspelt field is read by nothing, so the artifact it was meant to shape would be written as if it had never been supplied — the same silent-drop failure `grade_args` name checking exists to prevent (§4.8.1).
+
+Because the presentation rides on an attribute and `grade_meta_multi()` cannot restore it, the generated multi-outcome `analysis.R` carries an explicit re-stamp block — one `attr(set$outcomes[[…]], "pmatools_display") <- list(convert_smd_to_or = TRUE, …)` per converted outcome, emitted after `set_primary()` and before `grade_table()`. Without it the script would reproduce every number of the exported table except how its continuous rows are presented. The block is absent from a set with no converted outcome, so an ordinary bundle's script is byte-for-byte what it was.
 
 `other_text` / `other_downgrade` follow the same rule without an attribute: an outcome carrying its own `$other_text` (a non-blank single string) or `$other_downgrade` uses it for its own evidence profile, in the per-outcome directory and in the combined `evidence_profile.docx`, and the set-wide argument applies only to the outcomes that carry none.
 
@@ -1111,6 +1117,16 @@ grade_report(
 ```
 
 Passing a `pmatools_set` uses the set's `order` for the row order and its `primary` for grouping; the named-list API is unchanged. In the BMJ style, per-outcome `follow_up` / `unit` recorded by `grade_meta_multi()` are picked up automatically, and a table mixing effect measures keeps a generic Effect header plus a footnote pointing at the per-cell measure names.
+
+**Presenting a continuous outcome as a proportion of responders, per row [v0.5.1].** `grade_table()` has no `convert_smd_to_or` argument, because the answer is not one per table. It reads `convert_smd_to_or`, `baseline_risk`, `threshold_label` and `chinn_invert` off each rated object's `"pmatools_display"` attribute (§4.6, §4.8) and applies them **row by row**, in both layouts. A converted row's two arm columns hold the dichotomised rates with the same `.format_cer()` / `.format_ier_chinn()` numbers `sof_table()` produces, marked `*`; its Difference column keeps the continuous estimate, and the arm-derivation footnote is not written for it. In the GRADEpro layout a converted row counts as a *rate* row for the arm-header vote, since its cells hold event rates again.
+
+The `*` footnote explaining Chinn's formula is written **once when at least one row used the conversion, and not at all when none did**. It omits the direction and the threshold that `sof_table()`'s single-row version weaves in, because a combined table can hold rows converted in opposite directions against different thresholds; each converted row states its own on a following line keyed by outcome name (`[Depression] Responder presentation: OR direction inverted (OR > 1 = treatment better). Threshold definition: …`), the same shape as the per-outcome publication-bias sentences of the same footer.
+
+**A row that cannot be converted falls back; it does not take the table down.** `sof_table()` **aborts** when `convert_smd_to_or = TRUE` and the summary measure is not SMD/MD or `baseline_risk` is not in (0, 1) — its table *is* that row, so with the conversion refused there is nothing left to render, and that behaviour is unchanged. In `grade_table()` the same conditions (plus a missing pooled estimate) leave the row in its **unconverted** presentation and add the reason to the numbered per-row register, so the marker sits on the outcome name: *"The responder presentation was asked for but could not be applied: …. This row shows the unconverted presentation instead."* One outcome must not cost the reviewer the whole document. A row can therefore carry more than one `[n]` marker — the analysis-set note and this one — and `disp()` renders them as `Mortality [1][2]`.
+
+An unrecognised name in the attribute **aborts**, in `grade_table()` as in `export_bundle()`, so the on-screen preview and the exported table agree about what is legal.
+
+`summary_of_findings.csv` resolves the presentation through the same helper as the `.docx`, so the two cannot disagree, and the generated `analysis.R` re-stamps the attribute onto the set it rebuilds (§4.8).
 
 `print.pmatools()` / `summary.pmatools()` are unchanged apart from also reporting `$rating_target` and any low-RoB refit.
 
@@ -1828,6 +1844,8 @@ instead.
 | `grade_meta` with `threshold = -3` (negative) | abort with "threshold must be positive (it is treated as a half-width around null)" |
 | `grade_meta` with `threshold` AND `ois_p0/p1` both supplied | use `ois_p0/p1`; note "Threshold provided but explicit ois_p0/p1 takes precedence" in domain notes |
 | `sof_table(convert_smd_to_or = TRUE, baseline_risk = NULL)` | abort with informative message |
+| `grade_table()` row asking for the responder presentation that cannot support it (non-SMD/MD `sm`, `baseline_risk` outside (0, 1), no pooled estimate) | the row keeps its unconverted presentation; the reason is a numbered per-row footnote; the table still renders (§4.9) |
+| `grade_table()` where every row asked for the conversion and none could take it | no Chinn footnote at all — it would describe a conversion no cell went through |
 | `export_bundle` to non-writable directory | abort with file-system error |
 | `export_bundle` with `include = c("data")` only | ZIP contains only `data_long.csv`; no analysis.R |
 | `export_bundle(ma = m, grade = g, ...)` (legacy named call) | works; deprecation warning once per session (§4.8.1a) |

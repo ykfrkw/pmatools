@@ -31,7 +31,7 @@ set <- grade_meta_multi(
 )
 {{not_reported_block}}
 set <- reorder_outcomes(set, {{order_arg}})
-{{primary_line}}
+{{primary_line}}{{responder_block}}
 print(set)
 summary(set)
 

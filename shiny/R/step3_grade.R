@@ -3737,6 +3737,13 @@ step3_server <- function(input, output, session, state) {
     state$display$convert       <- !is.null(ca)
     state$display$baseline_risk <- ca$baseline_risk
     state$display$chinn_invert  <- isTRUE(ca$chinn_invert)
+    # threshold_label is NOT written here. app.R's display observer already
+    # mirrors input$threshold_label into the same field, and two observers
+    # writing one key with different answers (NULL off the responder route,
+    # the raw input on it) invalidate each other forever - the session never
+    # goes idle again and no output updates. It needs no guard of its own:
+    # nothing reads it unless state$display$convert is TRUE, and that IS the
+    # guarded value.
     # Resolved presentation fields, so Step 4 builds the exported SoF from
     # exactly the values this preview used.
     state$display$follow_up     <- sof_follow_up()
@@ -3955,9 +3962,10 @@ step3_server <- function(input, output, session, state) {
     # is aligned with the key for any downstream single-outcome use of it.
     g$outcome_name <- key
     # Same reasoning one level up: the ZIP is built from every banked outcome
-    # at once, so the display arguments its plots are drawn with, and the data
-    # they were pooled from, have to travel on the outcome too. Read at
-    # download time they would all describe whichever outcome is on screen.
+    # at once, so the display arguments its plots are drawn with, how this row
+    # is presented (as the effect, or as a proportion of responders), and the
+    # data it was pooled from, all have to travel on the outcome too. Read at
+    # download time they would describe whichever outcome is on screen.
     g <- pma_bank_export_material(g, display = state$display,
                                   pubias_missing = state$pubias_missing,
                                   rare = if (isTRUE(state$rare_mode_active))

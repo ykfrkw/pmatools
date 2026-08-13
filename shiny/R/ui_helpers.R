@@ -281,9 +281,14 @@ pma_upsert_outcome <- function(outcomes, name, g, uid = NULL) {
 PMA_OUTCOME_SOURCE_ATTR <- "pma_outcome_source"
 
 # The pmatools_display attribute for the outcome being banked. Only the
-# arguments that describe THIS analysis: `per`, `prediction` and the SoF
-# presentation settings are properties of the table, and the bundler takes
-# those once for the whole set.
+# arguments that describe THIS analysis: `per` and `prediction` are properties
+# of the table, and the bundler takes those once for the whole set.
+#
+# The responder presentation is NOT one of them. It is a property of the row -
+# two continuous outcomes in one review can be presented differently and a
+# binary one cannot be converted at all - so it is banked with the outcome, and
+# grade_table() reads it back per row when it builds the combined Summary of
+# Findings the ZIP carries.
 pma_outcome_display <- function(display = list(), pubias_missing = NULL,
                                 rare = NULL) {
   display <- display %||% list()
@@ -294,7 +299,18 @@ pma_outcome_display <- function(display = list(), pubias_missing = NULL,
     rare_forest_display = display$forest_step2,
     pubias_missing_df   = pubias_missing
   )
-  out[!vapply(out, is.null, logical(1))]
+  out <- out[!vapply(out, is.null, logical(1))]
+
+  # state$display$convert is the GUARDED boolean (shiny/SPEC.md §3.2): Step 3
+  # writes it only after the effect measure and the responder proportion have
+  # been checked, so an outcome shown as its effect carries nothing here.
+  if (!isTRUE(display$convert)) return(out)
+  c(out, list(
+    convert_smd_to_or = TRUE,
+    baseline_risk     = display$baseline_risk,
+    threshold_label   = display$threshold_label,
+    chinn_invert      = isTRUE(display$chinn_invert)
+  ))
 }
 
 pma_outcome_source <- function(data = NULL, experimental_label = NULL,

@@ -35,9 +35,24 @@ PMATOOLS_DISPLAY_ATTR <- "pmatools_display"
 
 # The names the attribute may carry, each the export_bundle.pmatools_set()
 # argument of the same name.
-PMATOOLS_DISPLAY_ATTR_FIELDS <- c("forest_display", "forest_display_rob",
-                                  "rare", "rare_forest_display",
-                                  "pubias_missing_df")
+PMATOOLS_EXPORT_DISPLAY_FIELDS <- c("forest_display", "forest_display_rob",
+                                    "rare", "rare_forest_display",
+                                    "pubias_missing_df")
+
+# How ONE row of the Summary of Findings presents a continuous outcome: as the
+# effect itself, or as a proportion of responders derived with Chinn's formula.
+# Each name is the sof_table() argument of the same name, because that is what
+# the values are - sof_table() takes the choice as arguments, which is right for
+# a table of one row, and grade_table() has to read it per row instead
+# (.responder_args(), sof_table.R). They travel on this attribute rather than in
+# `common` / `per_outcome` because grade_meta() takes none of them, and its own
+# `baseline_risk` means the control-arm event rate, not the proportion of
+# control patients who respond.
+PMATOOLS_RESPONDER_FIELDS <- c("convert_smd_to_or", "baseline_risk",
+                               "threshold_label", "chinn_invert")
+
+PMATOOLS_DISPLAY_ATTR_FIELDS <- c(PMATOOLS_EXPORT_DISPLAY_FIELDS,
+                                  PMATOOLS_RESPONDER_FIELDS)
 
 # One per-outcome display argument, falling back to the set-wide argument.
 .outcome_display <- function(g, field, fallback = NULL) {

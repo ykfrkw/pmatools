@@ -36,6 +36,26 @@
 #'   "Risk with ..." column headers (GRADEpro vocabulary).
 #'   Defaults are \code{"intervention"} and \code{"control"}.
 #'
+#' @section Presenting a continuous outcome as a proportion of responders:
+#' \code{\link{sof_table}} takes the responder presentation as arguments
+#' (\code{convert_smd_to_or}, \code{baseline_risk}, \code{threshold_label},
+#' \code{chinn_invert}), which is right for a table of one row. A combined
+#' table has to answer it per row -- one continuous outcome converted, another
+#' not, a binary one that cannot be -- so the choice rides on each rated object
+#' as the \code{"pmatools_display"} attribute, a named list holding those four
+#' names (see \code{\link{export_bundle.pmatools_set}} for the same attribute's
+#' export arguments). Both layouts fill the converted row's two arm columns
+#' with the dichotomised rates, marked \code{*} and explained in a footnote
+#' written once for the table however many rows used it -- and not at all when
+#' none did.
+#'
+#' A row that asks for the conversion and cannot support it -- a non-SMD/MD
+#' effect measure, no responder proportion in (0, 1), no usable pooled estimate
+#' -- keeps its unconverted presentation rather than taking the table down, and
+#' the reason is stated as a numbered footnote against that row.
+#' \code{sof_table()} aborts on the same conditions because its table is that
+#' one row; here the other rows are still worth rendering.
+#'
 #' @return A \code{flextable} object.
 #'
 #' @examples
@@ -101,27 +121,42 @@ grade_table <- function(outcomes,
     sec_nms  <- character(0)
   }
 
+  # Number formatting follows the layout, as it does in sof_table(): the BMJ
+  # tables print "578 per 1000" and separate every interval with "to".
+  nf <- .bmj_number_format(style)
+
+  # How each row asked to be presented (.responder_args(), sof_table.R), and
+  # what came of it: the converted arm cells, or the reason the conversion could
+  # not be applied to that row. Resolved before anything is built, because the
+  # reason has to reach the footnote register below.
+  responder     <- .resolve_responder(outcomes, nms, per,
+                                      big_mark = nf$big_mark,
+                                      ci_sep   = nf$ci_sep)
+  converted_nms <- .converted_outcomes(responder)
+
   # One numbered footnote pool for every note that belongs to a single row
   # rather than to the table: the risk-of-bias analysis set (Core GRADE 4
-  # Fig 2), which can differ between outcomes, and the reason a not-reported
-  # outcome went unreported. Both are attached to their row by a [n] marker.
+  # Fig 2), which can differ between outcomes, the reason a not-reported
+  # outcome went unreported, and the reason a row that asked for the responder
+  # presentation did not get it. Each is attached to its row by a [n] marker,
+  # and one row can carry more than one.
   row_notes  <- character(0)
-  row_marker <- stats::setNames(rep(NA_integer_, length(nms)), nms)
+  row_marker <- stats::setNames(vector("list", length(nms)), nms)
   for (nm in nms) {
     g <- outcomes[[nm]]
-    note <- if (.is_not_reported(g)) {
+    notes <- if (.is_not_reported(g)) {
       if (is.null(g$reason)) NULL else paste0("Not reported: ", g$reason)
     } else {
-      .rob_analysis_set_note(g)
+      c(.rob_analysis_set_note(g),
+        if (is.null(responder[[nm]]$reason)) NULL else
+          .responder_fallback_note(responder[[nm]]$reason))
     }
-    if (!is.null(note)) {
+    for (note in notes) {
       row_notes <- c(row_notes, note)
-      row_marker[[nm]] <- length(row_notes)
+      row_marker[[nm]] <- c(row_marker[[nm]], length(row_notes))
     }
   }
-  disp <- function(nm) {
-    if (is.na(row_marker[[nm]])) nm else paste0(nm, " [", row_marker[[nm]], "]")
-  }
+  disp <- function(nm) paste0(nm, .fact_marker_suffix(row_marker[[nm]]))
 
   # Domain-fact footnotes share the row-note register rather than starting a
   # second one, so a reader never sees two different [1]s in one footer.
@@ -158,7 +193,8 @@ grade_table <- function(outcomes,
       label_intervention = label_intervention,
       label_control      = label_control,
       disp = disp, row_notes = row_notes,
-      fact_notes = fact_notes, fact_markers = fact_markers
+      fact_notes = fact_notes, fact_markers = fact_markers,
+      responder = responder, converted_nms = converted_nms
     )
     # Mixed effect measures (the norm once binary and continuous outcomes share
     # a table) leave the BMJ header generic. Each cell still spells its own
@@ -197,6 +233,9 @@ grade_table <- function(outcomes,
     # of the continuous-header vote and of the arm-derivation footnote, and
     # .build_row() never reads it.
     if (.is_not_reported(g)) return(NULL)
+    # A converted row supplies its own pair: responder rates, not the arm-level
+    # means the object would otherwise be read for.
+    if (!is.null(responder[[nm]]$arm)) return(responder[[nm]]$arm)
     .sof_arm_cells(g$meta, g$baseline_risk, per,
                    unit = .per_outcome_arg(unit, nm))
   })
@@ -357,8 +396,23 @@ grade_table <- function(outcomes,
     }
   }
 
+  ft <- .add_responder_notes(ft, responder, converted_nms)
+
   ft <- .style_table_footer(ft)
 
+  ft
+}
+
+# The '*' footnote explaining the responder presentation, written once however
+# many rows used it and not at all when none did, followed by one line per
+# converted row for the direction and threshold that row was converted against.
+.add_responder_notes <- function(ft, responder, converted_nms) {
+  if (length(converted_nms) == 0L) return(ft)
+  ft <- flextable::add_footer_lines(ft, values = .chinn_note(reading = TRUE))
+  for (nm in converted_nms) {
+    ft <- flextable::add_footer_lines(
+      ft, values = .responder_row_note(nm, responder[[nm]]$args))
+  }
   ft
 }
 

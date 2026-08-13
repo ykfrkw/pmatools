@@ -498,24 +498,9 @@
   }
 
   if (chinn_active) {
-    invert_str <- if (isTRUE(chinn_invert)) {
-      " (OR direction inverted: OR > 1 = treatment better)"
-    } else {
-      " (OR direction as given: positive SMD -> OR > 1)"
-    }
-    threshold_str <- if (!is.null(threshold_label) && nzchar(threshold_label)) {
-      paste0(" Threshold definition: ", threshold_label, ".")
-    } else ""
-    ft <- flextable::add_footer_lines(ft, values = paste0(
-      "* Continuous outcome dichotomised via Chinn's formula ",
-      "(log OR = SMD x pi / sqrt(3))", invert_str,
-      ". Control event rate user-specified.", threshold_str,
-      " This is NOT Core GRADE 6's option 2, which assumes a normal ",
-      "distribution and computes, per study and before pooling, the ",
-      "proportion in each arm improving by more than the MID; Chinn's formula ",
-      "assumes a logistic latent variable, uses no MID and is applied to the ",
-      "pooled SMD. The two do not generally agree."
-    ))
+    ft <- flextable::add_footer_lines(
+      ft, values = .chinn_note(invert = isTRUE(chinn_invert),
+                               threshold_label = threshold_label))
   }
 
   if (has_plain) {
@@ -545,12 +530,19 @@
                              label_intervention, label_control,
                              disp, row_notes,
                              fact_notes = character(0),
-                             fact_markers = list()) {
+                             fact_markers = list(),
+                             responder = list(),
+                             converted_nms = character(0)) {
   row_vals <- lapply(nms, function(nm) {
+    # A converted row hands its own arm cells down, exactly as sof_table() does
+    # for a single-outcome Chinn table; every other row lets .bmj_row_values()
+    # derive them.
+    arm <- responder[[nm]]$arm
     .bmj_row_values(disp(nm), outcomes[[nm]], per = per,
                     prediction = prediction,
                     follow_up = .per_outcome_arg(follow_up, nm),
                     unit      = .per_outcome_arg(unit, nm),
+                    cer_str   = arm$cer, ier_str = arm$ier,
                     label_intervention = label_intervention,
                     markers   = fact_markers[[nm]])
   })
@@ -692,6 +684,8 @@
         ft, values = paste0("[", nm, "] Publication bias: ", pubias_qual_note))
     }
   }
+
+  ft <- .add_responder_notes(ft, responder, converted_nms)
 
   if (has_plain) {
     ft <- flextable::add_footer_lines(ft, values = .bmj_plain_language_note())

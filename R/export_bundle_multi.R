@@ -94,6 +94,14 @@
 #' `follow_up` / `unit` differ per row of the summary table. An unrecognised
 #' name in the attribute aborts rather than being ignored.
 #'
+#' The same attribute carries how a continuous outcome is presented in
+#' `summary_of_findings.docx` / `.csv`: `convert_smd_to_or`, `baseline_risk`,
+#' `threshold_label` and `chinn_invert`, each the \code{\link{sof_table}}
+#' argument of the same name. \code{\link{grade_table}} reads them per row, so
+#' one outcome can be shown as a proportion of responders while another is
+#' shown as its effect, and the generated `analysis.R` re-stamps them onto the
+#' set it rebuilds.
+#'
 #' @return Character. Absolute path to the created ZIP file.
 #'
 #' @seealso \code{\link{export_bundle}} for the single-outcome layout.
@@ -187,9 +195,14 @@ export_bundle.pmatools_set <- function(x,
                                     out_path = file.path(work_dir, "analysis.R"))
       TRUE
     }, error = function(e) {
+      # The offending call, not only the message: the loss is a file that is
+      # quietly absent from the ZIP, and a bare "the condition has length > 1"
+      # says nothing about which of the renderer's dozens of helpers raised it.
       rlang::warn(sprintf(
-        paste0("The multi-outcome analysis.R could not be rendered (%s); the ",
-               "bundle is written without it."), conditionMessage(e)))
+        paste0("The multi-outcome analysis.R could not be rendered (%s), so ",
+               "the bundle is written without it. Raised by: %s"),
+        conditionMessage(e),
+        paste(deparse(conditionCall(e)), collapse = " ")))
       FALSE
     })
     if (ok) add("analysis.R")
@@ -468,6 +481,11 @@ export_bundle.pmatools_set <- function(x,
 .sof_set_dataframe <- function(set, per = 1000, prediction = FALSE,
                                label_intervention = "intervention") {
   outcomes <- .set_outcome_list(set)
+  # The .docx is drawn in the BMJ layout, so the plain-text mirror resolves the
+  # responder presentation with the same number formatting.
+  nf <- .bmj_number_format("bmj")
+  responder <- .resolve_responder(outcomes, set$order, per,
+                                  big_mark = nf$big_mark, ci_sep = nf$ci_sep)
   rows <- lapply(set$order, function(nm) {
     g <- outcomes[[nm]]
 
@@ -495,8 +513,10 @@ export_bundle.pmatools_set <- function(x,
       ))
     }
 
+    arm <- responder[[nm]]$arm
     v <- .bmj_row_values(nm, g, per = per, prediction = prediction,
                          follow_up = g$follow_up, unit = g$unit,
+                         cer_str = arm$cer, ier_str = arm$ier,
                          label_intervention = label_intervention)
     data.frame(
       order            = which(set$order == nm),
@@ -695,6 +715,7 @@ export_bundle.pmatools_set <- function(x,
     common_arg       = .multi_arg_lit(common_args, indent = 4L),
     per_outcome_arg  = .multi_arg_lit(po_args, indent = 4L),
     not_reported_block = .not_reported_block(set),
+    responder_block  = .responder_stamp_block(set),
     order_arg        = .multi_arg_lit(set$order),
     primary_line     = primary_line,
     dir_names_arg    = .multi_arg_lit(.outcome_dir_names(set$order)),
@@ -763,6 +784,46 @@ export_bundle.pmatools_set <- function(x,
          "# Pooled with the rare-event method suite, not with run_ma(): the\n",
          "# rating below was made on this fit.\n",
          paste(blocks, collapse = ""))
+}
+
+# Re-stamp the responder presentation onto the rebuilt set, for the generated
+# analysis.R. The grade_meta_multi() call above cannot carry it: grade_meta()
+# takes none of these arguments, and its own `baseline_risk` is the control-arm
+# event rate rather than the proportion of control patients who respond. The
+# choice rides on the rated object as the "pmatools_display" attribute instead
+# (PMATOOLS_RESPONDER_FIELDS, multi_outcome.R), and grade_table() below reads it
+# per row - so without this block the script would reproduce every number of
+# summary_of_findings.docx except how its continuous rows are presented.
+# Returns "" when no outcome asked for the conversion, so an ordinary bundle's
+# script is byte-for-byte what it was before.
+#
+# "_stamp_" is not decoration: the Shiny app source()s these files into one
+# environment alongside its own, and shiny/R/step3_threshold.R already defines
+# a `.responder_block()` (the widget). A package helper of that name is
+# shadowed in the app - which is where this one runs - and the collision shows
+# up only as a bundle silently missing its analysis.R.
+.responder_stamp_block <- function(set) {
+  lit <- function(v) paste(deparse(v, width.cutoff = 500L), collapse = "")
+
+  calls <- character(0)
+  for (nm in set$order) {
+    args <- .responder_args(set$outcomes[[nm]])
+    if (is.null(args)) next
+    calls <- c(calls, paste0(
+      "attr(set$outcomes[[", lit(nm), "]], ", lit(PMATOOLS_DISPLAY_ATTR),
+      ") <- list(\n",
+      "  convert_smd_to_or = TRUE,\n",
+      "  baseline_risk     = ", lit(args$baseline_risk), ",\n",
+      "  threshold_label   = ", lit(args$threshold_label), ",\n",
+      "  chinn_invert      = ", lit(isTRUE(args$chinn_invert)), "\n",
+      ")"))
+  }
+  if (length(calls) == 0L) return("")
+
+  paste0("\n# Continuous outcomes the review chose to present as a proportion\n",
+         "# of responders (Chinn's formula). A presentation, not a rating\n",
+         "# input: grade_meta() never saw it.\n",
+         paste(calls, collapse = "\n"), "\n")
 }
 
 # One add_not_reported() call per not-reported outcome, in set$order, for the

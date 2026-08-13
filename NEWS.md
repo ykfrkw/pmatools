@@ -61,10 +61,11 @@
   `summary_of_findings.docx`, and `analysis.R` re-runs every outcome rather than
   one. The Step 4 checkboxes change with it — their values are now the
   bundler's own `include` vocabulary, so `grade_table` splits into `sof` and
-  `evidence_profile` and `sof_combined` becomes `sof`. One presentation is not
-  carried across: the combined table is built by `grade_table()`, which has no
-  SMD-to-odds-ratio conversion, so the responder presentation of a continuous
-  outcome remains an on-screen view and no longer reaches the .docx in the ZIP.
+  `evidence_profile` and `sof_combined` becomes `sof`. The responder
+  presentation of a continuous outcome travels with it: `grade_table()` now
+  applies the SMD-to-odds-ratio conversion per row (see the feature entry
+  below), so the presentation the reviewer picked in Step 3 is what the root
+  `summary_of_findings.docx` shows.
 
 * **Export bundles no longer contain PNG plots.** Every plot used to ship twice,
   once as a PDF and once as a raster PNG of the same figure, in both the
@@ -192,6 +193,29 @@
   `pma-incon-leaf-down2`.
 
 ## New features
+
+* **`grade_table()` presents a continuous outcome as a proportion of
+  responders, row by row.** `sof_table()` has taken `convert_smd_to_or` /
+  `baseline_risk` / `threshold_label` / `chinn_invert` since v0.2, which is the
+  right shape for a table of one row and the wrong one for a combined table:
+  the answer differs per outcome, and a binary row has no answer at all. The
+  combined table now reads the same four names off each rated object's
+  `"pmatools_display"` attribute — the channel that already carries the
+  per-outcome export arguments — and applies them per row, in both layouts. One
+  table can therefore hold a converted continuous outcome, an unconverted one
+  and a binary one; the `*` footnote explaining Chinn's formula is written once
+  when any row used the conversion and not at all when none did, with each
+  converted row's direction and threshold on its own line. **A row that asks
+  for the conversion and cannot support it — a non-SMD/MD effect measure, no
+  responder proportion in (0, 1), no usable pooled estimate — keeps its
+  unconverted presentation and says why in a numbered footnote against that
+  row, rather than aborting.** `sof_table()` still aborts on the same
+  conditions, because its table *is* that row; in a combined table one outcome
+  must not cost the reviewer the whole document. The Shiny app banks the choice
+  with the outcome, `export_bundle()` carries it into the root
+  `summary_of_findings.docx` and `.csv`, and the generated multi-outcome
+  `analysis.R` re-stamps it so re-running the script reproduces the same table.
+  See `SPEC.md` §4.9.
 
 * **The heterogeneity estimator and the random-effects confidence interval are
   both choices now, and the model that ran is printed above the results.**

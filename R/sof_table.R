@@ -308,29 +308,10 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
 
   # Chinn-specific footnote with explicit '*' link and citations
   if (chinn_active) {
-    invert_str <- if (isTRUE(chinn_invert)) {
-      " (OR direction inverted: OR > 1 = treatment better)"
-    } else {
-      " (OR direction as given: positive SMD -> OR > 1)"
-    }
-    threshold_str <- if (!is.null(threshold_label) && nzchar(threshold_label)) {
-      paste0(" Threshold definition: ", threshold_label, ".")
-    } else ""
-
-    chinn_note <- paste0(
-      "* Continuous outcome dichotomised via Chinn's formula ",
-      "(log OR = SMD x pi / sqrt(3))", invert_str,
-      ". Control event rate user-specified.", threshold_str,
-      " This is NOT Core GRADE 6's option 2, which assumes a normal ",
-      "distribution and computes, per study and before pooling, the ",
-      "proportion in each arm improving by more than the MID; Chinn's formula ",
-      "assumes a logistic latent variable, uses no MID and is applied to the ",
-      "pooled SMD. The two do not generally agree.",
-      " Recommended reading: ",
-      "Chinn S. Stat Med. 2000; ",
-      "Heimke F, et al. BMJ Ment Health. 2024."
-    )
-    ft <- flextable::add_footer_lines(ft, values = chinn_note)
+    ft <- flextable::add_footer_lines(
+      ft, values = .chinn_note(invert = isTRUE(chinn_invert),
+                               threshold_label = threshold_label,
+                               reading = TRUE))
   }
 
   ft <- .style_table_footer(ft)
@@ -732,6 +713,158 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
           round(p1_est * per), per_str,
           round(p1_lo  * per), ci_sep,
           round(p1_hi  * per))
+}
+
+# --------------------------------------------------------------------------
+# The responder presentation, as one row of any Summary of Findings table
+# --------------------------------------------------------------------------
+#
+# sof_table() takes the choice as arguments, which is right for a table of one
+# row. grade_table() builds the only Summary of Findings a multi-outcome bundle
+# carries, so there the choice has to be readable per row: it rides on each
+# rated object as the "pmatools_display" attribute (PMATOOLS_RESPONDER_FIELDS,
+# multi_outcome.R). The helpers below are what both paths share.
+
+# The responder arguments this row asked for, or NULL when it asked for none.
+.responder_args <- function(g) {
+  if (.is_not_reported(g)) return(NULL)
+  if (!isTRUE(.outcome_display(g, "convert_smd_to_or"))) return(NULL)
+  list(
+    baseline_risk   = .outcome_display(g, "baseline_risk"),
+    threshold_label = .outcome_display(g, "threshold_label"),
+    chinn_invert    = isTRUE(.outcome_display(g, "chinn_invert"))
+  )
+}
+
+# Why this row cannot be presented as a proportion of responders, or NULL when
+# it can. The first two conditions are the ones sof_table() aborts on; the third
+# is the pooled estimate the conversion is applied to.
+#
+# sof_table() aborts because its table IS that row: with the conversion refused
+# there is nothing left to render. A combined table has other rows, and taking
+# the whole document away from a reviewer because one outcome cannot be
+# converted is the worse answer, so grade_table() falls back to the unconverted
+# presentation and prints this sentence against the row instead.
+.responder_unavailable_reason <- function(g, args) {
+  sm <- as.character(g$meta$sm %||% "")
+  if (!sm %in% c("SMD", "MD")) {
+    return(sprintf(paste0(
+      "its effect measure is %s, and Chinn's formula converts a standardised ",
+      "mean difference or a mean difference only"),
+      if (nzchar(sm)) sm else "not recorded"))
+  }
+  p0 <- args$baseline_risk
+  if (is.null(p0) || !is.numeric(p0) || length(p0) != 1L || is.na(p0) ||
+      p0 <= 0 || p0 >= 1) {
+    return(paste0("no control-group responder proportion in (0, 1) was ",
+                  "recorded for it"))
+  }
+  est <- .pooled_estimate(g$meta)$est
+  if (is.null(est) || length(est) != 1L || !is.finite(est)) {
+    return("it has no usable pooled estimate to convert")
+  }
+  NULL
+}
+
+# The two arm cells of a converted row, each marked with the '*' that links it
+# to the Chinn footnote. `continuous = FALSE`: the cells hold event rates again,
+# whatever the outcome was measured on, so the rate headers are the right ones.
+.responder_arm_cells <- function(meta_obj, args, per = 1000,
+                                 big_mark = TRUE, ci_sep = "; ") {
+  cer <- .format_cer(args$baseline_risk, per, big_mark = big_mark)
+  ier <- .format_ier_chinn(meta_obj, args$baseline_risk, per,
+                           invert = isTRUE(args$chinn_invert),
+                           big_mark = big_mark, ci_sep = ci_sep)
+  if (cer != "-") cer <- paste0(cer, " *")
+  if (ier != "-") ier <- paste0(ier, " *")
+  list(cer = cer, ier = ier, note = NULL, continuous = FALSE)
+}
+
+# The footnote the '*' on the converted arm cells points at. `invert` and
+# `threshold_label` are woven in for a single-outcome table, whose one row owns
+# the whole footnote; a combined table passes neither, because it can hold rows
+# converted in opposite directions against different thresholds, and states
+# those per row (.responder_row_note()). `reading` appends the two references.
+.chinn_note <- function(invert = NULL, threshold_label = NULL,
+                        reading = FALSE) {
+  invert_str <- if (is.null(invert)) {
+    ""
+  } else if (isTRUE(invert)) {
+    " (OR direction inverted: OR > 1 = treatment better)"
+  } else {
+    " (OR direction as given: positive SMD -> OR > 1)"
+  }
+  threshold_str <- if (!is.null(threshold_label) && nzchar(threshold_label)) {
+    paste0(" Threshold definition: ", threshold_label, ".")
+  } else ""
+
+  paste0(
+    "* Continuous outcome dichotomised via Chinn's formula ",
+    "(log OR = SMD x pi / sqrt(3))", invert_str,
+    ". Control event rate user-specified.", threshold_str,
+    " This is NOT Core GRADE 6's option 2, which assumes a normal ",
+    "distribution and computes, per study and before pooling, the ",
+    "proportion in each arm improving by more than the MID; Chinn's formula ",
+    "assumes a logistic latent variable, uses no MID and is applied to the ",
+    "pooled SMD. The two do not generally agree.",
+    if (reading) paste0(
+      " Recommended reading: ",
+      "Chinn S. Stat Med. 2000; ",
+      "Heimke F, et al. BMJ Ment Health. 2024.") else ""
+  )
+}
+
+# What .chinn_note() leaves out for a combined table: the direction and the
+# threshold of ONE converted row. Keyed by outcome name, like the per-outcome
+# publication-bias sentences of the same footer.
+.responder_row_note <- function(nm, args) {
+  dir_str <- if (isTRUE(args$chinn_invert)) {
+    "OR direction inverted (OR > 1 = treatment better)"
+  } else {
+    "OR direction as given (positive SMD -> OR > 1)"
+  }
+  threshold_str <- if (!is.null(args$threshold_label) &&
+                       nzchar(args$threshold_label)) {
+    paste0(" Threshold definition: ", args$threshold_label, ".")
+  } else ""
+  paste0("[", nm, "] Responder presentation: ", dir_str, ".", threshold_str)
+}
+
+# The row-note for an outcome that asked for the conversion and could not have
+# it. Carried in grade_table()'s numbered register, so the marker sits on the
+# outcome name where a reader of that row is already looking.
+.responder_fallback_note <- function(reason) {
+  paste0("The responder presentation was asked for but could not be applied: ",
+         reason, ". This row shows the unconverted presentation instead.")
+}
+
+# What every row of a multi-outcome table asked for and what came of it: a named
+# list holding, per outcome, the arguments (`args`), the converted arm cells
+# (`arm`) or the reason there are none (`reason`). One resolution, shared by
+# grade_table() and by the plain-text mirror of it that the bundle writes
+# (.sof_set_dataframe(), export_bundle_multi.R), so the .docx and the .csv
+# cannot disagree about how a row is presented.
+.resolve_responder <- function(outcomes, nms = names(outcomes), per = 1000,
+                               big_mark = TRUE, ci_sep = "; ") {
+  out <- lapply(nms, function(nm) {
+    g <- outcomes[[nm]]
+    .check_outcome_display(g, nm)
+    args <- .responder_args(g)
+    if (is.null(args)) return(NULL)
+    why <- .responder_unavailable_reason(g, args)
+    if (!is.null(why)) return(list(args = args, reason = why, arm = NULL))
+    list(args   = args,
+         reason = NULL,
+         arm    = .responder_arm_cells(g$meta, args, per,
+                                       big_mark = big_mark, ci_sep = ci_sep))
+  })
+  stats::setNames(out, nms)
+}
+
+# The outcomes of a resolved table that are actually being converted.
+.converted_outcomes <- function(responder) {
+  nms <- names(responder)
+  nms[vapply(responder, function(r) !is.null(r$arm), logical(1))]
 }
 
 # --------------------------------------------------------------------------

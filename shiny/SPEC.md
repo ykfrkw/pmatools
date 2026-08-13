@@ -103,6 +103,8 @@ state <- reactiveValues(
     # from input$sof_presentation only after sm and the proportion have been
     # checked -- never a raw mirror of the radio. Named `convert` because it
     # is not the radio; it is what reaches sof_table(convert_smd_to_or =).
+    # All four are banked ON each outcome as it is saved (§3.4.10a), because
+    # they describe one ROW of the Summary of Findings, not the table.
     convert            = FALSE,
     baseline_risk      = NULL,
     chinn_invert       = FALSE,
@@ -632,6 +634,8 @@ Rendered by `.responder_block()` (`R/step3_threshold.R`), **below** the Decision
 - `output$responder_p0_badge` renders `confirmed` / `unconfirmed assumption` beside the section heading, and **nothing at all** on the `"effect"` route, where there is no assumption to confirm.
 - `input$sof_presentation` is registered in `PMA_OUTCOME_INPUT_IDS$configuration` (`R/ui_helpers.R`), so a change of outcome clears it. An id missing from that list is an id whose stale answer survives an outcome change.
 - `responder_mode()` in `step3_server()` is the single definition of "the responder route was chosen"; the Next gate, `sof_convert_args()` and the `state$display$convert` mirror all read it rather than the input.
+
+**The choice is banked with the outcome, and it reaches the ZIP.** All four values — `convert_smd_to_or`, `baseline_risk`, `threshold_label`, `chinn_invert` — reach `state$display` and are stamped onto the rated object by `pma_bank_export_material()` in `.store_outcome()`, under the `"pmatools_display"` attribute pmatools already reads per outcome. Three of them are written by the `sof_convert_args()` observer in `step3_server()`; `threshold_label` is left to app.R's display observer, which already mirrors the raw input. **One key, one writer**: a second observer writing `state$display$threshold_label` with a different answer invalidates the first forever — the session never goes idle again and no output updates. `threshold_label` needs no guard of its own, because nothing reads it unless `state$display$convert` is `TRUE`, and that is the guarded value. `grade_table()` picks them up **per row**, so the Step 4 preview and the root `summary_of_findings.docx` of the bundle both show the presentation the reviewer chose, and two continuous outcomes in one review can be presented differently. Only the responder route stamps anything: an outcome shown as its effect carries no field at all, so nothing reads as a decision that was never made. A row whose conversion cannot be applied falls back to the unconverted presentation with the reason footnoted rather than failing the export (`SPEC.md` §4.9).
 
 #### 3.4.11 Information design — what is open, what is collapsed, what was deleted
 

@@ -64,7 +64,30 @@ test_that("banking stamps both attributes, and drops what was not set", {
   expect_equal(d$pubias_missing_df$studlab, "C")
   expect_false("rare" %in% names(d))
 
-  # Every name it does carry is one export_bundle.pmatools_set() reads.
+  # Every name it does carry is one the bundler or grade_table() reads.
+  expect_true(all(names(d) %in% PMATOOLS_DISPLAY_ATTR_FIELDS))
+})
+
+test_that("the responder presentation is banked with the outcome it describes", {
+  g <- fake_outcome("Depression")
+
+  # The effect route claims nothing: an outcome shown as its own effect must
+  # not carry a convert_smd_to_or = FALSE that reads as a decision.
+  effect_route <- pma_bank_export_material(
+    g, display = list(convert = FALSE, baseline_risk = 0.2))
+  expect_false("convert_smd_to_or" %in%
+                 names(attr(effect_route, PMATOOLS_DISPLAY_ATTR, exact = TRUE)))
+
+  # state$display$convert is the guarded boolean, so all four travel together.
+  responder <- pma_bank_export_material(
+    g, display = list(convert = TRUE, baseline_risk = 0.2,
+                      threshold_label = ">=50% drop in PHQ-9",
+                      chinn_invert = TRUE))
+  d <- attr(responder, PMATOOLS_DISPLAY_ATTR, exact = TRUE)
+  expect_true(d$convert_smd_to_or)
+  expect_equal(d$baseline_risk, 0.2)
+  expect_equal(d$threshold_label, ">=50% drop in PHQ-9")
+  expect_true(d$chinn_invert)
   expect_true(all(names(d) %in% PMATOOLS_DISPLAY_ATTR_FIELDS))
 })
 
