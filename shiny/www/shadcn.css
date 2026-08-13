@@ -131,6 +131,12 @@ h5 { font-size: 0.95rem; margin-top: 0.75rem; margin-bottom: 0.4rem; }
   font-size: 0.78rem;
   font-weight: 500;
   letter-spacing: 0.02em;
+  /* The longest badge -- "source: pmatools convention, not Core GRADE" -- is
+     311px on one line, which pushed the document 8px wider than a 375px
+     phone. Let it wrap inside the card rather than widening the page. */
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
 }
 .pma-badge.grade-high     { background: var(--grade-high-bg);     color: var(--grade-high-fg); }
 .pma-badge.grade-moderate { background: var(--grade-moderate-bg); color: var(--grade-moderate-fg); }

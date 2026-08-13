@@ -194,9 +194,22 @@ server <- function(input, output, session) {
   # Stepper indicator. The Certainty node carries how much of Step 3 is
   # confirmed, so the count is readable from the other three steps - Step 4's
   # download lock is the same number said again.
+  #
+  # Not before Step 3 has been opened, though. step3_server() is wired at
+  # startup and writes state$domain_confirmed immediately, so without this the
+  # stepper reads "Certainty 0/6" to someone who has not yet loaded a dataset,
+  # and "six of what?" is the wrong first question to raise. Same "seen it
+  # yet?" semantics as the dot on a domain tab.
+  certainty_opened <- shiny::reactiveVal(FALSE)
+  shiny::observeEvent(state$step, {
+    if (identical(as.integer(state$step), 3L)) certainty_opened(TRUE)
+  }, ignoreInit = FALSE)
+
   output$stepper_ui <- shiny::renderUI({
-    confirmed <- length(PMA_DOMAIN_LABELS) -
-      length(pma_unconfirmed_domains(state$domain_confirmed))
+    confirmed <- if (isTRUE(certainty_opened())) {
+      length(PMA_DOMAIN_LABELS) -
+        length(pma_unconfirmed_domains(state$domain_confirmed))
+    } else NULL
     pma_stepper(state$step, certainty_confirmed = confirmed)
   })
 

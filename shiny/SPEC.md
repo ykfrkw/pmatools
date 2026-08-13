@@ -870,7 +870,14 @@ gate whose state was decided one outcome ago.
 |---|---|
 | the tab strip | `pma_tab_mark()`: a tick on a confirmed tab, a dot on one the reviewer has opened but not confirmed, nothing before that |
 | the Step 3 card header | `output$grade_progress_badge`, "n/6 confirmed" |
-| the stepper, from every step | `pma_stepper(current_step, certainty_confirmed =)`, "Certainty n/6" |
+| the stepper, once Step 3 has been opened | `pma_stepper(current_step, certainty_confirmed =)`, "Certainty n/6" |
+
+The stepper count is withheld until the reviewer first reaches Step 3.
+`step3_server()` is wired at startup and writes `state$domain_confirmed`
+immediately, so without the guard the stepper reads "Certainty 0/6" to someone
+who has not yet loaded a dataset — the same "have you seen this yet?" semantics
+the dot on a domain tab carries. Passing `certainty_confirmed = NULL` renders
+the bare label.
 
 The markers are `uiOutput`s *inside the tab titles*, so the count follows a
 tick without the tabset being rebuilt. That is why every gated `tabPanel` now
