@@ -278,6 +278,10 @@ assess_imprecision <- function(meta_obj,
   ois_direction   <- .ois_target_increase(small_values, te_point)
   ois_p1_derived  <- FALSE
   ois_sd_derived  <- FALSE
+  # Where a derived ois_sd came from, in words. The pooled-SD wording is not
+  # true of every derivation any more (the SMD takes 1), so the fact below
+  # quotes this rather than re-asserting a provenance it cannot see.
+  ois_sd_source   <- ""
   has_mid_for_ois <- !is.null(threshold_internal) && !is.na(threshold_internal) &&
                      threshold_internal != 0
   if (is.null(ois_events) && is.null(ois_n)) {
@@ -350,17 +354,36 @@ assess_imprecision <- function(meta_obj,
       # not be computed -> do not rate down". The pooled within-study SD is the
       # natural default and is already computed a few lines below for the
       # large-effect check, so derive it here rather than skipping the OIS.
+      #
+      # EXCEPT for the SMD, where delta and sigma must share a scale and the
+      # SMD is ALREADY in within-study SD units: n_arm = 2(z_a+z_b)^2 sigma^2 /
+      # delta^2 with the standardized delta of 0.20 and a RAW-scale sigma of,
+      # say, 8 inflates the OIS by sigma^2 (64x here), which can flip Fig 4's
+      # large-effect path from "no" to serious through the "< 30% of OIS" rule.
+      # For the SMD sigma is 1 by construction.
       if (is.null(ois_sd) && !is.null(ois_delta)) {
-        sd_auto <- tryCatch(compute_pooled_sd(meta_obj), error = function(e) NULL)
-        if (!is.null(sd_auto) && length(sd_auto) == 1L &&
-            is.finite(sd_auto) && sd_auto > 0) {
-          ois_sd <- as.numeric(sd_auto)
+        if (identical(sm, "SMD")) {
+          ois_sd <- 1
           ois_sd_derived <- TRUE
-          threshold_used_note <- paste0(threshold_used_note, sprintf(
-            paste0(" (ois_sd = %.4f, derived from the pooled within-study SD ",
-                   "of the contributing studies -- not supplied by the caller)"),
-            ois_sd
-          ))
+          ois_sd_source <- paste0(
+            "1 by construction: the SMD is expressed in within-study SD ",
+            "units, so the threshold above is already standardized and the ",
+            "pooled SD must not be applied to it a second time")
+          threshold_used_note <- paste0(
+            threshold_used_note, " (ois_sd = ", ois_sd_source, ")")
+        } else {
+          sd_auto <- tryCatch(compute_pooled_sd(meta_obj), error = function(e) NULL)
+          if (!is.null(sd_auto) && length(sd_auto) == 1L &&
+              is.finite(sd_auto) && sd_auto > 0) {
+            ois_sd <- as.numeric(sd_auto)
+            ois_sd_derived <- TRUE
+            ois_sd_source <- sprintf(
+              paste0("%.4f, derived from the pooled within-study SD of the ",
+                     "contributing studies -- not supplied by the caller"),
+              ois_sd)
+            threshold_used_note <- paste0(
+              threshold_used_note, " (ois_sd = ", ois_sd_source, ")")
+          }
         }
       }
     }
@@ -579,10 +602,7 @@ assess_imprecision <- function(meta_obj,
             ois_p1)
     } else NULL,
     if (ois_sd_derived) {
-      .fact("ois_sd_source", "OIS standard deviation",
-            sprintf(paste0("%.4f, derived from the pooled within-study SD ",
-                           "(not supplied by the caller)"), ois_sd),
-            ois_sd)
+      .fact("ois_sd_source", "OIS standard deviation", ois_sd_source, ois_sd)
     } else NULL,
     .fact("fig4_path", "Core GRADE 2 Fig 4 path",
           sub("^Fig 4 path: ", "", fig4$path)),

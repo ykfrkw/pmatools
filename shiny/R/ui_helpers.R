@@ -282,7 +282,7 @@ PMA_OUTCOME_INPUT_IDS <- list(
   # branches of output$threshold_panel build different widgets.
   configuration = c("threshold_mode", "threshold_abs", "threshold_ratio",
                     "threshold_cont", "threshold_baseline_input",
-                    "threshold_baseline_rationale", "convert_smd_to_or",
+                    "threshold_baseline_rationale", "sof_presentation",
                     "baseline_risk_chinn", "responder_p0_rationale",
                     "responder_p0_confirm", "threshold_label",
                     "threshold_confirm"),

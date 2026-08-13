@@ -612,8 +612,8 @@ In `assess_imprecision()`, when no explicit `ois_*` is provided:
 
 - **Binary (v0.5.0): `ois_p1 = ois_p0 * (1 ∓ ois_rrr)`, default `ois_rrr = 0.20`.** The MID is *not* used. (v0.5.1: the sign follows the outcome direction and the observed effect — §5.5, "OIS inputs".) Core GRADE 2 (p6): "For binary outcomes, these involve specifying the acceptable error rates: α (typically 0.05) and β (typically 0.20), the control group event rate (chosen from the context), and **a modest relative risk reduction, typically 20% or 25%**." `ois_p0` still comes from the ARD baseline risk when `threshold_scale = "ard"`, otherwise from the pooled control-arm rate.
 - Continuous (MD): `ois_delta = threshold_internal` (raw outcome units) — the same paragraph writes the continuous case out separately and *does* send it to the MID ("by specifying the smallest difference between intervention and control that one would want to avoid missing (ie, the MID)").
-- Continuous (SMD): `ois_delta = threshold_internal × pooled_SD` *(see §5.4 for pooled_SD computation)*.
-- Continuous (v0.5.1): `ois_sd = compute_pooled_sd(meta_obj)` when the caller supplies none.
+- Continuous (SMD): `ois_delta = threshold_internal` as well — the SMD threshold is *already* in standardized units, so it goes into the formula unchanged and the SD that accompanies it is 1 (below). Multiplying delta by the pooled SD and taking `ois_sd = 1` would give the same `n`; the implemented formulation is delta-unchanged, sigma-one.
+- Continuous (v0.5.1): `ois_sd = compute_pooled_sd(meta_obj)` when the caller supplies none — **except for SMD, where `ois_sd = 1`** *(see §5.4 for pooled_SD computation)*. An explicitly supplied `ois_sd` always wins.
 
 **Comparison unit (v0.5.0): participants, not events.** Core GRADE 2 Fig 4 caption: "N=number of participants; OIS=optimal information size"; body: "If the total sample size of all the studies included in a meta-analysis exceeds the OIS, one does not rate down". The auto-computed binary OIS is therefore a target **N** compared against `sum(n.e) + sum(n.c)`; the implied event count is reported in the notes for information. Supplying `ois_events` explicitly still selects an event-based comparison (backward compatible).
 
@@ -680,6 +680,8 @@ When `convert_smd_to_or = TRUE`:
 - Adds a footer note row: *"Continuous outcome dichotomized via Chinn's formula (log OR = SMD × π/√3). Control event rate user-specified{{; threshold: <threshold_label>}}."*
 
 When `convert_smd_to_or = FALSE` (default), behavior is identical to v0.1.0.
+
+**The conversion is a presentation, not a rating input.** `convert_smd_to_or` reaches `sof_table()` and nothing else — `grade_meta()` never sees it, and Imprecision is rated on the SMD/MD against `threshold_cont` whichever way this argument is set. The package default is and stays `FALSE`; as of the Shiny app's `input$sof_presentation` radio the app default matches it, where the app previously defaulted the conversion on.
 
 ### 4.7 `chinn_smd_to_or()` [new helper, exported]
 
@@ -1599,6 +1601,8 @@ The ratio-scale magnitude is `1 - exp(-|log ratio|)`, which is symmetric: RR 0.6
 
 **Auto-derived `ois_sd` (continuous).** `.calc_ois()` needs both `ois_delta` and `ois_sd`. `ois_delta` has always fallen back to the Threshold; `ois_sd` had no fallback, so a continuous outcome with no reviewer-supplied SD reached Fig 4's large-effect path, found no OIS and landed on "do not rate down" with no explanation. `ois_sd` now falls back to `compute_pooled_sd(meta_obj)`, and the notes and the `ois_sd_source` fact record that it was derived rather than supplied.
 
+**`ois_sd = 1` for SMD.** `n_arm = 2(z_α + z_β)² σ² / δ²` requires δ and σ on the same scale, and an SMD is *by construction* expressed in within-study SD units — so σ is 1 and the raw pooled SD must not be applied to a threshold that is already standardized. Deriving it from the data anyway inflated the target N by σ² (a pooled SD of 4 gives 16×, of 8 gives 64×), which reaches the rating: Fig 4's large-effect path consults the "< 30% of OIS" rule, so an inflated OIS can turn `no` into `some_concerns` or `serious`. MD and RoM keep the pooled-SD derivation, where the threshold is on the raw scale. `ois_sd_source` reports which of the two applied, in words. An explicitly supplied `ois_sd` still takes precedence for every measure.
+
 **"OIS could not be computed" names the missing input.** When the OIS is still unavailable, the Fig 4 path string names which of `ois_p0` / `ois_p1` / `ois_delta` / `ois_sd` was missing, or says that the analysis carries no complete arm-level sample sizes to compare against.
 
 **CI ratio** (Fig 4 caption) is the upper CI limit divided by the lower limit on the ratio scale.
@@ -1629,7 +1633,7 @@ The container is **domain-agnostic**: `.fact(key, label, value, numeric = NA)` b
 | | `threshold_position` | — (omitted when no MID zone applies) |
 | | `ois` | observed / target ratio; the `value` says `"not applied on this Fig 4 path"` when Fig 4 did not consult it |
 | | `ois_target_rate` | `ois_p1` (v0.5.1; recorded only when `ois_p1` was derived rather than supplied — the `value` names the direction and why it was chosen) |
-| | `ois_sd_source` | `ois_sd` (v0.5.1; recorded only when the pooled SD was derived rather than supplied) |
+| | `ois_sd_source` | `ois_sd` (v0.5.1; recorded only when it was derived rather than supplied — the `value` says whether it is the pooled within-study SD or the SMD's σ = 1) |
 | | `fig4_path` | — |
 | | `ois_used` | — (`"yes"` / `"no"`) |
 | Publication bias | `k` | effective study count (`.pubias_effective_k()`) |

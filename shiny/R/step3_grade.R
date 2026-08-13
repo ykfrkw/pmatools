@@ -836,16 +836,18 @@ step3_ui <- function() {
               shiny::uiOutput("per_echo"),
               shiny::checkboxInput("prediction",
                 "Show 95 percent prediction interval in Effect column", FALSE),
-              # The responder-conversion controls (convert_smd_to_or,
+              # The responder-conversion controls (the presentation choice,
               # baseline_risk_chinn, threshold_label) used to live here. They
               # moved to the Configuration tab: the control-group responder
               # proportion and the definition of the threshold of clinical
               # interest are not display preferences, they are inputs the
               # rating is read against, and they belong with the threshold
-              # they mirror. The input IDs are unchanged, so app.R's display
-              # observer and Step 4's export still read them. chinn_invert
-              # lost its checkbox entirely - it is now derived from the Step 2
-              # direction answer (see chinn_invert_derived()).
+              # they mirror. The old convert_smd_to_or tick-box became the
+              # two-way input$sof_presentation radio there; Step 4 reads the
+              # guarded state$display mirror rather than the input, so the
+              # rename did not reach it. chinn_invert lost its checkbox
+              # entirely - it is now derived from the Step 2 direction answer
+              # (see chinn_invert_derived()).
               shiny::uiOutput("display_options_config_note")
             )
           ),
@@ -1325,6 +1327,16 @@ step3_server <- function(input, output, session, state) {
     isTRUE(input$responder_p0_confirm)
   })
 
+  # The one definition of "the reviewer asked for the responder presentation".
+  # Everything downstream - the Next gate, sof_convert_args(), the state mirror
+  # Step 4 exports from - reads this rather than input$sof_presentation, so the
+  # radio's encoding lives in exactly one place. NULL (before the radio reports
+  # in, and on every outcome whose sm is not SMD/MD) means the effect itself,
+  # which is also the widget's default.
+  responder_mode <- shiny::reactive({
+    identical(input$sof_presentation, "responder")
+  })
+
   # chinn_invert is DERIVED from the Step 2 direction answer rather than
   # asked again. Chinn's formula gives OR = exp(SMD * pi / sqrt(3)), so a
   # symptom scale where smaller is better produces a negative SMD for an
@@ -1466,6 +1478,11 @@ step3_server <- function(input, output, session, state) {
   shiny::outputOptions(output, "per_echo", suspendWhenHidden = FALSE)
 
   output$responder_p0_badge <- shiny::renderUI({
+    # The badge reports on the responder proportion, which only exists on the
+    # responder route. On the effect route there is no assumption to confirm,
+    # and an "unconfirmed assumption" warning beside a section the reviewer
+    # has declined would be pure noise.
+    if (!responder_mode()) return(NULL)
     if (responder_p0_confirmed()) {
       .ok_badge("confirmed")
     } else {
@@ -1578,10 +1595,11 @@ step3_server <- function(input, output, session, state) {
       )
     } else {
       htmltools::tagList(
-        # isolate() for the same reason as the threshold seeds: a reactive read
-        # would rebuild the panel on every keystroke in this very box.
-        .responder_block(sm, shiny::isolate(responder_p0_state())),
-        shiny::uiOutput("direction_echo"),
+        # The threshold comes FIRST on the continuous branch, ahead of the
+        # presentation choice: it is the number the certainty rating turns on,
+        # while the presentation only changes how the SoF displays the effect.
+        # The old order put the responder conversion at the top of the tab,
+        # which read as though converting were a step on the way to a rating.
         .config_section(
           htmltools::tagList("Decision threshold", .source_badge(src)),
           shiny::numericInput("threshold_cont",
@@ -1589,6 +1607,17 @@ step3_server <- function(input, output, session, state) {
               "Threshold for clinical importance",
             value = .rel_value(), min = 0, step = 0.01),
           .config_note(EDU_COPY$threshold_help[[sm]] %||% ""),
+          .config_note(
+            "The certainty rating reads this threshold whichever presentation ",
+            "is chosen below: Imprecision compares the confidence interval ",
+            "with it on the ", sm, " scale itself. ",
+            if (identical(sm, "SMD")) {
+              paste0("The 0.20 prefilled above is Core GRADE 6's own ",
+                     "threshold for a small and important effect. ")
+            } else "",
+            "The responder conversion below changes only how the Summary of ",
+            "Findings table presents the effect - it never reaches the ",
+            "rating."),
           if (identical(sm, "SMD")) {
             htmltools::p(
               class = "pma-card-subtitle", style = "font-style: italic;",
@@ -1607,7 +1636,11 @@ step3_server <- function(input, output, session, state) {
               "published threshold for this instrument whenever one exists.")
           },
           .mic_note()
-        )
+        ),
+        shiny::uiOutput("direction_echo"),
+        # isolate() for the same reason as the threshold seeds: a reactive read
+        # would rebuild the panel on every keystroke in this very box.
+        .responder_block(sm, shiny::isolate(responder_p0_state()))
       )
     }
   })
@@ -1923,16 +1956,30 @@ step3_server <- function(input, output, session, state) {
 
   output$ois_sd_ui <- shiny::renderUI({
     obj <- state$ma
-    val <- if (!is.null(obj)) {
+    # The OIS formula is 2(z_a+z_b)^2 sigma^2 / delta^2, so sigma and the
+    # threshold have to be on the same scale. An SMD threshold is already in
+    # within-study SD units, which makes sigma 1; prefilling the raw pooled SD
+    # there squared a number that does not belong in the formula at all. MD and
+    # RoM stay on the pooled SD, where the threshold is on the raw scale.
+    is_smd <- identical(obj$sm %||% "", "SMD")
+    val <- if (is.null(obj)) {
+      NA
+    } else if (is_smd) {
+      1
+    } else {
       sd_pooled <- tryCatch(compute_pooled_sd(obj),
                             error = function(e) NULL)
       if (!is.null(sd_pooled) && is.finite(sd_pooled) && sd_pooled > 0) {
         round(sd_pooled, 4)
       } else NA
-    } else NA
-    shiny::numericInput("ois_sd",
-      "Pooled SD for OIS (auto from data)",
-      value = val, min = 0, step = 0.1)
+    }
+    label <- if (is_smd) {
+      paste0("SD for OIS (1: the SMD is already expressed in SD units, so ",
+             "the threshold above is standardized)")
+    } else {
+      "Pooled SD for OIS (auto from data)"
+    }
+    shiny::numericInput("ois_sd", label, value = val, min = 0, step = 0.1)
   })
   # Inside a conditionalPanel keyed on input$outcome_type, so it is hidden
   # whenever the analysis is binary -- and a suspended output never runs, which
@@ -2419,7 +2466,7 @@ step3_server <- function(input, output, session, state) {
         out <- c(out, paste0("give a rationale for replacing the pooled ",
                              "control-group risk"))
       }
-    } else if (isTRUE(input$convert_smd_to_or)) {
+    } else if (responder_mode()) {
       if (!responder_p0_valid()) {
         out <- c(out, paste0("enter a control-group responder proportion ",
                              "between 0 and 1"))
@@ -3581,7 +3628,7 @@ step3_server <- function(input, output, session, state) {
     g <- grade_obj()
     if (is.null(g)) return(NULL)
     sm <- g$meta$sm %||% ""
-    if (!isTRUE(input$convert_smd_to_or)) return(NULL)
+    if (!responder_mode()) return(NULL)
     if (!sm %in% c("SMD", "MD")) return(NULL)
     p0 <- responder_p0()
     if (!responder_p0_valid()) return(NULL)
@@ -3661,8 +3708,8 @@ step3_server <- function(input, output, session, state) {
   # tab), not by app.R's display observer. Step 4's export_bundle() gets the
   # same guarded values the Step 3 preview uses, so it cannot walk into
   # sof_table()'s abort - which is reachable otherwise, because an
-  # input$convert_smd_to_or left TRUE from an earlier SMD run survives a
-  # switch to RoM (hiding a checkbox does not reset it).
+  # input$sof_presentation left on "responder" from an earlier SMD run
+  # survives a switch to RoM (hiding a radio does not reset it).
   shiny::observe({
     ca <- sof_convert_args()
     state$display$convert       <- !is.null(ca)

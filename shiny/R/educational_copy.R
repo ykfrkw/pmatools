@@ -368,8 +368,9 @@ EDU_COPY <- list(
     # Core GRADE 6 ranks three presentations of a continuous outcome: (1) the
     # mean difference read against the threshold, (2) conversion to a
     # proportion of responders, (3) the SMD. It recommends presenting 1 and 2
-    # together. This app presents 2 only; that departure is stated on screen
-    # rather than left implicit.
+    # TOGETHER. This app offers them as an either/or (input$sof_presentation),
+    # so the agreement check is still out of reach; that departure is stated
+    # on screen rather than left implicit.
     continuous_intro = paste0(
       "Core GRADE 6 ranks three ways of presenting a continuous outcome: ",
       "the mean difference interpreted against the threshold; conversion ",
@@ -383,10 +384,13 @@ EDU_COPY <- list(
     ),
     continuous_departure = paste0(
       "Departure from the source, stated here rather than left implicit: ",
-      "this app presents the responder proportion only. The mean-difference ",
-      "presentation is not offered, so the agreement check Core GRADE 6 ",
-      "recommends cannot be performed here; inferences about the magnitude ",
-      "of effect should be correspondingly weaker."
+      "the two presentations are offered here as a choice, one or the other, ",
+      "not side by side in one table as Core GRADE 6 recommends. The ",
+      "agreement check between them therefore cannot be performed here, and ",
+      "inferences about the magnitude of effect should be correspondingly ",
+      "weaker. Neither choice changes the certainty rating: the rating reads ",
+      "the decision threshold above, on the scale the outcome was analysed ",
+      "on."
     ),
     chinn_caveat = paste0(
       "The responder conversion used here is not Core GRADE 6's option 2. ",
