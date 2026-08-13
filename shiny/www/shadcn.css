@@ -783,10 +783,10 @@ details > summary {
    keeps its table-native styling.
 
    Inputs covered here: col_studlab, col_treat, col_n, col_event, col_mean,
-   col_sd, subgroup_col, selected_outcome, sample_dataset, rare_primary_method
+   col_sd, subgroup_col, sample_dataset, rare_primary_method
    (native, selectize = FALSE); experimental_label, control_label, method,
-   method_tau, subgroup_order, rob_override and the other Step 3 / Step 4
-   pickers (selectize).
+   method_tau, random_ci, subgroup_order, rob_override and the other
+   Step 3 / Step 4 pickers (selectize).
    --------------------------------------------------------------------------- */
 
 /* The caret glyph is shared by both flavours, so it lives in a custom property

@@ -249,15 +249,31 @@ One `pma_card("Model configuration")` holding a `bslib::accordion(multiple = TRU
 
 | Panel (`value`) | Contents | Open on build |
 |---|---|---|
-| Outcome (`outcome`) | `outcome_name`, `small_values`, `outcome_type`, `outcome_filter_ui`, `outcome_follow_up`, `outcome_unit` (continuous only) | always |
+| Outcome (`outcome`) | `outcome_name`, `small_values`, `outcome_type`, `outcome_follow_up`, `outcome_unit` (continuous only) | always |
 | Data mapping (`mapping`) | `col_studlab`, `col_treat`, `arm_assignment_ui`, `col_n`, `col_event` (binary) / `col_mean` + `col_sd` (continuous) | while `state$ma` is NULL |
-| Model details (`model`) | `sm_bin` / `sm_cont_ui`, `model`, `method`, `method_tau`, `incr` | never |
+| Model details (`model`) | `sm_bin` / `sm_cont_ui`, `model`, `method`, `method_tau`, `random_ci`, `incr` | never |
 | Subgroup (`subgroup`) | `subgroup_col`, `subgroup_order_ui` | never |
 
-- **Outcome type is identity, not mapping.** `outcome_type` and
-  `outcome_filter_ui` sit in the Outcome panel: they say *which* outcome is
-  being rated, and `outcome_type` decides which of the panel's own optional
-  fields (`outcome_unit`) applies.
+- **Outcome type is identity, not mapping.** `outcome_type` sits in the
+  Outcome panel: it says what kind of thing is being rated, and decides which
+  of the panel's own optional fields (`outcome_unit`) applies.
+- **There is no outcome row-filter.** Step 2 once rendered a `selected_outcome`
+  select whenever the data held more than one `outcome` value, and analysed
+  only the rows matching it. On a continuous review where each study measured
+  its own instrument — PHQ-9, HAMD, BDI — that sliced the data down to one
+  study, silently: the reactive returned `NULL` with no notification and no
+  `state$ma_blocked` entry, so Step 3 could not explain the empty screen
+  either. `outcome` is a descriptive column now and every study pools. The one
+  case that cannot pool — one study under two outcomes — is `run_ma()`'s to
+  reject, and its message reaches the reviewer through the existing
+  `tryCatch()` around the run.
+- **`method_tau` offers six estimators** — `REML` (default), `PM`, `DL`, `SJ`,
+  `ML`, `EB` — labelled with their names in the select. **`random_ci`** sits
+  beside it in the same `input.model == 'random' && input.use_rare_workflow
+  != true` panel: `auto` (default), `hk`, `classic`, mapped into `run_ma()`'s
+  `hakn` as `NULL` / `TRUE` / `FALSE`. `auto` is `run_ma()`'s own `k >= 3`
+  rule, so the default run is byte-for-byte what it was before the control
+  existed.
 - **Data mapping's open state is decided at build time from `state$ma`**, not
   from the selects themselves — the selects are populated by the server
   *after* this UI is built, so at build time they are all blank whatever the
@@ -275,6 +291,17 @@ One `pma_card("Model configuration")` holding a `bslib::accordion(multiple = TRU
   it, so changing a model setting meant scrolling back down to act on it.
 
 #### 3.3.4 Outputs (right pane)
+
+Above the tabs, `uiOutput("ma_model_summary")`: one line naming the model that
+produced the numbers, e.g. `Random effects (REML), Hartung-Knapp CI, k = 12`
+(`classic (Wald) CI` when Hartung-Knapp is off, `Common (fixed) effect, k = 12`
+for a common-effect fit). Built by the pure `step2_model_summary_line()`, which
+reads `random` / `method.tau` / `method.random.ci` / `k` **off the fitted
+object** rather than off the controls, so it cannot drift from what actually
+ran, and reports the rare-events primary fit correctly when that is what is on
+screen. It sits above the tabset rather than inside "Text results" because the
+Hartung-Knapp adjustment was applied silently at `k >= 3` for as long as it
+existed: a setting nobody can see is a setting nobody can question.
 
 Tabset with 3 tabs:
 

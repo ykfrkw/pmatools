@@ -8,18 +8,21 @@
 #' @param data Canonical long-format data, typically from
 #'   \code{\link{ingest_data}}: one row per study x arm with columns
 #'   `studlab`, `treat`, `n`, plus `event` (binary) or `mean`/`sd` (continuous).
-#'   If an `outcome` column is present, data must contain exactly one outcome.
+#'   An `outcome` column may name a different measurement scale per study --
+#'   several scales pool fine under `sm = "SMD"` -- but no single `studlab` may
+#'   carry more than one outcome, which would double-count that study.
 #' @param outcome_type One of `"binary"` or `"continuous"`.
 #' @param sm Effect measure. Binary: `"OR"` or `"RR"`. Continuous: `"SMD"`,
 #'   `"MD"`, or `"RoM"`. Defaults: `"OR"` for binary, `"SMD"` for continuous.
 #' @param method Pooling method (binary only). One of `"Inverse"`, `"MH"`,
 #'   `"Peto"`. Defaults: `"Inverse"` for OR, `"MH"` for RR.
-#' @param method.tau Heterogeneity estimator. One of `"REML"` (default) or
-#'   `"DL"`.
+#' @param method.tau Heterogeneity estimator. One of `"REML"` (default),
+#'   `"PM"`, `"DL"`, `"SJ"`, `"ML"` or `"EB"`.
 #' @param random,common Logical. Use random-effects (default `TRUE`) and/or
 #'   common-effects (default `FALSE`) pooling.
 #' @param hakn Hartung-Knapp-Sidik-Jonkman adjustment. NULL (default) uses
-#'   `TRUE` if k >= 3, else `FALSE`.
+#'   `TRUE` if k >= 3, else `FALSE`. `TRUE` and `FALSE` are honoured as given;
+#'   `TRUE` below k = 3 warns, because the interval it produces is very wide.
 #' @param prediction Compute 95 percent prediction interval. NULL (default) uses
 #'   `TRUE` if k >= 3, else `FALSE`.
 #' @param incr Continuity correction for zero events (binary). Default 0.5.
@@ -39,7 +42,7 @@ run_ma <- function(data,
                    outcome_type = c("binary", "continuous"),
                    sm           = NULL,
                    method       = NULL,
-                   method.tau   = c("REML", "DL"),
+                   method.tau   = c("REML", "PM", "DL", "SJ", "ML", "EB"),
                    random       = TRUE,
                    common       = FALSE,
                    hakn         = NULL,
@@ -51,19 +54,11 @@ run_ma <- function(data,
   outcome_type <- match.arg(outcome_type)
   method.tau   <- match.arg(method.tau)
 
-  if ("outcome" %in% names(data)) {
-    outcomes <- unique(as.character(data$outcome))
-    outcomes <- outcomes[!is.na(outcomes) & nzchar(outcomes)]
-    if (length(outcomes) > 1) {
-      rlang::abort(sprintf(
-        paste0(
-          "run_ma() received multiple outcomes (%s). ",
-          "Filter data to one outcome before calling run_ma()."
-        ),
-        paste(outcomes, collapse = ", ")
-      ))
-    }
-  }
+  # A continuous review whose studies each measured depression on a different
+  # scale carries one outcome label per study, and pooling all of them under
+  # SMD is the whole point of the measure. What cannot be pooled is the same
+  # study appearing under two outcomes: that study would be counted twice.
+  .abort_on_multi_outcome_studies(data)
 
   if (is.null(sm)) {
     sm <- if (outcome_type == "binary") "OR" else "SMD"
@@ -87,8 +82,22 @@ run_ma <- function(data,
   }
 
   # Auto-defaults
+  hakn_forced_on <- isTRUE(hakn)
   if (is.null(hakn))       hakn       <- (k >= 3 && random)
   if (is.null(prediction)) prediction <- (k >= 3 && random)
+  # The caller overrode the k >= 3 rule, so the request is honoured -- but the
+  # Hartung-Knapp t quantile below three studies is large enough to make the
+  # interval close to uninformative, and that is worth saying out loud.
+  if (hakn_forced_on && k < 3) {
+    rlang::warn(sprintf(
+      paste0(
+        "hakn = TRUE was requested with k = %d. The Hartung-Knapp confidence ",
+        "interval is very wide with fewer than three studies; it has been ",
+        "applied as asked."
+      ),
+      k
+    ))
+  }
 
   # Subgroup vector
   subgroup_vec <- NULL
@@ -146,6 +155,55 @@ run_ma <- function(data,
   )
   if (!is.null(subgroup_vec)) args$subgroup <- subgroup_vec
   do.call(meta::metacont, args)
+}
+
+# --------------------------------------------------------------------------
+# One outcome per study
+# --------------------------------------------------------------------------
+# Naming several outcomes across the data set is legitimate (one measurement
+# scale per study, pooled as SMD); naming several for one study is not.
+# .long_to_wide()'s "exactly one intervention and one control arm" check would
+# also stop it, but only with a message about arms, which is not the problem.
+.abort_on_multi_outcome_studies <- function(data) {
+  if (!all(c("outcome", "studlab") %in% names(data))) return(invisible(NULL))
+
+  outcome_labels <- as.character(data$outcome)
+  named <- !is.na(outcome_labels) & nzchar(outcome_labels)
+  if (!any(named)) return(invisible(NULL))
+
+  outcomes_per_study <- tapply(
+    outcome_labels[named],
+    as.character(data$studlab)[named],
+    function(labels) length(unique(labels))
+  )
+  offenders <- names(outcomes_per_study)[outcomes_per_study > 1]
+  if (length(offenders) == 0) return(invisible(NULL))
+
+  max_listed <- 5L
+  listed <- paste(utils::head(offenders, max_listed), collapse = ", ")
+  if (length(offenders) > max_listed) {
+    listed <- sprintf("%s, and %d more", listed,
+                      length(offenders) - max_listed)
+  }
+  rlang::abort(sprintf(
+    paste0(
+      "run_ma() received more than one outcome for the same study (%s). ",
+      "Each study may contribute only once, so reduce the data to one ",
+      "outcome per study before calling run_ma()."
+    ),
+    listed
+  ))
+}
+
+# --------------------------------------------------------------------------
+# Which random-effects CI a fitted object actually used
+# --------------------------------------------------------------------------
+# {meta} keeps `hakn` as a legacy alias of `method.random.ci`, so the field the
+# pooling is really controlled by is the one to read.
+.uses_hartung_knapp <- function(meta_obj) {
+  ci <- meta_obj$method.random.ci
+  if (is.null(ci) || length(ci) == 0) return(isTRUE(meta_obj$hakn))
+  identical(as.character(ci)[1], "HK")
 }
 
 # --------------------------------------------------------------------------

@@ -196,7 +196,7 @@ run_ma(
   outcome_type = c("binary", "continuous"),
   sm           = NULL,                            # NULL → "OR" if binary, "SMD" if continuous
   method       = NULL,                            # NULL → "Inverse" if binary, irrelevant if continuous
-  method.tau   = c("REML", "DL"),
+  method.tau   = c("REML", "PM", "DL", "SJ", "ML", "EB"),
   random       = TRUE,
   common       = FALSE,
   hakn         = NULL,                            # NULL → TRUE if k>=3
@@ -222,10 +222,25 @@ run_ma(
 | OR | "Inverse", "MH", "Peto" |
 | RR | "Inverse", "MH" |
 
+**`hakn` — the random-effects confidence interval:**
+
+`hakn` is translated to `{meta}`'s `method.random.ci`: `TRUE` → `"HK"`, `FALSE` → `"classic"`.
+
+| `hakn` | behaviour |
+|---|---|
+| `NULL` (default) | `TRUE` when `k >= 3` **and** `random`, else `FALSE` |
+| `TRUE` | Hartung-Knapp, whatever `k` is. Below `k = 3` it warns — the interval is very wide there — and applies it anyway |
+| `FALSE` | classic (Wald), whatever `k` is |
+
+`prediction` keeps its own independent `k >= 3 && random` rule; the two are not coupled.
+
+**One outcome per study:**
+
+An `outcome` column is descriptive, not an analysis partition key. Several outcome labels across the data set are fine — a continuous review where each study used its own instrument (PHQ-9 / HAMD / BDI) is exactly what `sm = "SMD"` is for, and all of those studies pool together. `run_ma()` aborts only when a single `studlab` carries more than one distinct outcome, which would count that study twice; the message names the offending study labels (first five, then "and N more"). `.long_to_wide()`'s "exactly one intervention and one control arm" check remains the last line of defence.
+
 **Implementation:**
 
 - Pivot canonical long → wide internally for `metabin/metacont` (which take wide input via `event.e/event.c/n.e/n.c` etc.).
-- Pass `prediction = TRUE` to `metabin/metacont` when `hakn = TRUE` (required by `{meta}`).
 - If `subgroup` not NULL, pass `subgroup = data[[subgroup]]` to `{meta}`.
 
 **Returns:** the raw `meta` object so existing pmatools functions (`grade_meta`, `sof_table`) work unchanged.

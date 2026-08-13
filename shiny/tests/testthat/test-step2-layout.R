@@ -38,12 +38,22 @@ test_that("every Step 2 input id survives the accordion restructure", {
   ids <- c("outcome_name", "small_values", "outcome_type", "outcome_follow_up",
            "outcome_unit", "col_studlab", "col_treat", "col_n", "col_event",
            "col_mean", "col_sd", "sm_bin", "model", "method", "method_tau",
-           "incr", "subgroup_col", "auto_rerun", "run_ma",
-           "arm_assignment_ui", "outcome_filter_ui", "sm_cont_ui",
-           "subgroup_order_ui")
+           "random_ci", "incr", "subgroup_col", "auto_rerun", "run_ma",
+           "arm_assignment_ui", "sm_cont_ui", "subgroup_order_ui")
   for (id in ids) {
     expect_true(grepl(sprintf('id="%s"', id), html, fixed = TRUE), info = id)
   }
+})
+
+test_that("Step 2 offers no outcome row-filter", {
+  # The filter sliced a continuous data set whose studies each named their own
+  # measurement scale (PHQ-9 / HAMD / BDI) down to whichever scale came first,
+  # leaving one study to pool and saying nothing about the rest. `outcome` is
+  # a descriptive column now, so neither the control nor its placeholder may
+  # come back.
+  html <- step2_html()
+  expect_false(grepl("selected_outcome", html, fixed = TRUE))
+  expect_false(grepl("outcome_filter_ui", html, fixed = TRUE))
 })
 
 test_that("the sidebar is four accordion panels plus a sticky action bar", {

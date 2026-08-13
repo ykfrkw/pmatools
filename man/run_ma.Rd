@@ -9,7 +9,7 @@ run_ma(
   outcome_type = c("binary", "continuous"),
   sm = NULL,
   method = NULL,
-  method.tau = c("REML", "DL"),
+  method.tau = c("REML", "PM", "DL", "SJ", "ML", "EB"),
   random = TRUE,
   common = FALSE,
   hakn = NULL,
@@ -24,7 +24,9 @@ run_ma(
 \item{data}{Canonical long-format data, typically from
 \code{\link{ingest_data}}: one row per study x arm with columns
 \code{studlab}, \code{treat}, \code{n}, plus \code{event} (binary) or \code{mean}/\code{sd} (continuous).
-If an \code{outcome} column is present, data must contain exactly one outcome.}
+An \code{outcome} column may name a different measurement scale per study --
+several scales pool fine under \code{sm = "SMD"} -- but no single \code{studlab} may
+carry more than one outcome, which would double-count that study.}
 
 \item{outcome_type}{One of \code{"binary"} or \code{"continuous"}.}
 
@@ -34,14 +36,15 @@ If an \code{outcome} column is present, data must contain exactly one outcome.}
 \item{method}{Pooling method (binary only). One of \code{"Inverse"}, \code{"MH"},
 \code{"Peto"}. Defaults: \code{"Inverse"} for OR, \code{"MH"} for RR.}
 
-\item{method.tau}{Heterogeneity estimator. One of \code{"REML"} (default) or
-\code{"DL"}.}
+\item{method.tau}{Heterogeneity estimator. One of \code{"REML"} (default),
+\code{"PM"}, \code{"DL"}, \code{"SJ"}, \code{"ML"} or \code{"EB"}.}
 
 \item{random, common}{Logical. Use random-effects (default \code{TRUE}) and/or
 common-effects (default \code{FALSE}) pooling.}
 
 \item{hakn}{Hartung-Knapp-Sidik-Jonkman adjustment. NULL (default) uses
-\code{TRUE} if k >= 3, else \code{FALSE}.}
+\code{TRUE} if k >= 3, else \code{FALSE}. \code{TRUE} and \code{FALSE} are honoured as given;
+\code{TRUE} below k = 3 warns, because the interval it produces is very wide.}
 
 \item{prediction}{Compute 95 percent prediction interval. NULL (default) uses
 \code{TRUE} if k >= 3, else \code{FALSE}.}

@@ -113,10 +113,6 @@ step2_ui <- function(state = NULL) {
               shiny::radioButtons("outcome_type", "Outcome type",
                 choices = c("Binary" = "binary", "Continuous" = "continuous"),
                 selected = outcome_type_default, inline = TRUE),
-              # Which outcome of a multi-outcome dataset is being rated -
-              # identity again, not mapping. Renders nothing when the data
-              # holds a single outcome.
-              shiny::uiOutput("outcome_filter_ui"),
               # Follow-up belongs to the outcome's identity, not to the display
               # settings: Core GRADE 6's first column is "Outcome and
               # follow-up", and a review that pools two outcomes measured over
@@ -199,8 +195,21 @@ step2_ui <- function(state = NULL) {
               shiny::conditionalPanel(
                 "input.model == 'random' && input.use_rare_workflow != true",
                 shiny::selectInput("method_tau", "tau-squared estimator",
-                  choices = c("REML", "DL"),
-                  selected = "REML")
+                  choices = c("REML (default)"           = "REML",
+                              "PM (Paule-Mandel)"        = "PM",
+                              "DL (DerSimonian-Laird)"   = "DL",
+                              "SJ (Sidik-Jonkman)"       = "SJ",
+                              "ML (maximum likelihood)"  = "ML",
+                              "EB (empirical Bayes)"     = "EB"),
+                  selected = "REML"),
+                # The Hartung-Knapp adjustment was applied automatically at
+                # k >= 3 and never mentioned anywhere, so nobody could either
+                # see it or turn it off. "Auto" is that same rule, named.
+                shiny::selectInput("random_ci", "Random-effects CI",
+                  choices = c("Auto (Hartung-Knapp when k >= 3)" = "auto",
+                              "Hartung-Knapp"                    = "hk",
+                              "Classic (Wald)"                   = "classic"),
+                  selected = "auto")
               ),
               shiny::conditionalPanel(
                 "input.outcome_type == 'binary' && input.use_rare_workflow != true",
@@ -261,6 +270,11 @@ step2_ui <- function(state = NULL) {
           "output.pma_has_ma",
           pma_card(
             title = "Results",
+            # Above the tabs, not inside "Text results": the Hartung-Knapp
+            # adjustment used to be applied silently, and a setting nobody can
+            # see is a setting nobody can question. Names what the fit actually
+            # did, read off the fitted object rather than off the controls.
+            shiny::uiOutput("ma_model_summary"),
             shiny::tabsetPanel(
               id = "ma_tabs",
               shiny::tabPanel("Forest plot",
@@ -307,6 +321,27 @@ step2_ui <- function(state = NULL) {
     # unsaved widget value (forest title, labels, ...).
     shiny::uiOutput("step2_nav")
   )
+}
+
+# One line naming the model that produced the numbers on screen, read off the
+# fitted object so it cannot drift from the controls that were set when the run
+# started. A pure function of the object, so it is testable without a session.
+step2_model_summary_line <- function(meta_obj) {
+  if (is.null(meta_obj)) return(NULL)
+  k <- meta_obj$k %||% length(meta_obj$TE %||% numeric(0))
+  parts <- if (isTRUE(meta_obj$random)) {
+    # {meta} keeps `hakn` only as a legacy alias of method.random.ci.
+    uses_hk <- if (is.null(meta_obj$method.random.ci)) {
+      isTRUE(meta_obj$hakn)
+    } else {
+      identical(as.character(meta_obj$method.random.ci)[1], "HK")
+    }
+    c(sprintf("Random effects (%s)", meta_obj$method.tau %||% "REML"),
+      if (uses_hk) "Hartung-Knapp CI" else "classic (Wald) CI")
+  } else {
+    "Common (fixed) effect"
+  }
+  paste(c(parts, sprintf("k = %d", as.integer(k))), collapse = ", ")
 }
 
 step2_server <- function(input, output, session, state) {
@@ -370,17 +405,6 @@ step2_server <- function(input, output, session, state) {
       shiny::selectInput("control_label", "Control arm value",
                          choices = arms, selected = ctrl_selected)
     )
-  })
-
-  output$outcome_filter_ui <- shiny::renderUI({
-    d <- state$data
-    if (is.null(d) || !"outcome" %in% names(d)) return(NULL)
-    outcomes <- unique(as.character(d$outcome))
-    outcomes <- outcomes[!is.na(outcomes) & nzchar(outcomes)]
-    if (length(outcomes) <= 1) return(NULL)
-    shiny::selectInput("selected_outcome", "Outcome",
-                       choices = outcomes, selected = outcomes[1],
-                       selectize = FALSE)
   })
 
   # Summary measure for continuous outcomes. RoM (ratio of means) is only
@@ -545,12 +569,12 @@ step2_server <- function(input, output, session, state) {
       sm           = if (identical(input$outcome_type, "binary")) input$sm_bin else input$sm_cont,
       method       = if (identical(input$outcome_type, "binary")) input$method else NULL,
       method.tau   = input$method_tau %||% "REML",
+      random_ci    = input$random_ci %||% "auto",
       random       = identical(input$model, "random"),
       common       = identical(input$model, "common"),
       incr         = input$incr %||% 0.5,
       experimental_label = input$experimental_label,
       control_label      = input$control_label,
-      selected_outcome   = input$selected_outcome,
       col_studlab    = input$col_studlab,
       col_treat      = input$col_treat,
       col_n          = input$col_n,
@@ -582,19 +606,14 @@ step2_server <- function(input, output, session, state) {
     if (!auto && !clicked) return(NULL)
     if (is.null(args$data)) return(NULL)
 
-    # Apply column mapping (rename user-selected columns to canonical names)
+    # Apply column mapping (rename user-selected columns to canonical names).
+    # `outcome` is not consulted here: it is a descriptive column, not an
+    # analysis partition key. Data whose studies each measured a different
+    # scale used to be sliced down to the first scale, which on a PHQ-9 /
+    # HAMD / BDI review left one study standing and no message saying why.
+    # run_ma() stops the one case that genuinely cannot be pooled -- the same
+    # study under two outcomes -- and the tryCatch below shows what it said.
     d <- args$data
-    if ("outcome" %in% names(d)) {
-      outcomes <- unique(as.character(d$outcome))
-      outcomes <- outcomes[!is.na(outcomes) & nzchar(outcomes)]
-      if (length(outcomes) > 1) {
-        if (is.null(args$selected_outcome) ||
-            !args$selected_outcome %in% outcomes) {
-          return(NULL)
-        }
-        d <- d[as.character(d$outcome) == args$selected_outcome, , drop = FALSE]
-      }
-    }
 
     missing_cols <- character()
     if (is.null(args$col_studlab) || !nzchar(args$col_studlab) ||
@@ -777,6 +796,10 @@ step2_server <- function(input, output, session, state) {
       sm           = args$sm,
       method       = args$method,
       method.tau   = args$method.tau,
+      # NULL is run_ma()'s own "decide from k", and the line below this list
+      # drops NULL entries, so "auto" reaches run_ma() as no argument at all.
+      hakn         = switch(args$random_ci %||% "auto",
+                            auto = NULL, hk = TRUE, classic = FALSE),
       random       = args$random,
       common       = args$common,
       incr         = args$incr,
@@ -1315,6 +1338,13 @@ step2_server <- function(input, output, session, state) {
   # screen, so Shiny would otherwise never compute it.
   output$pma_has_ma <- shiny::reactive(!is.null(state$ma))
   shiny::outputOptions(output, "pma_has_ma", suspendWhenHidden = FALSE)
+
+  output$ma_model_summary <- shiny::renderUI({
+    line <- step2_model_summary_line(state$ma)
+    if (is.null(line)) return(NULL)
+    htmltools::p(class = "pma-card-subtitle", style = "margin-bottom: 0.75rem;",
+                 line)
+  })
 
   output$ma_summary <- shiny::renderPrint({
     obj <- state$ma

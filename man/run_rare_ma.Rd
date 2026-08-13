@@ -10,7 +10,7 @@ run_rare_ma(
   primary_method = NULL,
   random = TRUE,
   common = FALSE,
-  method.tau = c("REML", "DL"),
+  method.tau = c("REML", "PM", "DL", "SJ", "ML", "EB"),
   experimental_label = NULL,
   control_label = NULL
 )
@@ -24,7 +24,10 @@ run_rare_ma(
 
 \item{random, common}{Logical model flags.}
 
-\item{method.tau}{Between-study variance estimator for methods that use it.}
+\item{method.tau}{Between-study variance estimator for methods that use it.
+One of \code{"REML"} (default), \code{"PM"}, \code{"DL"}, \code{"SJ"},
+\code{"ML"} or \code{"EB"}. Methods whose spec fixes an estimator (GLMM,
+the two random-effects inverse-variance specs) keep their own.}
 
 \item{experimental_label, control_label}{Optional arm labels.}
 }

@@ -31,6 +31,9 @@ rare_event_diagnostics <- function(x,
 #' @param primary_method Optional method id to force as primary.
 #' @param random,common Logical model flags.
 #' @param method.tau Between-study variance estimator for methods that use it.
+#'   One of \code{"REML"} (default), \code{"PM"}, \code{"DL"}, \code{"SJ"},
+#'   \code{"ML"} or \code{"EB"}. Methods whose spec fixes an estimator (GLMM,
+#'   the two random-effects inverse-variance specs) keep their own.
 #' @param experimental_label,control_label Optional arm labels.
 #'
 #' @details
@@ -54,7 +57,7 @@ run_rare_ma <- function(data,
                         primary_method = NULL,
                         random = TRUE,
                         common = FALSE,
-                        method.tau = c("REML", "DL"),
+                        method.tau = c("REML", "PM", "DL", "SJ", "ML", "EB"),
                         experimental_label = NULL,
                         control_label = NULL) {
   effect_scale <- match.arg(effect_scale)

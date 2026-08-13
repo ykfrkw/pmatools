@@ -138,11 +138,61 @@ test_that("ingest_data validates experimental/control labels", {
   expect_setequal(unique(ok$treat), c("experimental", "control"))
 })
 
-test_that("run_ma rejects unfiltered multi-outcome data", {
+test_that("one scale per study pools every study under SMD", {
+  # The reason SMD exists: three trials, three depression instruments. The
+  # `outcome` column names the instrument, and nothing here is double-counted.
+  data <- make_long_continuous()
+  data$outcome <- rep(c("PHQ-9", "HAMD", "BDI"), each = 2)
+  ma <- run_ma(data, outcome_type = "continuous", sm = "SMD")
+  expect_equal(ma$k, length(unique(data$studlab)))
+})
+
+test_that("run_ma rejects a study that carries two outcomes", {
   data <- rbind(
     transform(make_long_continuous(), outcome = "ISI"),
     transform(make_long_continuous(), outcome = "TST")
   )
   expect_error(run_ma(data, outcome_type = "continuous"),
-               regexp = "multiple outcomes")
+               regexp = "more than one outcome for the same study")
+  # The message has to name the studies, or the reviewer cannot find them.
+  expect_error(run_ma(data, outcome_type = "continuous"), regexp = "A, B, C")
+})
+
+test_that("every method.tau choice reaches the fit, and REML is the default", {
+  data <- make_long_continuous()
+  for (estimator in c("REML", "PM", "DL", "SJ", "ML", "EB")) {
+    ma <- run_ma(data, outcome_type = "continuous", sm = "SMD",
+                 method.tau = estimator)
+    expect_equal(ma$method.tau, estimator, info = estimator)
+  }
+  expect_equal(run_ma(data, outcome_type = "continuous", sm = "SMD")$method.tau,
+               "REML")
+})
+
+test_that("hakn decides the random-effects CI, automatically or on request", {
+  data <- make_long_continuous()
+  two_studies <- data[data$studlab %in% c("A", "B"), , drop = FALSE]
+
+  auto_k3 <- run_ma(data, outcome_type = "continuous", sm = "SMD")
+  expect_equal(auto_k3$method.random.ci, "HK")
+
+  auto_k2 <- run_ma(two_studies, outcome_type = "continuous", sm = "SMD")
+  expect_equal(auto_k2$method.random.ci, "classic")
+
+  off <- run_ma(data, outcome_type = "continuous", sm = "SMD", hakn = FALSE)
+  expect_equal(off$method.random.ci, "classic")
+
+  on <- run_ma(data, outcome_type = "continuous", sm = "SMD", hakn = TRUE)
+  expect_equal(on$method.random.ci, "HK")
+})
+
+test_that("forcing hakn on below k = 3 warns but is still applied", {
+  data <- make_long_continuous()
+  two_studies <- data[data$studlab %in% c("A", "B"), , drop = FALSE]
+  expect_warning(
+    forced <- run_ma(two_studies, outcome_type = "continuous", sm = "SMD",
+                     hakn = TRUE),
+    regexp = "very wide"
+  )
+  expect_equal(forced$method.random.ci, "HK")
 })

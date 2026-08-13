@@ -676,7 +676,10 @@ export_bundle.meta <- function(x,
     method_tau       = ma$method.tau %||% "REML",
     random           = if (isTRUE(ma$random))     "TRUE" else "FALSE",
     common           = if (isTRUE(ma$common))     "TRUE" else "FALSE",
-    hakn             = if (isTRUE(ma$hakn))       "TRUE" else "FALSE",
+    # Read off method.random.ci, not the legacy `hakn` alias: the alias is what
+    # {meta} keeps for back-compatibility, and a user who forced the CI method
+    # in Step 2 must see that choice in the reproducibility script.
+    hakn             = if (.uses_hartung_knapp(ma))  "TRUE" else "FALSE",
     prediction       = if (isTRUE(ma$prediction)) "TRUE" else "FALSE",
     incr             = ma$incr %||% 0.5,
     arm_labels_arg   = .arm_labels_arg(ma_args[["experimental_label", exact = TRUE]],
