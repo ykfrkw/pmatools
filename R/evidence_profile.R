@@ -67,17 +67,11 @@ evidence_profile <- function(grade,
   impr  <- pick("Imprecision")
   pubi  <- pick("Publication bias")
 
-  fmt_judgment <- function(judgment) {
-    switch(
-      as.character(judgment),
-      "no"            = "not serious",
-      "some"          = "serious",
-      "some_concerns" = "serious",
-      "serious"       = "very serious",
-      "very_serious"  = "very serious",
-      as.character(judgment)
-    )
-  }
+  # The display vocabulary is .grade_level_wording() in R/utils.R, not a
+  # second switch() here: the Shiny badges and the override menus read the
+  # same function, so the app and this table cannot word a judgment
+  # differently.
+  fmt_judgment <- function(judgment) .grade_level_wording(judgment)
 
   fn <- list()
   add_fn <- function(judgment, reason) {

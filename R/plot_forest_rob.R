@@ -17,14 +17,30 @@
 #'   \code{"Critical concerns"}. \code{NA}, \code{""} and \code{"?"} are
 #'   tolerated (kept as their own group labeled \code{"unknown"}); any other
 #'   unrecognized label is bucketed into \code{"unknown"} with a warning.
+#' @param some_concerns_as \code{NULL} (default), \code{"low"} or
+#'   \code{"high"}. \code{NULL} keeps the four descriptive strata above.
+#'   Supplying \code{"low"} or \code{"high"} instead draws the \strong{two}
+#'   groups the algorithm actually analyses -- \code{"Low risk of bias"} and
+#'   \code{"High risk of bias"} -- folded with the same internal rule
+#'   \code{\link{grade_meta}} applies to its own \code{rob_some_concerns}
+#'   argument, which this one is named after. Studies left unrated follow
+#'   whichever side \code{"some concerns"} takes, exactly as they do in the
+#'   rating. Use it whenever the plot sits next to a rating: with the default
+#'   four strata a reader sees four groups beside a judgment made on two.
 #' @param ... Additional arguments passed to \code{\link{plot_forest}}.
 #'
 #' @return Invisibly NULL. Side effect: draws on the active graphics device.
 #'
 #' @export
-plot_forest_rob <- function(meta_obj, rob, ...) {
+plot_forest_rob <- function(meta_obj, rob, some_concerns_as = NULL, ...) {
   if (!inherits(meta_obj, "meta")) {
     rlang::abort("plot_forest_rob: meta_obj must be a meta-analysis object.")
+  }
+  if (!is.null(some_concerns_as) &&
+      !(length(some_concerns_as) == 1L &&
+        some_concerns_as %in% c("low", "high"))) {
+    rlang::abort(paste0(
+      "plot_forest_rob: some_concerns_as must be NULL, 'low' or 'high'."))
   }
 
   k <- meta_obj$k
@@ -39,15 +55,21 @@ plot_forest_rob <- function(meta_obj, rob, ...) {
   }
 
   rob_norm <- .normalise_rob(rob)
-  rob_factor <- factor(rob_norm,
-                       levels = c("low", "some", "high", "unknown"))
+  if (is.null(some_concerns_as)) {
+    rob_factor    <- factor(rob_norm,
+                            levels = c("low", "some", "high", "unknown"))
+    subgroup_name <- "Risk of bias"
+  } else {
+    rob_factor    <- .rob_analysis_strata(rob_norm, some_concerns_as)
+    subgroup_name <- "Risk of bias (as analysed)"
+  }
 
   update_obj <- .subgroup_update_object(meta_obj)
   m_sg <- tryCatch(
     suppressWarnings(stats::update(
       update_obj,
       subgroup      = rob_factor,
-      subgroup.name = "Risk of bias"
+      subgroup.name = subgroup_name
     )),
     error = function(e) NULL
   )
@@ -68,6 +90,25 @@ plot_forest_rob <- function(meta_obj, rob, ...) {
 # warns before being bucketed there.
 .normalise_rob <- function(rob) {
   .rob_plot_strata(rob, arg = "plot_forest_rob: rob")
+}
+
+# The two-group fold, as a factor ready for stats::update(subgroup = ).
+#
+# The fold itself is NOT re-implemented here: .rob_high_levels() is the same
+# internal assess_rob() consults, so a study on the "high" side of the plot is
+# a study on the "high" side of the rating. The only mapping this function
+# owns is plot strata -> internal levels, which is the inverse of the one
+# rob_strata() applies on the way in ("unknown" -> "some_concerns", because an
+# unrated study reaches grade_meta() as "*" and normalises there the same way).
+#
+# The factor carries BOTH levels even when one is empty, so the legend and the
+# subgroup rows are stable as the reviewer moves the boundary.
+.rob_analysis_strata <- function(rob_norm, some_concerns_as) {
+  internal <- c(low = "no", some = "some_concerns", high = "serious",
+                unknown = "some_concerns")[rob_norm]
+  high <- unname(internal) %in% .rob_high_levels(some_concerns_as)
+  factor(ifelse(high, "High risk of bias", "Low risk of bias"),
+         levels = c("Low risk of bias", "High risk of bias"))
 }
 
 .subgroup_update_object <- function(meta_obj) {

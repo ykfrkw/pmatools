@@ -289,8 +289,11 @@ PMA_OUTCOME_INPUT_IDS <- list(
   # Step 3 - Risk of Bias. rob_some_concerns / rob_inf_threshold are review-
   # wide conventions with defaults, not per-outcome answers, so they stay.
   rob = c("rob_override", "rob_override_rationale", "rob_confirm_na"),
-  # Step 3 - Inconsistency
-  inconsistency = c("ci_diff", "threshold_side", "subgroup_explained",
+  # Step 3 - Inconsistency. ci_diff and threshold_side are gone: Core GRADE
+  # 3's Steps 1 and 2 are derived by .auto_inconsistency(), and the app no
+  # longer asks questions the algorithm has already answered. Step 3
+  # (subgroup_explained) is the one a human has to answer.
+  inconsistency = c("subgroup_explained",
                     "incon_override", "incon_override_rationale",
                     "incon_confirm_na"),
   # Step 3 - Indirectness (the four Core GRADE 5 PICO questions, plus the
@@ -689,9 +692,19 @@ pma_downgrade_chip <- function(judgment) {
   htmltools::span(class = paste("pma-badge pma-chip", cls), label)
 }
 
-# Generic judgment badge
+# Generic judgment badge.
+#
+# The words are NOT chosen here. .grade_level_wording() (vendored R/utils.R,
+# driven by GRADE_LEVEL_SOURCE_WORDING) is the app's single display
+# vocabulary, shared with the Evidence Profile: "Not serious" / "Serious" /
+# "Very serious", which is Core GRADE's own wording. The badge used to print
+# "No concern" / "Some concerns" / "Serious" from a second hand-written
+# switch, so the same judgment read one way on the tab and another way in the
+# exported table - and "Serious" meant -2 in one place and -1 in the other.
+# Only the CSS class mapping is this function's own.
 pma_judgment_badge <- function(judgment) {
-  cls <- switch(judgment,
+  j <- judgment %||% "no"
+  cls <- switch(j,
     "no"            = "grade-high",
     "some"          = "grade-low",
     "some_concerns" = "grade-low",
@@ -699,15 +712,133 @@ pma_judgment_badge <- function(judgment) {
     "very_serious"  = "grade-vlow",
     "grade-low"
   )
-  label <- switch(judgment,
-    "no"            = "No concern",
-    "some"          = "Some concerns",
-    "some_concerns" = "Some concerns",
-    "serious"       = "Serious",
-    "very_serious"  = "Serious",
-    judgment
+  htmltools::span(class = paste("pma-badge", cls),
+                  pma_judgment_label(j))
+}
+
+# One judgment, worded for display. Wraps the vendored helper so the app has
+# a single call site to change if the package ever moves it, and so the tests
+# have something app-side to assert against.
+pma_judgment_label <- function(judgment) {
+  .grade_level_wording(judgment %||% "no", sentence = TRUE)
+}
+
+# Choices for every override widget on the Step 3 domain tabs, and for the
+# Indirectness overall radio.
+#
+# The VALUES are the internal levels and do not move: grade_meta() reads
+# "no" / "some_concerns" / "serious" and nothing downstream is aware that the
+# labels changed. The labels are the Core GRADE wording plus the downgrade the
+# level carries, because "Serious" alone is ambiguous between the source's
+# -1 and pmatools' internal name for -2.
+#
+# `include_blank` is the "(no override)" entry the four selectInputs need and
+# the Indirectness radio does not (there, leaving the group unselected is how
+# the reviewer accepts the automatic worst-case fold).
+pma_judgment_choices <- function(include_blank = TRUE,
+                                 blank_label = "(no override)") {
+  out <- c("Not serious (-0)"  = "no",
+           "Serious (-1)"      = "some_concerns",
+           "Very serious (-2)" = "serious")
+  if (isTRUE(include_blank)) out <- c(stats::setNames("", blank_label), out)
+  out
+}
+
+# ----- One evaluation shape for all five domain tabs ----------------------
+# Every domain tab used to print the machine-generated note string raw, into
+# a verbatimTextOutput several hundred characters long, under the heading
+# "Evaluation". Three helpers replace it: the verdict is one line, the numbers
+# behind it come forward as a short list, and the full prose moves one click
+# away. Nothing is deleted - the note is still there, verbatim, inside the
+# <details>.
+
+# The headline line: what this domain was rated, in Core GRADE's words, with
+# the downgrade it carries.
+pma_domain_verdict <- function(judgment, downgrade = NULL) {
+  j  <- judgment %||% "no"
+  dg <- downgrade
+  if (is.null(dg) || length(dg) != 1L || is.na(dg)) {
+    # Single-bracket: an unknown level must fall back to 0, not abort the
+    # whole tab the way [[ ]] would.
+    dg <- unname(c(no = 0, some = -1, some_concerns = -1,
+                   serious = -2, very_serious = -2)[j])
+  }
+  if (is.na(dg)) dg <- 0
+  dg <- as.integer(dg)
+  htmltools::div(
+    class = "pma-domain-verdict",
+    htmltools::strong(pma_judgment_label(j)),
+    htmltools::span(
+      class = "pma-domain-verdict-dg",
+      if (dg == 0L) " - do not rate down"
+      else sprintf(" - rate down %d level%s", abs(dg),
+                   if (abs(dg) == 1L) "" else "s"))
   )
-  htmltools::span(class = paste("pma-badge", cls), label)
+}
+
+# The numbers, as a compact definition list. `facts` is a domain_facts()
+# tibble (key / label / value / numeric) or NULL. `keys` restricts and orders
+# the rows; NULL takes the first `max_rows` as the assessor emitted them.
+#
+# Returns NULL when there is nothing to show, so a caller can drop it into a
+# tagList without a conditional.
+pma_facts_list <- function(facts, keys = NULL, max_rows = 6L) {
+  if (is.null(facts) || !is.data.frame(facts) || nrow(facts) == 0L) {
+    return(NULL)
+  }
+  if (!all(c("key", "label", "value") %in% names(facts))) return(NULL)
+  if (!is.null(keys)) {
+    idx <- match(keys, facts$key)
+    idx <- idx[!is.na(idx)]
+    facts <- facts[idx, , drop = FALSE]
+  }
+  if (nrow(facts) == 0L) return(NULL)
+  if (nrow(facts) > max_rows) facts <- facts[seq_len(max_rows), , drop = FALSE]
+  htmltools::tags$dl(
+    class = "pma-facts",
+    lapply(seq_len(nrow(facts)), function(i) {
+      htmltools::tagList(
+        htmltools::tags$dt(facts$label[i]),
+        htmltools::tags$dd(facts$value[i])
+      )
+    })
+  )
+}
+
+# The full machine-generated note, one click away. Collapsed, never deleted:
+# it is the authoritative record of why the domain was rated the way it was,
+# and the reviewer has to be able to reach it.
+pma_notes_collapse <- function(notes,
+                               title = "Full reasoning (verbatim)") {
+  txt <- paste(as.character(notes %||% ""), collapse = "\n")
+  if (!nzchar(trimws(txt))) return(NULL)
+  htmltools::tags$details(
+    class = "pma-notes-details",
+    htmltools::tags$summary(title),
+    htmltools::tags$pre(class = "pma-notes-pre", txt)
+  )
+}
+
+# ----- Step 2 required fields ---------------------------------------------
+# Which of the two required Step 2 fields are still blank. Pure, so the rule
+# the marks are painted from is testable without a session; step2_server()
+# holds the reactive that calls it and decides whether the marks are ARMED
+# (see PMA_STEP2_REQUIRED and the two-tier CSS in www/shadcn.css).
+PMA_STEP2_REQUIRED <- c("outcome_name", "small_values")
+
+pma_step2_required_unset <- function(outcome_name, small_values) {
+  unset <- character(0)
+  nm <- outcome_name
+  if (is.null(nm) || length(nm) != 1L || is.na(nm) ||
+      !nzchar(trimws(as.character(nm)))) {
+    unset <- c(unset, "outcome_name")
+  }
+  sv <- small_values
+  if (is.null(sv) || length(sv) != 1L || is.na(sv) ||
+      !nzchar(as.character(sv))) {
+    unset <- c(unset, "small_values")
+  }
+  unset
 }
 
 # Render a base R plot to a temp PNG and trim white margins via {magick}.
@@ -1403,6 +1534,16 @@ PMA_SOF_LIMITATIONS_NOTE <- paste0(
   "down indirectness or publication bias domain is still only named in the ",
   "certainty cell, with its reasoning left in the Evidence Profile and in ",
   "that domain's notes."
+)
+
+# Core GRADE 6's own presentation advice, as a footnote on the table it is
+# about. It used to be a standing italic paragraph on the Final certainty tab,
+# where it was page text and therefore did not travel into the exported .docx.
+PMA_SOF_CER_EER_NOTE <- paste0(
+  "Recommended: report both the control event rate (CER) and the intervention ",
+  "event rate (EER) alongside the relative effect, to aid clinical ",
+  "interpretation (Heimke et al., BMJ Ment Health 2024; ",
+  "doi:10.1136/bmjment-2023-300978)."
 )
 
 pma_sof_limitations_ui <- function() {

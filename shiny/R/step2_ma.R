@@ -1289,22 +1289,23 @@ step2_server <- function(input, output, session, state) {
 
   # The ids managed here; `unset` is recomputed from input$ on every change,
   # so the marks clear the moment a field is filled.
-  PMA_STEP2_REQUIRED <- c("outcome_name", "small_values")
+  # PMA_STEP2_REQUIRED and pma_step2_required_unset() live in R/ui_helpers.R,
+  # so the rule the marks are painted from is testable without a session.
+  #
+  # TWO TIERS, and the split is the point. `unset` is now computed
+  # unconditionally, so a fresh form wears a MUTED "required" pill from the
+  # first paint and the reviewer can see what is being asked of them.
+  # `armed` is the old required_touched() gate, and it is what turns that pill
+  # destructive-red: still nothing painted red until the reviewer has actually
+  # asked for an analysis, which is the behaviour the comment above defends.
   shiny::observe({
-    unset <- character(0)
-    if (isTRUE(required_touched())) {
-      if (!nzchar(trimws(input$outcome_name %||% ""))) {
-        unset <- c(unset, "outcome_name")
-      }
-      sv <- input$small_values
-      if (is.null(sv) || length(sv) != 1L || !nzchar(sv)) {
-        unset <- c(unset, "small_values")
-      }
-    }
+    unset <- pma_step2_required_unset(input$outcome_name, input$small_values)
     # as.list() so a single id (or none) still serialises as a JSON array.
     session$sendCustomMessage(
       "pma_required_fields",
-      list(all = as.list(PMA_STEP2_REQUIRED), unset = as.list(unset))
+      list(all   = as.list(PMA_STEP2_REQUIRED),
+           unset = as.list(unset),
+           armed = isTRUE(required_touched()))
     )
   })
 

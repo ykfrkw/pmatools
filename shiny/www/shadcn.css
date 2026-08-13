@@ -206,19 +206,63 @@ h5 { font-size: 0.95rem; margin-top: 0.75rem; margin-bottom: 0.4rem; }
 /* How-this-is-judged block */
 .pma-how p { margin: 0.25rem 0 0.75rem 0; line-height: 1.5; font-size: 0.9rem; }
 
-/* Standing rule notice (Risk of Bias: the binary low/high classification).
-   A statement of how the app resolves an open choice in the source, so it is
-   quieter than .pma-banner but still set apart from the surrounding copy. */
-.pma-rob-rule {
+/* ---------------------------------------------------------------------------
+   The shared domain-evaluation shape (pma_domain_verdict / pma_facts_list /
+   pma_notes_collapse in R/ui_helpers.R). One verdict line, the numbers behind
+   it as a compact list, and the machine-generated note one click away.
+   --------------------------------------------------------------------------- */
+.pma-domain-verdict {
+  font-size: 1rem;
+  margin: 0.35rem 0 0.5rem;
+}
+.pma-domain-verdict-dg { color: hsl(var(--muted-foreground)); }
+
+.pma-facts {
+  display: grid;
+  grid-template-columns: minmax(9rem, max-content) 1fr;
+  gap: 0.15rem 0.85rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.pma-facts dt { color: hsl(var(--muted-foreground)); font-weight: 500; }
+.pma-facts dd { margin: 0; }
+@media (max-width: 560px) {
+  .pma-facts { grid-template-columns: 1fr; gap: 0 0; }
+  .pma-facts dd { margin-bottom: 0.4rem; }
+}
+
+.pma-notes-details > summary {
+  font-size: 0.85rem;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+}
+.pma-notes-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.8rem;
+  line-height: 1.5;
   background: hsl(var(--muted));
-  border-left: 3px solid hsl(var(--border));
   border-radius: var(--radius);
   padding: 0.6rem 0.85rem;
-  margin: 0.5rem 0 0.75rem;
-  font-size: 0.85rem;
-  line-height: 1.55;
-  color: hsl(var(--foreground));
+  margin: 0.4rem 0 0;
 }
+
+/* Publication-bias wizard breadcrumb: the answered nodes, each re-openable,
+   plus the computed Q2 step. Without it a one-question-at-a-time wizard is a
+   trap. */
+.pma-crumbs {
+  margin: 0.25rem 0 0.75rem;
+  padding-left: 0.6rem;
+  border-left: 3px solid hsl(var(--border));
+}
+.pma-crumb {
+  font-size: 0.85rem;
+  color: hsl(var(--muted-foreground));
+  line-height: 1.6;
+}
+.pma-crumb strong { color: hsl(var(--foreground)); }
+.pma-crumb-auto { font-style: italic; }
 
 /* Inline help icon */
 .pma-help { color: hsl(var(--muted-foreground)); cursor: help; margin-left: 0.25rem; font-size: 0.8rem; }
@@ -450,11 +494,18 @@ table.dataTable th { background: hsl(var(--muted)); }
 /* ---------------------------------------------------------------------------
    Required-but-still-empty fields (Step 2 "Outcome name" / "Direction").
 
-   The class is put on / taken off the .shiny-input-container by
-   www/required-fields.js, driven from a server-side observe() in
-   step2_server(); it is only ever applied after the user has asked for an
-   analysis at least once, so a fresh page load is never red. These are the
-   only consumers of the --destructive tokens declared at the top of this file.
+   TWO TIERS, both put on / taken off the .shiny-input-container by
+   www/required-fields.js from a server-side observe() in step2_server().
+
+   Tier 1, .pma-required-unset alone: a MUTED "required" pill, painted from
+   the first render. The reviewer can see what the form is asking for before
+   they have touched anything, which they could not before - the marks used to
+   arm only after a failed Next, so a fresh form said nothing at all.
+
+   Tier 2, .pma-required-unset.pma-required-armed: today's destructive
+   treatment, applied only once the reviewer has actually asked for an
+   analysis. A fresh page load is still never red. The armed tier is the only
+   consumer of the --destructive tokens declared at the top of this file.
    --------------------------------------------------------------------------- */
 .pma-required-unset > label::after {
   content: "required";
@@ -462,25 +513,33 @@ table.dataTable th { background: hsl(var(--muted)); }
   margin-left: 0.4rem;
   padding: 0.02rem 0.45rem;
   border-radius: 9999px;
-  background: hsl(var(--destructive));
-  color: hsl(var(--destructive-foreground));
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  border: 1px solid hsl(var(--border));
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   vertical-align: 0.08em;
 }
-.pma-required-unset .form-control,
-.pma-required-unset .selectize-input {
+
+/* ----- Tier 2: armed ----- */
+.pma-required-unset.pma-required-armed > label::after {
+  background: hsl(var(--destructive));
+  color: hsl(var(--destructive-foreground));
   border-color: hsl(var(--destructive));
 }
-.pma-required-unset .form-control:focus,
-.pma-required-unset .selectize-input.focus {
+.pma-required-unset.pma-required-armed .form-control,
+.pma-required-unset.pma-required-armed .selectize-input {
+  border-color: hsl(var(--destructive));
+}
+.pma-required-unset.pma-required-armed .form-control:focus,
+.pma-required-unset.pma-required-armed .selectize-input.focus {
   border-color: hsl(var(--destructive));
   box-shadow: 0 0 0 2px hsl(var(--destructive) / 0.2);
 }
 /* Radio / checkbox groups carry no .form-control to outline, so the option
    list itself gets the rule. */
-.pma-required-unset .shiny-options-group {
+.pma-required-unset.pma-required-armed .shiny-options-group {
   border-left: 3px solid hsl(var(--destructive));
   padding-left: 0.6rem;
 }

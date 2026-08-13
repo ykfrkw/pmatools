@@ -275,6 +275,15 @@ side of the clinical threshold, or spread across both sides?}
 \code{"yes"} / \code{"no"}: is the inconsistency explained by a credible
 subgroup?
 
+Since 0.5.1 this argument is also read on the \emph{automated} path, on
+its own: when \code{inconsistency_ci_diff} is \code{NULL} and the
+automated zone tally lands on opposite sides of the threshold,
+\code{"yes"} rates the domain \code{"no"} (present the subgroups
+separately) and \code{"no"} keeps \code{"some_concerns"}. Leaving it
+unanswered also keeps \code{"some_concerns"}, which is the conservative
+default. Before 0.5.1 the automated note advised supplying it while the
+automated path ignored it.
+
 \strong{How to decide.} pmatools cannot assess credibility; Core GRADE 3
 points at a formal instrument and three key criteria. Verbatim (Core
 GRADE 3 summary points): "Key criteria for determining the credibility of

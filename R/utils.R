@@ -45,6 +45,25 @@ GRADE_LEVEL_SOURCE_WORDING <- c(
   out[out == "very_serious"] <- "serious"
   out
 }
+
+# THE display vocabulary. Every user-facing rendering of a domain judgment -
+# the Evidence Profile cells, the Shiny badges, the override menus - goes
+# through this one function, so the app and the exported table can never word
+# the same judgment differently. Legacy labels are normalised first; anything
+# still unrecognised is returned unchanged rather than replaced by a
+# placeholder, so a new level shows up as itself.
+#
+# `sentence = TRUE` capitalises the first letter, which is what a badge or a
+# menu entry wants; the Evidence Profile prints it lower-case mid-sentence.
+.grade_level_wording <- function(x, sentence = FALSE) {
+  lv  <- .normalize_grade_level(x)
+  out <- unname(GRADE_LEVEL_SOURCE_WORDING[lv])
+  out[is.na(out)] <- as.character(lv)[is.na(out)]
+  if (isTRUE(sentence)) {
+    out <- paste0(toupper(substring(out, 1L, 1L)), substring(out, 2L))
+  }
+  out
+}
 CERTAINTY_LABELS <- c("Very Low", "Low", "Moderate", "High")
 CERTAINTY_SYMBOLS <- c(
   "High"       = "++++",

@@ -137,3 +137,55 @@ test_that("plot_forest_rob rejects non-meta objects", {
   expect_error(plot_forest_rob(list(), rob = "L"),
                regexp = "must be a meta-analysis object")
 })
+
+# ---------------------------------------------------------------------------
+# some_concerns_as: the two-group fold the algorithm actually analyses
+# ---------------------------------------------------------------------------
+# Added in 0.5.1. The default (NULL) keeps every case above working unchanged,
+# which is what makes this a safe argument to add rather than a breaking one.
+
+test_that(".rob_analysis_strata folds with the same rule assess_rob() uses", {
+  strata <- c("low", "some", "high", "unknown")
+
+  # "some concerns" -> high: only an explicit "low" stays low, and an unrated
+  # study follows "some concerns" (it reaches grade_meta() as "*", which
+  # normalises to some_concerns there).
+  hi <- pmatools:::.rob_analysis_strata(strata, "high")
+  expect_identical(as.character(hi),
+                   c("Low risk of bias", "High risk of bias",
+                     "High risk of bias", "High risk of bias"))
+
+  # "some concerns" -> low: only an explicit "high" is high.
+  lo <- pmatools:::.rob_analysis_strata(strata, "low")
+  expect_identical(as.character(lo),
+                   c("Low risk of bias", "Low risk of bias",
+                     "High risk of bias", "Low risk of bias"))
+
+  # Both levels are always present, in a fixed order, so the subgroup rows do
+  # not reorder themselves as the reviewer moves the boundary.
+  expect_identical(levels(hi), c("Low risk of bias", "High risk of bias"))
+  expect_identical(levels(lo), levels(hi))
+})
+
+test_that("plot_forest_rob draws the folded two-group plot on request", {
+  m   <- make_metabin_pfr()
+  rob <- c("L", "L", "S", "S", "H", "H")
+  with_null_device({
+    for (side in c("low", "high")) {
+      res <- withVisible(plot_forest_rob(m, rob = rob,
+                                         some_concerns_as = side))
+      expect_null(res$value)
+      expect_false(res$visible)
+    }
+  })
+})
+
+test_that("plot_forest_rob rejects an unusable some_concerns_as", {
+  m   <- make_metabin_pfr()
+  rob <- c("L", "L", "S", "S", "H", "H")
+  expect_error(plot_forest_rob(m, rob = rob, some_concerns_as = "medium"),
+               "some_concerns_as")
+  expect_error(plot_forest_rob(m, rob = rob,
+                               some_concerns_as = c("low", "high")),
+               "some_concerns_as")
+})

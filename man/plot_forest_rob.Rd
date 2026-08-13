@@ -4,7 +4,7 @@
 \alias{plot_forest_rob}
 \title{Forest plot stratified by Risk-of-Bias subgroup}
 \usage{
-plot_forest_rob(meta_obj, rob, ...)
+plot_forest_rob(meta_obj, rob, some_concerns_as = NULL, ...)
 }
 \arguments{
 \item{meta_obj}{A \code{meta} object (from \code{\link{run_ma}} or
@@ -18,6 +18,17 @@ labels as \code{\link{grade_meta}} (case-insensitive): \code{"L"/"S"/"H"},
 \code{"Critical concerns"}. \code{NA}, \code{""} and \code{"?"} are
 tolerated (kept as their own group labeled \code{"unknown"}); any other
 unrecognized label is bucketed into \code{"unknown"} with a warning.}
+
+\item{some_concerns_as}{\code{NULL} (default), \code{"low"} or
+\code{"high"}. \code{NULL} keeps the four descriptive strata above.
+Supplying \code{"low"} or \code{"high"} instead draws the \strong{two}
+groups the algorithm actually analyses -- \code{"Low risk of bias"} and
+\code{"High risk of bias"} -- folded with the same internal rule
+\code{\link{grade_meta}} applies to its own \code{rob_some_concerns}
+argument, which this one is named after. Studies left unrated follow
+whichever side \code{"some concerns"} takes, exactly as they do in the
+rating. Use it whenever the plot sits next to a rating: with the default
+four strata a reader sees four groups beside a judgment made on two.}
 
 \item{...}{Additional arguments passed to \code{\link{plot_forest}}.}
 }

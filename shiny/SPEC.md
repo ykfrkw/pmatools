@@ -232,6 +232,47 @@ Below the tabset: collapsible "Forest plot adjustments" with title, label_e, lab
 
 > **Why this matters.** The pooled estimate and confidence interval you see here drive every GRADE judgment in the next step. The choice between random and fixed-effects models, and between REML and DL, can meaningfully change tau-squared and the prediction interval. Random-effects with REML and Hartung-Knapp adjustment is the modern default for clinical evidence synthesis.
 
+#### 3.3.6 Required fields — two visual tiers
+
+`PMA_STEP2_REQUIRED` (`R/ui_helpers.R`) names the two fields Step 2 cannot
+proceed without: `outcome_name` and `small_values`. Which of them is still
+blank is decided by the pure `pma_step2_required_unset()`, so the rule is
+testable without a session; `www/required-fields.js` paints it.
+
+| state | classes | appearance |
+|---|---|---|
+| blank, from the first render | `.pma-required-unset` | **muted** "required" pill on the label |
+| blank, after a failed Next / Run analysis | `.pma-required-unset.pma-required-armed` | destructive pill, border and option-group rule |
+
+The split exists because the two behaviours were in conflict. Painting a fresh
+form red is wrong — nobody has done anything wrong yet — but the previous
+single tier armed only after a failed Next, so a fresh form said **nothing at
+all** about what was required. The muted tier is legible from the start; the
+armed tier is the old destructive treatment, unchanged, and `armed` is the same
+`required_touched()` flag as before, now sent to the client as a third field of
+the `pma_required_fields` message. Both classes are cached on `window`
+alongside the per-id flags, because `app.R` rebuilds the Step 2 body on every
+step change and throws the DOM away.
+
+#### 3.3.7 Sample-dataset outcome defaults
+
+`PMA_SAMPLE_OUTCOME_DEFAULTS` in `R/step1_data.R` is a named list keyed by
+`input$sample_dataset`, holding the outcome name, direction and follow-up each
+bundled sample is an analysis *of* (`regular` → "Depression response" /
+`undesirable` / "Post-treatment"). Seeded into `state` by an
+`observeEvent(input$load_data)`, so it fires once per load.
+
+Two rules:
+
+- **Blanks only.** A field the reviewer has already filled is never
+  overwritten, however many times they reload.
+- **Hooked to the load path, not to `commit_loaded_data()`.** That function is
+  called from an observer that depends on `state$rob_table`, so it re-runs on
+  every per-study Risk-of-Bias edit made in Step 3.
+
+`step2_ui()` already seeds all three widgets from `state`, so nothing in Step 2
+changes.
+
 ### 3.4 Step 3 — GRADE
 
 #### 3.4.1 Layout
@@ -454,13 +495,161 @@ Below the accordion, a `pma-card` with:
 
 #### 3.4.10 Display options card
 
-- `numericInput("per", "Display rates per N patients", value = 1000, min = 1)` (1000 / 100 typical)
 - `checkboxInput("prediction", "Show 95% prediction interval in Effect column")`
 - `checkboxInput("convert_smd_to_or", "Show as dichotomous outcome (Chinn's formula)")` *— SMD/MD outcomes only*
 - If `convert_smd_to_or` checked:
   - `numericInput("baseline_risk", "Control event rate (proportion responding)", value = 0.30, min = 0.01, max = 0.99)`
   - `textInput("threshold_label", "Threshold definition (free text)", placeholder = "e.g., ≥50% reduction in PHQ-9 from baseline")`
   - Inline note: *"This is the proportion of control patients who would meet the threshold of clinical interest. Continuous effect sizes are statistically rigorous but hard for clinicians and patients to interpret. Showing 'X out of 1,000 patients respond' alongside the SMD often communicates the same evidence more accessibly."*
+
+#### 3.4.11 Information design — what is open, what is collapsed, what was deleted
+
+> The governing rule, from the reviewer this app is for: **delete duplicated and
+> verbose explanation outright; collapse what survives; never collapse anything
+> the reviewer has to answer.** Figure configuration and detailed algorithm
+> narration collapse. Inputs, questions and confirmations stay open. A change
+> to a Step 3 tab is measured against that rule, not against a character count.
+
+**One evaluation shape on every domain tab.** Each tab replaced its raw
+`verbatimTextOutput("<domain>_notes")` under the heading "Evaluation" with three
+parts, built by `pma_domain_verdict()` / `pma_facts_list()` /
+`pma_notes_collapse()` (`R/ui_helpers.R`):
+
+1. the verdict, one line, in Core GRADE's own words plus the downgrade;
+2. the numbers behind it, 3–6 rows of a `<dl>` read from `domain_facts()`;
+3. the full machine-generated note, verbatim, inside a closed `<details>`.
+
+Nothing is deleted by this: the note remains the authoritative record of why the
+domain was rated as it was, and it is one click away.
+
+**Judgment wording.** Badges, verdict lines and the four override
+`selectInput`s read `.grade_level_wording()` from the package (SPEC.md §5.0),
+so they say *Not serious* / *Serious* / *Very serious*. The override **values**
+are unchanged (`no` / `some_concerns` / `serious`), and their labels carry the
+downgrade — `"Serious (-1)"` — because "serious" alone is ambiguous between
+Core GRADE's −1 and the internal level name for −2.
+
+**Configuration owns the cross-cutting settings.** Three inputs moved onto the
+Configuration tab, which is where the app settles everything the five domains
+depend on:
+
+| input | was | why it moved |
+|---|---|---|
+| `per` | a `numericInput` on Final certainty | it relabels the control-group risk, the absolute threshold and the OIS figures, none of which are on Final certainty |
+| `rob_some_concerns` | closed `<details>` on Risk of Bias | a review-wide decision driving the dominance gate, the comparator estimate, the refit and the forest strata |
+| `rob_inf_threshold` | closed `<details>` on Risk of Bias | same: a review convention, not an answer about this outcome |
+
+Final certainty keeps a one-line read-only echo of `per`.
+
+**The per-N display unit.** `radioButtons("per", …)` offers 100 or 1,000 and is
+backed by the `display_per_state()` reactiveVal, seeded under `isolate()` and
+synced back with `.sync_widget()` — the same machinery the threshold values use,
+because a statically declared radio would push its default back on every
+3 → 2 → 3 round trip.
+
+**Internal storage stays per-1,000.** `threshold_abs_state()`,
+`threshold_baseline_state()`, `.threshold_grade_args()` and `ois_p0_value()`
+keep their `/1000` arithmetic whatever the reviewer picks. Only the displayed
+value, its label and `sof_table(per =)` / `export_bundle(per =)` follow the
+setting. `step3_per_label()` (`R/step3_threshold.R`) is the one formatter every
+rate string on Step 3 goes through.
+
+> **Exception, deliberate.** `step3_threshold_note()` — the provenance sentence
+> appended to the domain notes and the Evidence Profile footnote — stays in the
+> per-1,000 storage unit. It is a record of the conversion that was rated
+> against, and it travels into the exported object and `analysis.R`, so it must
+> not change with a display preference.
+
+**Control-group risk is a whole number of events.** Every write into
+`threshold_baseline_state()` / `threshold_abs_state()` goes through
+`step3_quantise_per1000()`, and the two boxes are `step = 1`, `max = per`. An
+event rate is a count of patients; "15.6 per 100" is not one.
+
+> **Cost, stated rather than discovered.** At `per = 100` the grid is ten times
+> coarser than at `per = 1,000`: a control-group risk of 156 per 1,000 is
+> displayed and stored as 160 per 1,000 (16 per 100). Switching units therefore
+> can move the number the rating is computed from. The rationale
+> `conditionalPanel` compares against the quantised auto value, so a fresh
+> analysis is not reported as overridden.
+
+**Publication bias is a wizard over Figure 5.** `output$pubias_wizard` renders
+exactly one node. The node is **derived**, never stored as a cursor, by
+`step3_pubias_node()` (`R/step3_threshold.R`, pure and unit-tested), mirroring
+`assess_pubias()`'s own short-circuit order:
+
+```
+!answered(pubias_small_industry)                    -> "q1"
+pubias_small_industry == "yes"                      -> "result"   (terminal)
+!answered(pubias_registry_complete)                 -> "extra"
+pubias_registry_complete %in% c("yes", "no")        -> "result"   (terminal both ways)
+# only the explicit "defer" falls through
+k >= 10 : !answered(pubias_funnel_asymmetry) ? "q3" : "result"
+k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
+```
+
+- **Q2 is not a question.** k decides it (`.pubias_effective_k()`), so it is
+  reported as a one-line automatic step in the breadcrumb, never a screen.
+- **Two nodes carry an explicit deferral VALUE** rather than a blank:
+  `pubias_registry_complete = "defer"` ("leave it to the Figure 5 nodes") and
+  `pubias_funnel_asymmetry = "egger"` ("accept the automated Egger test").
+  Without them, "the reviewer looked and has no opinion" is indistinguishable
+  from "the reviewer has not reached this yet" and the wizard can never advance
+  past an optional node. Neither value reaches `grade_meta()`: both are mapped
+  to `NULL`, which is what "let the algorithm decide" means to
+  `assess_pubias()`. In particular `"egger"` must not be routed through
+  `.override_or_ignore()`, which would demand a rationale for declining to
+  override.
+- **Advancing happens on answer.** One `observeEvent` per input clears
+  `pubias_reopen`; the derivation moves on by itself. No `updateTabsetPanel`,
+  no manual Next.
+- **A breadcrumb re-opens any answered node.** `pubias_reopen` is honoured
+  ahead of the derivation, but only for a node the current answers put on the
+  path — so re-opening Q1 and answering "yes" cannot strand the reviewer on a
+  Q3 that no longer exists. Reset by `state$step3_reset()`.
+- **Structural constraints.** The funnel and trim-and-fill `imageOutput`s and
+  the RoB-ME `DT::DTOutput` are **statically placed** and gated by
+  `conditionalPanel` on `output.pubias_show_funnel` /
+  `output.pubias_show_result`, not moved inside the `renderUI`: DT does not
+  bind cleanly inside one. Both flags carry
+  `outputOptions(suspendWhenHidden = FALSE)`, or the panel they gate would
+  never appear.
+
+**Inconsistency asks one question, not three.** `ci_diff` and `threshold_side`
+are gone: `.auto_inconsistency()` derives Core GRADE 3's Steps 1 and 2, and the
+app passes `inconsistency_ci_diff = NULL` and
+`inconsistency_threshold_side = NULL` unconditionally. The zone tally is shown
+instead, through `pma_facts_list()`, so the reviewer sees what the two deleted
+questions were answered with. `subgroup_explained` stays open — Step 3 is not
+auto-detectable — but only when the automated path reached the opposite-sides
+branch, via a `conditionalPanel` on `output.incon_subgroup_relevant`
+(`suspendWhenHidden = FALSE`). The package reads it on the automated path as of
+0.5.1 (SPEC.md §5.2).
+
+**Risk of Bias.** `output$rob_rule_note` (a ~180-word standing statement of the
+binary rule) and the "See also RoB 2" paragraph are deleted, not collapsed: the
+Configuration setting states the rule in one sentence beside the control that
+sets it, the two-group forest *shows* it, and `pma_reference()` already carries
+the source. `output$rob_forest` passes
+`plot_forest_rob(some_concerns_as = .rob_some_concerns_setting())`, so the plot
+and the judgment beside it agree about how many groups there are.
+
+**Indirectness.** The four PICO radios and the overall override stay open and
+gain the standard `Inputs` wrapper they never had. The two boxed departure
+notes and the three per-element footnotes are collapsed into one shared
+`<details>`; the `EDU_COPY$domains$indirectness$mapping` paragraph is deleted
+(it restated the "How is this judged?" copy).
+
+**Imprecision.** `output$impre_branch` reads the `fig4_path` / `ois_used`
+**facts** instead of regex-parsing the note string. The Core GRADE 2 verbatim
+quotation in `ois_rrr_equiv` and the override explanation collapse; the
+`.override_details` preamble is deleted (it restated the branch text).
+`.inputs_details(open = TRUE)` stays open.
+
+**Final certainty.** `other_text` / `other_downgrade` are answers and stay
+open; the rest of Display options collapses. The Heimke CER/EER recommendation
+is now `PMA_SOF_CER_EER_NOTE`, written into the SoF footer by
+`pma_sof_add_notes()`, so it travels into the exported .docx — which it never
+did as page text.
 
 ### 3.5 Step 4 — Export
 

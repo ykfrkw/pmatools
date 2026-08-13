@@ -259,6 +259,29 @@ plot_forest(
 
 Since v0.4 the signature also carries display arguments used by the export bundle: `threshold_lines`, `show_n`, `show_events`, `favors_left`, `favors_right`, `addrow_above`, `addrow_below`. `addrow_below = NULL` (the default) derives the bottom spacing from the drawn content so the heterogeneity text cannot overlap the x-axis band.
 
+### 4.3a `plot_forest_rob()` — stratified by risk of bias
+
+```r
+plot_forest_rob(meta_obj, rob, some_concerns_as = NULL, ...)
+```
+
+Re-runs the analysis with a risk-of-bias subgroup and draws the per-stratum pooled estimates beside the overall one. `rob` accepts the whole `grade_meta()` vocabulary, normalised by the exported `rob_strata()` — the single place that vocabulary is defined. `...` goes to `plot_forest()`.
+
+**`some_concerns_as` (v0.5.1) selects the grouping:**
+
+| value | strata | `subgroup.name` |
+|---|---|---|
+| `NULL` (default) | `low` / `some` / `high` / `unknown` — the four descriptive strata | `"Risk of bias"` |
+| `"low"` / `"high"` | `Low risk of bias` / `High risk of bias` — **two** groups | `"Risk of bias (as analysed)"` |
+
+The two-group fold is not a second implementation: `.rob_analysis_strata()` maps the plot strata back to the internal levels and asks **`.rob_high_levels()`**, the same internal `assess_rob()` consults for `rob_some_concerns`. The argument is named after `grade_meta(rob_some_concerns =)` for that reason, and a study on the high side of the plot is by construction a study on the high side of the rating. Unrated studies follow whichever side "some concerns" takes, matching `grade_meta()`, where an unrated study arrives as `"*"` and normalises to `some_concerns`.
+
+Both levels are always present in the factor, even when one is empty, so the subgroup rows do not reorder as the boundary moves.
+
+**Why this exists.** With the four descriptive strata the plot splits studies four ways beside a judgment made on two, so under the common `rob_some_concerns = "high"` setting the figure and the evaluation printed next to it disagree. Any caller that shows the plot alongside a rating should pass the same value it passed to `grade_meta()`. `NULL` keeps the pre-0.5.1 behaviour exactly, so this is an additive change.
+
+Folding at the call site (handing pre-collapsed labels to `rob`) is **not** supported: `rob_strata()` warns on any label outside its vocabulary and buckets it to `"unknown"`.
+
 ### 4.4 `plot_funnel()` [new]
 
 ```r
@@ -1217,6 +1240,16 @@ GRADE_LEVELS <- c("no", "some_concerns", "serious")   # 0, -1, -2
 
 The legacy spellings `"some"` and `"very_serious"` are accepted on input and normalised (`"some"` → `"some_concerns"`, `"very_serious"` → `"serious"`), but **`"some_concerns"` is what the objects, notes and tables contain**. Consumers matching on judgment strings must match the normalised form. Anything outside the accepted set aborts via `validate_grade_level()`.
 
+**Display vocabulary (single source, v0.5.1).** The internal levels are *not* what a reader sees. Core GRADE's own wording is held in `GRADE_LEVEL_SOURCE_WORDING` and rendered by **`.grade_level_wording()`** (`R/utils.R`), which is the **only** function permitted to turn a judgment into user-facing words:
+
+| internal level | displayed | downgrade |
+|---|---|---|
+| `"no"` | not serious | 0 |
+| `"some_concerns"` | serious | −1 |
+| `"serious"` | very serious | −2 |
+
+`evidence_profile()` calls it, and so do the Shiny app's domain badges, verdict lines and override menus. Note the trap it closes: the internal name `"serious"` is the source's **very serious** (−2), so a second hand-written mapping — which is what `evidence_profile()` and the app badge each used to carry — could and did print "Serious" for −1 in one place and for −2 in the other. A new renderer must call `.grade_level_wording()` rather than write a third `switch()`.
+
 ### 5.1 Risk of bias — Core GRADE 4 Fig 2 flowchart (v0.5.0)
 
 `assess_rob()` follows the BMJ 2025 Core GRADE 4 Fig 2 flowchart literally. `R/domain_rob.R`'s header comment is the maintained long form; this section is the contract.
@@ -1351,9 +1384,29 @@ if (pct_max_zone >= 0.80) {                    # ZONE_MAJORITY (CINeMA)
 } else {
   threshold_side <- "heterogeneous";        judgment <- "some_concerns"
 }
+
+# AUTO Step 3 (v0.5.1). Reached ONLY on the opposite_substantial branch.
+# inconsistency_subgroup_explained is read here as well as on Path B.
+if (threshold_side == "opposite_substantial") {
+  if (inconsistency_subgroup_explained == "yes") {
+    return judgment = "no", auto = TRUE,
+           notes = "AUTO Step 3: opposite-sided estimates explained by a
+                    credible subgroup → do not rate down; present subgroup
+                    results separately." + ICEMAN caveat
+  }
+  # "no" or unanswered: judgment stays "some_concerns" (−1).
+}
 # Notes carry: the I² surrogate caveat, the zone-cut-off provenance caveat,
 # and (for opposite_substantial) the ICEMAN subgroup caveat and the −1 cap.
 ```
+
+**AUTO Step 3 (v0.5.1, behaviour change).** `inconsistency_subgroup_explained` now reaches the automated path. Before v0.5.1 the automated opposite-sides note advised the reviewer to supply it, and doing so switched the domain onto Path B — which then aborted unless `inconsistency_ci_diff` **and** `inconsistency_threshold_side` were supplied too. The advice was therefore a no-op, and this closes that gap rather than adding a new judgment route:
+
+- `"yes"` → `"no"` (do not rate down), `auto = TRUE`, with `.INCONSISTENCY_SUBGROUP_CAVEAT`;
+- `"no"` → `"some_concerns"`, `auto = TRUE`, note says the subgroup did not explain it;
+- unanswered → `"some_concerns"`, unchanged from before, note points at the argument.
+
+It is read **only** on the `opposite_substantial` branch: on `majority_one_side` and `heterogeneous` Core GRADE 3 never reaches Step 3, so an answer there changes nothing. The value is validated (`"yes"` / `"no"`) on both paths.
 
 **Edge cases:**
 
@@ -1372,9 +1425,10 @@ if (pct_max_zone >= 0.80) {                    # ZONE_MAJORITY (CINeMA)
 | Manual | ci_diff = "yes" | opposite_sides | yes | **No** + note |
 | Manual | ci_diff = "yes" | opposite_sides | no | **some_concerns** *(capped at −1)* |
 | Auto | I² ≤ 30% | — | — | **No** |
-| Auto | I² > 30% | majority_one_side (max zone ≥ 80%) | — | **No** |
-| Auto | I² > 30% | opposite_substantial (≥ 20% each side) | n/a | **some_concerns** |
-| Auto | I² > 30% | heterogeneous (neither) | n/a | **some_concerns** |
+| Auto | I² > 30% | majority_one_side (max zone ≥ 80%) | not reached | **No** |
+| Auto | I² > 30% | opposite_substantial (≥ 20% each side) | yes | **No** + note *(v0.5.1)* |
+| Auto | I² > 30% | opposite_substantial (≥ 20% each side) | no / unanswered | **some_concerns** |
+| Auto | I² > 30% | heterogeneous (neither) | not reached | **some_concerns** |
 
 `"serious"` (−2) for this domain is reachable only through the scalar `inconsistency` override.
 

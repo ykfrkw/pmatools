@@ -331,7 +331,10 @@ server <- function(input, output, session) {
 
   # Mirror display options into state for export
   shiny::observe({
-    state$display$per             <- input$per             %||% 1000
+    # The Configuration radio yields a character; sof_table(per =) and
+    # export_bundle(per =) want a number, and step3_per_unit() is the one
+    # place that validates the pair of units the app offers.
+    state$display$per             <- step3_per_unit(input$per)
     state$display$prediction      <- isTRUE(input$prediction)
     state$display$threshold_label <- input$threshold_label
     # convert / baseline_risk / chinn_invert are written by step3_server()

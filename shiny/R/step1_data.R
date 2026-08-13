@@ -327,6 +327,51 @@ step1_server <- function(input, output, session, state) {
     } else NULL
   })
 
+  # ----- What each bundled sample is an analysis OF -----------------------
+  # The sample datasets ship with a known outcome, direction and follow-up.
+  # Making the reviewer retype them in Step 2 to try the app out serves
+  # nothing, and getting the direction wrong there silently changes the
+  # Risk-of-Bias direction gate and the OIS target.
+  #
+  # A named list, keyed by input$sample_dataset, so a third sample joins by
+  # adding a row rather than by editing a branch. The synthetic rare-events
+  # set has no real clinical identity, so it seeds only what is honest.
+  PMA_SAMPLE_OUTCOME_DEFAULTS <- list(
+    regular = list(
+      outcome_name      = "Depression response",
+      small_values      = "undesirable",
+      outcome_follow_up = "Post-treatment"
+    ),
+    rare = list(
+      outcome_name      = "Serious adverse event",
+      small_values      = "desirable",
+      outcome_follow_up = "End of follow-up"
+    )
+  )
+
+  # Seed the three Step 2 identity fields from the sample being loaded.
+  #
+  # BLANKS ONLY. A reviewer who has already typed an outcome name and then
+  # reloads the data must not find it replaced. step2_ui() seeds all three
+  # widgets from state, so nothing in Step 2 needs to change.
+  #
+  # Hooked to the LOAD path, not to commit_loaded_data(): that function is
+  # called from an observer that depends on state$rob_table and therefore
+  # re-runs on every per-study Risk-of-Bias edit made in Step 3, which would
+  # make this fire over and over.
+  .seed_sample_outcome_defaults <- function() {
+    if (!identical(input$input_method, "sample")) return(invisible(NULL))
+    d <- PMA_SAMPLE_OUTCOME_DEFAULTS[[input$sample_dataset %||% "regular"]]
+    if (is.null(d)) return(invisible(NULL))
+    .blank <- function(v) {
+      is.null(v) || length(v) != 1L || is.na(v) || !nzchar(trimws(as.character(v)))
+    }
+    if (.blank(state$outcome_name))      state$outcome_name      <- d$outcome_name
+    if (.blank(state$small_values))      state$small_values      <- d$small_values
+    if (.blank(state$outcome_follow_up)) state$outcome_follow_up <- d$outcome_follow_up
+    invisible(NULL)
+  }
+
   # Run ingest_data only when the user explicitly clicks Load data.
   ingested <- shiny::eventReactive(input$load_data, {
     df <- raw()
@@ -354,6 +399,11 @@ step1_server <- function(input, output, session, state) {
         list(error = conditionMessage(e))
       }
     )
+  }, ignoreInit = TRUE)
+
+  # Fires once per click on Load data, and only then.
+  shiny::observeEvent(input$load_data, {
+    .seed_sample_outcome_defaults()
   }, ignoreInit = TRUE)
 
   # Saved outcomes survive a data reload on purpose (never silently

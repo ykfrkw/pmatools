@@ -74,6 +74,195 @@ step3_blocked_message <- function(blocked) {
          ". Go back to Step 2 and complete it.")
 }
 
+# --------------------------------------------------------------------------
+# The per-N display unit
+# --------------------------------------------------------------------------
+# ONE setting for the whole app, owned by the Configuration tab
+# (input$per). It changes how event rates are DISPLAYED and what
+# sof_table(per =) / export_bundle(per =) are given. It changes nothing the
+# rating is computed from.
+#
+# Internal storage stays per-1,000 throughout: threshold_abs_state(),
+# threshold_baseline_state(), .threshold_grade_args() and ois_p0_value() all
+# keep their /1000 arithmetic. Only the number on screen, its label and the
+# two export arguments move. That is what keeps a reviewer's switch from 1,000
+# to 100 from silently re-scaling a threshold they already justified in
+# writing.
+STEP3_PER_UNITS <- c(100L, 1000L)
+STEP3_PER_DEFAULT <- 1000L
+
+# A radioButtons() value arrives as a character. sof_table() wants a number,
+# and validation is cheap enough to do at every boundary.
+step3_per_unit <- function(x) {
+  v <- suppressWarnings(as.integer(round(as.numeric(x))))
+  if (length(v) != 1L || is.na(v) || !v %in% STEP3_PER_UNITS) {
+    return(STEP3_PER_DEFAULT)
+  }
+  v
+}
+
+# per-1,000 -> the chosen unit, and back. Both are plain rescalings; they
+# exist so no call site writes `* per / 1000` by hand and gets the direction
+# wrong.
+step3_to_per <- function(v_per1000, per) {
+  per <- step3_per_unit(per)
+  if (is.null(v_per1000) || length(v_per1000) != 1L ||
+      !is.numeric(v_per1000) || !is.finite(v_per1000)) {
+    return(NA_real_)
+  }
+  v_per1000 * per / 1000
+}
+step3_from_per <- function(v_per, per) {
+  per <- step3_per_unit(per)
+  if (is.null(v_per) || length(v_per) != 1L || !is.numeric(v_per) ||
+      !is.finite(v_per)) {
+    return(NA_real_)
+  }
+  v_per * 1000 / per
+}
+
+# Round a per-1,000 value so that it is a WHOLE NUMBER OF EVENTS in the
+# chosen unit. "15.6 events per 100 patients" is not a thing a reviewer can
+# read off a trial, and the box used to offer one decimal at per = 1,000 and
+# would have offered two at per = 100.
+#
+# Note the cost, which is real: at per = 100 the grid is ten times coarser, so
+# a control-group risk of 156 per 1,000 becomes 160 per 1,000 (16 per 100).
+# shiny/SPEC.md states this rather than leaving a reviewer to discover it.
+step3_quantise_per1000 <- function(v_per1000, per = STEP3_PER_DEFAULT) {
+  per <- step3_per_unit(per)
+  if (is.null(v_per1000) || length(v_per1000) != 1L ||
+      !is.numeric(v_per1000) || !is.finite(v_per1000)) {
+    return(NA_real_)
+  }
+  round(v_per1000 * per / 1000) * 1000 / per
+}
+
+# THE formatter. Every "per 1,000" string in Step 3 goes through it, so a
+# reviewer who switches the unit does not find one box relabelled and three
+# notes still claiming per 1,000.
+step3_per_label <- function(v_per1000, per = STEP3_PER_DEFAULT,
+                            digits = 0L) {
+  per <- step3_per_unit(per)
+  unit <- format(per, big.mark = ",", scientific = FALSE, trim = TRUE)
+  v <- step3_to_per(v_per1000, per)
+  if (is.na(v)) return(sprintf("not set (per %s)", unit))
+  sprintf("%s per %s",
+          formatC(v, format = "f", digits = digits, big.mark = ","),
+          unit)
+}
+
+# Just the unit, for a widget label or the tail of a sentence.
+step3_per_unit_label <- function(per = STEP3_PER_DEFAULT) {
+  sprintf("per %s", format(step3_per_unit(per), big.mark = ",",
+                           scientific = FALSE, trim = TRUE))
+}
+
+# --------------------------------------------------------------------------
+# Publication bias: which Fig 5 node is being asked
+# --------------------------------------------------------------------------
+# DERIVED from the answers, never stored as a free-running cursor. Changing an
+# earlier answer therefore re-derives everything downstream instead of leaving
+# the wizard parked on a node the algorithm no longer reaches.
+#
+# The chain below is assess_pubias()'s own evaluation order
+# (R/domain_pubias.R): Q1 first and terminal on "yes"; then the pmatools
+# registry-coverage input, which is terminal EITHER way (the app forces
+# rate-down 1 on "no", the package short-circuits on "yes"); then the k gate,
+# which is computed and never asked; then Q3 or Q4.
+#
+# `reopen` is a breadcrumb click. It wins over the derivation, and only for a
+# node that is actually reachable - so re-opening Q1 and answering "yes" does
+# not strand the reviewer on a Q3 that no longer exists.
+STEP3_PUBIAS_NODES <- c("q1", "extra", "q3", "q4", "result")
+
+# A radio is "answered" when it carries a non-empty value. Every node's
+# widget therefore starts with NOTHING selected, and the "I have no opinion
+# here" option is an explicit VALUE rather than the empty string:
+# STEP3_PUBIAS_DEFER on the overall reporting-bias question, "egger" on the
+# visual-override select. Without those, a node whose honest answer is "leave
+# it to the algorithm" would be indistinguishable from a node the reviewer has
+# not reached, and the wizard could never move past it.
+STEP3_PUBIAS_DEFER <- "defer"
+STEP3_PUBIAS_USE_EGGER <- "egger"
+
+.pubias_answered <- function(v) {
+  !is.null(v) && length(v) == 1L && !is.na(v) && nzchar(as.character(v))
+}
+.pubias_chr <- function(v) {
+  if (!.pubias_answered(v)) "" else as.character(v)[1]
+}
+
+step3_pubias_node <- function(small_industry = NULL,
+                              registry_complete = NULL,
+                              funnel_asymmetry = NULL,
+                              unpublished = NULL,
+                              k = 0L,
+                              reopen = NULL) {
+  path <- step3_pubias_reachable(small_industry, registry_complete, k)
+  if (!is.null(reopen) && length(reopen) == 1L && !is.na(reopen) &&
+      as.character(reopen) %in% path) {
+    return(as.character(reopen))
+  }
+
+  if (!.pubias_answered(small_industry)) return("q1")
+  # Fig 5 node 1 is terminal on "yes": nothing after it can undo the concern.
+  if (identical(.pubias_chr(small_industry), "yes")) return("result")
+
+  if (!.pubias_answered(registry_complete)) return("extra")
+  # Terminal both ways: "yes" short-circuits assess_pubias(), "no" is the
+  # app-level rule that forces rate down 1 regardless of Q2-Q4. Only the
+  # explicit "defer" falls through to the Figure 5 statistical nodes.
+  if (!identical(.pubias_chr(registry_complete), STEP3_PUBIAS_DEFER)) {
+    return("result")
+  }
+
+  # Q2 is not a question - k decides it. See step3_pubias_k_line().
+  if (isTRUE(step3_pubias_statistical(k))) {
+    if (!.pubias_answered(funnel_asymmetry)) return("q3")
+  } else {
+    if (!.pubias_answered(unpublished)) return("q4")
+  }
+  "result"
+}
+
+# Q2, computed. k >= 10 routes to the statistical branch, below it to the
+# registry question. Same rule as assess_pubias().
+step3_pubias_statistical <- function(k) {
+  k <- suppressWarnings(as.numeric(k))
+  if (length(k) != 1L || is.na(k)) return(FALSE)
+  k >= 10
+}
+
+# The one-line automatic step the breadcrumb shows in place of a Q2 screen.
+step3_pubias_k_line <- function(k) {
+  k <- suppressWarnings(as.numeric(k))
+  if (length(k) != 1L || is.na(k)) k <- 0
+  if (step3_pubias_statistical(k)) {
+    sprintf("Q2 - k = %g >= 10, statistical route (funnel / Egger)", k)
+  } else {
+    sprintf("Q2 - k = %g < 10, registry route (Egger would be unreliable)", k)
+  }
+}
+
+# The nodes the CURRENT answers put on the path, in wizard order. Drives the
+# breadcrumb (which links only the answered ones) and gates `reopen`, so a
+# breadcrumb click can never strand the reviewer on a node the algorithm no
+# longer reaches.
+step3_pubias_reachable <- function(small_industry = NULL,
+                                   registry_complete = NULL,
+                                   k = 0L) {
+  out <- "q1"
+  if (!.pubias_answered(small_industry)) return(out)
+  if (identical(.pubias_chr(small_industry), "yes")) return(c(out, "result"))
+  out <- c(out, "extra")
+  if (!.pubias_answered(registry_complete)) return(out)
+  if (!identical(.pubias_chr(registry_complete), STEP3_PUBIAS_DEFER)) {
+    return(c(out, "result"))
+  }
+  c(out, if (step3_pubias_statistical(k)) "q3" else "q4", "result")
+}
+
 # Map a suggest_threshold() return onto the two threshold reactiveVals used by
 # the Configuration tab.
 #
@@ -614,13 +803,14 @@ RESPONDER_P0_DEFAULT <- 0.20
 # than the ARD. The residual asymmetry cannot be removed - it is moved to
 # the other side, and named here. Same wording as threshold_summary_text()
 # below; these two are the app's copies.
-.equiv_lines <- function(eq, dir = NULL) {
+.equiv_lines <- function(eq, dir = NULL, per = STEP3_PER_DEFAULT) {
   sm <- eq$sm
-  up <- sprintf("Increase: %.0f -> %.0f per 1,000, equivalent %s %.3f",
-                1000 * eq$p0, 1000 * eq$p1_up, sm, eq$ratio_up)
+  .lbl <- function(p) step3_per_label(1000 * p, per)
+  up <- sprintf("Increase: %s -> %s, equivalent %s %.3f",
+                .lbl(eq$p0), .lbl(eq$p1_up), sm, eq$ratio_up)
   dn <- if (isTRUE(eq$down_ok)) {
-    sprintf("Decrease: %.0f -> %.0f per 1,000, equivalent %s %.3f",
-            1000 * eq$p0, 1000 * eq$p1_dn, sm, eq$ratio_dn)
+    sprintf("Decrease: %s -> %s, equivalent %s %.3f",
+            .lbl(eq$p0), .lbl(eq$p1_dn), sm, eq$ratio_dn)
   } else {
     "Decrease: not shown - the threshold exceeds the control-group risk."
   }
@@ -642,20 +832,26 @@ RESPONDER_P0_DEFAULT <- 0.20
   } else {
     ""
   }
+  # Signed, so the reader can see which way the band moves; the unit follows
+  # the Configuration setting like every other rate on the tab.
+  .signed <- function(p1000) {
+    v <- step3_to_per(p1000, per)
+    sprintf("%+.0f %s", v, step3_per_unit_label(per))
+  }
   alg <- sprintf(
     paste0("What the algorithm uses: a symmetric +/- log(%.3f) band, ",
            "converted on the %s side%s. That side is exact - %s %.3f is ",
-           "%+.0f per 1,000 at this control-group risk."),
+           "%s at this control-group risk."),
     dir$ratio, dir$exact_side, reason,
-    sm, dir$exact_ratio, 1000 * dir$exact_ard)
+    sm, dir$exact_ratio, .signed(1000 * dir$exact_ard))
   approx <- sprintf(
     paste0("The %s side is therefore the approximate one: the band's ",
-           "mirror is %s %.3f, which implies %+.0f per 1,000 rather than ",
-           "%+.0f. Imprecision's two-level rule asks whether the ",
+           "mirror is %s %.3f, which implies %s rather than ",
+           "%s. Imprecision's two-level rule asks whether the ",
            "confidence interval crosses both thresholds, so that one ",
            "crossing is judged against the mirrored value."),
     dir$approx_side, sm, dir$approx_ratio,
-    1000 * dir$approx_ard, -1000 * dir$exact_ard)
+    .signed(1000 * dir$approx_ard), .signed(-1000 * dir$exact_ard))
   if (!is.na(dir$caveat)) approx <- paste(approx, dir$caveat)
   list(up = up, dn = dn, alg = alg, approx = approx)
 }

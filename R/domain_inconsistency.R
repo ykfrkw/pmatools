@@ -72,8 +72,14 @@
 #   CINeMA (Nikolakopoulou 2020); 0.20 is a pmatools convention. Both are
 #   stated in the domain notes.
 #
-# Auto Step 3: cannot be auto-detected -> opposite_sides leads to
-#   "some_concerns" (-1), with a note pointing at the override.
+# Auto Step 3: cannot be auto-detected, so it is ASKED. When the zone tally
+#   lands on opposite sides, `inconsistency_subgroup_explained` is read on the
+#   auto path exactly as it is on the manual one: "yes" -> "no" (do not rate
+#   down, present the subgroups separately), "no" -> "some_concerns" (-1),
+#   unanswered -> "some_concerns" (-1) with a note pointing at the argument.
+#   Before v0.5.1 the note pointed at an argument the auto path ignored;
+#   answering it switched the domain onto the manual path, which then demanded
+#   inconsistency_threshold_side as well.
 #
 # I^2 / tau^2 / Q statistics are always shown in notes but never drive the
 # judgment beyond the Step 1 gate above.
@@ -278,15 +284,32 @@ assess_inconsistency <- function(meta_obj,
   }
 
   # ----- Path C: auto-detect -----
+  # inconsistency_subgroup_explained travels into the auto path too. Core
+  # GRADE 3's Step 3 is the one node the algorithm cannot reach on its own
+  # (subgroup credibility is a human judgment; see
+  # .INCONSISTENCY_SUBGROUP_CAVEAT), and the auto note at the opposite-sides
+  # branch has always told the reviewer to supply it. Until v0.5.1 that advice
+  # was a no-op: answering it switched the whole domain onto the manual path,
+  # which then demanded inconsistency_threshold_side as well.
   .auto_inconsistency(meta_obj, i2_pct, stat_note, threshold_chosen,
-                      stat_facts = stat_facts)
+                      stat_facts = stat_facts,
+                      inconsistency_subgroup_explained =
+                        inconsistency_subgroup_explained)
 }
 
 # --------------------------------------------------------------------------
 # Auto-detect path
 # --------------------------------------------------------------------------
 .auto_inconsistency <- function(meta_obj, i2_pct, stat_note,
-                                threshold_chosen = NULL, stat_facts = NULL) {
+                                threshold_chosen = NULL, stat_facts = NULL,
+                                inconsistency_subgroup_explained = NULL) {
+
+  # Validated here as well as on the manual path: the argument now has two
+  # entry points and a typo must not be silently read as "not answered".
+  if (!is.null(inconsistency_subgroup_explained) &&
+      !inconsistency_subgroup_explained %in% c("yes", "no")) {
+    rlang::abort("inconsistency_subgroup_explained must be 'yes' or 'no'.")
+  }
 
   # Step 1 surrogate: I^2 > 30% (see INCONSISTENCY_I2_CUT / file header)
   cut <- INCONSISTENCY_I2_CUT
@@ -444,6 +467,35 @@ assess_inconsistency <- function(meta_obj,
   }
 
   if (identical(threshold_side, "opposite_substantial")) {
+    # AUTO Step 3. The zone tally has put the estimates on opposite sides of
+    # the threshold, which is exactly the node Core GRADE 3 hands to a human:
+    # a credible subgroup explanation removes the concern (and, per
+    # .INCONSISTENCY_SUBGROUP_CAVEAT, should be split into separate PICO
+    # questions). Unanswered keeps the conservative -1.
+    if (identical(inconsistency_subgroup_explained, "yes")) {
+      return(make_domain_row(
+        domain   = "Inconsistency",
+        judgment = "no",
+        auto     = TRUE,
+        notes    = paste0(
+          step1_note,
+          side_note,
+          " AUTO Step 3: opposite-sided estimates explained by a credible ",
+          "subgroup (inconsistency_subgroup_explained = 'yes') -> do not ",
+          "rate down; present subgroup results separately. ",
+          .INCONSISTENCY_SUBGROUP_CAVEAT, " | ",
+          stat_note
+        ),
+        facts    = .facts(c(stat_facts, zone_facts))
+      ))
+    }
+    step3_note <- if (identical(inconsistency_subgroup_explained, "no")) {
+      paste0(" AUTO Step 3: opposite-sided estimates NOT explained by a ",
+             "credible subgroup (inconsistency_subgroup_explained = 'no') ",
+             "-> rate down one level. ")
+    } else {
+      " Supply inconsistency_subgroup_explained = 'yes' to override. "
+    }
     return(make_domain_row(
       domain   = "Inconsistency",
       judgment = "some_concerns",
@@ -451,7 +503,7 @@ assess_inconsistency <- function(meta_obj,
       notes    = paste0(
         step1_note,
         side_note,
-        " Supply inconsistency_subgroup_explained = 'yes' to override. ",
+        step3_note,
         .INCONSISTENCY_SUBGROUP_CAVEAT, " ",
         .INCONSISTENCY_CAP_NOTE, " | ",
         stat_note

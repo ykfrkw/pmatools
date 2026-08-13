@@ -144,6 +144,68 @@ test_that("auto Step 2 with Threshold: zone tally distinguishes opposite from ma
   expect_match(row$notes, "clinically opposite", fixed = TRUE)
 })
 
+# ---- Auto Step 3: the subgroup answer now reaches the automated path ------
+# Before 0.5.1 the automated opposite-sides note told the reviewer to supply
+# inconsistency_subgroup_explained, and supplying it switched the whole domain
+# onto the MANUAL path - which then aborted unless inconsistency_ci_diff and
+# inconsistency_threshold_side were supplied too. The advice was a no-op.
+
+.opposite_sides_meta <- function() make_mock_meta(c(0.30, -0.30, 0.0), i2 = 0.70)
+
+test_that("auto opposite sides + subgroup explained -> 'no', on the auto path", {
+  g <- grade_meta(.opposite_sides_meta(), threshold = 1.20,
+                  threshold_scale = "ratio",
+                  inconsistency_subgroup_explained = "yes")
+  row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
+  expect_equal(row$judgment, "no")
+  # Still the AUTOMATED path: no rationale was required and none was given.
+  expect_true(row$auto)
+  expect_match(row$notes, "AUTO Step 3", fixed = TRUE)
+  # The caveat that makes the answer interpretable travels with it.
+  expect_match(row$notes, "Subgroup credibility is not auto-detectable",
+               fixed = TRUE)
+  expect_match(row$notes, "present subgroup results separately", fixed = TRUE)
+})
+
+test_that("auto opposite sides + subgroup NOT explained keeps 'some_concerns'", {
+  g <- grade_meta(.opposite_sides_meta(), threshold = 1.20,
+                  threshold_scale = "ratio",
+                  inconsistency_subgroup_explained = "no")
+  row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
+  expect_equal(row$judgment, "some_concerns")
+  expect_true(row$auto)
+  expect_match(row$notes, "NOT explained by a credible subgroup", fixed = TRUE)
+})
+
+test_that("an unanswered subgroup question is unchanged from before 0.5.1", {
+  g <- grade_meta(.opposite_sides_meta(), threshold = 1.20,
+                  threshold_scale = "ratio")
+  row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
+  expect_equal(row$judgment, "some_concerns")
+  expect_match(row$notes, "Supply inconsistency_subgroup_explained",
+               fixed = TRUE)
+})
+
+test_that("the subgroup answer does nothing on the other automated branches", {
+  # Majority on one side: Step 3 is never reached, so answering it must not
+  # change the verdict or invent a Step 3 note.
+  g <- grade_meta(make_mock_meta(c(0.30, 0.40, 0.50), i2 = 0.60),
+                  threshold = 1.20, threshold_scale = "ratio",
+                  inconsistency_subgroup_explained = "yes")
+  row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
+  expect_equal(row$judgment, "no")
+  expect_false(grepl("AUTO Step 3", row$notes, fixed = TRUE))
+})
+
+test_that("the auto path validates the subgroup answer", {
+  expect_error(
+    grade_meta(.opposite_sides_meta(), threshold = 1.20,
+               threshold_scale = "ratio",
+               inconsistency_subgroup_explained = "maybe"),
+    "inconsistency_subgroup_explained"
+  )
+})
+
 # ---- Chosen threshold shared with Imprecision (Core GRADE 3 Fig 2) ---------
 
 test_that("inconsistency and imprecision use the SAME chosen threshold", {

@@ -22,6 +22,31 @@
   domain was rated the way it was. Indirectness and Publication bias keep
   prose-only notes; the container is domain-agnostic, so they can adopt it
   later without a change to the accessor or the renderers.
+* `plot_forest_rob()` gains `some_concerns_as`, so the stratified forest can
+  show the **two** groups the algorithm analysed rather than the four
+  descriptive strata. `NULL` (the default) is the existing four-way
+  `low` / `some` / `high` / `unknown` split, byte-for-byte; `"low"` or
+  `"high"` folds to `Low risk of bias` / `High risk of bias` under
+  `subgroup.name = "Risk of bias (as analysed)"`. The fold is not a second
+  implementation of the rule — it asks the same internal `assess_rob()` uses
+  for `rob_some_concerns`, which is why the argument carries that name, and
+  unrated studies land on the side they land on in the rating. Pass the value
+  you passed to `grade_meta()` whenever the plot sits next to a rating: with
+  the four strata and the common `rob_some_concerns = "high"`, the figure and
+  the judgment beside it disagree about how many groups there are. Folding at
+  the call site is still not supported — `rob_strata()` owns that vocabulary
+  and warns on labels invented elsewhere. See SPEC.md §4.3a.
+
+* A single display vocabulary for domain judgments. `GRADE_LEVEL_SOURCE_WORDING`
+  had no consumers and two hand-written copies of it had drifted: the internal
+  level `"serious"` is Core GRADE's **very serious** (−2), so a renderer that
+  wrote its own `switch()` could print "Serious" for −1 in one place and −2 in
+  another. `.grade_level_wording()` (`R/utils.R`) is now the only function that
+  turns a judgment into words, `evidence_profile()` calls it instead of its own
+  duplicate, and the Shiny app's badges, verdict lines and override menus read
+  the same function. Output is unchanged — `evidence_profile()` was already
+  correct — but there is now one place to change it. See SPEC.md §5.0.
+
 * `sof_table()`, `grade_table()` (both `"gradepro"` and `"bmj"` layouts) and
   `evidence_profile()` render those facts as numbered footnotes for the domains
   that pulled the rating down, with the marker on the certainty cell — after
@@ -90,6 +115,22 @@
   the bundler. `sof_notes` does not reach the certainty appendix.
 
 ## Behaviour changes
+
+* **`inconsistency_subgroup_explained` now works on the automated path**, which
+  is where the domain notes had been telling reviewers to use it all along.
+  When `inconsistency_ci_diff` is `NULL` the automated zone tally runs, and its
+  opposite-sides branch has always written "Supply
+  `inconsistency_subgroup_explained = 'yes'` to override" — advice that was a
+  no-op: answering it switched the domain onto the manual flowchart, which then
+  aborted unless `inconsistency_threshold_side` was supplied too, and that is
+  the very thing the automated tally had just derived. `.auto_inconsistency()`
+  now takes the argument. On the opposite-sides branch `"yes"` returns `"no"`
+  (do not rate down; present the subgroups separately) with
+  Core GRADE 3's ICEMAN credibility caveat attached, `"no"` returns
+  `"some_concerns"` saying so, and leaving it unanswered is unchanged. On the
+  other two automated branches Core GRADE 3 never reaches Step 3, so an answer
+  there changes nothing. The value is validated on both paths. Callers that do
+  not pass it see no change at all. See SPEC.md §5.2.
 
 * The default `style` of the single-outcome bundle changed from GRADEpro to
   `"bmj"`, matching `export_bundle.pmatools_set()`, which has defaulted to the

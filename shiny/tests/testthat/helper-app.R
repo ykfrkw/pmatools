@@ -23,6 +23,22 @@ PMA_APP_ROOT <- local({
   d
 })
 
+# The package's own R/utils.R, which the running app gets from the staged
+# copy under R/_pmatools/. ui_helpers.R reads GRADE_LEVEL_SOURCE_WORDING /
+# .grade_level_wording() from it so the app's badges and the Evidence Profile
+# cannot word the same judgment differently, and without it every badge test
+# would fail on a missing object rather than on a wrong label. Both locations
+# are tried and neither is required: a checkout with no staged bundle still
+# has ../../R relative to shiny/, and the guard keeps the helper usable in a
+# tree where the sources are laid out some third way.
+for (.f in c(file.path(PMA_APP_ROOT, "R", "_pmatools", "utils.R"),
+             file.path(dirname(PMA_APP_ROOT), "R", "utils.R"))) {
+  if (file.exists(.f)) {
+    source(.f)
+    break
+  }
+}
+
 for (.f in c("R/ui_helpers.R", "R/educational_copy.R", "R/step3_threshold.R")) {
   source(file.path(PMA_APP_ROOT, .f))
 }
