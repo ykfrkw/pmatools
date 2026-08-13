@@ -14,7 +14,34 @@
   and was always written alongside, so nothing is lost but the raster. The
   app's on-screen plot previews are a separate path and are unaffected.
 
+* **Shiny app: a certainty domain is confirmed by ticking its box, and by
+  nothing else.** The export gate used to accept substantive input in the
+  domain as a confirmation — a filled per-study risk-of-bias table, an answered
+  Indirectness PICO question, an OIS override, a judgment override with a
+  rationale — and the checkbox was one route among several. It is now the only
+  route. A review that used to reach Step 4 with Risk of Bias confirmed by its
+  table alone will now find the download locked until that box is ticked, and
+  the same is true of every other domain. The stricter gate is intended: the
+  old rule could report a domain as unconfirmed while the checkbox on screen
+  was ticked (a tick left over from the previous outcome), and confirm a domain
+  whose box was visibly empty, so the one thing the reviewer could see was the
+  one thing that did not decide it. It would also have opened the gate by
+  itself for any widget that ships preselected. Configuration is unchanged: it
+  still requires its values to be set as well as its box ticked. Nothing about
+  navigation is locked — the tab strip and the stepper still move freely, and
+  what a domain is *rated* as is untouched. See `shiny/SPEC.md` §3.4.13.
+
 ## New features
+
+* **Shiny app: Step 3 says how far through it you are, and where the next click
+  goes.** Each domain tab's Next stays greyed (with the reason on hover) until
+  that domain's box is ticked; the tab strip marks a confirmed tab with a tick
+  and an opened-but-unconfirmed one with a dot; the card header and the stepper
+  both read "n/6", so the count is legible from the other three steps. Every
+  message that names a domain still to be confirmed — the Final certainty
+  banner and the Step 4 download lock — now names it as a link that opens that
+  tab. The seven-tab strip scrolls sideways on its own rather than widening the
+  page, which is what it was doing on a phone.
 
 * pmatools now ships **drawings of the decision flowcharts it implements**, and
   the app highlights the path a given analysis actually took. Four domains have

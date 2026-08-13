@@ -325,21 +325,46 @@ step4_server <- function(input, output, session, state) {
     # W4-A output gate: the ZIP (which includes the GRADE Evidence Profile /
     # SoF docx) stays locked until every certainty domain has been reviewed
     # and confirmed in Step 3. Navigation itself is never blocked.
-    unconf <- pma_unconfirmed_domains(state$domain_confirmed)
-    if (length(unconf)) {
+    keys <- pma_unconfirmed_domain_keys(state$domain_confirmed)
+    if (length(keys)) {
       return(.blocked_note(
         htmltools::p(style = "margin: 0;",
           htmltools::strong("Download locked - certainty assessment incomplete.")),
         htmltools::p(style = "margin: 0.25rem 0 0;",
-          paste0("Review and confirm the following in Step 3 (enter inputs ",
-                 "or tick 'I have reviewed this domain'): ",
-                 paste(unconf, collapse = ", "), "."))
+          # Each name is a link back to the tab that clears it, so the lock
+          # names its own remedy and gets the reviewer there in one click.
+          pma_domain_jump_links(
+            keys, "dl_jump_",
+            before = "Tick 'I have reviewed this domain' in Step 3 for: ",
+            after = "."))
       ))
     }
     shiny::downloadButton("download_zip", "Download ZIP",
                           class = "btn btn-primary",
                           style = "width: 100%; margin-top: 0.5rem;")
   })
+
+  # The download lock names the domains that hold it; each name jumps back to
+  # its Step 3 tab. Two moves, in this order: the step first, so app.R rebuilds
+  # the Step 3 body and the tabset exists, then the tab selection. Shiny
+  # dispatches rendered values before input messages within one flush, which is
+  # what makes that order hold (see the restore observer in R/step3_grade.R).
+  #
+  # Declared once over the fixed domain keys, because the links themselves are
+  # rebuilt with the note and a freshly rendered actionLink reports 0.
+  for (.domain_key in names(PMA_DOMAIN_LABELS)) {
+    local({
+      key <- .domain_key
+      link_id <- paste0("dl_jump_", key)
+      shiny::observeEvent(input[[link_id]], {
+        if (!isTRUE((input[[link_id]] %||% 0L) > 0L)) return()
+        state$step <- 3L
+        shiny::updateTabsetPanel(session, "grade_tabs",
+                                 selected = PMA_DOMAIN_LABELS[[key]])
+        session$sendCustomMessage("scroll_top", list())
+      }, ignoreInit = TRUE)
+    })
+  }
 
   output$download_zip <- shiny::downloadHandler(
     filename = function() {

@@ -116,10 +116,11 @@ pmatools_GRADE_DOWNGRADE <- function(j) {
 }
 
 # Sub-tab navigation inside Step 3. File scope rather than local to
-# step3_ui(), because step3_server() re-renders the Final certainty copy of
-# it whenever the confirmation state changes (see output$grade_nav_final).
+# step3_ui(), because step3_server() renders EVERY copy of it: each Next is
+# gated on something that can flip while the tab is on screen, and a statically
+# built button could not follow (see output$grade_nav_<key>).
 .grade_nav <- function(back_id, back_label, next_id, next_label = "Next",
-                       next_disabled = FALSE) {
+                       next_disabled = FALSE, next_title = NULL) {
   htmltools::div(
     style = paste(
       "display: flex;",
@@ -130,9 +131,37 @@ pmatools_GRADE_DOWNGRADE <- function(j) {
     # See pma_wizard_nav(): TRUE / NULL, never a string, never FALSE.
     shiny::actionButton(next_id, next_label,
       class = "btn btn-primary",
+      title = next_title,
       disabled = if (isTRUE(next_disabled)) TRUE else NULL)
   )
 }
+
+# The Back / Next pair on each of the five domain tabs, keyed by the domain key
+# of PMA_DOMAIN_LABELS. step3_ui() places uiOutput("grade_nav_<key>") and
+# step3_server() renders it; the ids are the ones the existing
+# observeEvent(input$grade_next_*) handlers already listen on.
+STEP3_DOMAIN_NAVS <- list(
+  rob = list(
+    back_id = "grade_back_rob",    back_label = "Back: Configuration",
+    next_id = "grade_next_rob",    next_label = "Next: Inconsistency"),
+  inconsistency = list(
+    back_id = "grade_back_incon",  back_label = "Back: Risk of Bias",
+    next_id = "grade_next_incon",  next_label = "Next: Indirectness"),
+  indirectness = list(
+    back_id = "grade_back_indir",  back_label = "Back: Inconsistency",
+    next_id = "grade_next_indir",  next_label = "Next: Imprecision"),
+  imprecision = list(
+    back_id = "grade_back_impre",  back_label = "Back: Indirectness",
+    next_id = "grade_next_impre",  next_label = "Next: Publication bias"),
+  pubias = list(
+    back_id = "grade_back_pubias", back_label = "Back: Imprecision",
+    next_id = "grade_next_pubias", next_label = "Next: Final certainty")
+)
+
+# Why the Next is dead, on the button itself: the checkbox that revives it is
+# one screen up, and a greyed button with no explanation reads as a bug.
+STEP3_CONFIRM_GATE_TITLE <-
+  "Tick 'I have reviewed this domain' to continue"
 
 step3_ui <- function() {
   s <- EDU_COPY$steps$step3
@@ -175,8 +204,21 @@ step3_ui <- function() {
       )
     )
   }
-  # Explicit per-domain confirmation checkbox (output gate W4-A). Checking
-  # it marks the domain as reviewed even if no substantive input was given.
+  # Title of a gated tab: the label, plus the slot its progress marker is
+  # painted into. tabsetPanel accepts a tag list as a title, but tabPanel then
+  # has no string to derive its value from, so every gated tab states its
+  # `value` explicitly - it is what updateTabsetPanel() and grade_tab_sequence
+  # match on, and what PMA_DOMAIN_LABELS maps a domain key to.
+  .tab_title <- function(key) {
+    htmltools::tagList(
+      PMA_DOMAIN_LABELS[[key]],
+      shiny::uiOutput(paste0("grade_tab_mark_", key), inline = TRUE)
+    )
+  }
+
+  # Explicit per-domain confirmation checkbox (output gate W4-A). Ticking it is
+  # the ONE thing that confirms the domain (pma_domain_confirmations()), so it
+  # is also what un-greys the Next button below it.
   .confirm_checkbox <- function(id,
                                 label = "I have reviewed this domain") {
     htmltools::div(
@@ -205,7 +247,12 @@ step3_ui <- function() {
     shiny::uiOutput("analysis_set_indicator"),
 
     pma_card(
-      title = "Certainty assessment (Core GRADE series)",
+      title = htmltools::tagList(
+        "Certainty assessment (Core GRADE series)",
+        # How much of the assessment is done, beside its name. The same count
+        # is on the stepper, where it is visible from the other three steps.
+        shiny::uiOutput("grade_progress_badge", inline = TRUE)
+      ),
       shiny::tabsetPanel(
         id = "grade_tabs",
 
@@ -213,7 +260,7 @@ step3_ui <- function() {
         #     depend on is established and confirmed here, in the order a
         #     reviewer needs to decide it: control-group risk, then the
         #     threshold, then how the effect is presented) ---
-        shiny::tabPanel("Configuration",
+        shiny::tabPanel(.tab_title("threshold"), value = "Configuration",
           htmltools::h4("Configuration",
                         style = "margin: 0 0 0.5rem; font-size: 1.1rem;"),
           htmltools::p(class = "pma-card-subtitle",
@@ -306,7 +353,7 @@ step3_ui <- function() {
         ),
 
         # --- Risk of Bias ---
-        shiny::tabPanel("Risk of Bias",
+        shiny::tabPanel(.tab_title("rob"), value = "Risk of Bias",
           .domain_header("Risk of Bias", "rob_badge", "rob_chip"),
           shiny::uiOutput("analysis_set_banner_rob"),
           # The body is a live output, not a fixed string: the Risk of Bias
@@ -371,12 +418,11 @@ step3_ui <- function() {
             .override_rationale("rob_override", "rob_override_rationale")
           ),
           .confirm_checkbox("rob_confirm_na"),
-          .grade_nav("grade_back_rob", "Back: Configuration",
-                     "grade_next_rob", "Next: Inconsistency")
+          shiny::uiOutput("grade_nav_rob")
         ),
 
         # --- Inconsistency ---
-        shiny::tabPanel("Inconsistency",
+        shiny::tabPanel(.tab_title("inconsistency"), value = "Inconsistency",
           .domain_header("Inconsistency", "incon_badge", "incon_chip"),
           pma_how_collapse(edu_domain_how("inconsistency")),
           pma_reference(EDU_COPY$domains$inconsistency$ref_text,
@@ -423,12 +469,11 @@ step3_ui <- function() {
             .override_rationale("incon_override", "incon_override_rationale")
           ),
           .confirm_checkbox("incon_confirm_na"),
-          .grade_nav("grade_back_incon", "Back: Risk of Bias",
-                     "grade_next_incon", "Next: Indirectness")
+          shiny::uiOutput("grade_nav_inconsistency")
         ),
 
         # --- Indirectness ---
-        shiny::tabPanel("Indirectness",
+        shiny::tabPanel(.tab_title("indirectness"), value = "Indirectness",
           .domain_header("Indirectness", "indir_badge", "indir_chip"),
           shiny::uiOutput("indirectness_banner"),
           pma_how_collapse(edu_domain_how("indirectness")),
@@ -567,12 +612,11 @@ step3_ui <- function() {
           shiny::uiOutput("indir_forest_image_block"),
           pma_forest_display_panel("indir"),
           .confirm_checkbox("indir_confirm_na"),
-          .grade_nav("grade_back_indir", "Back: Inconsistency",
-                     "grade_next_indir", "Next: Imprecision")
+          shiny::uiOutput("grade_nav_indirectness")
         ),
 
         # --- Imprecision ---
-        shiny::tabPanel("Imprecision",
+        shiny::tabPanel(.tab_title("imprecision"), value = "Imprecision",
           .domain_header("Imprecision", "impre_badge", "impre_chip"),
           pma_how_collapse(edu_domain_how("imprecision")),
           pma_reference(EDU_COPY$domains$imprecision$ref_text,
@@ -650,12 +694,11 @@ step3_ui <- function() {
             .override_rationale("impre_override", "impre_override_rationale")
           ),
           .confirm_checkbox("impre_confirm_na"),
-          .grade_nav("grade_back_impre", "Back: Indirectness",
-                     "grade_next_impre", "Next: Publication bias")
+          shiny::uiOutput("grade_nav_imprecision")
         ),
 
         # --- Publication bias ---
-        shiny::tabPanel("Publication bias",
+        shiny::tabPanel(.tab_title("pubias"), value = "Publication bias",
           .domain_header("Publication bias", "pubias_badge", "pubias_chip"),
           pma_how_collapse(edu_domain_how("pubias")),
           pma_reference(EDU_COPY$domains$pubias$ref_text,
@@ -783,8 +826,7 @@ step3_ui <- function() {
             .override_rationale("pubias_override", "pubias_override_rationale")
           ),
           .confirm_checkbox("pubias_confirm_na"),
-          .grade_nav("grade_back_pubias", "Back: Imprecision",
-                     "grade_next_pubias", "Next: Final certainty")
+          shiny::uiOutput("grade_nav_pubias")
         ),
 
         # --- Final certainty (7th tab) ---
@@ -2371,36 +2413,25 @@ step3_server <- function(input, output, session, state) {
   })
 
   # ----- W4-A: per-domain confirmation state (output gate) ----------------
-  # A domain counts as confirmed when it has substantive user input, or
-  # when its explicit "I have reviewed this domain" checkbox is ticked.
-  # Progression through tabs stays free; only outputs are gated.
+  # A domain counts as confirmed when its "I have reviewed this domain" box is
+  # ticked FOR THIS OUTCOME, and only then; see domain_confirmed() below and
+  # pma_domain_confirmations() in R/ui_helpers.R. The .valid_override() /
+  # .answered() / .confirmed_na() helpers that used to stand here are gone with
+  # the disjunction they served.
   #
-  # Every read below goes through .fresh(): an answer given for a PREVIOUS
+  # Every read still goes through .fresh(): an answer given for a PREVIOUS
   # outcome must not confirm this one, however the reviewer got here (see the
   # .answer_gen note above and begin_new_outcome() in app.R).
-  .valid_override <- function(sel_id, rat_id) {
-    sel <- input[[sel_id]]
-    rat <- input[[rat_id]]
-    .fresh(sel_id) &&
-      !is.null(sel) && length(sel) == 1 && nzchar(sel) &&
-      !is.null(rat) && nzchar(trimws(rat))
-  }
-  .answered <- function(id) {
-    v <- input[[id]]
-    .fresh(id) && !is.null(v) && length(v) > 0 && nzchar(v[1])
-  }
-  .confirmed_na <- function(id) .fresh(id) && isTRUE(input[[id]])
 
   # ----- Configuration gate -----------------------------------------------
   # Everything that must be settled before the reviewer starts on the five
   # domains, as a list of human-readable blockers. Empty means ready.
   #
-  # Configuration is the ONE Step-3 sub-tab whose Next is gated. The recently
-  # established convention is that only the last sub-tab (Final certainty) is
-  # gated, so reviewers can move freely between domains; Configuration is a
-  # deliberate exception, because the threshold it sets drives Risk of Bias,
-  # Inconsistency and Imprecision, and walking those three against an
-  # unsettled threshold means doing them twice. No other sub-tab is gated.
+  # Every sub-tab's Next is now gated on that tab having been confirmed, and
+  # Configuration's gate is the widest of them: the threshold it sets drives
+  # Risk of Bias, Inconsistency and Imprecision, so a tick alone will not do -
+  # the values themselves have to be there, and these blockers say which are
+  # not. The tab STRIP is never gated: the reviewer can always look ahead.
   threshold_missing <- shiny::reactive({
     obj <- state$ma
     if (is.null(obj)) return(TRUE)
@@ -2469,65 +2500,26 @@ step3_server <- function(input, output, session, state) {
   })
   shiny::outputOptions(output, "config_status", suspendWhenHidden = FALSE)
 
+  # What confirms a domain: its own checkbox, ticked for the outcome now open,
+  # and nothing else. The rule itself is pma_domain_confirmations() in
+  # R/ui_helpers.R - a pure function of these two vectors, so it can be tested
+  # without a session, and so this reactive is only the wiring.
+  #
+  # It used to also count substantive input (a filled RoB table, an answered
+  # PICO radio, a valid override). That disjunction is deleted: it told
+  # reviewers a domain was unconfirmed while the checkbox they could see was
+  # ticked, and it would have opened the export gate by itself once the
+  # Indirectness radios ship preselected. See the note at the helper.
   domain_confirmed <- shiny::reactive({
-    rt <- state$rob_table
-    rob_data <- !is.null(rt) && "rob" %in% names(rt) &&
-      any(!is.na(rt$rob) & nzchar(trimws(as.character(rt$rob))))
-
-    # Answering any of the four Core GRADE 5 subdomain questions counts as
-    # substantive input on its own: those answers now reach grade_meta() and
-    # decide the domain judgment.
-    indir_sel <- input$indirectness
-    indir_pico <- c("indir_population", "indir_intervention",
-                    "indir_comparator", "indir_outcome")
-    indir_active <-
-      (!is.null(indir_subdomains()) &&
-         any(vapply(indir_pico, .fresh, logical(1)))) ||
-      (.fresh("indirectness") &&
-         !is.null(indir_sel) && length(indir_sel) == 1 &&
-         nzchar(indir_sel) &&
-         (identical(indir_sel, "no") ||
-            nzchar(trimws(input$indir_rationale %||% ""))))
-
-    c(
-      # config_blockers() already requires input$threshold_confirm, so adding
-      # the freshness test to that one id is enough to say "confirmed FOR THIS
-      # outcome" without restating the whole gate.
-      threshold = length(config_blockers()) == 0L &&
-        .fresh("threshold_confirm"),
-      # rob_data is the per-study risk-of-bias table, which describes the
-      # studies rather than the outcome and is deliberately kept across a
-      # change of outcome - so it legitimately re-confirms this domain.
-      rob = rob_data ||
-        .valid_override("rob_override", "rob_override_rationale") ||
-        .confirmed_na("rob_confirm_na"),
-      # ci_diff is gone (derived). The only inconsistency question left is
-      # Core GRADE 3's Step 3, and it is only ASKED when the automated zone
-      # tally reaches the opposite-sides branch - so on every other path the
-      # confirmation checkbox is the whole gate, which is correct: there is
-      # nothing for the reviewer to answer.
-      inconsistency = .answered("subgroup_explained") ||
-        .valid_override("incon_override", "incon_override_rationale") ||
-        .confirmed_na("incon_confirm_na"),
-      indirectness = indir_active || .confirmed_na("indir_confirm_na"),
-      imprecision = (.fresh("ois_events_override") &&
-                       !is.null(.na_null(input$ois_events_override))) ||
-        (.fresh("ois_n_override") &&
-           !is.null(.na_null(input$ois_n_override))) ||
-        .valid_override("impre_override", "impre_override_rationale") ||
-        .confirmed_na("impre_confirm_na"),
-      # Every node of the wizard counts, including the two deferral answers
-      # ("let the Figure 5 nodes decide", "accept the automated Egger test"):
-      # the reviewer looked at the question and answered it, which is what
-      # this gate is asking about.
-      pubias = .answered("pubias_registry_complete") ||
-        .answered("pubias_small_industry") ||
-        .answered("pubias_unpublished") ||
-        .answered("pubias_funnel_asymmetry") ||
-        .valid_override("pubias_funnel_asymmetry", "pubias_fa_rationale") ||
-        .valid_override("pubias_override", "pubias_override_rationale") ||
-        .confirmed_na("pubias_confirm_na")
-    )
+    ids <- unname(PMA_DOMAIN_CONFIRM_INPUTS)
+    ticked <- vapply(ids, function(id) isTRUE(input[[id]]), logical(1))
+    fresh  <- vapply(ids, .fresh, logical(1))
+    names(ticked) <- names(fresh) <- ids
+    # Configuration additionally gates on the values it collects being set,
+    # which is what config_blockers() lists; the tick alone is not enough
+    # there, because three domains are judged against those values.
+    pma_domain_confirmations(
+      ticked, fresh, config_ready = length(config_blockers()) == 0L)
   })
 
   # Mirror into state so Step 4 (export gate) can read it.
@@ -2535,16 +2527,105 @@ step3_server <- function(input, output, session, state) {
     state$domain_confirmed <- domain_confirmed()
   })
 
+  confirmed_count <- shiny::reactive({
+    length(PMA_DOMAIN_LABELS) -
+      length(pma_unconfirmed_domains(domain_confirmed()))
+  })
+
+  output$grade_progress_badge <- shiny::renderUI({
+    htmltools::span(
+      class = "pma-progress-badge",
+      sprintf("%d/%d confirmed", confirmed_count(),
+              length(PMA_DOMAIN_LABELS)))
+  })
+  shiny::outputOptions(output, "grade_progress_badge",
+                       suspendWhenHidden = FALSE)
+
+  # ----- Progress markers on the tab strip ---------------------------------
+  # "Visited" is the one piece of state no input carries: it is the reviewer
+  # having opened the tab, which only the tabset reports.
+  grade_tab_visited <- shiny::reactiveValues()
+  shiny::observeEvent(input$grade_tabs, {
+    grade_tab_visited[[input$grade_tabs]] <- TRUE
+  }, ignoreNULL = TRUE)
+  # A new outcome clears the confirmations (app.R's begin_new_outcome()), so
+  # leaving the dots behind would mark tabs as seen for an outcome nobody has
+  # opened them for. The tab standing open is still open, so it stays visited.
+  shiny::observeEvent(state$outcome_gen, {
+    for (tab in names(grade_tab_visited)) grade_tab_visited[[tab]] <- FALSE
+    here <- shiny::isolate(input$grade_tabs)
+    if (!is.null(here)) grade_tab_visited[[here]] <- TRUE
+  }, ignoreInit = TRUE)
+
+  for (.domain_key in names(PMA_DOMAIN_LABELS)) {
+    local({
+      key <- .domain_key
+      tab <- PMA_DOMAIN_LABELS[[key]]
+      out_id <- paste0("grade_tab_mark_", key)
+      output[[out_id]] <- shiny::renderUI({
+        pma_tab_mark(confirmed = isTRUE(domain_confirmed()[[key]]),
+                     visited   = isTRUE(grade_tab_visited[[tab]]))
+      })
+      # The marker lives in the tab STRIP, which is on screen whichever tab is
+      # selected - but a suspended output keeps its last painted HTML, and a
+      # marker that lies about the state it names is worse than none.
+      shiny::outputOptions(output, out_id, suspendWhenHidden = FALSE)
+    })
+  }
+
+  # ----- Nav on the five domain tabs ---------------------------------------
+  # Each Next waits on that domain's confirmation box. Moving BACKWARDS is
+  # never gated, and neither is the tab strip: the gate says "you have not
+  # finished here yet", not "you may not leave".
+  #
+  # suspendWhenHidden = FALSE on every one of them. Six of the seven navs are
+  # hidden at any moment, and a suspended output keeps the HTML it last
+  # painted - which is exactly a stale gate: the reviewer ticks the box on a
+  # tab that is not the selected one (via the restore path, or a new outcome
+  # clearing it) and finds a button whose state was decided one outcome ago.
+  for (.domain_key in names(STEP3_DOMAIN_NAVS)) {
+    local({
+      key <- .domain_key
+      spec <- STEP3_DOMAIN_NAVS[[key]]
+      out_id <- paste0("grade_nav_", key)
+      output[[out_id]] <- shiny::renderUI({
+        blocked <- !isTRUE(domain_confirmed()[[key]])
+        .grade_nav(spec$back_id, spec$back_label,
+                   spec$next_id, spec$next_label,
+                   next_disabled = blocked,
+                   next_title = if (blocked) STEP3_CONFIRM_GATE_TITLE)
+      })
+      shiny::outputOptions(output, out_id, suspendWhenHidden = FALSE)
+    })
+  }
+
   # Nav on the Final certainty tab. Its Next is the one that leaves Step 3,
   # so it carries the same signal as the Step 4 download gate: enabled only
-  # once every domain is confirmed. The other six sub-tabs keep a plain,
-  # always-enabled Next - moving between sub-tabs is never gated.
+  # once every domain is confirmed.
   output$grade_nav_final <- shiny::renderUI({
     .grade_nav("grade_back_final", "Back: Publication bias",
                "grade_next_final", "Next: Export",
                next_disabled = length(
                  pma_unconfirmed_domains(domain_confirmed())) > 0)
   })
+  shiny::outputOptions(output, "grade_nav_final", suspendWhenHidden = FALSE)
+
+  # Clicking a domain named in the banner below opens that domain's tab. The
+  # ids are rebuilt with the banner, so the observers are declared once here,
+  # over the fixed set of domain keys, and guard against the 0 a freshly
+  # rendered actionLink reports.
+  for (.domain_key in names(PMA_DOMAIN_LABELS)) {
+    local({
+      key <- .domain_key
+      link_id <- paste0("cert_jump_", key)
+      shiny::observeEvent(input[[link_id]], {
+        if (!isTRUE((input[[link_id]] %||% 0L) > 0L)) return()
+        shiny::updateTabsetPanel(session, "grade_tabs",
+                                 selected = PMA_DOMAIN_LABELS[[key]])
+        session$sendCustomMessage("scroll_top", list())
+      }, ignoreInit = TRUE)
+    })
+  }
 
   # Banner on the Final certainty tab while domains remain unconfirmed.
   output$cert_incomplete_banner <- shiny::renderUI({
@@ -2555,19 +2636,22 @@ step3_server <- function(input, output, session, state) {
     if (is.null(state$ma) && !is.null(blocked)) {
       return(.alert_box("Assessment blocked. ", blocked))
     }
-    unconf <- pma_unconfirmed_domains(domain_confirmed())
-    if (!length(unconf)) return(NULL)
+    keys <- pma_unconfirmed_domain_keys(domain_confirmed())
+    if (!length(keys)) return(NULL)
     htmltools::div(
       style = paste0(
         "padding: 0.75rem 1rem; margin-bottom: 1rem; ",
         "background: #fef3c7; border-left: 4px solid #b45309; ",
         "border-radius: 4px; font-size: 0.9rem;"),
       htmltools::strong("Assessment incomplete. "),
-      sprintf(paste0(
-        "The certainty shown below is provisional until every domain has ",
-        "been reviewed. Unconfirmed: %s. "), paste(unconf, collapse = ", ")),
-      "Provide inputs in each tab, or tick 'I have reviewed this domain' ",
-      "to confirm it as-is. Export (Step 4) stays locked until then."
+      # Named, and each name is the way there: the reviewer should not have to
+      # find the tab a message just told them about.
+      pma_domain_jump_links(
+        keys, "cert_jump_",
+        before = paste0("The certainty shown below is provisional until every ",
+                        "domain has been reviewed. Unconfirmed: "),
+        after = paste0(". Open each and tick 'I have reviewed this domain'. ",
+                       "Export (Step 4) stays locked until then."))
     )
   })
   shiny::outputOptions(output, "cert_incomplete_banner",

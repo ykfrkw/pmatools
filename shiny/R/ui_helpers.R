@@ -34,9 +34,21 @@ pma_help <- function(text) {
   )
 }
 
-# Stepper (4 steps) - each step is a clickable actionLink
-pma_stepper <- function(current_step) {
+# Stepper (4 steps) - each step is a clickable actionLink.
+#
+# `certainty_confirmed` is how many of the six gated Step 3 tabs the reviewer
+# has confirmed; when given, the Certainty node reads "Certainty 4/6". It is an
+# ARGUMENT rather than a read of state$domain_confirmed, because this helper is
+# pure UI and is called from app.R, where the state it would have to reach into
+# lives.
+pma_stepper <- function(current_step, certainty_confirmed = NULL) {
   steps <- c("Data", "Meta-analysis", "Certainty", "Export")
+  certainty_step <- match("Certainty", steps)
+  step_label <- function(i) {
+    if (i != certainty_step || is.null(certainty_confirmed)) return(steps[i])
+    sprintf("%s %d/%d", steps[i], as.integer(certainty_confirmed),
+            length(PMA_DOMAIN_LABELS))
+  }
   htmltools::div(
     class = "pma-stepper",
     lapply(seq_along(steps), function(i) {
@@ -48,7 +60,7 @@ pma_stepper <- function(current_step) {
           inputId = paste0("step_jump_", i),
           label   = htmltools::tagList(
             htmltools::span(class = "num", i),
-            htmltools::span(steps[i])
+            htmltools::span(step_label(i))
           ),
           class = cls,
           style = "text-decoration: none; cursor: pointer;"
@@ -90,16 +102,106 @@ PMA_DOMAIN_LABELS <- c(
   pubias        = "Publication bias"
 )
 
+# Internal keys of the domains not yet confirmed, in tab order. The labels are
+# also the tabPanel values of the six gated Step 3 tabs, so a key is all a
+# caller needs to jump to the tab that clears it - see pma_domain_jump_links().
+pma_unconfirmed_domain_keys <- function(conf) {
+  keys <- names(PMA_DOMAIN_LABELS)
+  if (is.null(conf)) return(keys)
+  ok <- vapply(keys, function(k) {
+    k %in% names(conf) && isTRUE(conf[[k]])
+  }, logical(1))
+  keys[!ok]
+}
+
 # Human-readable labels of the domains not yet confirmed. `conf` is the
 # named logical vector from state$domain_confirmed (NULL = nothing
 # confirmed yet, e.g. before Step 3 was opened).
 pma_unconfirmed_domains <- function(conf) {
-  keys <- names(PMA_DOMAIN_LABELS)
-  if (is.null(conf)) return(unname(PMA_DOMAIN_LABELS))
-  ok <- vapply(keys, function(k) {
-    k %in% names(conf) && isTRUE(conf[[k]])
+  unname(PMA_DOMAIN_LABELS[pma_unconfirmed_domain_keys(conf)])
+}
+
+# ----- What confirms a domain --------------------------------------------
+# One confirmation checkbox per gated tab, keyed by the domain key above.
+PMA_DOMAIN_CONFIRM_INPUTS <- c(
+  threshold     = "threshold_confirm",
+  rob           = "rob_confirm_na",
+  inconsistency = "incon_confirm_na",
+  indirectness  = "indir_confirm_na",
+  imprecision   = "impre_confirm_na",
+  pubias        = "pubias_confirm_na"
+)
+
+# The confirmation rule of state$domain_confirmed, as a pure function of the
+# checkbox values (`ticked`) and the freshness stamps (`fresh`), both named
+# logical vectors keyed by INPUT id. `config_ready` is the Configuration tab's
+# extra condition (config_blockers() empty): that tab gates on values actually
+# being set, not only on a tick.
+#
+# A domain is confirmed if and only if its box is ticked FOR THE OUTCOME NOW
+# OPEN. Two reasons this is deliberately narrower than what it replaced, which
+# also counted substantive input and valid overrides:
+#
+#   - the tick the reviewer can see must be the verdict. Under the old rule a
+#     domain could be reported as unconfirmed with its box ticked (a stale
+#     tick), or confirmed with the box empty, and the screen said nothing;
+#   - any widget that arrives PRESELECTED - the four Indirectness PICO radios
+#     are about to - would otherwise satisfy "substantive input" the moment it
+#     mounts, and open the export gate for an outcome nobody has looked at.
+#
+# Failing closed is the safe direction: an answer whose stamp is out of date
+# locks the gate, it never opens it.
+pma_domain_confirmations <- function(ticked, fresh, config_ready = TRUE) {
+  flag <- function(v, id) {
+    if (is.null(v) || !id %in% names(v)) return(FALSE)
+    isTRUE(unname(v[[id]]))
+  }
+  out <- vapply(names(PMA_DOMAIN_CONFIRM_INPUTS), function(key) {
+    id <- PMA_DOMAIN_CONFIRM_INPUTS[[key]]
+    flag(ticked, id) && flag(fresh, id)
   }, logical(1))
-  unname(PMA_DOMAIN_LABELS[keys[!ok]])
+  out[["threshold"]] <- out[["threshold"]] && isTRUE(config_ready)
+  out
+}
+
+# The progress marker on a gated Step 3 tab: a tick once the domain is
+# confirmed, a dot once the reviewer has opened the tab, nothing before that.
+# HTML entities rather than literal glyphs, for the reason given at
+# pma_wizard_nav(): the deploy bundle's encoding is not guaranteed.
+pma_tab_mark <- function(confirmed, visited) {
+  if (isTRUE(confirmed)) {
+    return(htmltools::span(class = "pma-tab-mark pma-tab-mark-done",
+                           title = "Confirmed",
+                           htmltools::HTML("&#10003;")))
+  }
+  if (isTRUE(visited)) {
+    return(htmltools::span(class = "pma-tab-mark pma-tab-mark-seen",
+                           title = "Opened, not yet confirmed",
+                           htmltools::HTML("&#9679;")))
+  }
+  NULL
+}
+
+# Comma-separated actionLinks, one per domain key, each jumping to the Step 3
+# tab that clears it. `id_prefix` separates the Step 3 and Step 4 copies: both
+# can exist in one session and Shiny input ids have to be unique. The observers
+# that act on them live beside the message they belong to.
+#
+# One HTML string rather than a tag list, and `before` / `after` for the words
+# on either side: htmltools joins a tag's children with a newline, which the
+# browser renders as a space, so a list built out of siblings reads
+# "Configuration , Risk of Bias ." Same fix as the blocked-analysis sentence.
+pma_domain_jump_links <- function(keys, id_prefix, before = "", after = "") {
+  if (!length(keys)) return(NULL)
+  links <- vapply(keys, function(key) {
+    as.character(shiny::actionLink(paste0(id_prefix, key),
+                                   PMA_DOMAIN_LABELS[[key]],
+                                   class = "pma-domain-jump"))
+  }, character(1))
+  htmltools::HTML(paste0(
+    htmltools::htmlEscape(before),
+    paste(links, collapse = ", "),
+    htmltools::htmlEscape(after)))
 }
 
 # ----- Saved outcomes (multi-outcome Summary of Findings) -----------------

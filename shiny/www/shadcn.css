@@ -161,6 +161,42 @@ h5 { font-size: 0.95rem; margin-top: 0.75rem; margin-bottom: 0.4rem; }
 .pma-stepper a.action-button { color: inherit; }
 .pma-stepper a.action-button:hover { text-decoration: none; }
 
+/* ---------------------------------------------------------------------------
+   Step 3 progress: the tab-strip markers, the header count, and the jump
+   links that let a "still to confirm" message be clicked rather than read.
+   --------------------------------------------------------------------------- */
+.pma-tab-mark { margin-left: 0.35rem; font-size: 0.85em; }
+.pma-tab-mark-done { color: var(--grade-high-fg); }
+.pma-tab-mark-seen { color: hsl(var(--muted-foreground)); font-size: 0.6em;
+                     vertical-align: middle; }
+.pma-progress-badge {
+  margin-left: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted));
+  border-radius: 9999px;
+  padding: 0.1rem 0.55rem;
+  vertical-align: middle;
+}
+a.pma-domain-jump { font-weight: 600; text-decoration: underline; }
+
+/* ---------------------------------------------------------------------------
+   Step 3's tab strip: seven tabs, and the marker glyphs make them wider still.
+   Left to itself the strip is what sets the page's minimum width, so a 375px
+   phone scrolls the WHOLE page sideways to read a paragraph. Scroll the strip
+   instead; the snap points stop a swipe halfway across a tab name.
+   --------------------------------------------------------------------------- */
+.pma-card .nav-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.pma-card .nav-tabs > li { scroll-snap-align: start; }
+.pma-card .nav-tabs > li > a { white-space: nowrap; }
+
 /* Banner */
 .pma-banner {
   background: var(--grade-low-bg);

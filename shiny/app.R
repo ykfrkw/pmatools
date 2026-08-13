@@ -191,9 +191,13 @@ server <- function(input, output, session) {
     )
   )
 
-  # Stepper indicator
+  # Stepper indicator. The Certainty node carries how much of Step 3 is
+  # confirmed, so the count is readable from the other three steps - Step 4's
+  # download lock is the same number said again.
   output$stepper_ui <- shiny::renderUI({
-    pma_stepper(state$step)
+    confirmed <- length(PMA_DOMAIN_LABELS) -
+      length(pma_unconfirmed_domains(state$domain_confirmed))
+    pma_stepper(state$step, certainty_confirmed = confirmed)
   })
 
   # Render the current step body

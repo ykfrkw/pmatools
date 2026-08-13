@@ -826,6 +826,73 @@ printed.
 `pma_algorithm_source(domain)` supplies the caption naming the implementing function, so
 the app and the roxygen topic `?grade_flowcharts` quote the same file and function.
 
+### 3.4.13 Confirmation, progress and the forward path (v0.5.1)
+
+**What confirms a domain: its checkbox, and nothing else.** Six of the seven
+Step 3 tabs are gated — Configuration plus the five domains — and each carries
+one `I have reviewed this domain` checkbox. `pma_domain_confirmations()`
+(`R/ui_helpers.R`) is the rule, a pure function of two named logical vectors
+keyed by input id: the checkbox values, and the freshness stamps of the same
+ids. A domain is confirmed **iff** its box is ticked *for the outcome now
+open*. `PMA_DOMAIN_CONFIRM_INPUTS` maps a domain key to its checkbox;
+`domain_confirmed()` in `R/step3_grade.R` is only the wiring, and mirrors the
+result into `state$domain_confirmed` for Step 4.
+
+This is **narrower than it was**, deliberately. The rule used to be a
+disjunction: substantive input in the domain (a filled risk-of-bias table, an
+answered PICO radio, a non-empty OIS override), *or* a valid override with a
+rationale, *or* the checkbox. Two things were wrong with it.
+
+- It could report `Unconfirmed: Indirectness` with that tab's checkbox ticked
+  (a tick left over from another outcome), and confirm a domain whose box was
+  visibly empty. The tick the reviewer can see must be the verdict.
+- Any widget that arrives **preselected** satisfies "substantive input" the
+  moment it mounts, which would open the export gate for an outcome nobody had
+  looked at.
+
+Configuration keeps one extra condition, and only it: `config_blockers()` must
+be empty. That gate is about values being *set* — three of the five domains are
+judged against the threshold — so a tick alone will not do.
+
+**Every Next is gated; nothing else is.** `output$grade_nav_<key>` renders the
+Back/Next pair of each domain tab from `STEP3_DOMAIN_NAVS`, and the Next is
+disabled until that domain is confirmed, carrying
+`title = "Tick 'I have reviewed this domain' to continue"` while it is. Back is
+never gated, and neither is the tab strip: the reviewer can always look ahead,
+and the stepper still jumps freely. Every one of the seven navs is an output
+with `outputOptions(suspendWhenHidden = FALSE)` — six of the seven are hidden at
+any moment, and a suspended output keeps the HTML it last painted, which is a
+gate whose state was decided one outcome ago.
+
+**Progress is visible in three places, all reading the same count.**
+
+| where | what it shows |
+|---|---|
+| the tab strip | `pma_tab_mark()`: a tick on a confirmed tab, a dot on one the reviewer has opened but not confirmed, nothing before that |
+| the Step 3 card header | `output$grade_progress_badge`, "n/6 confirmed" |
+| the stepper, from every step | `pma_stepper(current_step, certainty_confirmed =)`, "Certainty n/6" |
+
+The markers are `uiOutput`s *inside the tab titles*, so the count follows a
+tick without the tabset being rebuilt. That is why every gated `tabPanel` now
+states its `value` explicitly: a tag-list title leaves `tabPanel()` no string to
+derive one from, and the value is what `updateTabsetPanel()`, `grade_tabs` and
+`PMA_DOMAIN_LABELS` all match on. "Visited" is the one piece of state no input
+carries; a `reactiveValues` set written by `observeEvent(input$grade_tabs)`
+holds it, and a change of outcome clears it with the confirmations.
+
+**Every "still to confirm X" names X as a link to X.** `cert_incomplete_banner`
+(Step 3) and the download lock (Step 4) both build their domain list with
+`pma_domain_jump_links(keys, id_prefix)`; clicking one calls
+`updateTabsetPanel(session, "grade_tabs", selected = PMA_DOMAIN_LABELS[[key]])`,
+and from Step 4 sets `state$step <- 3L` first so the tabset exists when the
+input message lands. The two copies take different id prefixes because both can
+be alive in one session.
+
+**The tab strip scrolls.** Seven tabs plus the markers are wider than a 375px
+viewport, and left alone the strip is what sets the page's minimum width — a
+phone scrolled the *whole page* sideways to read a paragraph. `.pma-card
+.nav-tabs` is `overflow-x: auto` with proximity scroll-snap.
+
 ---
 
 ## 4. Design system
