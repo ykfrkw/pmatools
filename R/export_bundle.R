@@ -730,7 +730,8 @@ export_bundle.meta <- function(x,
       fallback = if (identical(grade$rob_analysis_set, "low_only") &&
                      !isTRUE(grade$rob_refit)) "FALSE" else "TRUE"
     ),
-    rob_inf_threshold= grade_args[["rob_inflation_threshold", exact = TRUE]][["value"]] %||% 0.10,
+    rob_inf_threshold= grade_args[["rob_inflation_threshold", exact = TRUE]][["value"]] %||%
+      PMA_ROB_INFLATION_THRESHOLD,
     small_values_arg = .arg_lit(grade_args[["small_values", exact = TRUE]],  fallback = "NULL"),
     # Indirectness: with a Core GRADE 5 subdomain table the scalar argument and
     # its rationale are derived from the recorded judgment, so the bundled

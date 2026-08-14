@@ -321,13 +321,21 @@ Not a screen. The Step 1 "why this matters" copy is §3.1.1's once-per-session m
 
 Two columns in one flex row: left sidebar with model controls, right pane with tabbed plots and result text.
 
-Both columns must be able to shrink. The sidebar is `flex: 1 1 320px` and the
-right pane `flex: 1; min-width: min(480px, 100%)`. A fixed `flex: 0 0 320px`
-basis and a flat `min-width: 480px` floor were what made a 375px viewport
-render a 492px document and scroll the whole page sideways; the rule the app
-has to satisfy is `document.scrollWidth <= document.clientWidth` at 375px.
-`tests/testthat/test-step2-layout.R` pins both declarations — there is no
-browser driver here, so what is asserted is the CSS, not the measurement.
+The sidebar is `flex: 0 1 300px` and the right pane
+`flex: 1; min-width: min(480px, 100%)`. Two independent rules meet here:
+
+- **Both columns must be able to shrink.** A fixed `flex: 0 0` basis and a flat
+  `min-width: 480px` floor were what made a 375px viewport render a 492px
+  document and scroll the whole page sideways; the rule the app has to satisfy
+  is `document.scrollWidth <= document.clientWidth` at 375px. The sidebar's
+  shrink factor therefore stays `1` at any basis.
+- **Only the right pane grows.** With the sidebar on `flex: 1 1 320px` it took
+  its share of every spare pixel, so on a wide screen a column of short selects
+  grew past 500px while the forest plot beside it stayed small. Grow factor `0`
+  sends the spare width to the pane that holds the plots.
+
+`tests/testthat/test-step2-layout.R` pins both — there is no browser driver
+here, so what is asserted is the CSS, not the measurement.
 
 #### 3.3.2 Step header
 
@@ -357,6 +365,16 @@ One `pma_card("Model configuration")` holding a `bslib::accordion(multiple = TRU
   case that cannot pool — one study under two outcomes — is `run_ma()`'s to
   reject, and its message reaches the reviewer through the existing
   `tryCatch()` around the run.
+- **Every abbreviation in this panel is spelled out on sight** — `OR (odds
+  ratio)`, `RoM (ratio of means)`, `MH (Mantel-Haenszel)`, `REML (restricted
+  maximum likelihood, default)`. Only the **label** carries the expansion; the
+  input **value** stays the bare code (`"OR"`, `"REML"`), which is what every
+  branch and every saved outcome compares against. Labels are built from
+  `PMA_ABBREVIATION_EXPANSIONS` in `R/step2_ma.R` via `pma_spell_out()` /
+  `pma_spelled_choices()`, never typed beside the value, so the control and
+  `step2_model_summary_line()` (§3.3.4) cannot word the same code differently.
+  A code the table does not carry is shown unchanged — `Inverse` and `Peto` are
+  names, not abbreviations, and must not gain an empty bracket.
 - **`method_tau` offers six estimators** — `REML` (default), `PM`, `DL`, `SJ`,
   `ML`, `EB` — labelled with their names in the select. **`random_ci`** sits
   beside it in the same `input.model == 'random' && input.use_rare_workflow
@@ -383,9 +401,13 @@ One `pma_card("Model configuration")` holding a `bslib::accordion(multiple = TRU
 #### 3.3.4 Outputs (right pane)
 
 Above the tabs, `uiOutput("ma_model_summary")`: one line naming the model that
-produced the numbers, e.g. `Random effects (REML), Hartung-Knapp CI, k = 12`
-(`classic (Wald) CI` when Hartung-Knapp is off, `Common (fixed) effect, k = 12`
-for a common-effect fit). Built by the pure `step2_model_summary_line()`, which
+produced the numbers, e.g. `Random effects, REML (restricted maximum
+likelihood), Hartung-Knapp CI, k = 12` (`classic (Wald) CI` when Hartung-Knapp
+is off, `Common (fixed) effect, k = 12` for a common-effect fit). The estimator
+is its own comma-separated part rather than `Random effects (REML)` because it
+is spelled out from the same table the control uses (§3.3.3), and a nested
+bracket reads worse than a fourth item. Built by the pure
+`step2_model_summary_line()`, which
 reads `random` / `method.tau` / `method.random.ci` / `k` **off the fitted
 object** rather than off the controls, so it cannot drift from what actually
 ran, and reports the rare-events primary fit correctly when that is what is on
@@ -399,7 +421,36 @@ Tabset with 3 tabs:
 - **Funnel plot** — `plotOutput("funnel")` via `pmatools::plot_funnel(state$ma, show_egger = TRUE)`.
 - **Text results** — `verbatimTextOutput("ma_summary")` showing `summary(state$ma)`.
 
-Below the tabset: collapsible "Forest plot adjustments" with title, label_e, label_c, xlim min/max overrides.
+Below the tabset: the collapsible **"Forest plot display"** panel, built by the
+single `pma_forest_display_panel(prefix)` in `R/ui_helpers.R` and shared with
+each of the four Step 3 domain tabs (`prefix = NULL` gives Step 2's unprefixed
+ids). It holds the title, the two arm labels, the two "Favors …" labels, the
+x-min / x-max overrides, the two blank-row spinners and the per-arm column
+checkbox.
+
+- **Layout is `.pma-display-grid`**, four columns. A child that needs the whole
+  row carries `.pma-span-4` (title, the blank-row hint, the checkbox); a child
+  that is one of a **pair** carries `.pma-span-2` (x-min / x-max, and the two
+  blank-row spinners). Without the pair class those two rows filled columns 1–2
+  and left 3–4 empty, so they read as a misaligned rung between the four-column
+  rows around them. The grid folds to two columns under 760px, because
+  `minmax(160px, 1fr)` is a hard floor and four such tracks cannot fit a phone.
+- **The title is a `textAreaInput`, not a `textInput`.** `plot_forest()` honours
+  a newline in the title as an explicit line break (SPEC.md §4.3), and
+  `<input type="text">` cannot carry one — the HTML value sanitisation
+  algorithm strips CR/LF, so the break would be lost both when the user typed
+  it and when the Step 3 autofill pushed a stratified default in.
+  `updateTextInput()` and `updateTextAreaInput()` send the same message, so
+  `pma_autofill_text()` drives the field unchanged.
+- **The Step 3 copies prefill a stratification suffix** onto the outcome name
+  (`.forest_title_suffix` in `R/step3_grade.R`, applied by
+  `pma_autofill_forest_panel()` and only to a title the user has not edited).
+  Risk of Bias appends `"\n(stratified by Risk of Bias)"` — on its **own line**,
+  because on one line the wrapped title reached down into the
+  `Events / N / OR (95% CI) / Weight` headings. Indirectness still appends on
+  the same line. Inconsistency and **publication bias append nothing**: the
+  publication-bias figure's own subgroup heading already says "available" vs
+  "missing results", so the suffix repeated it at the cost of a title line.
 
 Before the first run the tabset would be three empty tabs, so the card is
 **hidden** and one line shows in its place: "Press **Run analysis** to pool the
@@ -825,20 +876,39 @@ tab, and is now the only pointer to it.
 
 **Citation style [v0.5.1].** Every reference the app renders is written in one
 house style: **first author, `et al.`, journal abbreviation, year**. No volume,
-no pages, **no DOI and no `<a href>`** — a hyperlink bought nothing the citation
-itself did not carry, and it made the same paper render four different ways
-depending on which call site rendered it. `pma_reference(...)` takes citation
-strings and nothing else; its `doi` argument and the `<a href>` branch are gone,
-as is the unused `EDU_COPY$pmid_url()`. Each rated domain carries its reference
-as the single field `EDU_COPY$domains$*$ref`, replacing the `$ref_text` / `$doi`
-pair. The six BMJ 2025 Core GRADE papers are all Guyatt, all BMJ, all 2025, so
-the bare form cannot tell them apart; a specific paper carries its series number
-as a prefix — `Core GRADE 4. Guyatt G, et al. BMJ. 2025`. Risk of Bias and
-Publication bias both cite Core GRADE 4 and so render identically, which is
-correct. `test-edu-copy.R` pins the shape with a regex over every `$ref`, so the
-format cannot drift back. The rule reaches the whole app, not just Step 3: the
-Step 1 sample-dataset line, the Step 2 rare-events references, the RoB-ME notes
-on Steps 1 and 3, and the Step 4 "How to cite" card all follow it.
+no pages, **no DOI in the citation text**. `EDU_COPY$pmid_url()` is gone and so
+are the per-domain `$ref_text` / `$doi` pairs: each rated domain carries its
+reference as the single field `EDU_COPY$domains$*$ref`. The six BMJ 2025 Core
+GRADE papers are all Guyatt, all BMJ, all 2025, so the bare form cannot tell
+them apart; a specific paper carries its series number as a prefix — `Core
+GRADE 4. Guyatt G, et al. BMJ. 2025`. Risk of Bias and Publication bias both
+cite Core GRADE 4 and so render identically, which is correct.
+`test-edu-copy.R` pins the shape with a regex over every `$ref`, so the format
+cannot drift back. The rule reaches the whole app, not just Step 3: the Step 1
+sample-dataset line, the Step 2 rare-events references and the RoB-ME notes on
+Steps 1 and 3 all follow it. **Step 4's "How to cite" card is the one exception
+— it is Vancouver; see §Step 4.**
+
+**Linking a citation.** `pma_reference(..., url = NULL)` renders the citation
+text, wrapped in `<a href target="_blank" rel="noopener">` when a `url` is
+given and as plain text when it is not. The argument is back after having been
+removed: what the removal was right about was the *inconsistency* — the same
+paper rendered four different ways across the wizard — not the link itself, and
+a reviewer checking a domain against its source wants the paper rather than the
+ability to retype a citation into a search box. So the destination comes from
+one map, `PMA_CORE_GRADE_DOIS` in the package's `R/utils.R`, keyed on the Core
+GRADE series number and read through `.core_grade_doi_url()`, and every Core
+GRADE tab renders alike.
+
+Each rated domain names its paper as a **number**, `EDU_COPY$domains$*$core_grade`,
+and `pma_domain_reference(EDU_COPY$domains$<d>)` — the single call at all five
+Step 3 tabs — reads the citation and the link from that one entry. The number is
+a field rather than something parsed back out of the `"Core GRADE n."` prefix
+because the prefix is display text: a regex over it would turn any rewording of
+the citation into a silently dead link. `.core_grade_doi_url()` returns `NULL`
+for a number the map does not carry (series papers 6 and 7 have no DOI recorded),
+so an unmapped domain renders as plain text rather than losing its tab. Step 2's
+rare-events references pass no `url` and take that same plain path.
 
 **Judgment wording.** Badges, verdict lines and the four override
 `selectInput`s read `.grade_level_wording()` from the package (SPEC.md §5.0),
@@ -888,7 +958,7 @@ the UI still named MIC at all.
 |---|---|---|
 | `per` | Configuration | it relabels the control-group risk, the absolute threshold and the OIS figures, none of which are on Final certainty (Final certainty keeps a read-only echo) |
 | `rob_some_concerns` | **Risk of Bias**, under `Inputs for this domain` | it decides which side of the binary split each study falls on, and the stratified forest on that tab draws exactly that split. Its **scope is unchanged** — still one review-wide setting that persists across outcomes, still absent from `PMA_OUTCOME_INPUT_IDS$rob`. Only the point of edit moved (0.5.1; it was on Configuration for one release, and on a closed `<details>` on Risk of Bias before that). Seeded from `state$rob_some_concerns` — see below |
-| `rob_inf_threshold` | **deleted** (0.5.1) | a pmatools convention rather than a Core GRADE 4 rule, and a reviewer had no basis on which to move it. The package default `rob_inflation_threshold = 0.10` (`R/domain_rob.R`) now applies unconditionally; the app no longer passes the argument at all, and `export_bundle()` writes the same 0.10 into the bundled `analysis.R`. Deleting the slider also removed the only consumer of the RoB `how` closure's `inflation_threshold` argument — producer and consumer died together |
+| `rob_inf_threshold` | **deleted** (0.5.1) | a pmatools convention rather than a Core GRADE 4 rule, and a reviewer had no basis on which to move it. The package default `rob_inflation_threshold = PMA_ROB_INFLATION_THRESHOLD` (`R/domain_rob.R`, `0.20` since 0.5.1) now applies unconditionally; the app no longer passes the argument at all, and `export_bundle()` writes that same value into the bundled `analysis.R`. Deleting the slider also removed the only consumer of the RoB `how` closure's `inflation_threshold` argument — producer and consumer died together |
 
 **The some-concerns boundary survives a rebuild.** `state$rob_some_concerns`
 holds the setting; `step3_ui(state)` seeds the radio from it under `isolate()`,
@@ -944,8 +1014,8 @@ exactly one node. The node is **derived**, never stored as a cursor, by
 !answered(pubias_small_industry)                    -> "q1"
 pubias_small_industry == "yes"                      -> "result"   (terminal)
 !answered(pubias_registry_complete)                 -> "extra"
-pubias_registry_complete %in% c("yes", "no")        -> "result"   (terminal both ways)
-# only the explicit "defer" falls through
+pubias_registry_complete == "yes"                   -> "result"   (terminal)
+# "no" falls through to the Figure 5 nodes
 k >= 10 : !answered(pubias_funnel_asymmetry) ? "q3" : "result"
 k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
 ```
@@ -960,16 +1030,30 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
   nor the route the reviewer was walking. The **node keys** (`"q1"`, `"q3"`,
   `"q4"`) and the `"Q1:"`–`"Q4:"` prefixes inside the package's domain notes
   are unchanged: the first are internal, the second are the exported record.
-- **Two nodes carry an explicit deferral VALUE** rather than a blank:
-  `pubias_registry_complete = "defer"` ("leave it to the Figure 5 nodes") and
+- **The overall reporting-bias question has two answers, and only one of them
+  decides anything (0.5.1, breaking).** `pubias_registry_complete = "yes"`
+  ("reporting bias is unlikely; do not rate down") is the pmatools
+  short-circuit and is forwarded to `grade_meta()`. `"no"` ("reporting bias is
+  plausible; go on to the Figure 5 nodes") is sent as `NULL` and decides
+  nothing on its own. Two things went with that:
+  - the app-level post-override that rewrote a `"no"` into a forced rate-down 1
+    **regardless of the remaining nodes** is deleted. Core GRADE 4 Fig 5 has no
+    such rule and the app was the only thing that had one: a reviewer who
+    thought reporting bias plausible and then answered the funnel question
+    found the funnel answer had counted for nothing. A reviewer who wants the
+    rating regardless still has `pubias_override`, which demands a written
+    rationale;
+  - the third `"defer"` option ("leave it to the Figure 5 nodes") is deleted
+    with it, because `"no"` now means exactly that. `STEP3_PUBIAS_DEFER` is
+    gone from `R/step3_threshold.R` rather than left unused.
+- **The Q3 select still carries an explicit VALUE for "no opinion":**
   `pubias_funnel_asymmetry = "egger"` ("accept the automated Egger test").
-  Without them, "the reviewer looked and has no opinion" is indistinguishable
+  Without it, "the reviewer looked and accepts the test" is indistinguishable
   from "the reviewer has not reached this yet" and the wizard can never advance
-  past an optional node. Neither value reaches `grade_meta()`: both are mapped
-  to `NULL`, which is what "let the algorithm decide" means to
-  `assess_pubias()`. In particular `"egger"` must not be routed through
-  `.override_or_ignore()`, which would demand a rationale for declining to
-  override.
+  past an optional node. It does not reach `grade_meta()`: it is mapped to
+  `NULL`, which is what "let the algorithm decide" means to `assess_pubias()`.
+  In particular it must not be routed through `.override_or_ignore()`, which
+  would demand a rationale for declining to override.
 - **Advancing happens on answer.** One `observeEvent` per input clears
   `pubias_reopen`; the derivation moves on by itself. No `updateTabsetPanel`,
   no manual Next.
@@ -994,12 +1078,16 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
     exists only once `grade_meta()` has rated the domain, which is exactly when
     a progress indicator has stopped being useful. It translates the wizard's
     node keys (`q1` / `extra` / `q3` / `q4`) into the figure's ids, which are
-    a different vocabulary — `extra` is the dashed registry node, and the k
+    a different vocabulary — `extra` is the pmatools registry node, and the k
     gate is the figure's `q2`, which the wizard never asks.
-  - Two answers stop the trail at a node rather than a leaf, because no leaf is
-    decided yet: `"egger"` hands Q3 to a p value the function does not have,
-    and `"no"` on the registry node is the app's own rate-down-1 rule, for
-    which the figure draws no leaf.
+  - One answer stops the trail at a node rather than a leaf, because no leaf is
+    decided yet: `"egger"` hands Q3 to a p value the function does not have.
+  - **`"no"` on the registry node lights the k gate and the edge out of it.**
+    That node is the one the reviewer is never asked about, so lighting the
+    node alone would show the chart stopping at an unanswered question; the
+    edge is what says which branch the study count chose for them. Up to 0.5.0
+    a `"no"` stopped the trail at `pma-pubias-edge-registry-no`, because it
+    ended the wizard.
   - `.domain_evaluation("Publication bias", flowchart = FALSE)` suppresses the
     usual under-the-verdict copy, so the tab draws the figure once.
   - The k gate is printed under the chart by `step3_pubias_k_line()`: the chart
@@ -1021,6 +1109,22 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
   - `output$pubias_show_result` remains, gating `output$pubias_evaluation`
     alone: the verdict is the wizard's conclusion, and printing it before the
     wizard has run reports a rating of nothing.
+  - **`output$pubias_trimfill_summary` states the 20% exaggeration check
+    (0.5.1).** The panel used to print the original and adjusted pooled effects
+    and leave the reviewer to compare them by eye. It now also prints the
+    sentence `.pubias_trimfill_line()` builds from
+    `.pubias_trimfill_inflation()` (`R/pubias_trimfill.R`, SPEC.md §5.5a): the
+    same "is the favourable direction exaggerated by more than a fifth?"
+    question the Risk of bias tab asks of the low-RoB subset, asked here of the
+    trim-and-fill adjustment, sharing `PMA_ROB_INFLATION_THRESHOLD`. **It rates
+    nothing** — Core GRADE 4 Fig 5 has no trim-and-fill node — and is material
+    for the funnel-asymmetry question above it; the sentence says so, and the
+    left border is amber only when the check fires. The arithmetic and the
+    wording are the package's so a test can hold them to that; the app supplies
+    `state$small_values` (normalised to `NULL` when it is not one of the two
+    known values, because an aborting `renderUI` would replace the panel with a
+    stack trace) and its own `fmt()` as `format_te`. The `k >= 10` gate on the
+    whole panel is unchanged.
 
 **Inconsistency asks one question, not three.** `ci_diff` and `threshold_side`
 are gone: `.auto_inconsistency()` derives Core GRADE 3's Steps 1 and 2, and the
@@ -1060,7 +1164,16 @@ always, and the equivalence block only when `detail = TRUE`.
 |---|---|---|
 | Risk of Bias | `FALSE` | it compares two pooled estimates against the band; the conversion arithmetic answers nothing |
 | Inconsistency | `FALSE` | the zone tally is computed for the reviewer and reported through `pma_facts_list()`; they never read a bound themselves |
-| Imprecision | `TRUE` | Core GRADE 2's two-level rule tests the confidence interval against the important-benefit **and** important-harm thresholds by eye, so both bounds — and the residual-asymmetry sentence, since only one conversion is exact on the absolute scale — are operative |
+| Imprecision | `FALSE` | `output$impre_evaluation`, directly below, renders the interval against both thresholds and states the verdict; the box was showing the arithmetic behind an answer the tab was about to give |
+
+Imprecision passed `TRUE` until 0.5.1, on the argument that Core GRADE 2's
+two-level rule tests the confidence interval against the important-benefit
+**and** important-harm thresholds by eye, so both bounds — and the
+residual-asymmetry sentence, since only one conversion is exact on the absolute
+scale — were operative. That is true of the rule and was still wrong for this
+box, which is not where the reviewer reads the interval. All three tabs now
+render the same one-line box. `detail` survives as a parameter because the
+argument for the long form is tab-specific and could win again.
 
 The trailing *"This decision threshold is shared by … Change it in the
 Configuration tab"* sentence is now the tab's own name as a link, built by
@@ -1098,21 +1211,48 @@ Nothing else branches on subdomains being present: `evidence_profile()`,
 `sof_table()` and the SoF footnotes are byte-identical across the change.
 
 The two boxed departure notes and the three per-element footnotes that sat in a
-shared `<details>` are **deleted**; what survives is two capped subtitles beside
-the questions — `EDU_COPY$domains$indirectness$surrogate` (a surrogate outcome
-is grounds to consider rating down; never pool the two) and `$gradient` (the
-fold is symmetric and ignores Table 2's ranking, which is why the override
-exists). `$mapping` and `$banner` are gone, and with `$banner` went
+shared `<details>` are **deleted**; what survives is three capped subtitles
+beside the questions:
+
+- `EDU_COPY$domains$indirectness$population`, under the Population radio — the
+  test is whether the treatment effect would differ, not whether the trial
+  population resembles the target one, and relative effects are rarely
+  different across populations, which is why Core GRADE 5 Table 2 ranks
+  Population least likely to warrant rating down. It sits under Population
+  because the radio's own wording ("sufficiently similar") invites the
+  demographic reading;
+- `$surrogate`, under the Outcome radio — a surrogate outcome is grounds to
+  consider rating down, and pooling it with the patient-important one is not
+  recommended. That last clause read *"Never pool the two"* until 0.5.1; Core
+  GRADE 5 states no such prohibition, so the imperative claimed more than the
+  source does;
+- `$gradient`, below the four questions — the fold is symmetric and ignores
+  Table 2's ranking, which is why the override exists.
+
+`$mapping` and `$banner` are gone, and with `$banner` went
 `output$indirectness_banner` and `state$indir_reviewed`: the banner said "no
 indirectness judgment recorded yet", and with the radios preselected there
 always is one.
 
-**Imprecision.** `output$impre_branch` reads the `fig4_path` / `ois_used`
-**facts** instead of regex-parsing the note string. The `.override_details`
-preamble is deleted (it restated the branch text), and the nested `<details>`
-inside it is unwrapped: the one sentence a reviewer needs at the override —
-*"Rate down two levels when the plain language summary warrants 'may' rather
-than 'likely'"* — is now the only thing there, visible.
+**Imprecision.** The tab is, in order: the domain header and reference, the
+read-only threshold box, `output$impre_evaluation`, the inputs, the override.
+
+**`output$impre_branch` and its "Core GRADE 2 Figure 4 branch taken" heading are
+deleted [0.5.1].** They rendered the `fig4_path` / `ois_used` facts as a headline
+plus two paragraphs of prose. The Fig 4 flowchart inside `impre_evaluation`
+directly below draws the *same* `fig4_path` fact with the route lit up
+(`pma_flowchart_details()`, §3.4), so the tab named its branch twice and argued
+with itself about which was the answer. What the prose was for — making it
+visible that sample size is not consulted unless the OIS branch is reached — is
+what an unlit OIS node on the chart says; and the two-level condition the
+algorithm cannot judge is stated at the override, where the reviewer can act on
+it. Nothing else read `impre_branch`: its fact lookup was a closure inside the
+`renderUI`, and it went with it.
+
+The `.override_details` preamble is deleted (it restated the branch text), and
+the nested `<details>` inside it is unwrapped: the one sentence a reviewer needs
+at the override — *"Rate down two levels when the plain language summary
+warrants 'may' rather than 'likely'"* — is now the only thing there, visible.
 `.inputs_details(open = TRUE)` stays open.
 
 **Final certainty.** `other_text` / `other_downgrade` are answers and stay
@@ -1236,21 +1376,52 @@ start" looks like. Two signals, because neither covers the other's window:
   `tryCatch`, and a `duration = NULL` notification nothing removes stays on
   screen for the rest of the session.
 
-#### 3.5.4 "How to cite this analysis" expandable
+#### 3.5.4 "How to cite" card
 
-```
-Bibtex entries for:
-- pmatools (this package)
-- BMJ Core GRADE series (papers 1, 3, 4, 5)
-- {meta} R package
-- CINeMA approach for Inconsistency
+A `pma_card` holding one model sentence and an **ordered** reference list of
+seven entries: Core GRADE 1–5, `{meta}`, pmatools.
 
-Plus a paragraph:
-"Pairwise meta-analysis was performed using the {meta} R package (Schwarzer 2007).
-Certainty of evidence was rated using the GRADE approach following the BMJ 2025 Core GRADE series
-(Guyatt et al. 2025), implemented in the pmatools R package
-(https://github.com/ykfrkw/pmatools)."
-```
+**This card is Vancouver, and it is the app's one exception to the house
+citation style [0.5.1].** Everywhere else a reference points a reviewer at a
+paper *while they work*, and the short form (`.core_grade_ref()`) is the right
+length for that. Here the reference **is** the deliverable — the reviewer copies
+these lines into a manuscript — so each entry carries up to six authors then
+`et al.`, the volume, the elocation id and the DOI. **Do not fold this list back
+onto `.core_grade_ref()`.**
+
+The prose cites **by bracketed number** into that list rather than repeating
+short forms inline, so the card is one citation system and not two:
+
+> Pairwise meta-analysis was performed using the {meta} R package [6]. Certainty
+> of evidence was rated following the BMJ 2025 Core GRADE series [1-5],
+> implemented in pmatools [7].
+
+Numbering runs Core GRADE 1–5, `{meta}`, pmatools rather than by first
+appearance: an author pasting this in renumbers against their own bibliography
+regardless, and keeping the series contiguous is what makes it readable as a
+block.
+
+The pmatools entry is software, not an article, so it takes Vancouver's
+`Available from:` form for the URL and carries a **version**, because an
+analysis is only reproducible against one.
+
+That version comes from **`pma_pmatools_version_number()`** — never
+`utils::packageVersion()`, which errors under the vendored `source()` the
+deployed app runs on (CLAUDE.md §1), and **never `pma_pmatools_version()`**,
+which appends a ` (vendored)` provenance marker. The marker is right where it is
+used — the Step 2 environment block (`step2_ma.R`) and the app footer (`app.R`)
+are reporting *how the code was loaded* — and wrong here, because this line is
+pasted into someone else's manuscript, where `Version 0.5.1 (vendored).` lands
+in their reference list and reads as part of the version number. The two
+helpers must not converge; `test-edu-copy.R` asserts both forms.
+
+`pma_pmatools_version_number()` returns **`NULL`** when the version is genuinely
+unknown (no installed package and no `pmatools.version_stamp` option), and the
+card then **omits the whole `Version X.` clause**. An incomplete citation is
+honest; `Version (vendored; version unknown).` in a bibliography is not.
+
+Entries are ASCII apart from `Rücker`, written as the HTML entity `&uuml;` —
+the shinyapps.io build has mangled Latin-1 in this app before.
 
 #### 3.5.5 The saved-outcome list lives here (v0.5.1)
 

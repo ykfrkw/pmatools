@@ -85,6 +85,27 @@ pma_pmatools_version <- function() {
   "(vendored; version unknown)"
 }
 
+# The same version as a bare number, for a citation.
+#
+# pma_pmatools_version() returns a PROVENANCE string: its " (vendored)" marker
+# says the run came from staged sources rather than an installed package, which
+# is exactly what the Step 2 environment block and the app footer need. A
+# citation is not provenance. Step 4's "How to cite" card is copied into someone
+# else's manuscript, where "Version 0.5.1 (vendored)." lands in their reference
+# list and reads as part of the version number. So the marker is stripped here
+# and pma_pmatools_version() is left alone -- its two callers still need it.
+#
+# NULL when the version is genuinely unknown, so the caller drops the version
+# clause rather than printing "(vendored; version unknown)" into a bibliography.
+# A citation without a version is incomplete; that string is misinformation.
+# The guard is "starts with a digit" because it catches the unknown sentinel
+# (which starts with "(") without having to spell the sentinel out twice.
+pma_pmatools_version_number <- function() {
+  version <- sub(" \\(vendored\\)$", "", pma_pmatools_version())
+  if (!grepl("^[0-9]", version)) return(NULL)
+  version
+}
+
 # ----- W4-A output gate: shared confirmation-domain labels -----
 # Named after the keys of the state$domain_confirmed logical vector set in
 # step3_server(); used by both Step 3 (banner/badge) and Step 4 (export gate).
@@ -866,7 +887,8 @@ pma_arg_spec <- function(value) {
 PMA_GRADE_ARGS_EXPORTED <- c(
   # rob_inflation_threshold is off this list as of 0.5.1: the app no longer
   # sets it, so it could never be emitted, and export_bundle() already writes
-  # the package default of 0.10 into the bundled analysis.R.
+  # the package default (PMA_ROB_INFLATION_THRESHOLD) into the bundled
+  # analysis.R.
   "rob", "rob_rationale", "rob_some_concerns",
   "small_values",
   "indirectness", "indirectness_rationale", "indirectness_subdomains",
@@ -1840,17 +1862,31 @@ pma_forest_display_panel <- function(prefix = NULL) {
     htmltools::tags$summary("Forest plot display"),
     htmltools::div(
       class = "pma-display-grid",
+      # A textarea, not a textInput. plot_forest() honours a newline in the
+      # title as an explicit line break (SPEC.md 4.3), and <input type="text">
+      # cannot carry one: the HTML value sanitisation algorithm strips CR/LF,
+      # so a break would be swallowed both when the user typed it and when the
+      # autofill below pushed the stratified default in - joining the suffix
+      # onto the outcome name with no separator at all. updateTextInput() and
+      # updateTextAreaInput() send the same message, so pma_autofill_text()
+      # drives this field unchanged.
       htmltools::div(
         class = "pma-span-4",
-        shiny::textInput(labels[["title"]], "Title", value = "", width = "100%")),
+        shiny::textAreaInput(labels[["title"]], "Title (line breaks honoured)",
+                             value = "", rows = 2, width = "100%")),
 
       shiny::textInput(labels[["label_e"]], "Intervention label", value = "", width = "100%"),
       shiny::textInput(labels[["label_c"]], "Control label",      value = "", width = "100%"),
       shiny::textInput(labels[["favors_left"]],  "Favors (left)",  placeholder = "e.g., Favors Control", width = "100%"),
       shiny::textInput(labels[["favors_right"]], "Favors (right)", placeholder = "e.g., Favors CBT-I",   width = "100%"),
 
-      shiny::numericInput(.id("xlim_lo"), "x-min", value = NA, width = "100%"),
-      shiny::numericInput(.id("xlim_hi"), "x-max", value = NA, width = "100%"),
+      # Two per row rather than four: a row holding only x-min and x-max left
+      # the third and fourth columns empty, so the fields below it sat a column
+      # out of step with the ones above. .pma-span-2 fills the row instead.
+      htmltools::div(class = "pma-span-2",
+        shiny::numericInput(.id("xlim_lo"), "x-min", value = NA, width = "100%")),
+      htmltools::div(class = "pma-span-2",
+        shiny::numericInput(.id("xlim_hi"), "x-max", value = NA, width = "100%")),
 
       # Blank rows around the pooled result. Always visible: they matter most
       # once the per-arm columns are hidden (that is when the heterogeneity
@@ -1874,10 +1910,12 @@ pma_forest_display_panel <- function(prefix = NULL) {
                "these to move it up or down. Above: 0 removes the ",
                "blank row before the pooled result. Below: blank ",
                "= automatic.")),
-      shiny::numericInput(addrows[["above"]], "Blank rows above pooled result",
-                          value = 1, min = 0, step = 1, width = "100%"),
-      shiny::numericInput(addrows[["below"]], "Blank rows below pooled result",
-                          value = NA, min = 0, step = 1, width = "100%"),
+      htmltools::div(class = "pma-span-2",
+        shiny::numericInput(addrows[["above"]], "Blank rows above pooled result",
+                            value = 1, min = 0, step = 1, width = "100%")),
+      htmltools::div(class = "pma-span-2",
+        shiny::numericInput(addrows[["below"]], "Blank rows below pooled result",
+                            value = NA, min = 0, step = 1, width = "100%")),
 
       # One checkbox, not two: plot_forest() keeps show_n and show_events as
       # separate arguments (correct for a library), but there is no case where
@@ -2334,14 +2372,36 @@ pma_analysis_set_banner <- function(g) {
 # style (first author, "et al.", journal abbreviation, year), joined by the
 # caller when there is more than one.
 #
-# The DOI argument is gone. A hyperlink here bought nothing a reviewer could
-# not get from the citation itself, and it made the same paper render four
-# different ways across the wizard depending on which call site rendered it.
-pma_reference <- function(...) {
+# `url` links the whole citation, opening in a new tab so the reviewer does not
+# lose a half-filled wizard to a navigation. The argument came back in 0.5.1:
+# it had been removed on the grounds that the citation carried everything a
+# reviewer needed, but a reviewer who wants to check a domain against its
+# source paper wants the paper, not the ability to retype the citation into a
+# search box. What that removal was actually right about was the inconsistency
+# -- the same paper used to render four different ways -- so the link now hangs
+# off ONE map (.core_grade_doi_url() in R/utils.R) reached through ONE helper
+# (pma_domain_reference() below), and every Core GRADE tab renders alike.
+# Citation TEXT is unchanged and still carries no DOI.
+pma_reference <- function(..., url = NULL) {
+  citation <- if (is.null(url)) {
+    list(...)
+  } else {
+    # rel = "noopener" because target = "_blank" otherwise hands the opened
+    # page a live window.opener back into the app.
+    list(htmltools::a(href = url, target = "_blank", rel = "noopener", ...))
+  }
   htmltools::p(class = "pma-reference",
     style = "font-style: italic; color: hsl(var(--muted-foreground)); font-size: 0.85rem;",
-    "Reference: ", ...
+    "Reference: ", citation
   )
+}
+
+# The reference line for one rated domain. Takes the whole EDU_COPY entry, not
+# its `$ref` string, so the citation and the link are read from the same place
+# and a domain cannot end up pointing at another domain's paper.
+pma_domain_reference <- function(domain_copy) {
+  pma_reference(domain_copy$ref,
+                url = .core_grade_doi_url(domain_copy$core_grade))
 }
 
 # pma_how_collapse() was deleted here, with the five EDU_COPY `how` bodies it

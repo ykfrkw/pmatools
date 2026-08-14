@@ -38,50 +38,78 @@ EDU_COPY <- list(
     dismiss = "Got it"
   ),
 
-  # `$ref` is the whole reference for a domain tab: one string, house style,
-  # no DOI and no link (see shiny/SPEC.md). The six Core GRADE papers are all
-  # Guyatt / BMJ / 2025, so the bare form cannot tell them apart and they carry
-  # the series number as a prefix. `pmid_url()` was deleted with the DOIs; it
-  # had no call sites left.
+  # `$ref` is the reference text for a domain tab: one string, house style, no
+  # DOI *in the string itself* (see shiny/SPEC.md). The six Core GRADE papers
+  # are all Guyatt / BMJ / 2025, so the bare form cannot tell them apart and
+  # they carry the series number as a prefix. `pmid_url()` was deleted with the
+  # old per-domain DOI fields; it had no call sites left.
+  #
+  # `$core_grade` is which paper of the series that is, as a number.
+  # pma_domain_reference() hands it to .core_grade_doi_url() (R/utils.R) to
+  # open the paper in a new tab. It is a field rather than something recovered
+  # from `$ref` because the prefix is display text: a regex over it would turn
+  # any rewording of the citation into a silently dead link, and the number is
+  # what the DOI map is keyed on anyway.
   domains = list(
 
     rob = list(
-      header   = "Risk of Bias",
-      ref      = "Core GRADE 4. Guyatt G, et al. BMJ. 2025"
+      header     = "Risk of Bias",
+      ref        = "Core GRADE 4. Guyatt G, et al. BMJ. 2025",
+      core_grade = 4
     ),
 
     inconsistency = list(
-      header   = "Inconsistency",
-      ref      = "Core GRADE 3. Guyatt G, et al. BMJ. 2025"
+      header     = "Inconsistency",
+      ref        = "Core GRADE 3. Guyatt G, et al. BMJ. 2025",
+      core_grade = 3
     ),
 
     indirectness = list(
-      header   = "Indirectness",
-      ref      = "Core GRADE 5. Guyatt G, et al. BMJ. 2025",
+      header     = "Indirectness",
+      ref        = "Core GRADE 5. Guyatt G, et al. BMJ. 2025",
+      core_grade = 5,
       # Sits beside the four subdomain questions, because it is the reason the
       # overall override below them exists.
       gradient = paste0(
         "Core GRADE 5 Table 2 ranks Population lowest and Outcome highest; ",
         "the worst-case fold used here is symmetric and ignores that ranking."
       ),
+      # Beside the Population question. That radio's own wording ("sufficiently
+      # similar") invites the wrong test: reviewers rate down because the trial
+      # population is demographically unlike theirs, which is not what Core
+      # GRADE 5 asks. It asks whether the treatment EFFECT would differ, and
+      # its Table 2 puts Population at the bottom of the gradient for exactly
+      # that reason (R/domain_indirectness.R quotes it: "Low likelihood because
+      # relative effects are typically similar across populations"). The
+      # ranking itself is `gradient`'s job below; this says which test to
+      # apply, which was on the tab nowhere.
+      population = paste0(
+        "Ask whether the treatment effect would differ, not whether the ",
+        "population resembles yours. Relative effects are rarely different ",
+        "across populations."
+      ),
       # Beside the Outcome question. Both halves are judgments the reviewer
       # cannot read off the data: how far a surrogate warrants rating down,
-      # and that it does not belong in the same analysis.
+      # and whether it belongs in the same analysis. The second half read
+      # "Never pool the two" until 0.5.1; Core GRADE 5 states no such
+      # prohibition, so the flat imperative claimed more than the source does.
       surrogate = paste0(
-        "A surrogate outcome is grounds to consider rating down - how far ",
-        "depends on how closely it tracks the patient-important one. Never ",
-        "pool the two."
+        "A surrogate outcome is grounds to consider rating down, depending ",
+        "on how closely it tracks the patient-important one. Pooling the two ",
+        "is not recommended."
       )
     ),
 
     imprecision = list(
-      header   = "Imprecision",
-      ref      = "Core GRADE 2. Guyatt G, et al. BMJ. 2025"
+      header     = "Imprecision",
+      ref        = "Core GRADE 2. Guyatt G, et al. BMJ. 2025",
+      core_grade = 2
     ),
 
     pubias = list(
-      header   = "Publication bias",
-      ref      = "Core GRADE 4. Guyatt G, et al. BMJ. 2025"
+      header     = "Publication bias",
+      ref        = "Core GRADE 4. Guyatt G, et al. BMJ. 2025",
+      core_grade = 4
     )
   ),
 
@@ -188,6 +216,7 @@ EDU_COPY_SUBTITLE_WORD_CAP <- 25L
 # not an oversight, and the test names the file that will tell you so.
 EDU_COPY_SUBTITLE_FIELDS <- c(
   "domains$indirectness$gradient",
+  "domains$indirectness$population",
   "domains$indirectness$surrogate",
   "config_tab$continuous_departure",
   "config_tab$chinn_caveat",

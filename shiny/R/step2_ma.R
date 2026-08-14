@@ -1,5 +1,58 @@
 # step2_ma.R - Step 2: Meta-analysis configuration + plots
 
+# --------------------------------------------------------------------------
+# Abbreviations, spelled out where they are first read
+# --------------------------------------------------------------------------
+# "RoM", "MH" and "EB" say nothing to a reviewer meeting them cold, and the
+# model controls were the one place in the app that showed them bare.
+#
+# The table maps the abbreviation to its expansion ONLY. The abbreviation is
+# the input VALUE that every branch in the app and every saved outcome compares
+# against ("OR", "REML", ...), so it must not move; building the label from
+# this table rather than typing it beside the value is what keeps the two from
+# drifting apart. Two readers share the table: the choices in step2_ui() /
+# output$sm_cont_ui, and step2_model_summary_line(), which echoes whatever code
+# it finds on the fitted object.
+PMA_ABBREVIATION_EXPANSIONS <- c(
+  OR   = "odds ratio",
+  RR   = "risk ratio",
+  MD   = "mean difference",
+  SMD  = "standardised mean difference",
+  RoM  = "ratio of means",
+  MH   = "Mantel-Haenszel",
+  REML = "restricted maximum likelihood",
+  PM   = "Paule-Mandel",
+  DL   = "DerSimonian-Laird",
+  SJ   = "Sidik-Jonkman",
+  ML   = "maximum likelihood",
+  EB   = "empirical Bayes"
+)
+
+# "REML" -> "REML (restricted maximum likelihood)".
+#
+# `note` joins the SAME bracket ("REML (restricted maximum likelihood,
+# default)") instead of opening a second one. A code the table does not carry
+# comes back unchanged: "Inverse" and "Peto" are names rather than
+# abbreviations and must not gain an empty bracket.
+pma_spell_out <- function(code, note = NULL) {
+  code <- as.character(code)[1]
+  if (is.na(code) || !nzchar(code)) return(code)
+  expansion <- unname(PMA_ABBREVIATION_EXPANSIONS[code])
+  inside <- c(if (!is.na(expansion)) expansion, note)
+  if (!length(inside)) return(code)
+  paste0(code, " (", paste(inside, collapse = ", "), ")")
+}
+
+# A choices vector for radioButtons()/selectInput(): spelled-out label, value
+# untouched. `notes` is an optional code -> note map, used for the "default"
+# marker on the tau-squared estimator.
+pma_spelled_choices <- function(codes, notes = NULL) {
+  labels <- vapply(codes, function(code) {
+    pma_spell_out(code, note = if (code %in% names(notes)) notes[[code]])
+  }, character(1), USE.NAMES = FALSE)
+  stats::setNames(codes, labels)
+}
+
 step2_ui <- function(state = NULL) {
   s <- EDU_COPY$steps$step2
 
@@ -74,11 +127,19 @@ step2_ui <- function(state = NULL) {
       class = "row",
       style = "display: flex; gap: 1.5rem; flex-wrap: wrap;",
 
-      # Sidebar. `flex: 1 1 320px` rather than `0 0 320px`: the fixed basis
-      # made the sidebar refuse to shrink, so on a 375px phone the row was
-      # wider than the viewport and the whole document scrolled sideways.
+      # Sidebar. `flex: 0 1 300px`, and each of the three numbers is load
+      # bearing:
+      #  * grow 0 - with `1` the sidebar took its share of every spare pixel,
+      #    so on a wide screen a column of short selects grew past 500px while
+      #    the forest plot next to it stayed small. The right pane is the one
+      #    that can use the room.
+      #  * shrink 1 - the sidebar MUST still be able to give width back. A
+      #    fixed `0 0` basis is what once made a 375px phone render a row wider
+      #    than the viewport and scroll the whole document sideways.
+      #  * basis 300px - below the width at which the accordion labels wrap,
+      #    and never above 100% of a phone viewport.
       htmltools::div(
-        style = "flex: 1 1 320px;",
+        style = "flex: 0 1 300px;",
         pma_card(
           title = "Model configuration",
 
@@ -174,7 +235,8 @@ step2_ui <- function(state = NULL) {
               shiny::conditionalPanel(
                 "input.outcome_type == 'binary' && input.use_rare_workflow != true",
                 shiny::radioButtons("sm_bin", "Summary measure",
-                  choices = c("OR", "RR"), selected = "OR", inline = TRUE)
+                  choices = pma_spelled_choices(c("OR", "RR")),
+                  selected = "OR", inline = TRUE)
               ),
               shiny::conditionalPanel(
                 "input.outcome_type == 'continuous' && input.use_rare_workflow != true",
@@ -189,18 +251,15 @@ step2_ui <- function(state = NULL) {
               shiny::conditionalPanel(
                 "input.outcome_type == 'binary' && input.use_rare_workflow != true",
                 shiny::selectInput("method", "Pooling method",
-                  choices = c("Inverse", "MH", "Peto"),
+                  choices = pma_spelled_choices(c("Inverse", "MH", "Peto")),
                   selected = "Inverse")
               ),
               shiny::conditionalPanel(
                 "input.model == 'random' && input.use_rare_workflow != true",
                 shiny::selectInput("method_tau", "tau-squared estimator",
-                  choices = c("REML (default)"           = "REML",
-                              "PM (Paule-Mandel)"        = "PM",
-                              "DL (DerSimonian-Laird)"   = "DL",
-                              "SJ (Sidik-Jonkman)"       = "SJ",
-                              "ML (maximum likelihood)"  = "ML",
-                              "EB (empirical Bayes)"     = "EB"),
+                  choices = pma_spelled_choices(
+                    c("REML", "PM", "DL", "SJ", "ML", "EB"),
+                    notes = c(REML = "default")),
                   selected = "REML"),
                 # The Hartung-Knapp adjustment was applied automatically at
                 # k >= 3 and never mentioned anywhere, so nobody could either
@@ -245,7 +304,9 @@ step2_ui <- function(state = NULL) {
 
       # Right pane. `min-width: min(480px, 100%)` rather than a flat 480px:
       # the flat floor is what pushed the document past a 375px viewport once
-      # the two columns had wrapped onto separate rows.
+      # the two columns had wrapped onto separate rows. `flex: 1` against the
+      # sidebar's `flex: 0 ...` means every spare pixel on a wide screen lands
+      # here, which is where the forest plot is.
       htmltools::div(
         style = "flex: 1; min-width: min(480px, 100%);",
         shiny::uiOutput("rare_events_panel"),
@@ -336,7 +397,12 @@ step2_model_summary_line <- function(meta_obj) {
     } else {
       identical(as.character(meta_obj$method.random.ci)[1], "HK")
     }
-    c(sprintf("Random effects (%s)", meta_obj$method.tau %||% "REML"),
+    # The estimator is its own comma-separated part rather than "Random
+    # effects (REML)": spelling the code out (same table the control uses) puts
+    # a bracket inside the label, and a nested bracket reads worse than a
+    # fourth item in a list that already has three.
+    c("Random effects",
+      pma_spell_out(meta_obj$method.tau %||% "REML"),
       if (uses_hk) "Hartung-Knapp CI" else "classic (Wald) CI")
   } else {
     "Common (fixed) effect"
@@ -424,7 +490,8 @@ step2_server <- function(input, output, session, state) {
     current <- shiny::isolate(input$sm_cont) %||% "MD"
     if (!current %in% choices) current <- "MD"
     shiny::radioButtons("sm_cont", "Summary measure",
-                        choices = choices, selected = current, inline = TRUE)
+                        choices = pma_spelled_choices(choices),
+                        selected = current, inline = TRUE)
   })
 
   # ----- Column mapping: populate choices from current data -----

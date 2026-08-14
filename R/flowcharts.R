@@ -104,13 +104,20 @@
 #' branches out of Q2 are \code{.pubias_statistical()} (k at least 10) and
 #' \code{.pubias_registry()} (k below 10) in the same file.
 #'
-#' Departs from the source by one whole node: the dashed registry-coverage box
-#' is a pmatools input and appears nowhere in Fig 5, whose only registry node
-#' is Q4. It is evaluated after Q1, so a body of small industry-sponsored
-#' trials still rates down even when the reviewer asserts complete coverage.
+#' Departs from the source by one whole node: the registry-coverage box is a
+#' pmatools input and appears nowhere in Fig 5, whose only registry node is Q4.
+#' The box says so on its own third line, having been drawn with a dashed
+#' outline up to 0.5.0 -- a dash reads as "provisional" or "not reached yet" on
+#' a chart whose job is to show which boxes an analysis went through. It is
+#' evaluated after Q1, so a body of small industry-sponsored trials still rates
+#' down even when the reviewer asserts complete coverage.
 #' The p < 0.05 cut-off on Q3 is also pmatools': Fig 5 asks qualitatively
 #' whether asymmetry "strongly suggests publication bias" and names no
 #' threshold.
+#'
+#' The study-count node is computed rather than asked, and says that on its own
+#' third line too. \code{flow_path} lights the node AND the edge out of it, so
+#' a reader can see which branch the count chose.
 #'
 #' The chart prints no question numbers, although Fig 5 numbers its four nodes
 #' Q1 to Q4: the registry box sits between Q1 and Q2, so numbering on the

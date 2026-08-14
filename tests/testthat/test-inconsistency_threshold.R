@@ -270,7 +270,7 @@ test_that("a MID target makes both domains use +/-MID", {
   impre <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_match(incon$notes, "vs +/-Threshold", fixed = TRUE)
   expect_match(incon$notes, "same as Imprecision", fixed = TRUE)
-  expect_match(impre$notes, "the Threshold (+/-MID)", fixed = TRUE)
+  expect_match(impre$notes, "the +/-Threshold band", fixed = TRUE)
 })
 
 # ---- Auto Step 2 without Threshold (null=0 fallback) ----

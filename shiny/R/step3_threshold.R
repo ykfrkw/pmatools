@@ -167,23 +167,24 @@ step3_per_unit_label <- function(per = STEP3_PER_DEFAULT) {
 #
 # The chain below is assess_pubias()'s own evaluation order
 # (R/domain_pubias.R): Q1 first and terminal on "yes"; then the pmatools
-# registry-coverage input, which is terminal EITHER way (the app forces
-# rate-down 1 on "no", the package short-circuits on "yes"); then the k gate,
-# which is computed and never asked; then Q3 or Q4.
+# registry-coverage input, terminal only on "yes" (which short-circuits the
+# package); then the k gate, which is computed and never asked; then Q3 or Q4.
 #
 # `reopen` is a breadcrumb click. It wins over the derivation, and only for a
 # node that is actually reachable - so re-opening Q1 and answering "yes" does
 # not strand the reviewer on a Q3 that no longer exists.
 STEP3_PUBIAS_NODES <- c("q1", "extra", "q3", "q4", "result")
 
-# A radio is "answered" when it carries a non-empty value. Every node's
-# widget therefore starts with NOTHING selected, and the "I have no opinion
-# here" option is an explicit VALUE rather than the empty string:
-# STEP3_PUBIAS_DEFER on the overall reporting-bias question, "egger" on the
-# visual-override select. Without those, a node whose honest answer is "leave
-# it to the algorithm" would be indistinguishable from a node the reviewer has
-# not reached, and the wizard could never move past it.
-STEP3_PUBIAS_DEFER <- "defer"
+# A radio is "answered" when it carries a non-empty value, so every node's
+# widget starts with NOTHING selected and no answer can be confused with an
+# unreached node.
+#
+# The visual-override select still needs an explicit "I looked and I accept the
+# test" VALUE, because on that node the honest answer "leave it to Egger"
+# would otherwise be a blank. The registry question no longer needs one: it
+# used to offer a third "leave it to the Figure 5 nodes" option alongside a
+# "no" that forced rate-down 1 on its own, and 0.5.1 made "no" mean exactly
+# what deferring meant - carry on down the chart.
 STEP3_PUBIAS_USE_EGGER <- "egger"
 
 .pubias_answered <- function(v) {
@@ -210,12 +211,9 @@ step3_pubias_node <- function(small_industry = NULL,
   if (identical(.pubias_chr(small_industry), "yes")) return("result")
 
   if (!.pubias_answered(registry_complete)) return("extra")
-  # Terminal both ways: "yes" short-circuits assess_pubias(), "no" is the
-  # app-level rule that forces rate down 1 regardless of Q2-Q4. Only the
-  # explicit "defer" falls through to the Figure 5 statistical nodes.
-  if (!identical(.pubias_chr(registry_complete), STEP3_PUBIAS_DEFER)) {
-    return("result")
-  }
+  # Terminal on "yes" only, which is what short-circuits assess_pubias(). "no"
+  # decides nothing by itself and falls through to the Figure 5 nodes.
+  if (identical(.pubias_chr(registry_complete), "yes")) return("result")
 
   # Q2 is not a question - k decides it. See step3_pubias_k_line().
   if (isTRUE(step3_pubias_statistical(k))) {
@@ -261,7 +259,7 @@ step3_pubias_reachable <- function(small_industry = NULL,
   if (identical(.pubias_chr(small_industry), "yes")) return(c(out, "result"))
   out <- c(out, "extra")
   if (!.pubias_answered(registry_complete)) return(out)
-  if (!identical(.pubias_chr(registry_complete), STEP3_PUBIAS_DEFER)) {
+  if (identical(.pubias_chr(registry_complete), "yes")) {
     return(c(out, "result"))
   }
   c(out, if (step3_pubias_statistical(k)) "q3" else "q4", "result")
@@ -278,19 +276,16 @@ step3_pubias_reachable <- function(small_industry = NULL,
 #
 # Two vocabularies meet here. The wizard's node keys (q1 / extra / q3 / q4 /
 # result) are not the figure's ids, and the mapping is not one-to-one: `extra`
-# is the dashed registry node, and the k gate is the figure's q2, which the
+# is the pmatools registry node, and the k gate is the figure's q2, which the
 # wizard never asks. Hence a pure function with tests rather than inline logic.
 #
 # Nothing is lit until something is answered: an unlit chart says "you have not
 # started", and lighting the entry node before the reviewer has touched it
 # would say the opposite.
 #
-# Two answers stop the trail at a node rather than a leaf, because the leaf is
-# genuinely not decided yet:
-#   - STEP3_PUBIAS_USE_EGGER defers Q3 to the automated test, whose p value
-#     this function does not have;
-#   - "no" on the registry node is the app's own rate-down-1 rule, and the
-#     figure has no leaf for a rule that is not in the figure.
+# One answer stops the trail at a node rather than a leaf, because the leaf is
+# genuinely not decided yet: STEP3_PUBIAS_USE_EGGER defers Q3 to the automated
+# test, whose p value this function does not have.
 step3_pubias_flow_ids <- function(small_industry = NULL,
                                   registry_complete = NULL,
                                   funnel_asymmetry = NULL,
@@ -310,10 +305,10 @@ step3_pubias_flow_ids <- function(small_industry = NULL,
     return(c(ids, "pma-pubias-edge-registry-yes",
              "pma-pubias-leaf-nodown-registry"))
   }
-  ids <- c(ids, "pma-pubias-edge-registry-no")
-  if (!identical(registry, STEP3_PUBIAS_DEFER)) return(ids)
-
-  ids <- c(ids, "pma-pubias-node-q2")
+  # "no" carries on down the chart. The k gate below it is computed rather
+  # than asked, so lighting its node AND the edge out of it is the only way
+  # the reviewer sees which branch the study count chose for them.
+  ids <- c(ids, "pma-pubias-edge-registry-no", "pma-pubias-node-q2")
   if (step3_pubias_statistical(k)) {
     ids <- c(ids, "pma-pubias-edge-q2-yes", "pma-pubias-node-q3")
     asymmetry <- .pubias_chr(funnel_asymmetry)

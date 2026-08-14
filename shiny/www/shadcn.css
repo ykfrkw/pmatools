@@ -678,14 +678,33 @@ table.dataTable th { background: hsl(var(--muted)); }
    panel in R/step2_ma.R and pma_funnel_display_panel() in R/ui_helpers.R.
    .pma-span-4 is for the children that need the full row (title field, the
    blank-row hint, the per-arm column checkbox, the Egger toggle).
+
+   .pma-span-2 is for a PAIR that would otherwise leave half a row empty:
+   x-min / x-max and the two blank-row spinners are two fields each, so on a
+   four-column grid they hugged columns 1-2 and left 3-4 blank, which read as
+   a misaligned rung between the four-column rows above and below.
+
+   The 160px track floor (was 140px) is what stops "Blank rows above pooled
+   result" wrapping onto a second line in one cell and not in its neighbour.
    --------------------------------------------------------------------------- */
 .pma-display-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
   gap: 0.75rem 1rem;
   padding: 0.75rem 0.25rem 0.25rem;
 }
 .pma-display-grid > .pma-span-4 { grid-column: span 4; }
+.pma-display-grid > .pma-span-2 { grid-column: span 2; }
+
+/* minmax()'s floor is a hard floor: four 160px tracks plus the gaps cannot
+   fit a phone, and an opened panel would push the document sideways -- the
+   same failure the Step 2 flex basis exists to avoid. Fold to two columns
+   before that happens; both span classes then mean "the whole row", so the
+   pairs above still fill theirs. */
+@media (max-width: 760px) {
+  .pma-display-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pma-display-grid > .pma-span-4 { grid-column: span 2; }
+}
 
 /* ---------------------------------------------------------------------------
    Required-but-still-empty fields (Step 2 "Outcome name" / "Direction").

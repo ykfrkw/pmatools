@@ -2,10 +2,14 @@
 #
 # There is no browser driver here, so the overflow itself cannot be measured.
 # What CAN be pinned is the pair of CSS declarations that caused it: a sidebar
-# with `flex: 0 0 320px` refuses to shrink and a right pane with a flat
-# `min-width: 480px` refuses to narrow below it, so on a 375px viewport the row
-# was 492px wide and the whole document scrolled sideways. Both are one-token
-# edits away from coming back, which is exactly what this catches.
+# that refuses to shrink (`flex: 0 0 <basis>`) and a right pane with a flat
+# `min-width: 480px` that refuses to narrow below it, so on a 375px viewport
+# the row was 492px wide and the whole document scrolled sideways. Both are
+# one-token edits away from coming back, which is exactly what this catches.
+#
+# The sidebar's grow factor is 0 so that a wide screen spends its spare pixels
+# on the forest plot rather than on the controls; the shrink factor is what the
+# phone guarantee rests on, and the two are one character apart.
 
 step2_html <- function(state = NULL) as.character(step2_ui(state))
 
@@ -23,11 +27,21 @@ step2_open_panels <- function(html) {
 
 test_that("neither Step 2 column can force the document wider than a phone", {
   html <- step2_html()
-  expect_true(grepl("flex: 1 1 320px", html, fixed = TRUE))
+  expect_true(grepl("flex: 0 1 300px", html, fixed = TRUE))
   expect_true(grepl("min-width: min(480px, 100%)", html, fixed = TRUE))
-  # The two declarations that produced the 492px document.
-  expect_false(grepl("flex: 0 0 320px", html, fixed = TRUE))
+  # The declarations that produced the 492px document. Any basis with a 0
+  # shrink factor brings it back, so the whole shape is rejected, not one size.
+  expect_false(grepl("flex: 0 0 ", html, fixed = TRUE))
+  expect_false(grepl("flex: 1 0 ", html, fixed = TRUE))
   expect_false(grepl("min-width: 480px", html, fixed = TRUE))
+})
+
+test_that("the Step 2 sidebar does not take the width the forest plot wants", {
+  # Grow factor 0: on a wide screen the spare pixels belong to the right pane,
+  # which is what holds the plots. `flex: 1 1 300px` renders identically on a
+  # phone and is the edit this guards against.
+  html <- step2_html()
+  expect_false(grepl("flex: 1 1 ", html, fixed = TRUE))
 })
 
 test_that("every Step 2 input id survives the accordion restructure", {

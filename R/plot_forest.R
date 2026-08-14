@@ -16,7 +16,9 @@
 #' @param title Optional plot title. Drawn on its own line(s) above the
 #'   column headers, word-wrapped to the device width, so a long title
 #'   cannot collide with the \code{Events / N} and \code{OR (95\% CI)}
-#'   headings. Not passed to \code{\link[meta]{forest}} as \code{smlab};
+#'   headings. A newline in the title is honoured as an explicit line break
+#'   and each resulting line is wrapped on its own; empty lines are dropped.
+#'   Not passed to \code{\link[meta]{forest}} as \code{smlab};
 #'   see \code{.draw_forest_title()}.
 #' @param label_e Label for the experimental arm.
 #' @param label_c Label for the control arm.
@@ -310,6 +312,11 @@ PMA_FOREST_TITLE_CLEARANCE_IN <- 0.10
     # grid measures y from the bottom. Sit the title on top of the block, then
     # clamp so a title taller than the margin runs off nothing but its own
     # clearance.
+    #
+    # The anchor is the title's BOTTOM, so extra lines -- wrapped or explicitly
+    # broken (see .wrap_forest_title()) -- grow upward into the margin and the
+    # last line stays the same distance above the column headers. title_height
+    # is measured on the joined string, so the clamp tracks the line count too.
     baseline <- device_height - block_top + PMA_FOREST_TITLE_CLEARANCE_IN
     baseline <- min(baseline, device_height - title_height)
     baseline <- max(baseline, 0)
@@ -324,16 +331,36 @@ PMA_FOREST_TITLE_CLEARANCE_IN <- 0.10
   invisible(NULL)
 }
 
-# Greedy word wrap measured against the real device, not a character count:
-# the title is proportional-font text, so "Illness" and "WWWWWWW" do not cost
-# the same. Returns NULL for an absent or blank title. A single word wider
-# than the device is left on its own line -- there is nothing to break it on,
-# and it is still the only thing on that line.
+# Split the title on the caller's own line breaks, then wrap each piece to the
+# device. The break has to be honoured BEFORE the wrap: the greedy pass below
+# tokenises on "[[:space:]]+", which counts "\n" as ordinary white space, so a
+# break typed into the title used to be eaten and the plot came back on one
+# line. Callers rely on this to keep a long suffix off the column headers (see
+# .forest_title_suffix in the app's step3_grade.R).
+#
+# Returns NULL for an absent or blank title.
 .wrap_forest_title <- function(title) {
   if (!.nzchar1(title)) return(NULL)
-  words <- strsplit(trimws(as.character(title)[1]), "[[:space:]]+")[[1]]
+  segments <- strsplit(as.character(title)[1], "[\r\n]+")[[1]]
+  # An empty segment (a leading, trailing or doubled break) yields no words and
+  # therefore no line: a title must not open with a blank line above it, and
+  # "a\n\nb" reads as two lines rather than three. Dropping it is also what
+  # keeps a title without breaks wrapping exactly as it did before.
+  lines <- unlist(lapply(segments, .wrap_forest_title_segment),
+                  use.names = FALSE)
+  if (!length(lines)) return(NULL)
+  lines
+}
+
+# Greedy word wrap of ONE line of the title, measured against the real device
+# rather than a character count: the title is proportional-font text, so
+# "Illness" and "WWWWWWW" do not cost the same. Returns character(0) for a
+# blank segment. A single word wider than the device is left on its own line --
+# there is nothing to break it on, and it is still the only thing on that line.
+.wrap_forest_title_segment <- function(segment) {
+  words <- strsplit(trimws(as.character(segment)), "[[:space:]]+")[[1]]
   words <- words[nzchar(words)]
-  if (!length(words)) return(NULL)
+  if (!length(words)) return(character(0))
 
   gp <- grid::gpar(fontsize = PMA_FOREST_TITLE_FONTSIZE, fontface = "bold")
   fits <- function(txt) {

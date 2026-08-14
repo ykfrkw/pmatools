@@ -442,7 +442,7 @@ test_that("small_values = NULL leaves the ois_p1 clause as it was", {
     stripped,
     paste0("(ois_p1 from a modest relative risk reduction, ois_rrr = 20%: ",
            "ois_p1 = 0.1600; Core GRADE 2 specifies an RRR rather than the ",
-           "MID for binary outcomes)"),
+           "threshold for binary outcomes)"),
     fixed = TRUE
   )
 })
