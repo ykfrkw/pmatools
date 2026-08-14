@@ -89,6 +89,19 @@ ui <- bslib::page_fluid(
            document.body.removeChild(ta);
            Shiny.setInputValue('clipboard_copied', Math.random());
          }
+       });
+       // Download ZIP busy state. The click is the only moment the browser can
+       // react instantly -- the server does not get a turn until the download
+       // request reaches it -- so the class goes on here, client-side, and the
+       // handler's on.exit() sends the message that takes it off again.
+       document.addEventListener('click', function(ev){
+         var btn = ev.target.closest('#download_zip');
+         if (btn) { btn.classList.add('pma-download-busy'); }
+       });
+       Shiny.addCustomMessageHandler('download_done', function(_msg){
+         document.querySelectorAll('.pma-download-busy').forEach(function(el){
+           el.classList.remove('pma-download-busy');
+         });
        });"
     ))
   ),
@@ -348,7 +361,16 @@ server <- function(input, output, session) {
       id = "pma_outcome_changed", type = "warning", duration = 10)
   }, ignoreNULL = FALSE)
 
+  # "+ Add next outcome" no longer walks straight back to Step 2. Core GRADE 6
+  # wants the table to cover every prespecified outcome, and an outcome nobody
+  # reported has no data to map and no analysis to run - so the button asks
+  # which kind is being added first (pma_add_outcome_choice_modal()).
   shiny::observeEvent(input$add_next_outcome, {
+    shiny::showModal(pma_add_outcome_choice_modal())
+  }, ignoreInit = TRUE)
+
+  shiny::observeEvent(input[[PMA_ADD_OUTCOME_ANALYSE_ID]], {
+    shiny::removeModal()
     begin_new_outcome(identity = TRUE)
     state$step <- 2L
     session$sendCustomMessage("scroll_top", list())
@@ -357,6 +379,37 @@ server <- function(input, output, session) {
              "follow-up, map its columns and run the analysis; the saved ",
              "outcomes and the per-study ratings are kept."),
       type = "message", duration = 8)
+  }, ignoreInit = TRUE)
+
+  shiny::observeEvent(input[[PMA_ADD_OUTCOME_NOT_REPORTED_ID]], {
+    shiny::showModal(pma_not_reported_modal())
+  }, ignoreInit = TRUE)
+
+  # Nothing about the outcome being rated is touched here: a not-reported row
+  # is not an outcome the reviewer is about to work on, it is a finished row.
+  # begin_new_outcome() is deliberately NOT called, so a rating half-answered
+  # in Step 3 survives adding one.
+  shiny::observeEvent(input[[PMA_NOT_REPORTED_SAVE_ID]], {
+    outs  <- pma_outcomes_list(state$outcomes)
+    entry <- pma_not_reported_entry(
+      name      = input$not_reported_name,
+      follow_up = input$not_reported_follow_up,
+      reason    = input$not_reported_reason,
+      existing  = names(outs))
+    if (!isTRUE(entry$ok)) {
+      # The modal stays open, with what the reviewer typed still in it.
+      shiny::showNotification(entry$message, id = "pma_not_reported_error",
+                              type = "error", duration = 8)
+      return()
+    }
+    shiny::removeModal()
+    outs[[entry$name]] <- entry$outcome
+    state$outcomes <- outs
+    shiny::showNotification(
+      sprintf(paste0("Added \"%s\" as not reported. It has a row in the ",
+                     "Summary of Findings table and no certainty rating."),
+              entry$name),
+      type = "message", duration = 6)
   }, ignoreInit = TRUE)
 
   # Single dispatcher for Next / Back to avoid observer cascade

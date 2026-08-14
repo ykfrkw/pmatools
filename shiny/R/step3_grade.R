@@ -822,19 +822,13 @@ step3_ui <- function(state = NULL) {
           ),
           htmltools::hr(),
 
-          # ----- This outcome's place in the multi-outcome SoF table -----
-          # The end of the step: the rating for one outcome is complete here,
-          # so this is where the app says it has been banked and offers the
-          # next outcome. There is no Save button (shiny/SPEC.md 3.4.14), and
-          # the list of banked outcomes is on Step 4, beside the table it
-          # feeds.
-          htmltools::h5("Saved for the Summary of Findings table"),
-          htmltools::p(class = "pma-card-subtitle",
-                       EDU_COPY$multi_outcome$save_intro),
-          shiny::uiOutput("autosave_status"),
-          # Returns to Step 2 and clears everything belonging to this outcome
-          # (app.R's begin_new_outcome()).
-          pma_add_next_outcome_button(),
+          # Banking, and starting the next outcome, are Step 4's business now.
+          # A "Saved for the Summary of Findings table" section used to end this
+          # tab, explaining the automatic save and offering "+ Add next
+          # outcome". It said all of that a step away from the table it was
+          # about, where the same list, the same count and the same button now
+          # sit beside the rows they describe. The save itself is unchanged --
+          # it never depended on this UI (see the auto-save observer below).
 
           # The only Next in Step 3 that leaves the step (every other one
           # just moves to the following sub-tab, which stays free), so it is
@@ -2609,23 +2603,21 @@ step3_server <- function(input, output, session, state) {
   # over the fixed set of domain keys, and guard against the 0 a freshly
   # rendered actionLink reports.
   #
-  # Two prefixes because two messages on the Final certainty tab name the same
-  # domains at the same time - the incomplete banner at the top and the
-  # auto-save line at the bottom - and both are in the DOM at once, so one set
-  # of ids would collide.
-  for (.jump_prefix in c("cert_jump_", "autosave_jump_")) {
-    for (.domain_key in names(PMA_DOMAIN_LABELS)) {
-      local({
-        key <- .domain_key
-        link_id <- paste0(.jump_prefix, key)
-        shiny::observeEvent(input[[link_id]], {
-          if (!isTRUE((input[[link_id]] %||% 0L) > 0L)) return()
-          shiny::updateTabsetPanel(session, "grade_tabs",
-                                   selected = PMA_DOMAIN_LABELS[[key]])
-          session$sendCustomMessage("scroll_top", list())
-        }, ignoreInit = TRUE)
-      })
-    }
+  # One prefix. There used to be two, because the auto-save line at the end of
+  # this tab named the same domains as the incomplete banner at the top and
+  # both were in the DOM at once, so one set of ids would have collided. That
+  # line is gone (see step3_ui()) and the banner is alone again.
+  for (.domain_key in names(PMA_DOMAIN_LABELS)) {
+    local({
+      key <- .domain_key
+      link_id <- paste0("cert_jump_", key)
+      shiny::observeEvent(input[[link_id]], {
+        if (!isTRUE((input[[link_id]] %||% 0L) > 0L)) return()
+        shiny::updateTabsetPanel(session, "grade_tabs",
+                                 selected = PMA_DOMAIN_LABELS[[key]])
+        session$sendCustomMessage("scroll_top", list())
+      }, ignoreInit = TRUE)
+    })
   }
 
   # Banner on the Final certainty tab while domains remain unconfirmed.
@@ -3923,38 +3915,10 @@ step3_server <- function(input, output, session, state) {
     reasons
   })
 
-  # The one line that reports what happened, beside "+ Add next outcome" at
-  # the end of the tab. There is nothing to press: it either names the row
-  # that was banked, or names what is still in the way.
-  output$autosave_status <- shiny::renderUI({
-    if (is.null(state$ma) || is.null(grade_obj())) {
-      return(htmltools::p(
-        class = "pma-card-subtitle",
-        "Not saved yet: run the analysis in Step 2 and set a decision threshold."))
-    }
-    keys <- pma_unconfirmed_domain_keys(domain_confirmed())
-    if (length(keys)) {
-      # Its own id prefix: cert_incomplete_banner is on this same tab with the
-      # same domain names, and two actionLinks cannot share an input id.
-      return(htmltools::p(
-        class = "pma-card-subtitle",
-        pma_domain_jump_links(
-          keys, "autosave_jump_",
-          before = "Saved once every domain is confirmed. Still open: ",
-          after = ".")))
-    }
-    key <- .save_key()
-    if (is.null(key)) {
-      return(htmltools::p(
-        class = "pma-card-subtitle",
-        "Name this outcome in Step 2 - a saved row is keyed by its name."))
-    }
-    htmltools::p(
-      class = "pma-card-subtitle",
-      htmltools::HTML(sprintf("Saved automatically as <strong>%s</strong>.",
-                              htmltools::htmlEscape(key))))
-  })
-  shiny::outputOptions(output, "autosave_status", suspendWhenHidden = FALSE)
+  # output$autosave_status used to render a line here reporting what the
+  # auto-save had done, at the end of the Final certainty tab. Its section is
+  # gone (see step3_ui()); the same answer is on Step 4, where the saved rows
+  # are listed and counted beside the table they build.
 
   # Signature of the dataset currently loaded in Step 1. Used to stamp each
   # banked outcome so Step 4 can flag rows that came from a different dataset

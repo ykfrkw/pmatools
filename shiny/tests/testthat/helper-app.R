@@ -45,7 +45,14 @@ PMA_APP_ROOT <- local({
 # detected-columns strip is a presentation of that function's output, and a
 # test that hand-built the frame instead would keep passing after the two
 # drifted apart.
-for (.stem in c("utils.R", "multi_outcome.R", "data_ingest.R")) {
+#
+# R/not_reported.R rides along because pma_outcomes_list() and the modal
+# helpers are built ON it: `.is_not_reported()`, `.rated_outcomes()` and
+# `not_reported_outcome()` decide which saved rows survive normalisation, and
+# an app-side re-implementation of that class check is exactly the drift the
+# other three entries are here to prevent.
+for (.stem in c("utils.R", "multi_outcome.R", "data_ingest.R",
+                "not_reported.R")) {
   for (.f in c(file.path(PMA_APP_ROOT, "R", "_pmatools", .stem),
                file.path(dirname(PMA_APP_ROOT), "R", .stem))) {
     if (file.exists(.f)) {
