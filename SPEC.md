@@ -737,6 +737,12 @@ sof_table(
 
 **Per-domain rate-down footnotes [v0.5.1].** `sof_table()`, `grade_table()` (both layouts) and `evidence_profile()` render the structured domain facts of §4.15 as numbered footnotes for the domains that pulled the rating down, with the marker on the certainty cell — after the symbol in the GRADEpro layouts, and beside the domain name inside the BMJ "Due to serious risk of bias [1] …" sentence. In `grade_table()` these continue the same `[n]` register as the per-outcome analysis-set notes and name the outcome they belong to, so one footer never shows two different `[1]`s; the analysis-set and publication-bias sentences keep their existing numbering and wording.
 
+**An overridden domain's footnote states the reviewer's reason [0.5.1].** The footnotes above are built from `domain_facts`, which record what the ALGORITHM found and are not rewritten when a reviewer overrides a judgment — they cannot be. So an override moved the certainty cell and the "Due to …" sentence while the footnote under them went on reciting the automatic reasoning, reading as the justification for a rating it had not produced. `.domain_fact_note()` now leads with the override: *"Publication bias. Rated serious by the reviewer, not by the algorithm: `<rationale>`. The automatic assessment recorded: `<facts>`."* Three rules govern it:
+
+- **The signal is the `"Manual override (<judgment>): <rationale>"` head** that `make_domain_row()` writes, parsed back by `.parse_override_note()` in `R/utils.R`, **not** `auto == FALSE`. `auto == FALSE` also means "the reviewer supplied an input the algorithm cannot compute" — an answered `pubias_small_industry`, say — where the flowchart still decided the judgment and the facts still explain it. `auto` is checked as a corroborating guard, so a domain note that merely quotes the phrase does not trigger it.
+- **Only the override clause travels**, up to the first `" | "`. Behind that separator is the automatic note, which is flowchart prose written for a reader following the figure and is far too long for a table footer; its numbers are already in the facts.
+- **It is not keyed on a domain name.** Every domain can be overridden. `.rated_down_fact_domains()` therefore admits a rated-down domain that carries an override even when it emits no facts at all, which is how **Indirectness** — the one domain with no facts — stopped being able to rate the evidence down and explain nothing.
+
 **Not-reported outcomes.** `sof_table()` **aborts** on a `pmatools_not_reported` (§4.14) with a message pointing at `grade_table()`.
 
 **Citation style [v0.5.1].** Every bibliographic reference pmatools renders — flextable footnotes, the `.docx` header paragraphs of `grade_report()` and `export_bundle()`, and the caveat strings that reach `notes` — is written in one house style: **first author, `et al.`, journal abbreviation, year**. No volume, no pages, no DOI, no URL. The six BMJ 2025 Core GRADE papers defeat the bare form (all Guyatt, all BMJ, all 2025), so a specific paper carries its series number as a prefix — `Core GRADE 4. Guyatt G, et al. BMJ. 2025` — and the series as a whole is `Core GRADE series. Guyatt G, et al. BMJ. 2025`. Both shapes come from the internal `.core_grade_ref()` in `R/utils.R`, and the disclaimer that follows the series citation on every table is the single constant `.PMA_CORE_GRADE_FOOTNOTE` (`"Reference: … . Not an official GRADE Working Group assessment."`), which replaced eight literals wording it four ways. Short parentheticals that point at a figure rather than a paper — "(Core GRADE 4 Fig 2)", "(Core GRADE 5 Table 2)" — are pointers, not citations, and are unchanged.
@@ -1770,6 +1776,25 @@ The ratio-scale magnitude is `1 - exp(-|log ratio|)`, which is symmetric: RR 0.6
 
 **Manual override.** A scalar `imprecision` (with mandatory `imprecision_rationale`) bypasses this assessment entirely (v0.4.0).
 
+### 5.5a Publication bias — trim-and-fill is a diagnostic, never a decision
+
+`assess_pubias()` implements Core GRADE 4 Fig 5, and **Fig 5 has no trim-and-fill node**. `meta::trimfill()` therefore reaches no judgment in this package, has not since v0.5, and MUST NOT start to: what the figure asks at Q3 is the qualitative question whether asymmetry "strongly suggests publication bias", and that is the reviewer's to answer.
+
+What the trim-and-fill computation does supply is one of the numbers that answer is made on, and as of **0.5.1** pmatools states it rather than leaving the reviewer to eyeball two pooled estimates. `R/pubias_trimfill.R`:
+
+```r
+.pubias_trimfill_inflation(te_original, te_adjusted, small_values = NULL,
+                           threshold = PMA_ROB_INFLATION_THRESHOLD)
+# -> list(assessable, ratio, favourable, exaggerated, threshold)
+.pubias_trimfill_line(inflation, te_original, te_adjusted, format_te)
+# -> the one sentence the host application prints
+```
+
+- **Same shape as the risk-of-bias direction check** (`.assess_bias_direction()`, §5.1): is the estimate that may be exaggerated more than a fifth further in the direction that favours the intervention than the comparator that is meant to be free of the bias? Only the comparator differs. Risk of bias compares the whole body against its low-RoB subset; here the **original** pooled effect is the possibly exaggerated side and the **trim-and-fill adjusted** effect is the reference. `ratio = (|TE_original| − |TE_adjusted|) / |TE_adjusted|`, and the `favourable` gate reads `small_values` exactly as §5.1 does (`"undesirable"` → `TE_original > TE_adjusted`; `"desirable"` → the mirror; `NULL` → magnitudes only).
+- **It shares `PMA_ROB_INFLATION_THRESHOLD`** (0.20). The two checks ask one question and a reviewer reads their answers on adjacent tabs, so two constants holding the same number by coincidence would mislead the first time one of them moved. What is deliberately **not** shared is the per-analysis knob: `grade_meta(rob_inflation_threshold = )` tunes a *rating*, and routing it here would let a rating parameter move a display that rates nothing.
+- **Rule 1 of §5.1 has no counterpart** — this comparison is given no threshold, so a pair of near-null estimates can report a large percentage. `.pubias_trimfill_line()` prints both estimates beside the percentage so a reader can see that is what happened, and labels the whole sentence "reference only, rates nothing".
+- Unassessable inputs (either estimate non-finite, or `|TE_adjusted|` at or below 1e-9) return `assessable = FALSE` and are reported as *not assessable*, never as *no concern*. An unrecognised `small_values` is an error.
+
 ### 5.6 Structured domain facts (v0.5.1)
 
 The container is **domain-agnostic**: `.fact(key, label, value, numeric = NA)` builds one row, `.facts(...)` binds the non-`NULL` ones into a tibble, and the assessors attach it to their `make_domain_row(facts = )`. `grade_meta()` collects the non-`NULL` results into `$domain_facts`, keyed by domain name; a domain that records nothing is simply absent from the list. Reached with `domain_facts()` (§4.15).
@@ -1795,7 +1820,7 @@ The container is **domain-agnostic**: `.fact(key, label, value, numeric = NA)` b
 | | `ois_sd_source` | `ois_sd` (v0.5.1; recorded only when it was derived rather than supplied — the `value` says whether it is the pooled within-study SD or the SMD's σ = 1) |
 | | `fig4_path` | — |
 | | `ois_used` | — (`"yes"` / `"no"`) |
-| Publication bias | `k` | effective study count (`.pubias_effective_k()`) |
+| Publication bias | `k` | effective study count (`.pubias_effective_k()`). The `value` is the **bare count** as of 0.5.1; it used to read `"12 (Q2 threshold: 10)"`, and a SoF footnote is the one place a reader meets that string with no flowchart beside it to say what a "Q2" is. The threshold survives in the prose note (`"k = 12 >= 10"`) |
 | | `egger_p` | Egger p value, recorded only when the test actually ran |
 | Indirectness | none recorded | its judgment is a gradient, not a flowchart branch — the structured record is `x$indirectness_subdomains` |
 | Risk of bias, Inconsistency, Imprecision, Publication bias | `flow_path` | the flowchart path taken; see §5.7 |
@@ -1842,6 +1867,19 @@ figure says so in its `<desc>` and names the source figure in its caption.
   Both were reached with judgment `"not_serious"`, so they are drawn as the `nodown` leaves they
   are; the qualitative caveat is carried by the note and the `rlang::warn()`, which is
   where a reader can act on it.
+
+**A node that is not an ordinary question says so in words, on the box (0.5.1).** Two
+boxes of the Publication-bias chart are not questions put to a reviewer, and each now
+carries a third line saying which kind it is: the registry box reads *"A pmatools input;
+Figure 5 has no such node."* and the study-count box reads *"Computed from the analysis,
+never asked."* Both used to be signalled some other way and neither reached a reader who
+had only the figure. The registry box was drawn with a **dashed outline**, which reads as
+"provisional" or "not reached yet" on a chart whose whole job is to show which boxes an
+analysis went through; the `.pma-fc-pmatools` class and its `stroke-dasharray` rule are
+deleted from `FC_STYLE`, along with `fc_box()`'s now-unused `extra_class` argument. The
+study count was explained only by a line of app copy under the chart. Node and edge ids
+are unchanged, so no `flow_path` moved; the SVG grew from 592 to 626 units and every
+coordinate below the registry box shifted down.
 
 **Where they live.** `inst/figures/<figkey>.svg` is canonical, with `<figkey>` one of
 `rob`, `incon`, `impre`, `pubias`. `man/figures/` carries byte-identical copies so
@@ -1919,7 +1957,8 @@ instead.
 | test-public-helpers.R | §4.16 and §4.7c: `combine_arms()` binary sum and continuous pooling, per-study column carry-over, unchanged-when-unique; `rob_strata()` alias table, quiet-`unknown` inputs, warn-not-abort on unrecognised labels, the `arg` prefix; `format_effect()` exponentiation rule, model fallback, `"NR"`, prediction line |
 | test-export_bundle.R (extended) | `style` / `follow_up` / `unit` / `sof_notes` on both methods and their rendering into `analysis.R`; exact `[[` lookup of `grade_args` / `ma_args` and the formals check; the `threshold_baseline` slot; the `results.txt` analysis-set heading and the second rated-analysis block (§4.8.2) |
 | test-domain_rob.R (extended) | the k-space / studlab-space alignment (§5.1): refit and `rob_overrides` when {meta} drops a study; unresolvable alignment keeps the skip-with-a-warning behaviour |
-| test-sof_bmj.R (extended) | arm-level columns for continuous outcomes: the IV-weighted control mean, the SMD × pooled-SD rescale, the two derivation footnotes, and binary tables left unchanged |
+| test-sof_bmj.R (extended) | arm-level columns for continuous outcomes: the IV-weighted control mean, the SMD × pooled-SD rescale, the two derivation footnotes, and binary tables left unchanged; §4.6: an overridden domain's footnote leads with the reviewer's rationale, a domain with no facts gets one at all, an automatic rating's footnote is unchanged, and `.parse_override_note()` reads the head rather than inferring from `auto` |
+| test-pubias_trimfill.R | §5.5a: the orientation of the comparison (original vs adjusted, and the mirror case under each `small_values`), the shared threshold and its strict `>`, magnitude-only comparison without `small_values`, unassessable inputs reported as such rather than as "no concern", the printed sentence, and a source guard that `assess_pubias()` does not read any of it |
 
 ---
 

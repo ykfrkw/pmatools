@@ -61,8 +61,7 @@ PAD_X     <- 12
 # "middle" (default) or "start". Returns a list carrying both the markup and
 # the geometry, so edges can be expressed against real coordinates rather
 # than repeated magic numbers.
-fc_box <- function(id, kind, x, y, w, lines, align = "middle",
-                   extra_class = NULL) {
+fc_box <- function(id, kind, x, y, w, lines, align = "middle") {
   h  <- 2 * PAD_Y + length(lines) * LINE_H
   tx <- if (identical(align, "start")) x + PAD_X else x + w / 2
   y0 <- y + PAD_Y + 12
@@ -70,7 +69,7 @@ fc_box <- function(id, kind, x, y, w, lines, align = "middle",
     sprintf('      <tspan x="%g" dy="%s">%s</tspan>',
             tx, if (i == 1L) "0" else as.character(LINE_H), lines[i])
   }, character(1))
-  cls <- paste(c(paste0("pma-fc-", kind), extra_class), collapse = " ")
+  cls <- paste0("pma-fc-", kind)
   markup <- c(
     sprintf('  <g id="%s" class="%s">', id, cls),
     sprintf('    <rect x="%g" y="%g" width="%g" height="%g" rx="6" ry="6"/>',
@@ -131,7 +130,6 @@ FC_STYLE <- c(
   '    .pma-fc-node rect, .pma-fc-leaf rect {',
   '      fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2;',
   '    }',
-  '    .pma-fc-pmatools rect { stroke-dasharray: 5 3; }',
   '    .pma-fc-edge path { stroke: #cbd5e1; stroke-width: 1.5; fill: none; }',
   '    .pma-fc-node text, .pma-fc-leaf text, .pma-fc-edge text {',
   '      fill: #475569; font-size: 13px; font-weight: 400;',
@@ -490,6 +488,16 @@ build_pubias <- function() {
   # describe neither the source nor the route. The domain notes keep the
   # "Q1:" - "Q4:" prefixes: those are the exported record, and no figure
   # travels with them.
+  #
+  # Two nodes here are not ordinary questions, and each says so on its own
+  # third line rather than through a visual convention. The registry node is
+  # pmatools' own and has no counterpart in Fig 5; the study-count node is
+  # computed from the analysis and is never put to the reviewer. Both used to
+  # be signalled some other way -- the registry box was drawn with a dashed
+  # outline, the study count was explained in a line of app copy under the
+  # chart -- and neither reached a reader who had only the figure. A dashed
+  # outline in particular reads as "provisional" or "not reached yet" on a
+  # chart whose whole job is to show which boxes an analysis went through.
   q1  <- fc_box("pma-pubias-node-q1", "node", 20, 48, 470,
                 c("Are most or all studies small",
                   "and industry sponsored?"))
@@ -497,27 +505,28 @@ build_pubias <- function() {
                 c("Rate down 1 level"))
   reg <- fc_box("pma-pubias-node-registry", "node", 20, 150, 470,
                 c("Is registry coverage complete, so that every",
-                  "registered trial can be accounted for?"),
-                extra_class = "pma-fc-pmatools")
-  lreg <- fc_box("pma-pubias-leaf-nodown-registry", "leaf", 560, 158, 380,
+                  "registered trial can be accounted for?",
+                  "A pmatools input; Figure 5 has no such node."))
+  lreg <- fc_box("pma-pubias-leaf-nodown-registry", "leaf", 560, 167, 380,
                  c("Do not rate down"))
-  q2  <- fc_box("pma-pubias-node-q2", "node", 20, 258, 470,
+  q2  <- fc_box("pma-pubias-node-q2", "node", 20, 275, 470,
                 c("Is statistical analysis feasible?",
-                  "(a meta-analysis of 10 or more studies)"))
-  q3  <- fc_box("pma-pubias-node-q3", "node", 20, 366, 440,
+                  "(a meta-analysis of 10 or more studies)",
+                  "Computed from the analysis, never asked."))
+  q3  <- fc_box("pma-pubias-node-q3", "node", 20, 400, 440,
                 c("Does funnel plot asymmetry, visually",
                   "or by Egger&#8217;s test, strongly suggest",
                   "publication bias?"))
-  q4  <- fc_box("pma-pubias-node-q4", "node", 500, 366, 440,
+  q4  <- fc_box("pma-pubias-node-q4", "node", 500, 400, 440,
                 c("Is there documentation of unpublished",
                   "studies (a trial registry, FDA records)?"))
-  l3y <- fc_box("pma-pubias-leaf-down1-q3", "leaf", 94, 483, 140,
+  l3y <- fc_box("pma-pubias-leaf-down1-q3", "leaf", 94, 517, 140,
                 c("Rate down", "1 level"))
-  l3n <- fc_box("pma-pubias-leaf-nodown-q3", "leaf", 246, 483, 140,
+  l3n <- fc_box("pma-pubias-leaf-nodown-q3", "leaf", 246, 517, 140,
                 c("Do not", "rate down"))
-  l4y <- fc_box("pma-pubias-leaf-down1-q4", "leaf", 574, 483, 140,
+  l4y <- fc_box("pma-pubias-leaf-down1-q4", "leaf", 574, 517, 140,
                 c("Rate down", "1 level"))
-  l4n <- fc_box("pma-pubias-leaf-nodown-q4", "leaf", 726, 483, 140,
+  l4n <- fc_box("pma-pubias-leaf-nodown-q4", "leaf", 726, 517, 140,
                 c("Do not", "rate down"))
 
   e <- list(
@@ -525,23 +534,23 @@ build_pubias <- function() {
             "Yes", 525, 69),
     fc_edge("pma-pubias-edge-q1-no", list(c(255, 104), c(255, 150)),
             "No", 263, 130, "start"),
-    fc_edge("pma-pubias-edge-registry-yes", list(c(490, 178), c(560, 178)),
-            "Yes", 525, 171),
-    fc_edge("pma-pubias-edge-registry-no", list(c(255, 206), c(255, 258)),
-            "No or not answered", 263, 235, "start"),
-    fc_edge("pma-pubias-edge-q2-yes", list(c(200, 314), c(200, 366)),
-            "Yes", 208, 343, "start"),
+    fc_edge("pma-pubias-edge-registry-yes", list(c(490, 186), c(560, 186)),
+            "Yes", 525, 179),
+    fc_edge("pma-pubias-edge-registry-no", list(c(255, 223), c(255, 275)),
+            "No or not answered", 263, 252, "start"),
+    fc_edge("pma-pubias-edge-q2-yes", list(c(200, 348), c(200, 400)),
+            "Yes", 208, 377, "start"),
     fc_edge("pma-pubias-edge-q2-no",
-            list(c(490, 286), c(720, 286), c(720, 366)),
-            "No", 500, 278, "start"),
-    fc_edge("pma-pubias-edge-q3-yes", list(c(164, 439), c(164, 483)),
-            "Yes", 164, 475),
-    fc_edge("pma-pubias-edge-q3-no", list(c(316, 439), c(316, 483)),
-            "No", 316, 475),
-    fc_edge("pma-pubias-edge-q4-yes", list(c(644, 422), c(644, 483)),
-            "Yes", 644, 475),
-    fc_edge("pma-pubias-edge-q4-no", list(c(796, 422), c(796, 483)),
-            "No", 796, 475)
+            list(c(490, 311), c(720, 311), c(720, 400)),
+            "No", 500, 303, "start"),
+    fc_edge("pma-pubias-edge-q3-yes", list(c(164, 473), c(164, 517)),
+            "Yes", 164, 509),
+    fc_edge("pma-pubias-edge-q3-no", list(c(316, 473), c(316, 517)),
+            "No", 316, 509),
+    fc_edge("pma-pubias-edge-q4-yes", list(c(644, 456), c(644, 517)),
+            "Yes", 644, 509),
+    fc_edge("pma-pubias-edge-q4-no", list(c(796, 456), c(796, 517)),
+            "No", 796, 509)
   )
 
   body <- c(
@@ -549,22 +558,25 @@ build_pubias <- function() {
     unlist(lapply(list(q1, l1, reg, lreg, q2, q3, q4,
                        l3y, l3n, l4y, l4n),
                   `[[`, "markup"), use.names = FALSE),
-    fc_caption(563, c(
+    fc_caption(597, c(
       paste0("After BMJ Core GRADE 4 (Guyatt et al., 2025) Figure 5. ",
              "pmatools&#8217; operationalisation, not a reproduction:"),
-      "the dashed registry node is a pmatools input and is not in Figure 5."))
+      paste0("the registry node is a pmatools input and is not in Figure 5; ",
+             "the study-count node is computed, never asked.")))
   )
 
   fc_svg(
-    "pubias", 592,
+    "pubias", 626,
     "Publication bias: the Core GRADE 4 Figure 5 decision as pmatools implements it",
     paste0("Flowchart. The first question asks whether most or all studies ",
            "are small and industry sponsored; yes means rate down one level. ",
-           "Otherwise a pmatools input, drawn dashed because it is not a node ",
-           "of Figure 5, asks whether registry coverage is complete; yes ",
+           "Otherwise a pmatools input, labelled on the box itself because it ",
+           "is not a node of Figure 5, asks whether registry coverage is ",
+           "complete; yes ",
            "means do not rate down. Otherwise the chart asks whether ",
            "statistical analysis is feasible, that is whether a ",
-           "meta-analysis of ten or more studies was performed. If it is, ",
+           "meta-analysis of ten or more studies was performed. pmatools ",
+           "counts the studies and answers that node itself. If it is, ",
            "the next question asks whether funnel plot asymmetry, visually ",
            "or by Egger&#8217;s test, strongly suggests publication bias: ",
            "yes rates down one level, no does not, and a test that could not ",

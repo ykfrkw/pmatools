@@ -426,29 +426,58 @@ sof_add_notes <- function(x, notes) {
 # One footnote line's worth of text for a domain, or NULL. `outcome_name`
 # names the row in a multi-outcome table, where one footer serves several
 # ratings.
+#
+# An overridden domain leads with the override. Until 0.5.1 the footnote was
+# built from the facts alone, and the facts are not rewritten when a reviewer
+# overrides a judgment -- they cannot be, they record what the algorithm found.
+# So the certainty cell and the "Due to ..." sentence moved with the override
+# while the footnote under them went on stating the automatic reasoning, which
+# read as the justification for a rating it had not produced. The two are now
+# separated in words: the reviewer's rationale first, the automatic assessment
+# named as such after it, and the facts kept, because "what the algorithm found
+# and the panel overrode" is exactly what a reader of a SoF footnote wants.
+#
+# Deliberately not keyed on the domain name: an override is possible on every
+# domain, and a branch that named one would be a bug in waiting on the others.
 .domain_fact_note <- function(x, domain, outcome_name = NULL) {
-  body <- .domain_fact_body((x$domain_facts %||% list())[[domain]])
-  if (is.null(body)) return(NULL)
+  body     <- .domain_fact_body((x$domain_facts %||% list())[[domain]])
+  override <- .domain_override_note(x, domain)
+  if (is.null(body) && is.null(override)) return(NULL)
   head <- if (!is.null(outcome_name) && length(outcome_name) == 1L &&
                !is.na(outcome_name) && nzchar(outcome_name)) {
     sprintf("%s (%s).", domain, outcome_name)
   } else {
     paste0(domain, ".")
   }
-  paste(head, body)
+  if (is.null(override)) return(paste(head, body))
+
+  override_clause <- sprintf(
+    "Rated %s by the reviewer, not by the algorithm: %s",
+    .grade_level_wording(override$judgment),
+    sub("\\.*$", ".", override$rationale))
+  if (is.null(body)) return(paste(head, override_clause))
+  paste(head, override_clause, paste("The automatic assessment recorded:",
+                                     body))
 }
 
-# Domains that pulled the rating down AND have facts to show for it, in
+# Domains that pulled the rating down AND have something to say about why, in
 # domain_assessments order. A domain that did not rate down needs no
 # explanation in the footer.
+#
+# "Something to say" is facts OR a reviewer's override rationale. Indirectness
+# emits no facts at all, so before 0.5.1 a panel that rated it down by hand got
+# a "Due to indirectness" sentence with nothing under it saying why -- the one
+# case where the footer had a reason available and printed none.
 .rated_down_fact_domains <- function(x) {
-  all_facts <- x$domain_facts %||% list()
-  if (length(all_facts) == 0L) return(character(0))
   d <- x$domain_assessments
   if (is.null(d) || nrow(d) == 0L) return(character(0))
+  all_facts <- x$domain_facts %||% list()
   dg   <- d$downgrade
   doms <- d$domain[!is.na(dg) & dg < 0]
-  doms[doms %in% names(all_facts)]
+  has_reason <- vapply(doms, function(dm) {
+    dm %in% names(all_facts) || !is.null(.domain_override_note(x, dm))
+  }, logical(1))
+  doms[has_reason]
 }
 
 # The certainty-cell marker for the GRADEpro layouts: " [1]", " [1][2]".

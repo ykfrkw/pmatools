@@ -269,7 +269,59 @@
   slider for this since 0.5.1 and takes the package default, so the app moves
   with it.
 
+* **"Reporting bias is plausible" no longer rates the evidence down on its own
+  (Shiny app).** The Publication bias tab's overall reporting-bias question
+  offered three answers, and the middle one was a rule Core GRADE 4 Fig 5 does
+  not contain: a `"no"` was rewritten, after `grade_meta()` had returned, into
+  a forced rate-down 1 *regardless of the remaining nodes*. A reviewer who
+  thought reporting bias plausible and then went on to answer the funnel-plot
+  question found the funnel answer had counted for nothing, and the domain note
+  said the rating had been decided by a question they had answered two screens
+  earlier.
+
+  The question now has **two** answers and only one of them decides anything.
+  `"Yes — reporting bias is unlikely; do not rate down"` is the pmatools
+  short-circuit it always was and still reaches
+  `grade_meta(pubias_registry_complete = "yes")`. `"No — reporting bias is
+  plausible; go on to the Figure 5 nodes"` carries on down the chart and lets
+  Q2–Q4 decide, which is exactly what the deleted third option ("leave it to
+  the Figure 5 nodes") used to do — so that option is gone with the rule, and
+  `STEP3_PUBIAS_DEFER` with it rather than being left unused. The `(rate down
+  1)` promise is off the label because nothing promises it any more.
+
+  **What changes for a reviewer:** an analysis that answered `"no"` and rated
+  the domain *serious* on that answer alone now takes whichever judgment the
+  Figure 5 nodes reach, which for most bodies of evidence is *not serious*.
+  Certainty can therefore come out one level higher than it did in 0.5.0 on the
+  same answers. To keep the old rating, use the tab's **Override** control,
+  which asks for the written rationale the deleted rule never did. The package
+  API is unchanged: `assess_pubias()` never had this rule.
+
+* **The publication-bias `k` fact is the bare study count.** `domain_facts(g,
+  "Publication bias")$value` for `key = "k"` read `"12 (Q2 threshold: 10)"` and
+  now reads `"12"`. A Summary of Findings footnote is the one place a reader
+  meets that string with no flowchart beside it to say what a "Q2" is. The
+  threshold is unchanged and still stated in the domain note (`"Q2: Statistical
+  analysis feasible (k = 12 >= 10)"`), where the sentence around it gives it a
+  meaning. Consumers matching on the fact's `value` string must adjust;
+  `numeric` was always the count and is unchanged.
+
 ## New features
+
+* **Trim-and-fill is stated as a 20% exaggeration check, next to the funnel it
+  belongs to.** The Reporting bias tab printed the original and the
+  trim-and-fill adjusted pooled effects and left the reviewer to compare them
+  by eye. `.pubias_trimfill_inflation()` and `.pubias_trimfill_line()` in the
+  new `R/pubias_trimfill.R` now ask the same question the risk-of-bias
+  direction check asks of the low risk of bias subset — is the estimate that
+  may be exaggerated more than a fifth further in the direction that favours
+  the intervention? — of the trim-and-fill adjustment, sharing
+  `PMA_ROB_INFLATION_THRESHOLD` so the two cannot drift apart. **It rates
+  nothing.** Core GRADE 4 Fig 5 has no trim-and-fill node, `assess_pubias()`
+  does not read this function, and the printed sentence says so: it is material
+  for the reviewer answering the funnel-asymmetry question, and the
+  per-analysis knob `rob_inflation_threshold` is deliberately not routed here,
+  so tuning a *rating* cannot move a *display*.
 
 * **Cochrane RoB 2's three judgments and ROBINS-I's four are accepted
   verbatim, and the app's per-study editors are dropdowns rather than free
@@ -554,6 +606,46 @@
   the bundler. `sof_notes` does not reach the certainty appendix.
 
 ## Behaviour changes
+
+* **An overridden domain's Summary of Findings footnote states the reviewer's
+  reason.** The per-domain rate-down footnotes are built from `domain_facts`,
+  which record what the *algorithm* found and are not rewritten when a reviewer
+  overrides a judgment — they cannot be. So an override moved the certainty
+  cell and the "Due to …" sentence while the footnote under them went on
+  reciting the automatic reasoning, reading as the justification for a rating
+  it had not produced. It was reported against publication bias and was never
+  specific to it. `.domain_fact_note()` now leads with the override — *"Rated
+  serious by the reviewer, not by the algorithm: `<rationale>`. The automatic
+  assessment recorded: `<facts>`."* — for every domain, in `sof_table()`,
+  `grade_table()` and the BMJ layout alike. Two consequences worth knowing:
+  the signal is the `"Manual override (…)"` head that `make_domain_row()`
+  writes and **not** `auto == FALSE`, which also marks a reviewer-supplied
+  *input* the flowchart then acted on; and **Indirectness**, which emits no
+  facts at all, gets a footnote for the first time when it is rated down by
+  hand.
+
+* **The publication-bias flowchart draws every box with a solid outline, and
+  two of them say what kind of box they are.** The registry-coverage node was
+  drawn dashed to mark it as a pmatools input that is not in Core GRADE 4
+  Fig 5. On a chart whose whole job is to show which boxes an analysis went
+  through, a dash reads as "provisional" or "not reached yet" instead. That box
+  now says *"A pmatools input; Figure 5 has no such node."* on a third line, and
+  the study-count box — computed from the analysis, never put to the reviewer —
+  says *"Computed from the analysis, never asked."* on its own. The
+  `.pma-fc-pmatools` class and its `stroke-dasharray` rule are deleted from
+  `data-raw/build_figures.R`, along with `fc_box()`'s now-unused `extra_class`
+  argument. **No node or edge id changed**, so no `flow_path` fact moved and
+  nothing downstream needs updating; the SVG grew from 592 to 626 units and
+  every coordinate below the registry box shifted down.
+
+* **The app's publication-bias chart lights the study-count node and the edge
+  out of it.** Following from the two-answer question above, a `"no"` now walks
+  on to the k gate instead of ending the wizard, and
+  `step3_pubias_flow_ids()` lights `pma-pubias-node-q2` together with
+  `pma-pubias-edge-q2-yes` or `-q2-no`. That node is the one the reviewer is
+  never asked about, so the edge is the only thing that says which branch the
+  study count chose for them. `assess_pubias()`'s own `flow_path` already
+  recorded both.
 
 * **A forest plot's title moves out of the column-header row onto its own line
   above it.** `plot_forest(title =)` used to reach `meta::forest()` as `smlab`,
