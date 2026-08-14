@@ -1344,8 +1344,10 @@ pma_judgment_label <- function(judgment) {
 # lands in the same rationale gate every other override does.
 #
 # `include_blank` is the "(no override)" entry the four selectInputs need and
-# the Indirectness radio does not (there, leaving the group unselected is how
-# the reviewer accepts the automatic worst-case fold).
+# the Indirectness radio does not. That radio ships PRESELECTED to
+# STEP3_INDIR_DEFAULT_LEVEL, so it has no blank to offer: accepting the
+# automatic worst-case fold is now a rating that equals it, not an empty
+# group, and step3_indir_rationale_required() is what tells the two apart.
 pma_judgment_choices <- function(include_blank = TRUE,
                                  blank_label = "(no override)") {
   out <- c("Not serious (-0)"       = "not_serious",

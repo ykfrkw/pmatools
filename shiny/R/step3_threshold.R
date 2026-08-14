@@ -159,6 +159,70 @@ step3_per_unit_label <- function(per = STEP3_PER_DEFAULT) {
 }
 
 # --------------------------------------------------------------------------
+# Indirectness: the worst-case fold, and when a rationale is owed
+# --------------------------------------------------------------------------
+# The overall Indirectness radio ships PRESELECTED to STEP3_INDIR_DEFAULT_LEVEL
+# (step3_grade.R). Before that it shipped blank, and blank was the way a
+# reviewer said "accept the fold of the four PICO answers" - so the rationale
+# gate could key on "is anything selected at all?" and be right. Preselecting
+# turns that blank into a real answer, and a gate that still asked "is anything
+# selected?" would demand a written reason for a default nobody chose.
+#
+# So the gate has to compare the overall rating against the fold itself, which
+# is what these two do. Pure, and therefore testable without a session: the
+# server reactives are only the wiring that maps the four radios onto levels.
+STEP3_INDIR_DEFAULT_LEVEL <- "not_serious"
+
+# Severity order of the GRADE levels a fold can produce. Written out rather
+# than derived from .grade_level_downgrade(), because this file is sourced
+# before the vendored package and must not depend on it.
+#
+# The previous ordering vector spelled the levels "no" / "some_concerns" /
+# "serious", which is the vocabulary 0.5.1 replaced. Every level the PICO
+# answers actually produce ("not_serious" / "serious" / "very_serious") missed
+# it, so a fold over four answers containing a "No" (very serious) returned
+# NULL and the domain was reported as folding to "not serious".
+STEP3_INDIR_LEVEL_SEVERITY <- c(
+  not_serious       = 0L,
+  serious           = 1L,
+  very_serious      = 2L,
+  extremely_serious = 3L
+)
+
+# The most severe of the levels the answered subdomains map to, or NULL when
+# nothing recognisable was answered. Mirrors .indirectness_worst_case() in
+# R/domain_indirectness.R, so the app can tell a restatement of the automatic
+# judgment from a real override without a second grade_meta() call.
+step3_indir_worst_case <- function(levels) {
+  if (is.null(levels) || !length(levels)) return(NULL)
+  levels <- as.character(levels)
+  known  <- names(STEP3_INDIR_LEVEL_SEVERITY)
+  levels <- levels[!is.na(levels) & levels %in% known]
+  if (!length(levels)) return(NULL)
+  unname(levels[which.max(STEP3_INDIR_LEVEL_SEVERITY[levels])])
+}
+
+# TRUE when the overall rating on screen departs from the fold and therefore
+# owes a written reason. An unanswered overall owes nothing, and neither does
+# one that restates the fold - which is exactly the case the preselected
+# default lands in while all four PICO answers are "Yes".
+step3_indir_rationale_required <- function(overall, worst = NULL) {
+  overall <- if (is.null(overall) || length(overall) != 1L || is.na(overall)) {
+    ""
+  } else {
+    as.character(overall)
+  }
+  if (!nzchar(overall)) return(FALSE)
+  auto <- if (is.null(worst) || length(worst) != 1L || is.na(worst) ||
+              !nzchar(as.character(worst))) {
+    STEP3_INDIR_DEFAULT_LEVEL
+  } else {
+    as.character(worst)
+  }
+  !identical(overall, auto)
+}
+
+# --------------------------------------------------------------------------
 # Publication bias: which Fig 5 node is being asked
 # --------------------------------------------------------------------------
 # DERIVED from the answers, never stored as a free-running cursor. Changing an
@@ -192,6 +256,18 @@ STEP3_PUBIAS_USE_EGGER <- "egger"
 }
 .pubias_chr <- function(v) {
   if (!.pubias_answered(v)) "" else as.character(v)[1]
+}
+
+# Egger's verdict as the answer the Q3 node would have carried, so the chart
+# can be lit from it. NA is what an infeasible or failed test reports, and it
+# has to read as "no answer" rather than as FALSE - a test that could not run
+# is not a symmetric funnel.
+.pubias_egger_answer <- function(egger_asymmetric) {
+  if (is.null(egger_asymmetric) || length(egger_asymmetric) != 1L ||
+      !is.logical(egger_asymmetric) || is.na(egger_asymmetric)) {
+    return("")
+  }
+  if (isTRUE(egger_asymmetric)) "yes" else "no"
 }
 
 step3_pubias_node <- function(small_industry = NULL,
@@ -247,6 +323,24 @@ step3_pubias_k_line <- function(k) {
   }
 }
 
+# "Question 2 of 3" for the node now on screen, or NULL for anything that is
+# not a question (the terminal "result", or a node the current answers have
+# taken off the path).
+#
+# The TOTAL is only printed once the answers settle the route, i.e. once
+# "result" has joined the reachable path. Before that the reviewer's own next
+# answer decides whether two more questions follow - Q1 = "yes" ends the wizard
+# after one - so a total taken from the path so far would always equal the
+# current index and would tell every reviewer they were on the last question.
+step3_pubias_question_line <- function(node, path) {
+  if (is.null(node) || length(node) != 1L || is.na(node)) return(NULL)
+  questions <- setdiff(as.character(path), "result")
+  at <- match(as.character(node), questions)
+  if (is.na(at)) return(NULL)
+  if (!"result" %in% as.character(path)) return(sprintf("Question %d", at))
+  sprintf("Question %d of %d", at, length(questions))
+}
+
 # The nodes the CURRENT answers put on the path, in wizard order. Drives the
 # breadcrumb (which links only the answered ones) and gates `reopen`, so a
 # breadcrumb click can never strand the reviewer on a node the algorithm no
@@ -283,14 +377,21 @@ step3_pubias_reachable <- function(small_industry = NULL,
 # started", and lighting the entry node before the reviewer has touched it
 # would say the opposite.
 #
-# One answer stops the trail at a node rather than a leaf, because the leaf is
-# genuinely not decided yet: STEP3_PUBIAS_USE_EGGER defers Q3 to the automated
-# test, whose p value this function does not have.
+# STEP3_PUBIAS_USE_EGGER is an answer, not a blank: it says "I looked, and I
+# accept the automated test". It used to stop the trail at pma-pubias-node-q3
+# because this function had no p value, so a reviewer who accepted Egger saw a
+# chart that looked unfinished for the rest of the assessment.
+# `egger_asymmetric` is that p value's verdict, passed in by the caller (the
+# reactive that runs metabias() for the callout) rather than computed here -
+# the function stays pure and side-effect free, which is what makes it
+# unit-testable. NULL or NA still stops at the node, because then the leaf
+# genuinely is not decided.
 step3_pubias_flow_ids <- function(small_industry = NULL,
                                   registry_complete = NULL,
                                   funnel_asymmetry = NULL,
                                   unpublished = NULL,
-                                  k = 0L) {
+                                  k = 0L,
+                                  egger_asymmetric = NULL) {
   if (!.pubias_answered(small_industry)) return(character(0))
 
   ids <- "pma-pubias-node-q1"
@@ -312,6 +413,9 @@ step3_pubias_flow_ids <- function(small_industry = NULL,
   if (step3_pubias_statistical(k)) {
     ids <- c(ids, "pma-pubias-edge-q2-yes", "pma-pubias-node-q3")
     asymmetry <- .pubias_chr(funnel_asymmetry)
+    if (identical(asymmetry, STEP3_PUBIAS_USE_EGGER)) {
+      asymmetry <- .pubias_egger_answer(egger_asymmetric)
+    }
     if (identical(asymmetry, "yes")) {
       return(c(ids, "pma-pubias-edge-q3-yes", "pma-pubias-leaf-down1-q3"))
     }

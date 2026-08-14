@@ -62,6 +62,49 @@ STEP3_INDIR_ANSWER_TO_LEVEL <- c(
   x
 }
 
+# ----- Egger's regression: one tier, one threshold, two call sites --------
+# Single tier. pmatools 0.5 removed the p < 0.01 -> "very_serious" (-2) rule
+# because Core GRADE 4 never rates down two levels for publication bias. Named
+# because the number is now read in three places - the comparison, the
+# sentence, and the caveat above the Q3 select - and three literals is how the
+# displayed threshold drifts away from the tested one.
+STEP3_EGGER_ALPHA <- 0.05
+
+# The colour-coded callout, as a plain function of an Egger result rather than
+# a renderUI. Shiny binds one output to one place in the DOM, and this has to
+# appear twice: under the funnel it is computed from, and beside the Q3
+# question that consumes it two clicks away. `egger` is the list
+# pubias_egger() builds - list(feasible =, p =, asymmetric =).
+.pubias_egger_callout <- function(egger) {
+  if (is.null(egger) || !isTRUE(egger$feasible)) return(NULL)
+  if (is.na(egger$p)) {
+    return(htmltools::p(
+      class = "pma-card-subtitle", style = "font-style: italic;",
+      "Egger's test could not be computed."))
+  }
+  judgment <- if (isTRUE(egger$asymmetric)) {
+    list(text = sprintf(paste0("p = %.3f < %.2f - evidence of asymmetry. ",
+                               "Auto judgment: some concerns (rate down 1)."),
+                        egger$p, STEP3_EGGER_ALPHA),
+         color = "#c07020")
+  } else {
+    list(text = sprintf(paste0("p = %.3f >= %.2f - no strong evidence of ",
+                               "asymmetry. Auto judgment: no rate down."),
+                        egger$p, STEP3_EGGER_ALPHA),
+         color = "#208050")
+  }
+  htmltools::div(
+    style = sprintf(
+      "padding: 0.6rem 0.85rem; background: #f5f5f5; border-left: 4px solid %s; margin: 0.5rem 0;",
+      judgment$color),
+    # The p < 0.05 provenance caveat that used to be repeated here is now
+    # stated once, at the Q3 node.
+    htmltools::p(style = "margin: 0;",
+      htmltools::strong("Egger's regression: "),
+      judgment$text)
+  )
+}
+
 .study_labels_for_grade <- function(obj) {
   studs <- as.character(obj$studlab)
   if (!length(studs)) return(character())
@@ -492,19 +535,36 @@ step3_ui <- function(state = NULL) {
           # next to the judgment rather than only in the collapsed copy.
           shiny::uiOutput("indir_subdomain_table"),
 
-          # Still no preselected value: blank means "accept the fold", which
-          # is a different statement from any of the three ratings, and the
-          # four PICO radios above are where the default now shows itself.
+          # Preselected, like the four radios above it. Blank used to be the
+          # way a reviewer said "accept the fold", which meant the one answer
+          # nine reviewers out of ten give was the one the screen refused to
+          # show. It now shows STEP3_INDIR_DEFAULT_LEVEL, which is what the
+          # fold returns while none of the four answers raises a concern.
+          #
+          # The blank carried a second job, and this is where it goes: it was
+          # also the rationale gate, because "nothing selected" was a reliable
+          # proxy for "no override intended". That proxy is gone with the
+          # blank, so the gate now compares the rating against the fold itself
+          # - step3_indir_rationale_required() (R/step3_threshold.R), read
+          # through output$indir_override_active below. A JavaScript condition
+          # could not do it: the fold is four radios mapped through
+          # STEP3_INDIR_ANSWER_TO_LEVEL and then reduced by severity.
           htmltools::h5("Overall indirectness rating",
                         style = "margin-top: 1.25rem;"),
           htmltools::p(class = "pma-card-subtitle",
-            paste0("Blank accepts the worst case above. Choose a rating to ",
-                   "override it, with a written reason.")),
+            paste0("Preselected to the worst case of the four answers above, ",
+                   "which is what the domain is rated on. Move it only to ",
+                   "depart from that fold - a departure needs a written ",
+                   "reason.")),
           shiny::radioButtons("indirectness", NULL,
             choices = pma_judgment_choices(include_blank = FALSE),
-            selected = character(0), inline = TRUE),
+            selected = STEP3_INDIR_DEFAULT_LEVEL, inline = TRUE),
+          # Which of the two is actually rating the domain. Without it the
+          # reviewer who downgrades one PICO element sees the overall radio
+          # still reading "Not serious" and no statement of which one won.
+          shiny::uiOutput("indir_override_note"),
           shiny::conditionalPanel(
-            "(input.indirectness || '') != ''",
+            "output.indir_override_active === true",
             shiny::textAreaInput(
               "indir_rationale",
               paste0("Rationale (required whenever this rating differs from ",
@@ -2060,13 +2120,57 @@ step3_server <- function(input, output, session, state) {
   # Worst case across the answered subdomains. Mirrors the symmetric fold
   # pmatools applies (.indirectness_worst_case), so the app can tell a
   # restatement of the automatic judgment (no rationale needed) from a real
-  # override (rationale required) without a second grade_meta() call.
+  # override (rationale required) without a second grade_meta() call. The fold
+  # itself is step3_indir_worst_case() (R/step3_threshold.R) - pure, and
+  # tested against the level vocabulary its predecessor here had fallen out
+  # of step with.
   indir_worst_case <- shiny::reactive({
     sd <- indir_subdomains()
     if (is.null(sd)) return(NULL)
-    lv  <- unname(STEP3_INDIR_ANSWER_TO_LEVEL[sd$judgment])
-    ord <- c(no = 1L, some_concerns = 2L, serious = 3L)
-    names(which.max(ord[lv]))
+    step3_indir_worst_case(unname(STEP3_INDIR_ANSWER_TO_LEVEL[sd$judgment]))
+  })
+
+  # The rationale gate the overall radio's conditionalPanel reads, and the
+  # sentence beside it that says which of the two judgments is in force.
+  # Assigning a reactive to an output is what makes it readable from a
+  # conditionalPanel condition; suspendWhenHidden = FALSE because the panel it
+  # gates starts hidden and a suspended output never evaluates.
+  indir_override_active <- shiny::reactive({
+    step3_indir_rationale_required(input$indirectness, indir_worst_case())
+  })
+  output$indir_override_active <- indir_override_active
+  shiny::outputOptions(output, "indir_override_active",
+                       suspendWhenHidden = FALSE)
+
+  output$indir_override_note <- shiny::renderUI({
+    worst <- indir_worst_case() %||% STEP3_INDIR_DEFAULT_LEVEL
+    sel   <- .sel_val("indirectness")
+    if (is.null(sel)) return(NULL)
+    if (!indir_override_active()) {
+      return(htmltools::p(
+        class = "pma-card-subtitle",
+        sprintf(paste0("This restates the worst case of the four answers ",
+                       "above (%s). Nothing is overridden."),
+                pma_judgment_label(worst))))
+    }
+    # The rating only takes effect once the reason is written: grade_obj()
+    # drops a rationale-less override rather than sending grade_meta() one it
+    # would abort on. Saying so here is the difference between a reviewer
+    # believing their rating is in force and knowing that it is not yet.
+    in_force <- if (is.null(.rat_val("indir_rationale"))) {
+      sprintf(paste0("Until a reason is written below, %s (the fold) is what ",
+                     "the domain is rated on."),
+              pma_judgment_label(worst))
+    } else {
+      sprintf("%s is what the domain is rated on.",
+              pma_judgment_label(sel))
+    }
+    htmltools::p(
+      class = "pma-card-subtitle",
+      sprintf(paste0("This departs from the worst case of the four answers ",
+                     "above (%s). "),
+              pma_judgment_label(worst)),
+      in_force)
   })
 
   grade_obj <- shiny::reactive({
@@ -2128,12 +2232,19 @@ step3_server <- function(input, output, session, state) {
     # the user the domain is still unassessed.
     indir_sub       <- indir_subdomains()
     indir_worst     <- indir_worst_case()
-    indir_arg       <- if (is.null(indir_sub)) "not_serious" else NULL
+    indir_arg       <- if (is.null(indir_sub)) {
+      STEP3_INDIR_DEFAULT_LEVEL
+    } else {
+      NULL
+    }
     indir_rationale <- NULL
     indir_sel <- input$indirectness
     if (!is.null(indir_sel) && length(indir_sel) == 1 && nzchar(indir_sel)) {
-      auto_level <- indir_worst %||% "not_serious"
-      if (identical(indir_sel, auto_level)) {
+      # The radio ships preselected now, so "something is selected" no longer
+      # means "the reviewer wants to override". Only a rating that departs
+      # from the fold does - the same test the on-screen note and the
+      # rationale panel use, so all three can never disagree.
+      if (!step3_indir_rationale_required(indir_sel, indir_worst)) {
         # A restatement of the automatic judgment: accepted without a
         # rationale, and it changes nothing.
         indir_arg <- indir_sel
@@ -2997,6 +3108,34 @@ step3_server <- function(input, output, session, state) {
     .effective_pubias_k(obj)
   })
 
+  # Egger's regression, computed once and read by three surfaces: the callout
+  # under the funnel, the same callout inside the Q3 wizard node, and the
+  # flowchart above the wizard. It used to be computed inline inside
+  # output$pubias_egger_result, which is why the chart could not read it - and
+  # a reviewer who accepted the automated test therefore saw the lit trail stop
+  # dead at the Q3 node for the rest of the assessment.
+  #
+  # `feasible` is not the same thing as a missing p value: below k = 10 the
+  # test is not run at all and nothing is shown, whereas a test that ran and
+  # failed says so. Collapsing the two would print "could not be computed" at
+  # every small meta-analysis.
+  pubias_egger <- shiny::reactive({
+    obj <- state$ma
+    if (is.null(obj) || .effective_pubias_k(obj) < 10) {
+      return(list(feasible = FALSE, p = NA_real_, asymmetric = NA))
+    }
+    res <- tryCatch(
+      suppressWarnings(meta::metabias(obj, method.bias = "linreg")),
+      error = function(e) NULL
+    )
+    pval <- if (is.null(res)) NULL else res$p.value
+    if (is.null(pval) || length(pval) != 1L || is.na(pval)) {
+      return(list(feasible = TRUE, p = NA_real_, asymmetric = NA))
+    }
+    pval <- as.numeric(pval)
+    list(feasible = TRUE, p = pval, asymmetric = pval < STEP3_EGGER_ALPHA)
+  })
+
   pubias_node <- shiny::reactive({
     step3_pubias_node(
       small_industry    = input$pubias_small_industry,
@@ -3061,7 +3200,13 @@ step3_server <- function(input, output, session, state) {
           registry_complete = input$pubias_registry_complete,
           funnel_asymmetry  = input$pubias_funnel_asymmetry,
           unpublished       = input$pubias_unpublished,
-          k                 = pubias_k()),
+          k                 = pubias_k(),
+          # Accepting the automated test is an ANSWER, so the chart has to be
+          # able to light the leaf it reaches. The sentinel is still not
+          # forwarded to grade_meta() (see grade_obj()): "egger" means "let
+          # assess_pubias() decide", and lighting the chart is a display
+          # concern that must not change what is rated.
+          egger_asymmetric  = pubias_egger()$asymmetric),
         caption = pma_algorithm_source("Publication bias")),
       # The chart's second node is the k gate, which is computed rather than
       # asked, so the chart can light the branch but cannot print the number
@@ -3112,22 +3257,48 @@ step3_server <- function(input, output, session, state) {
     if (is.null(state$ma)) return(htmltools::p("Run analysis first."))
     node <- pubias_node()
     k    <- pubias_k()
+    path <- step3_pubias_reachable(input$pubias_small_industry,
+                                   input$pubias_registry_complete, k)
+
+    # ONE container for every node. Each node used to return a bare tagList,
+    # so the live question - the only thing on the tab that can be answered -
+    # was visually indistinguishable from the reference plots below it and
+    # from the override <details> below those. A reviewer could not tell what
+    # they were being asked. The card, the accent border and the progress line
+    # are all that distinction takes, and they are built here rather than
+    # pasted into four nodes so the four cannot drift apart again.
+    #
+    # The convention the nodes now share: the question is the HEADING, and
+    # the widget's own label is NULL. Two of them used to carry a second,
+    # differently worded question string in the widget label, which asked the
+    # reviewer to decide which of the two wordings was the real question.
+    .question <- function(heading, ...) {
+      progress <- step3_pubias_question_line(node, path)
+      htmltools::div(
+        class = "pma-wizard-question",
+        if (!is.null(progress)) {
+          htmltools::div(class = "pma-wizard-progress", progress)
+        },
+        htmltools::h5(heading),
+        ...
+      )
+    }
 
     if (identical(node, "q1")) {
-      return(htmltools::tagList(
-        htmltools::h5("Most or all studies small AND industry-sponsored?"),
+      return(.question(
+        "Most or all studies small AND industry-sponsored?",
         htmltools::p(class = "pma-card-subtitle",
           paste0("A 'yes' rates down 1 on its own and ends the assessment; ",
                  "nothing after it can undo the concern.")),
         shiny::radioButtons("pubias_small_industry", NULL,
           choices = c("No" = "no", "Yes" = "yes"),
-          selected = character(0), inline = TRUE)
+          selected = character(0), inline = FALSE)
       ))
     }
 
     if (identical(node, "extra")) {
-      return(htmltools::tagList(
-        htmltools::h5("Overall reporting-bias judgment"),
+      return(.question(
+        "Overall, does the situation argue against reporting bias?",
         # The provenance paragraph that used to open this node is deleted: the
         # three radio labels below already say what each answer does.
         #
@@ -3146,10 +3317,9 @@ step3_server <- function(input, output, session, state) {
         # rate down 1 on its own, which is a rule Core GRADE 4 Fig 5 does not
         # have; it now means what a third "leave it to the Figure 5 nodes"
         # option used to mean, so that option is gone with the rule.
-        shiny::radioButtons("pubias_registry_complete",
-          "Overall, does the situation argue against reporting bias?",
+        shiny::radioButtons("pubias_registry_complete", NULL,
           choices = c(
-            "No - reporting bias is plausible; go on to the Figure 5 nodes"
+            "No - reporting bias is possible; go on to the Figure 5 nodes"
               = "no",
             "Yes - reporting bias is unlikely; do not rate down"
               = "yes"
@@ -3159,23 +3329,29 @@ step3_server <- function(input, output, session, state) {
     }
 
     if (identical(node, "q3")) {
-      return(htmltools::tagList(
-        htmltools::h5("Does funnel plot asymmetry strongly suggest publication bias?"),
+      return(.question(
+        "Does funnel plot asymmetry strongly suggest publication bias?",
         # The <details> under this used to give the provenance of p < 0.05.
         # Deleted: the flowchart caption on this tab names the implementing
         # function, and the sentence changed no answer.
         htmltools::p(class = "pma-card-subtitle",
-          paste0("Egger's test is run on the funnel plot below, at p < 0.05. ",
-                 "Accept it, or replace it with your own visual judgment.")),
-        shiny::selectInput("pubias_funnel_asymmetry",
-          "Your answer",
+          sprintf(paste0("Egger's test is run on the funnel plot below, at ",
+                         "p < %.2f. Accept it, or replace it with your own ",
+                         "visual judgment."), STEP3_EGGER_ALPHA)),
+        # The same callout the Funnel sub-tab prints. It lives two clicks away
+        # from here, which is where the reviewer is asked to accept or reject
+        # the very number it reports.
+        .pubias_egger_callout(pubias_egger()),
+        # Still a select rather than radios: four options, and one of them is
+        # the sentinel that means "I looked and I accept the test".
+        shiny::selectInput("pubias_funnel_asymmetry", NULL,
           choices = c(
             "(choose)"                             = "",
             "Accept the automated Egger test"      = STEP3_PUBIAS_USE_EGGER,
             "Funnel symmetric (visual override)"   = "no",
             "Funnel asymmetric (visual override)"  = "yes")),
         shiny::conditionalPanel(
-          sprintf("input.pubias_funnel_asymmetry == 'no' || input.pubias_funnel_asymmetry == 'yes'"),
+          "input.pubias_funnel_asymmetry == 'no' || input.pubias_funnel_asymmetry == 'yes'",
           shiny::textAreaInput(
             "pubias_fa_rationale",
             "Rationale (required for the visual override)",
@@ -3188,16 +3364,15 @@ step3_server <- function(input, output, session, state) {
     }
 
     if (identical(node, "q4")) {
-      return(htmltools::tagList(
-        htmltools::h5("Documentation of unpublished studies"),
+      return(.question(
+        "Unpublished studies documented?",
         htmltools::p(class = "pma-card-subtitle",
           sprintf(paste0("Egger's test is unreliable at k = %d, so Figure 5 ",
                          "routes here. Documented unpublished trials rate ",
                          "down 1."), k)),
-        shiny::radioButtons("pubias_unpublished",
-          "Unpublished studies documented?",
+        shiny::radioButtons("pubias_unpublished", NULL,
           choices = c("No" = "no", "Yes" = "yes"),
-          selected = character(0), inline = TRUE)
+          selected = character(0), inline = FALSE)
       ))
     }
 
@@ -3241,43 +3416,10 @@ step3_server <- function(input, output, session, state) {
     )
   }, deleteFile = TRUE)
 
-  # Egger's auto judgment displayed as colour-coded callout
+  # Egger's auto judgment displayed as colour-coded callout, under the funnel
+  # it is computed from and again beside the Q3 question that consumes it.
   output$pubias_egger_result <- shiny::renderUI({
-    obj <- state$ma
-    if (is.null(obj) || .effective_pubias_k(obj) < 10) return(NULL)
-    res <- tryCatch(
-      suppressWarnings(meta::metabias(obj, method.bias = "linreg")),
-      error = function(e) NULL
-    )
-    if (is.null(res) || is.null(res$p.value) || is.na(res$p.value)) {
-      return(htmltools::p(
-        class = "pma-card-subtitle", style = "font-style: italic;",
-        "Egger's test could not be computed."))
-    }
-    pval <- res$p.value
-    # Single tier. pmatools 0.5 removed the p < 0.01 -> "very_serious" (-2) rule
-    # because Core GRADE 4 never rates down two levels for publication bias.
-    judgment <- if (pval < 0.05) {
-      list(text = sprintf(paste0("p = %.3f < 0.05 - evidence of asymmetry. ",
-                                 "Auto judgment: some concerns (rate down 1)."),
-                          pval),
-           color = "#c07020")
-    } else {
-      list(text = sprintf(paste0("p = %.3f >= 0.05 - no strong evidence of ",
-                                 "asymmetry. Auto judgment: no rate down."),
-                          pval),
-           color = "#208050")
-    }
-    htmltools::div(
-      style = sprintf(
-        "padding: 0.6rem 0.85rem; background: #f5f5f5; border-left: 4px solid %s; margin: 0.5rem 0;",
-        judgment$color),
-      # The p < 0.05 provenance caveat that used to be repeated here is now
-      # stated once, in the Q3 node's own <details> immediately above.
-      htmltools::p(style = "margin: 0;",
-        htmltools::strong("Egger's regression: "),
-        judgment$text)
-    )
+    .pubias_egger_callout(pubias_egger())
   })
   shiny::outputOptions(output, "pubias_egger_result",
                        suspendWhenHidden = FALSE)

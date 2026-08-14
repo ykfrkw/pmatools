@@ -933,6 +933,21 @@
   landed on "do not rate down" with no explanation. New fact key
   `ois_sd_source`; where the OIS is still unavailable, the Fig 4 path string
   now names the input that was missing.
+* Shiny app: the **overall Indirectness rating ships preselected** to *Not
+  serious*, alongside the four PICO radios that already did. Blank used to be
+  how a reviewer accepted the worst case of those four, which meant the answer
+  almost every reviewer gives was the one answer the screen refused to show.
+  The blank was also doing a second, invisible job — it was the rationale gate,
+  because "nothing selected" was a reliable proxy for "no override intended".
+  That proxy is gone with it, so the gate now compares the rating against the
+  fold itself and asks for a written reason only where the two genuinely
+  differ. A note under the radio says which of the two is rating the domain,
+  including the case preselection creates: a reviewer who downgrades one PICO
+  element and leaves the overall rating alone is rated on the fold, not on the
+  default, until they move the radio or explain it. **The certainty rating is
+  unchanged** on the bundled CBT-I sample, and the export gate is untouched —
+  a domain is confirmed by its checkbox and by nothing else, which is exactly
+  why a preselected widget cannot open it.
 
 ## Bug fixes
 
@@ -1058,6 +1073,25 @@
   "Treatment" as the plain-language subject. The labels are now rendered onto
   the script's `grade_table()` call; ones left at their defaults are omitted, so
   a bundle that named no arms gets the script it always did.
+* Shiny app: accepting the automated Egger test left the publication-bias
+  flowchart looking unfinished. The chart above the wizard is lit from the live
+  answers rather than from the rated `flow_path`, and "Accept the automated
+  Egger test" carries an explicit sentinel value that matched neither `"yes"`
+  nor `"no"`, so the lit trail stopped dead at the funnel-asymmetry node and no
+  leaf ever lit — for the rest of the assessment. Egger's regression is now
+  computed once and read by both the callout and the chart, which lights the
+  leaf the p value chose. A test that could not run still stops the trail at
+  the node, because that leaf genuinely is undecided. Nothing that reaches
+  `grade_meta()` changes: the sentinel still means "let `assess_pubias()`
+  decide". Alongside it, the same callout is now rendered inside the wizard
+  question that asks about the p value, not only in the Funnel sub-tab two
+  clicks away.
+* Shiny app: the Indirectness worst-case fold ranked its levels against the
+  `"no"` / `"some_concerns"` / `"serious"` vocabulary that 0.5.1 replaced. Every
+  level the four PICO answers actually produce except `"serious"` missed that
+  table, so a set of answers containing a *No* (very serious indirectness)
+  folded to nothing and was reported as *not serious* when the app compared an
+  overall rating against it.
 
 # pmatools 0.5.0
 

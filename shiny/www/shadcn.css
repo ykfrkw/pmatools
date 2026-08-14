@@ -464,6 +464,32 @@ a.pma-domain-jump { font-weight: 600; text-decoration: underline; }
 .pma-crumb strong { color: hsl(var(--foreground)); }
 .pma-crumb-auto { font-style: italic; }
 
+/* The one live wizard question. Every node's body is wrapped in this, because
+   a bare heading and a radio group read exactly like the reference plots and
+   the override <details> further down the tab -- and only this block can be
+   answered. The accent border is the primary colour, unshared with any other
+   block on the tab, so "what am I being asked" is one glance. */
+.pma-wizard-question {
+  margin: 0.25rem 0 1rem;
+  padding: 0.85rem 1rem 0.6rem;
+  border-left: 4px solid hsl(var(--primary));
+  background: hsl(var(--muted));
+  border-radius: var(--radius);
+}
+.pma-wizard-question > h5 { margin-top: 0; }
+/* Only the LAST widget: q3 carries a rationale textarea under its select and
+   that pair still needs the gap between them. */
+.pma-wizard-question > .shiny-input-container:last-child { margin-bottom: 0; }
+/* "Question 2 of 3". Quiet: it orients, it is not the question. */
+.pma-wizard-progress {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 0.35rem;
+}
+
 /* Buttons (work alongside bslib bs5 .btn) */
 .btn-primary {
   background: hsl(var(--primary));

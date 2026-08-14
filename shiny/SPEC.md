@@ -1061,8 +1061,37 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
 
 - **Q2 is not a question.** k decides it (`.pubias_effective_k()`), so it is
   reported as a one-line automatic step under the chart, never a screen.
-- **The reviewer sees no question numbers (0.5.1).** `PUBIAS_NODE_TITLES`, the
-  three wizard `h5()` headings and `step3_pubias_k_line()` state the question
+- **Every node is one card, and the four nodes agree with each other.** Each
+  node's body is wrapped in a single `div(class = "pma-wizard-question")` built
+  by one local helper inside `output$pubias_wizard`. Before that each returned
+  a bare `tagList()`, so the live question — the only thing on the tab that can
+  be answered — looked exactly like the reference plots below it and the
+  override `<details>` below those. The CSS (`www/shadcn.css`) is a
+  `hsl(var(--primary))` left accent on a `hsl(var(--muted))` ground, an accent
+  no other block on the tab uses.
+  - **The question is the heading; the widget's label is `NULL`.** Two nodes
+    used to carry a second, differently worded question string in the widget
+    label, and one labelled its select `"Your answer"`. Where there were two
+    wordings the better one survives as the heading and the other is deleted,
+    not merged.
+  - **The three radio groups are `inline = FALSE`.** Two of them have option
+    labels that are whole sentences. Q3 stays a `selectInput` — four options,
+    one of which is the `"egger"` sentinel.
+  - **A progress line sits above the heading**, from
+    `step3_pubias_question_line(node, path)` (`R/step3_threshold.R`, pure and
+    unit-tested), where `path` is `step3_pubias_reachable()`. `"result"` is not
+    counted: it is the verdict, not a question. The **total is printed only
+    once `"result"` has joined the reachable path**, i.e. once the answers
+    settle the route — before that the reviewer's own next answer decides
+    whether the wizard ends here or runs to three questions, so a total taken
+    from the path so far would always equal the current index and would tell
+    every reviewer they were on the last question. Until then the line reads
+    `"Question 2"` with no total. This does not reinstate Fig 5's `Q1`–`Q4`
+    numbering (below): it counts the questions on the route the reviewer is
+    actually walking, which is the thing the figure's numbers never named.
+- **The reviewer sees no *Figure 5* question numbers (0.5.1).**
+  `PUBIAS_NODE_TITLES`, the four wizard `h5()` headings and
+  `step3_pubias_k_line()` state the question
   and drop the `Q1` / `Q2` / `Q3` / `Q4` prefix, and `inst/figures/pubias.svg`
   drops it too. The numbering is Core GRADE 4 Fig 5's, but the chart puts a
   pmatools node between Q1 and Q2, so on screen it numbered neither the source
@@ -1073,7 +1102,7 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
   decides anything (0.5.1, breaking).** `pubias_registry_complete = "yes"`
   ("reporting bias is unlikely; do not rate down") is the pmatools
   short-circuit and is forwarded to `grade_meta()`. `"no"` ("reporting bias is
-  plausible; go on to the Figure 5 nodes") is sent as `NULL` and decides
+  possible; go on to the Figure 5 nodes") is sent as `NULL` and decides
   nothing on its own. Two things went with that:
   - the app-level post-override that rewrote a `"no"` into a forced rate-down 1
     **regardless of the remaining nodes** is deleted. Core GRADE 4 Fig 5 has no
@@ -1093,6 +1122,19 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
   `NULL`, which is what "let the algorithm decide" means to `assess_pubias()`.
   In particular it must not be routed through `.override_or_ignore()`, which
   would demand a rationale for declining to override.
+- **Egger's test is computed once, by `pubias_egger()`, and read three times.**
+  The reactive returns `list(feasible =, p =, asymmetric =)`; `feasible` is
+  `FALSE` below `k = 10`, where the test is not run at all, which is a
+  different state from a test that ran and produced no p value.
+  `.pubias_egger_callout()` renders it as the colour-coded callout — a plain
+  function, not a `renderUI`, because Shiny binds one output to one place in
+  the DOM and the callout appears **twice**: under the Funnel sub-tab it is
+  computed from, and inside the **q3 wizard node**, beside the question that
+  asks the reviewer to accept or reject that very number. It used to be
+  computed inline inside `output$pubias_egger_result`, which is why the
+  flowchart could not read it. The single tier is `p < STEP3_EGGER_ALPHA`
+  (0.05); the `p < 0.01` → `"very_serious"` tier pmatools 0.5 removed is not
+  coming back.
 - **Advancing happens on answer.** One `observeEvent` per input clears
   `pubias_reopen`; the derivation moves on by itself. No `updateTabsetPanel`,
   no manual Next.
@@ -1119,8 +1161,21 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
     node keys (`q1` / `extra` / `q3` / `q4`) into the figure's ids, which are
     a different vocabulary — `extra` is the pmatools registry node, and the k
     gate is the figure's `q2`, which the wizard never asks.
-  - One answer stops the trail at a node rather than a leaf, because no leaf is
-    decided yet: `"egger"` hands Q3 to a p value the function does not have.
+  - **Accepting the automated test lights the chart.** `"egger"` is an answer
+    ("I looked, and I accept the test"), so the leaf it reaches is decided —
+    by a p value the *caller* holds. `step3_pubias_flow_ids()` takes it as
+    `egger_asymmetric` (logical or `NULL`), supplied at the call site from
+    `pubias_egger()$asymmetric`, and resolves the sentinel to `"yes"` / `"no"`
+    before matching. The function stays pure and side-effect free, which is
+    what keeps it unit-testable. `NULL` or `NA` — the test was infeasible or
+    failed — still stops the trail at `pma-pubias-node-q3`, because then no
+    leaf genuinely is decided; a test that could not run is not a symmetric
+    funnel. Until 0.5.1 the sentinel always stopped there, so a reviewer who
+    accepted Egger saw a chart that looked unfinished for the rest of the
+    assessment.
+  - **This changes nothing that reaches `grade_meta()`.** The sentinel is still
+    mapped to `NULL` (above): `"egger"` means "let `assess_pubias()` decide",
+    and lighting the chart is a display concern.
   - **`"no"` on the registry node lights the k gate and the edge out of it.**
     That node is the one the reviewer is never asked about, so lighting the
     node alone would show the chart stopping at an unanswered question; the
@@ -1221,19 +1276,56 @@ Configuration tab"* sentence is now the tab's own name as a link, built by
 so three copies of one `actionLink` id would collide.
 
 **Indirectness: the default is on screen.** All four PICO radios are
-**preselected to `"yes"`** (0.5.1). Leaving them blank used to send
-`indirectness = "no"` to `grade_meta()` while the screen showed four unanswered
-questions — the domain scored no downgrade silently. Preselection makes that
-default visible and leaves the reviewer to downgrade the elements they have
-concerns about.
+**preselected to `"yes"`** (0.5.1), and so is the **overall rating**, to
+`STEP3_INDIR_DEFAULT_LEVEL` (`"not_serious"`, `R/step3_threshold.R`). Leaving
+them blank used to send `indirectness = "no"` to `grade_meta()` while the
+screen showed four unanswered questions — the domain scored no downgrade
+silently. Preselection makes that default visible and leaves the reviewer to
+downgrade the elements they have concerns about.
 
 The **judgment is unchanged** and this is verified, not assumed:
 `indir_subdomains()` now returns four rows instead of `NULL`, so `grade_obj()`
 takes the *subdomain* path rather than the scalar one; `indir_worst_case()`
-folds four `"yes"` answers to `"no"`; and the override-rationale logic compares
-`input$indirectness` against `indir_worst %||% "no"`, which is the same value it
-compared against before. Rated on the bundled CBT-I sample, certainty, all five
-domain judgments and every downgrade are identical either way.
+folds four `"yes"` answers to `"not_serious"`; and the override-rationale logic
+compares `input$indirectness` against that same fold, which is the same value
+it compared against before. Rated on the bundled CBT-I sample, certainty, all
+five domain judgments and every downgrade are identical either way.
+
+**The overall rating's blank carried two jobs, and only one of them was
+visible.** It was how a reviewer accepted the fold, and — because "nothing
+selected" was a reliable proxy for "no override intended" — it was also the
+rationale gate (`conditionalPanel("(input.indirectness || '') != ''")`).
+Preselecting removes the proxy, so the gate now compares the rating against
+the fold itself:
+
+- `step3_indir_worst_case(levels)` folds the answered subdomain levels by
+  severity, and `step3_indir_rationale_required(overall, worst)` is TRUE only
+  when the two differ (`R/step3_threshold.R`, both pure and unit-tested). An
+  unanswered overall demands nothing; a fold of nothing reads as
+  `STEP3_INDIR_DEFAULT_LEVEL`. `grade_obj()`, the rationale
+  `conditionalPanel` and the note below the radio all read the same function,
+  so the three cannot disagree.
+- The `conditionalPanel` is gated on `output.indir_override_active`, not on a
+  JavaScript expression: the fold is four radios mapped through
+  `STEP3_INDIR_ANSWER_TO_LEVEL` and then reduced by severity, which the client
+  cannot compute.
+- `output$indir_override_note` states **which of the two is in force** — a
+  restatement of the fold, an override that is rated because a reason was
+  written, or an override that is *not yet* rated because none has been. That
+  last case is the one preselection creates: a reviewer who downgrades a PICO
+  element leaves the overall radio reading "Not serious" over a fold of
+  "Serious", and `grade_obj()` drops a rationale-less override, so the fold is
+  what rates the domain until they either move the radio or explain it.
+- **`indir_worst_case()` used to fold against a dead vocabulary.** Its severity
+  table spelled the levels `"no"` / `"some_concerns"` / `"serious"`, which
+  0.5.1 replaced; every level the PICO answers produce except `"serious"`
+  missed it, so four answers containing a `"No"` (very serious) folded to
+  `NULL` and were reported as `"not_serious"`. It ranks the current levels now.
+
+The **completeness gate is untouched by any of this.** A domain is confirmed by
+its checkbox and nothing else (`pma_domain_confirmations()`, §3.4.13), which is
+precisely why a preselected widget cannot open the export gate for an outcome
+nobody has looked at.
 
 One downstream effect is real, and is the reason this is a breaking change:
 `grade$indirectness_subdomains` is now populated for every outcome, so
