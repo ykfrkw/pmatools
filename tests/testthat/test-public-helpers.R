@@ -213,7 +213,9 @@ test_that("rob_strata() maps every accepted vocabulary onto the same strata", {
                    c("low", "some", "high"))
   expect_identical(rob_strata(c("low", "some", "high")),
                    c("low", "some", "high"))
-  # Cochrane RoB 2 wording, including the critical -> high collapse.
+  # pmatools' own older "... concerns" phrasings. Kept working on purpose:
+  # they are what extraction sheets written against v0.4-v0.5.1 contain. They
+  # are NOT RoB 2's words, which is what this release stopped claiming.
   expect_identical(
     rob_strata(c("No concerns", "Some concerns", "Serious concerns",
                  "Critical concerns")),
@@ -222,6 +224,60 @@ test_that("rob_strata() maps every accepted vocabulary onto the same strata", {
   expect_identical(rob_strata(c("unclear", "moderate", "very high")),
                    c("some", "some", "high"))
   expect_identical(rob_strata("very_serious"), "high")
+})
+
+test_that("Cochrane RoB 2's three judgments land where a reviewer expects", {
+  # RoB 2 (Sterne JAC, et al. BMJ 2019;366:l4898) defines THREE levels and no
+  # more. Up to 0.5.1 pmatools advertised four under RoB 2's name and accepted
+  # only one of RoB 2's actual labels ("Some concerns"); the other two went to
+  # the "unknown" stratum with a warning, which is the opposite of what the
+  # documentation promised.
+  expect_identical(
+    rob_strata(c("Low risk of bias", "Some concerns", "High risk of bias")),
+    c("low", "some", "high"))
+
+  # And nothing about them is a warning path.
+  expect_silent(
+    rob_strata(c("Low risk of bias", "Some concerns", "High risk of bias")))
+
+  # Same three through the rating, where they decide which studies count as
+  # high risk rather than merely which stratum a plot draws them in.
+  expect_identical(
+    vapply(c("Low risk of bias", "Some concerns", "High risk of bias"),
+           pmatools:::.normalize_rob_level, character(1), USE.NAMES = FALSE),
+    c("not_serious", "serious", "very_serious"))
+})
+
+test_that("ROBINS-I's four judgments are accepted, and are not RoB 2's", {
+  # Kept, not removed: grade_meta() is public and a script may rate
+  # non-randomised evidence with it. The Shiny app cannot reach this -- it
+  # hardcodes study_design = "RCT" -- which is a reason to document the two
+  # vocabularies apart, not a reason to drop a working one.
+  expect_identical(
+    rob_strata(c("Low risk of bias", "Moderate risk of bias",
+                 "Serious risk of bias", "Critical risk of bias")),
+    c("low", "some", "high", "high"))
+
+  # Serious and Critical share the "high" stratum because Core GRADE
+  # describes no three-level risk-of-bias downgrade for either to reach.
+  expect_identical(
+    vapply(c("Serious risk of bias", "Critical risk of bias"),
+           pmatools:::.normalize_rob_level, character(1), USE.NAMES = FALSE),
+    c("very_serious", "very_serious"))
+
+  # The two tools disagree about the middle level, which is why the strings
+  # are stored separately rather than folded into one "four-level" table.
+  expect_identical(rob_strata("Moderate risk of bias"), "some")
+  expect_identical(rob_strata("High risk of bias"), "high")
+})
+
+test_that("an unrecognised label's warning names the right vocabularies", {
+  w <- tryCatch(rob_strata("Very high risk of bias, probably"),
+                warning = function(e) conditionMessage(e))
+  expect_match(w, "Cochrane RoB 2", fixed = TRUE)
+  expect_match(w, "ROBINS-I", fixed = TRUE)
+  # The four-level list that RoB 2 never defined is gone from the message.
+  expect_false(grepl("RoB2 labels", w, fixed = TRUE))
 })
 
 test_that("rob_strata() is case- and whitespace-insensitive", {
@@ -253,7 +309,10 @@ test_that("rob_strata() warns rather than aborting on unrecognised labels", {
 test_that("rob_strata() only ever returns the four documented strata", {
   labels <- c("L", "S", "H", "C", "M", "*", "no", "some", "very_serious",
               "low", "moderate", "unclear", "high", "very high",
-              "No concerns", "Some concerns", "Serious concerns",
+              "Low risk of bias", "Some concerns", "High risk of bias",
+              "Moderate risk of bias", "Serious risk of bias",
+              "Critical risk of bias",
+              "No concerns", "Serious concerns",
               "Critical concerns", NA, "", "?", "banana")
   out <- suppressWarnings(rob_strata(labels))
   expect_length(out, length(labels))

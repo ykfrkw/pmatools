@@ -1171,6 +1171,91 @@ pma_judgment_choices <- function(include_blank = TRUE,
   out
 }
 
+# ----- Per-study level pickers (Step 3 RoB / Indirectness editors) --------
+#
+# A DIFFERENT vocabulary from pma_judgment_choices() above. That one names a
+# judgment about the whole body of evidence, in Core GRADE's words; this one
+# names a judgment about ONE study, in the words of the tool that made it.
+# Reviewers type these two into each other constantly, which is why they sit
+# next to each other here with the distinction written down.
+#
+# Cochrane RoB 2 (Sterne JAC, et al. BMJ 2019;366:l4898) defines exactly three
+# judgments and these are its own words. Four-level wordings belong to
+# ROBINS-I, which the app cannot reach: step3_grade.R passes
+# study_design = "RCT" unconditionally.
+PMA_ROB2_CHOICES <- c("Low risk of bias"  = "low",
+                      "Some concerns"     = "some",
+                      "High risk of bias" = "high")
+
+# Indirectness has no RoB 2. These are pmatools' own forest-plot strata
+# (rob_strata()), worded so that nothing here can be mistaken for a published
+# risk-of-bias judgment.
+PMA_INDIRECTNESS_CHOICES <- c("Low indirectness"  = "low",
+                              "Some indirectness" = "some",
+                              "High indirectness" = "high")
+
+# One <select> for one cell of a DT editor.
+#
+# Why the cell holds a real <select> rather than DT's own editor: DT 0.34's
+# `editable=` injects <input type=text> (or number / textarea / date) and has
+# no dropdown type at all -- its factor/selectize support is for COLUMN
+# FILTERS, not for editing. The Publication bias tab reaches its closed-ish
+# vocabulary with a <datalist> bolted onto that injected input, but a datalist
+# is autocomplete: it still accepts anything typed, which is the failure mode
+# this control exists to remove. So the column is rendered as HTML with
+# escape = FALSE and left out of `editable`, and the change event carries the
+# row index the cell was RENDERED with -- not DT's `col`, which counts hidden
+# columns and has bitten this app before.
+pma_study_level_select <- function(row, value, input_id, choices) {
+  offered  <- c(stats::setNames("", "(not set)"), choices)
+  selected <- as.character(value %||% "")[1]
+  # A value the control does not offer reads as "(not set)", explicitly. It
+  # cannot arrive from the dropdown; it can arrive from an uploaded column,
+  # and leaving nothing marked would let the browser pick the first option and
+  # show a judgment nobody made.
+  if (length(selected) != 1L || is.na(selected) ||
+      !selected %in% unname(offered)) {
+    selected <- ""
+  }
+
+  options <- paste0(
+    "<option value=\"", unname(offered), "\"",
+    ifelse(unname(offered) == selected, " selected", ""), ">",
+    names(offered), "</option>",
+    collapse = "")
+
+  sprintf(
+    paste0("<select class=\"pma-level-select form-select form-select-sm\" ",
+           "data-input=\"%s\" data-row=\"%d\">%s</select>"),
+    input_id, as.integer(row), options)
+}
+
+# The whole column, vectorised over a data frame's rows.
+pma_study_level_column <- function(values, input_id, choices) {
+  if (length(values) == 0L) return(character(0))
+  vapply(seq_along(values),
+         function(i) pma_study_level_select(i, values[[i]], input_id, choices),
+         character(1))
+}
+
+# Delegated change handler for every pma_study_level_select() on the page.
+# Delegated so a re-rendered DT needs no re-binding.
+#
+# `.pmaLevel` and the `off()` are load-bearing, not tidiness: app.R rebuilds
+# the whole Step 3 body on every step change and Shiny re-executes inline
+# scripts in what it inserts, so a plain `on()` would stack a second handler
+# on every 3 -> 2 -> 3 round trip and report each change once per rebuild.
+pma_study_level_script <- function() {
+  htmltools::tags$script(htmltools::HTML(paste0(
+    "$(document).off('change.pmaLevel')",
+    ".on('change.pmaLevel', 'select.pma-level-select', function(){",
+    "  Shiny.setInputValue(this.dataset.input,",
+    "    {row: parseInt(this.dataset.row, 10), value: this.value},",
+    "    {priority: 'event'});",
+    "});"
+  )))
+}
+
 # ----- One evaluation shape for all five domain tabs ----------------------
 # Every domain tab used to print the machine-generated note string raw, into
 # a verbatimTextOutput several hundred characters long, under the heading

@@ -12,11 +12,13 @@
 #' @param rob A character vector of length \code{meta_obj$k}. Accepts the same
 #'   labels as \code{\link{grade_meta}} (case-insensitive): \code{"L"/"S"/"H"},
 #'   \code{"low"/"some"/"high"}, the internal levels
-#'   \code{"not_serious"/"serious"/"very_serious"}, and the Cochrane RoB2 wording
-#'   \code{"No concerns"}, \code{"Some concerns"}, \code{"Serious concerns"},
-#'   \code{"Critical concerns"}. \code{NA}, \code{""} and \code{"?"} are
-#'   tolerated (kept as their own group labeled \code{"unknown"}); any other
-#'   unrecognized label is bucketed into \code{"unknown"} with a warning.
+#'   \code{"not_serious"/"serious"/"very_serious"}, the three Cochrane RoB 2
+#'   judgments (\code{"Low risk of bias"}, \code{"Some concerns"},
+#'   \code{"High risk of bias"}) and the four ROBINS-I ones. See
+#'   \code{\link{rob_strata}} for the full table. \code{NA}, \code{""} and
+#'   \code{"?"} are tolerated (kept as their own group labeled
+#'   \code{"unknown"}); any other unrecognized label is bucketed into
+#'   \code{"unknown"} with a warning.
 #' @param some_concerns_as \code{NULL} (default), \code{"low"} or
 #'   \code{"high"}. \code{NULL} keeps the four descriptive strata above.
 #'   Supplying \code{"low"} or \code{"high"} instead draws the \strong{two}

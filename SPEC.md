@@ -94,8 +94,8 @@ One row per **study × arm**. Required columns:
 | Column | Type | Description |
 |---|---|---|
 | `outcome` | chr | Outcome label. Per study × outcome. When present, the unit of a row is **study × outcome × arm** and `studlab` must appear twice *per outcome*. Required by `run_ma_multi()` (§4.10). |
-| `rob` | chr | Risk of bias label (Cochrane RoB 2.0 or GRADE level). Per-study. |
-| `indirectness` | chr | Indirectness label (No / Some / Serious / Very serious). Per-study. |
+| `rob` | chr | Risk of bias label (Cochrane RoB 2, ROBINS-I or GRADE level; §4.11 `rob_strata()`). Per-study. |
+| `indirectness` | chr | Indirectness label (`low` / `some` / `high`; read through the same `rob_strata()` table). Per-study. |
 | `subgroup` | chr / fct | Subgroup variable. Per-study. |
 
 **`outcome` column semantics.** `ingest_data()` recognises `outcome` and validates arm pairing within each (`studlab`, `outcome`) pair rather than within `studlab` alone; its diagnostics name the unit accordingly. `run_ma()` still **aborts** on data holding more than one outcome — `run_ma_multi()` splits on this column and is the only supported way to batch (§4.10). Data without an `outcome` column behaves exactly as before.
@@ -1348,12 +1348,28 @@ applied iteratively over the rows of a group; rows with `NA` in `n` / `mean` / `
 
 **`rob_strata(x, arg = "rob")`.** Normalises free-text risk-of-bias labels onto the four strata pmatools groups studies by, returning a character vector the same length as `x` with elements in `"low"` / `"some"` / `"high"` / `"unknown"`. It shares the alias vocabulary of the internal `.normalize_rob_level()`, so `grade_meta()`, `plot_forest_rob()` and `plot_forest_indirectness()` (via the internal alias `.rob_plot_strata()`) all agree with it. Matching is case-insensitive after `trimws()`.
 
+**Cochrane RoB 2 defines three judgments, not four** (Sterne JAC, et al. BMJ 2019;366:l4898), and they are accepted verbatim. So are ROBINS-I's four (Sterne JAC, et al. BMJ 2016;355:i4919), whose top two fold onto `high` because Core GRADE describes no three-level risk-of-bias downgrade (§5.1). The tools are kept apart in the table below because they are not interchangeable: RoB 2 is for randomised trials, ROBINS-I for non-randomised studies.
+
+| Tool | Judgment | Stratum |
+|---|---|---|
+| RoB 2 | `Low risk of bias` | `low` |
+| RoB 2 | `Some concerns` | `some` |
+| RoB 2 | `High risk of bias` | `high` |
+| ROBINS-I | `Low risk of bias` | `low` |
+| ROBINS-I | `Moderate risk of bias` | `some` |
+| ROBINS-I | `Serious risk of bias` | `high` |
+| ROBINS-I | `Critical risk of bias` | `high` |
+
+Every other accepted label:
+
 | Stratum | Accepted labels |
 |---|---|
 | `low` | `not_serious`, `no`, `low`, `L`, `No concerns` |
-| `some` | `some_concerns`, `some`, `S`, `M`, `*`, `moderate`, `unclear` (RoB 1), `Some concerns` |
+| `some` | `some_concerns`, `some`, `S`, `M`, `*`, `moderate`, `unclear` (RoB 1) |
 | `high` | `very_serious`, `extremely_serious`, `high`, `very high`, `H`, `C`, `Serious concerns`, `Critical concerns` |
 | `unknown` | `NA`, `""`, `?`, `unknown`, `na` |
+
+`No concerns` / `Serious concerns` / `Critical concerns` are **pmatools' own phrasings**. Up to v0.5.1 the package documented all four of them as "Cochrane RoB 2.0", which RoB 2 does not define — only `Some concerns` is RoB 2's. They stay accepted, permanently: they are what stored extraction sheets and scripts written against v0.4–v0.5.1 contain, and removing a working alias would break those for no gain the corrected documentation does not already deliver. New work writes the RoB 2 or ROBINS-I judgments.
 
 A bare `serious` is **rejected** here, not mapped: it named the `high` stratum up to v0.5.0 and names `some` from v0.5.1 (§5.0). Write `some_concerns` or `very_serious`.
 

@@ -243,6 +243,38 @@
 
 ## New features
 
+* **Cochrane RoB 2's three judgments and ROBINS-I's four are accepted
+  verbatim, and the app's per-study editors are dropdowns rather than free
+  text.** The package documented a four-level "Cochrane RoB 2.0" vocabulary —
+  `"No concerns"` / `"Some concerns"` / `"Serious concerns"` /
+  `"Critical concerns"` — and RoB 2 defines no such thing. It has **three**
+  judgments (low risk of bias / some concerns / high risk of bias); the extra
+  severity belongs to ROBINS-I, which is for non-randomised studies. Only
+  `"Some concerns"` in that list was anyone's published wording, and neither
+  tool's own labels for its other levels were accepted at all.
+
+  `grade_meta()`, `rob_strata()`, `plot_forest_rob()` and
+  `plot_forest_indirectness()` now take `"Low risk of bias"`,
+  `"Some concerns"` and `"High risk of bias"` (RoB 2), and
+  `"Low risk of bias"`, `"Moderate risk of bias"`, `"Serious risk of bias"`
+  and `"Critical risk of bias"` (ROBINS-I, whose top two fold onto the `high`
+  stratum because Core GRADE describes no three-level risk-of-bias
+  downgrade). **Nothing was removed**: the three older pmatools phrasings keep
+  working permanently, because they are what extraction sheets and scripts
+  written against v0.4–v0.5.1 contain. They are simply no longer presented as
+  RoB 2's, in `README.md`, `SPEC.md` and every error and warning message that
+  used to list them.
+
+  In the Shiny app, the per-study Risk of Bias and Indirectness grids on Step
+  3 offer a three-value dropdown instead of a cell to type into. A mistyped
+  label used to land the study in the `"unknown"` stratum — `rob_strata()`
+  warns, and the app showed that warning nowhere. Risk of Bias is labelled in
+  RoB 2's words; Indirectness has no such instrument, so its three stay
+  pmatools' own (**Low / Some / High indirectness**) rather than borrowing a
+  vocabulary that would claim more than the column means. Both still store
+  `"low"` / `"some"` / `"high"`, so bulk buttons, Step 1 and banked outcomes
+  are unaffected.
+
 * **New `detect_column_roles()` reports which column filled each
   `ingest_data()` role.** Given a data frame or a vector of column names, it
   returns one row per canonical long-format role (`studlab`, `treat`, `n`,

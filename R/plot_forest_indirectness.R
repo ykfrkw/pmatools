@@ -11,10 +11,11 @@
 #'   \code{\link[meta]{metabin}}/\code{\link[meta]{metacont}}).
 #' @param indirectness A character vector of length \code{meta_obj$k}. Accepts
 #'   the same labels as \code{\link{plot_forest_rob}} (case-insensitive):
-#'   \code{"L"/"S"/"H"}, \code{"low"/"some"/"high"}, the internal levels
-#'   \code{"not_serious"/"serious"/"very_serious"}, and the Cochrane wording
-#'   \code{"No concerns"}, \code{"Some concerns"}, \code{"Serious concerns"},
-#'   \code{"Critical concerns"}. \code{NA}, \code{""} and \code{"?"} are
+#'   \code{"L"/"S"/"H"}, \code{"low"/"some"/"high"} and the internal levels
+#'   \code{"not_serious"/"serious"/"very_serious"}. The risk-of-bias tools'
+#'   own judgments are accepted too because the alias table is shared, but
+#'   they name a different construct -- there is no RoB 2 for indirectness, so
+#'   prefer the plain three. \code{NA}, \code{""} and \code{"?"} are
 #'   tolerated (kept as their own group labeled \code{"unknown"}); any other
 #'   unrecognized label is bucketed into \code{"unknown"} with a warning.
 #' @param ... Additional arguments forwarded to \code{\link{plot_forest}}.
