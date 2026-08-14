@@ -127,12 +127,77 @@ test_that("every domain reference is in the app's one citation style", {
   expect_identical(EDU_COPY$domains$rob$ref, EDU_COPY$domains$pubias$ref)
 })
 
-test_that("the app renders no reference as a link", {
-  # pma_reference() lost its `doi` argument with the <a href> branch it fed.
-  expect_false("doi" %in% names(formals(pma_reference)))
-  ref <- as.character(pma_reference(EDU_COPY$domains$rob$ref))
+test_that("every domain names the Core GRADE paper it cites, as a number", {
+  # The number is what .core_grade_doi_url() is keyed on. Recovering it from
+  # the "Core GRADE n." prefix instead would make any rewording of the citation
+  # a dead link, so the field has to exist and has to agree with the prefix.
+  for (d in c("rob", "inconsistency", "indirectness", "imprecision", "pubias")) {
+    entry <- EDU_COPY$domains[[d]]
+    expect_true(is.numeric(entry$core_grade), info = d)
+    expect_match(entry$ref, paste0("^Core GRADE ", entry$core_grade, "\\. "),
+                 info = d)
+    expect_false(is.null(.core_grade_doi_url(entry$core_grade)), info = d)
+  }
+})
+
+test_that("a domain reference links to the paper's DOI in a new tab", {
+  # The `doi` argument came back as `url` in 0.5.1, fed from one map rather
+  # than from a per-domain field, so every Core GRADE tab renders alike.
+  expect_true("url" %in% names(formals(pma_reference)))
+  ref <- as.character(pma_domain_reference(EDU_COPY$domains$rob))
   expect_match(ref, "Core GRADE 4. Guyatt G, et al. BMJ. 2025", fixed = TRUE)
-  expect_false(grepl("<a ", ref, fixed = TRUE))
-  # Deleted with the DOIs it built URLs from; it had no call sites left.
+  expect_match(ref, "https://doi.org/10.1136/bmj-2024-083864", fixed = TRUE)
+  expect_match(ref, "target=\"_blank\"", fixed = TRUE)
+  # target="_blank" without this hands the opened page a live window.opener.
+  expect_match(ref, "rel=\"noopener\"", fixed = TRUE)
+  # Indirectness cites a different paper; the two must not collapse.
+  indir <- as.character(pma_domain_reference(EDU_COPY$domains$indirectness))
+  expect_match(indir, "https://doi.org/10.1136/bmj-2024-083865", fixed = TRUE)
+
+  # No url, no link: the reference still renders, as plain text. That is the
+  # path Step 2's non-Core-GRADE citations take.
+  plain <- as.character(pma_reference("Efthimiou O. Evid Based Ment Health. 2018"))
+  expect_false(grepl("<a ", plain, fixed = TRUE))
+
+  # Deleted with the per-domain DOI fields; it had no call sites left.
   expect_null(EDU_COPY$pmid_url)
+})
+
+# The two version helpers must not converge: Step 4's "How to cite" entry is
+# pasted into someone's manuscript, so "Version 0.5.1 (vendored)." must never
+# reach it, while the Step 2 environment block and the app footer do want the
+# marker. Both tests below drive the *stamp* path, so they only mean anything
+# when pmatools is not installed -- which is the deployed app's situation, and
+# the one the citation is written for.
+skip_unless_vendored <- function() {
+  installed <- tryCatch(utils::packageVersion("pmatools"),
+                        error = function(e) NULL)
+  skip_if(!is.null(installed),
+          "pmatools is installed, so the vendored stamp path is unreachable")
+}
+
+# Plain options() rather than withr::with_options(): withr is not in the app's
+# DESCRIPTION, and the app test suite is not a package that can declare it.
+with_version_stamp <- function(stamp, code) {
+  previous <- options(pmatools.version_stamp = stamp)
+  on.exit(options(previous), add = TRUE)
+  force(code)
+}
+
+test_that("the citable version carries no provenance marker", {
+  skip_unless_vendored()
+  with_version_stamp("9.9.9", {
+    expect_identical(pma_pmatools_version(), "9.9.9 (vendored)")
+    expect_identical(pma_pmatools_version_number(), "9.9.9")
+  })
+})
+
+test_that("an unknown version yields NULL rather than a sentinel string", {
+  # The caller drops the whole "Version X." clause on NULL. An incomplete
+  # citation is honest; "Version (vendored; version unknown)." is not.
+  skip_unless_vendored()
+  with_version_stamp(NULL, {
+    expect_identical(pma_pmatools_version(), "(vendored; version unknown)")
+    expect_null(pma_pmatools_version_number())
+  })
 })

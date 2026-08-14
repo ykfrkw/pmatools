@@ -73,8 +73,8 @@
 #
 #   Decision (zone(TE_all) = za, zone(TE_low) = zl):
 #     Rule 1: za == zl == "trivial"                    -> "not_serious"
-#     Rule 2: za == zl, non-trivial, inflation <= 10%  -> "not_serious"
-#     Rule 3: za == zl, non-trivial, inflation > 10%   -> "serious"  (-1)
+#     Rule 2: za == zl, non-trivial, inflation <= 20%  -> "not_serious"
+#     Rule 3: za == zl, non-trivial, inflation > 20%   -> "serious"  (-1)
 #     Rule 4: za != zl, no sign flip across null       -> "serious"  (-1)
 #     Rule 5: za != zl, sign flip (above <-> below)    -> "serious"  (-1)
 #
@@ -156,6 +156,28 @@
 #   "desirable"  : small values are good (e.g., mortality, severity)
 #                  TE_all < TE_low indicates inflation toward favorable
 #   NULL         : direction unknown; use |TE_all| > |TE_low| (further from null)
+
+# --------------------------------------------------------------------------
+# Constants
+# --------------------------------------------------------------------------
+
+# Relative change of the pooled estimate that counts as "substantially
+# different" (non-dominated branch) or as bias-favouring inflation worth
+# rating down for (dominated branch, rule 3).
+#
+# Core GRADE 4 puts no number on either node — the dominance node is the only
+# one its Fig 2 footnote quantifies — so this is a pmatools convention. It was
+# 0.10 through v0.5.x; 0.20 since, because a 10% relative change in a pooled
+# estimate is routinely within what re-fitting on a subset produces on its own
+# (TE_low is a fixed-effect estimate while TE_all usually is not — see the
+# CAVEAT on .assess_bias_direction()), so the lower value rated down on
+# estimator noise rather than on bias.
+#
+# The three defaults below (assess_rob(), .flowchart_rob(),
+# .assess_bias_direction()) and export_bundle()'s fallback all read this one
+# value; the comparison itself stays strict (`>`), so a change exactly at the
+# threshold does not rate down.
+PMA_ROB_INFLATION_THRESHOLD <- 0.20
 
 # --------------------------------------------------------------------------
 # Flowchart node vocabulary (inst/figures/rob.svg)
@@ -241,8 +263,9 @@
 #'   absolute analysis scale:
 #'   \eqn{(|TE_{all}| - |TE_{low}|) / |TE_{low}|}, where \eqn{TE_{low}} is the
 #'   inverse-variance weighted mean of the low/some-concerns RoB studies.
-#'   Default `0.10`. A downgrade under rule 3 requires BOTH (a) the relative
-#'   change to be strictly greater than this threshold (`>`, so a change
+#'   Default `PMA_ROB_INFLATION_THRESHOLD` (`0.20`). A downgrade under rule 3
+#'   requires BOTH (a) the relative change to be strictly greater than this
+#'   threshold (`>`, so a change
 #'   exactly at the threshold does not rate down) AND (b) the shift to be in
 #'   the bias-favouring direction per `small_values`: only shifts that would
 #'   make the apparent effect look more favourable (over-estimation) count.
@@ -271,7 +294,7 @@ assess_rob <- function(rob, meta_obj,
                        rob_overrides           = NULL,
                        rob_override_rationale  = NULL,
                        rob_dominant_threshold  = 0.55,
-                       rob_inflation_threshold = 0.10,
+                       rob_inflation_threshold = PMA_ROB_INFLATION_THRESHOLD,
                        small_values            = NULL,
                        threshold_internal      = NULL,
                        rationale               = NULL) {
@@ -620,7 +643,8 @@ assess_rob <- function(rob, meta_obj,
 # --------------------------------------------------------------------------
 .flowchart_rob <- function(rob_vec, meta_obj,
                            dominant_threshold = 0.55,
-                           inflation_threshold = 0.10, small_values = NULL,
+                           inflation_threshold = PMA_ROB_INFLATION_THRESHOLD,
+                           small_values = NULL,
                            threshold_internal = NULL,
                            some_concerns_as = "low",
                            override_notes = NULL) {
@@ -1016,8 +1040,8 @@ assess_rob <- function(rob, meta_obj,
 #
 # Decision tree (za = zone(TE_all), zl = zone(TE_low)):
 #   za == zl == "trivial"                                    -> "not_serious" (rule 1)
-#   za == zl, non-trivial, no bias-favouring inflation > 10% -> "not_serious" (rule 2)
-#   za == zl, non-trivial, bias-favouring inflation > 10%    -> "serious"     (rule 3)
+#   za == zl, non-trivial, no bias-favouring inflation > 20% -> "not_serious" (rule 2)
+#   za == zl, non-trivial, bias-favouring inflation > 20%    -> "serious"     (rule 3)
 #   za != zl, no sign flip across null                       -> "serious"     (rule 4)
 #   za != zl, sign flip (above <-> below)                    -> "serious"     (rule 5)
 #
@@ -1038,7 +1062,9 @@ assess_rob <- function(rob, meta_obj,
 #   the route that keeps both estimates on the same footing.
 # --------------------------------------------------------------------------
 .assess_bias_direction <- function(te_all, se_all, te_vec, se_vec, low_idx,
-                                   small_values, inflation_threshold = 0.10,
+                                   small_values,
+                                   inflation_threshold =
+                                     PMA_ROB_INFLATION_THRESHOLD,
                                    sm = NULL, threshold_internal = NULL,
                                    warn_direction_assumption = TRUE) {
 

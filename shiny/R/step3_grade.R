@@ -326,7 +326,7 @@ step3_ui <- function(state = NULL) {
           # tabs; the flowchart under the verdict draws the same algorithm and
           # lights up the branch taken. output$rob_how_body went with it, and
           # so did output$rob_rule_note before that.
-          pma_reference(EDU_COPY$domains$rob$ref),
+          pma_domain_reference(EDU_COPY$domains$rob),
           # Review-wide, and edited here because this is the tab where it
           # decides something: it sets which side of the binary split each
           # study falls on, and the stratified forest below draws exactly that
@@ -394,7 +394,7 @@ step3_ui <- function(state = NULL) {
         # --- Inconsistency ---
         shiny::tabPanel(.tab_title("inconsistency"), value = "Inconsistency",
           .domain_header("Inconsistency", "incon_badge", "incon_chip"),
-          pma_reference(EDU_COPY$domains$inconsistency$ref),
+          pma_domain_reference(EDU_COPY$domains$inconsistency),
           shiny::uiOutput("threshold_block_inco"),
           shiny::uiOutput("incon_evaluation"),
           htmltools::h5("Forest plot"),
@@ -441,7 +441,7 @@ step3_ui <- function(state = NULL) {
         # --- Indirectness ---
         shiny::tabPanel(.tab_title("indirectness"), value = "Indirectness",
           .domain_header("Indirectness", "indir_badge", "indir_chip"),
-          pma_reference(EDU_COPY$domains$indirectness$ref),
+          pma_domain_reference(EDU_COPY$domains$indirectness),
 
           # ----- The four Core GRADE 5 PICO questions ----------------------
           # Every one PRESELECTED to "yes" - the default is now on screen
@@ -464,6 +464,8 @@ step3_ui <- function(state = NULL) {
               "Population - trial population sufficiently similar to target patients?",
               choices = STEP3_INDIR_ANSWERS, inline = TRUE,
               selected = "yes"),
+            htmltools::p(class = "pma-card-subtitle",
+                         EDU_COPY$domains$indirectness$population),
             shiny::radioButtons("indir_intervention",
               "Intervention - deliverable as studied?",
               choices = STEP3_INDIR_ANSWERS, inline = TRUE,
@@ -554,16 +556,17 @@ step3_ui <- function(state = NULL) {
         # --- Imprecision ---
         shiny::tabPanel(.tab_title("imprecision"), value = "Imprecision",
           .domain_header("Imprecision", "impre_badge", "impre_chip"),
-          pma_reference(EDU_COPY$domains$imprecision$ref),
+          pma_domain_reference(EDU_COPY$domains$imprecision),
           shiny::uiOutput("threshold_block_impre"),
-          # Which Fig 4 branch this analysis took. Stated on the tab because
-          # the branch decides whether sample size is consulted at all: on
-          # the CI-crosses-threshold path the OIS is never reached, and a
-          # reviewer reading OIS figures further down must be able to see
-          # that they did not drive the judgment.
-          htmltools::h5("Core GRADE 2 Figure 4 branch taken",
-                        style = "margin-top: 1rem;"),
-          shiny::uiOutput("impre_branch"),
+          # The "Core GRADE 2 Figure 4 branch taken" section that stood here
+          # is deleted (0.5.1). It restated in three paragraphs which branch
+          # the `fig4_path` fact names -- and the Fig 4 flowchart inside
+          # `impre_evaluation` below draws that same fact with the route lit
+          # up. The point it existed to make (sample size is not consulted
+          # unless the OIS branch is reached) is legible from a chart whose
+          # OIS node is unlit, and the two-level reviewer judgment it also
+          # carried is stated at the override further down, where it is
+          # actionable.
           shiny::uiOutput("impre_evaluation"),
           .inputs_details(open = TRUE, title = "Inputs for this domain",
             shiny::conditionalPanel(
@@ -621,7 +624,7 @@ step3_ui <- function(state = NULL) {
         # --- Publication bias ---
         shiny::tabPanel(.tab_title("pubias"), value = "Publication bias",
           .domain_header("Publication bias", "pubias_badge", "pubias_chip"),
-          pma_reference(EDU_COPY$domains$pubias$ref),
+          pma_domain_reference(EDU_COPY$domains$pubias),
           # ----- Figure 5 as a wizard, one node at a time -------------------
           # The whole of Fig 5 used to render at once: a static Q1, a static
           # non-Fig-5 overall judgment with two bulleted lists, a
@@ -1704,18 +1707,24 @@ step3_server <- function(input, output, session, state) {
 
   # Read-only threshold display inside RoB / Inconsistency / Imprecision.
   #
-  # `detail = FALSE` prints the head line alone. The equivalence block below it
-  # says what the absolute threshold becomes on the analysis scale in each
-  # direction, and which of the two conversions is exact - a derivation, not an
-  # answer, on every tab but one. Risk of Bias compares two pooled estimates
-  # against the band and Inconsistency reads a zone tally the algorithm has
-  # already computed; on neither does a reviewer do anything with the numbers.
+  # `detail = FALSE` prints the head line alone, and all three domains take it
+  # as of 0.5.1. The equivalence block below it says what the absolute
+  # threshold becomes on the analysis scale in each direction, and which of the
+  # two conversions is exact: a derivation, not an answer. Risk of Bias
+  # compares two pooled estimates against the band and Inconsistency reads a
+  # zone tally the algorithm has already computed; on neither does a reviewer
+  # do anything with the numbers.
   #
-  # `detail = TRUE` is Imprecision, where they ARE operative: Core GRADE 2's
-  # two-level rule tests the confidence interval against the important-benefit
-  # AND important-harm thresholds by eye, so both bounds have to be on screen -
-  # and the residual-asymmetry sentence with them, because by construction only
-  # one of the two conversions is exact on the absolute scale.
+  # Imprecision used to pass `detail = TRUE`, on the argument that Core GRADE
+  # 2's two-level rule tests the interval against the important-benefit AND
+  # important-harm thresholds by eye, so both bounds and the residual-asymmetry
+  # caveat had to be on screen. That is true of the RULE and was still wrong
+  # for this BOX: `output$impre_evaluation` right below already renders the
+  # interval against the thresholds and states the verdict, so the box was
+  # showing a reviewer the arithmetic behind an answer they were about to be
+  # given. Three tabs, three identical boxes, is also one less thing to read.
+  # `detail` stays a parameter because the argument for the long form is about
+  # a specific tab and could win again.
   #
   # The trailing "change it in the Configuration tab" sentence is now the tab's
   # own name, as a link. One id prefix per domain: all seven tab panels live in
@@ -1754,7 +1763,7 @@ step3_server <- function(input, output, session, state) {
   output$threshold_block_inco  <-
     shiny::renderUI(.render_threshold_readonly("inco",  detail = FALSE))
   output$threshold_block_impre <-
-    shiny::renderUI(.render_threshold_readonly("impre", detail = TRUE))
+    shiny::renderUI(.render_threshold_readonly("impre", detail = FALSE))
   shiny::outputOptions(output, "threshold_block_rob",   suspendWhenHidden = FALSE)
   shiny::outputOptions(output, "threshold_block_inco",  suspendWhenHidden = FALSE)
   shiny::outputOptions(output, "threshold_block_impre", suspendWhenHidden = FALSE)
@@ -2204,8 +2213,10 @@ step3_server <- function(input, output, session, state) {
       # rob_inflation_threshold is deliberately NOT passed. The app used to
       # expose it as a slider; it is a pmatools convention rather than a Core
       # GRADE 4 rule, and a reviewer had no basis on which to move it. The
-      # package default of 0.10 (R/domain_rob.R) now applies unconditionally,
-      # and export_bundle() writes the same 0.10 into the bundled analysis.R.
+      # package default PMA_ROB_INFLATION_THRESHOLD (R/domain_rob.R) now
+      # applies unconditionally, and export_bundle() writes that same value
+      # into the bundled analysis.R. Not naming the number here is the point:
+      # it moved from 0.10 to 0.20 in 0.5.1 and the app followed for free.
       small_values             = sv,
       indirectness             = indir_arg,
       indirectness_rationale   = indir_rationale,
@@ -2810,84 +2821,6 @@ step3_server <- function(input, output, session, state) {
   })
   shiny::outputOptions(output, "incon_subgroup_relevant",
                        suspendWhenHidden = FALSE)
-
-  # ----- Which Core GRADE 2 Fig 4 branch the analysis took ----------------
-  # Read from the STRUCTURED facts the assessor records ("fig4_path" and
-  # "ois_used", R/domain_imprecision.R), not by regex over the prose note.
-  # The facts exist precisely so a caller can branch on the path without
-  # re-parsing sentences, and the old sub("^.*Fig 4 path: ", "", notes) chain
-  # would have silently produced the wrong headline the first time the note
-  # wording moved.
-  output$impre_branch <- shiny::renderUI({
-    g <- grade_obj()
-    if (is.null(g)) {
-      return(htmltools::p(
-        class = "pma-card-subtitle", style = "font-style: italic;",
-        "Run the analysis and set a threshold to see which branch applies."))
-    }
-    f <- domain_fact_table("Imprecision")
-    .fact_value <- function(key) {
-      if (is.null(f) || !"key" %in% names(f)) return("")
-      v <- f$value[f$key == key]
-      if (!length(v) || is.na(v[1])) "" else as.character(v[1])
-    }
-    path <- .fact_value("fig4_path")
-    if (!nzchar(path)) {
-      return(htmltools::div(
-        style = paste0(
-          "padding: 0.6rem 0.85rem; background: #f5f5f5; ",
-          "border-left: 4px solid #6b7280; margin: 0.5rem 0; ",
-          "font-size: 0.85rem;"),
-        htmltools::p(style = "margin: 0;",
-          htmltools::strong("Figure 4 was not applied."),
-          " The imprecision judgment was supplied manually through the ",
-          "override below, which bypasses the automated assessment.")))
-    }
-    crosses  <- grepl("^CI crosses", path)
-    ois_used <- identical(.fact_value("ois_used"), "yes")
-    head <- if (crosses) {
-      "Yes branch - the CI crosses the chosen threshold."
-    } else if (ois_used) {
-      "No branch, implausibly large effect - the OIS approach was applied."
-    } else {
-      "No branch, moderate effect - do not rate down."
-    }
-    detail <- if (crosses) {
-      paste0("Sample size is NOT considered on this path: the Optimal ",
-             "Information Size is not consulted, and any OIS figures in the ",
-             "evaluation below are reported for information only. Rate down ",
-             "one level; two only if the CI crosses two thresholds ",
-             "(important benefit and important harm), or if the most ",
-             "appropriate plain language summary warrants 'may' rather than ",
-             "'likely'. The second condition is a reviewer judgment and is ",
-             "not assessed automatically - record it through the override ",
-             "below.")
-    } else if (ois_used) {
-      paste0("This is the only route to the OIS: the CI stays clear of the ",
-             "threshold AND the effect is implausibly large. The participant ",
-             "count therefore did drive the judgment. Figure 4 compares the ",
-             "OIS against participants, not events.")
-    } else {
-      paste0("Figure 4 stops here. A moderate effect whose CI stays clear of ",
-             "the threshold does not rate down, and sample size never enters ",
-             "the decision: the OIS is reached only when the effect is ",
-             "implausibly large.")
-    }
-    color <- if (crosses) "#c07020" else if (ois_used) "#0f172a" else "#208050"
-    htmltools::div(
-      style = sprintf(paste0(
-        "padding: 0.6rem 0.85rem; background: #f5f5f5; ",
-        "border-left: 4px solid %s; margin: 0.5rem 0; font-size: 0.85rem;"),
-        color),
-      htmltools::p(style = "margin: 0;", htmltools::strong(head)),
-      htmltools::p(style = "margin: 0.25rem 0 0;", detail),
-      htmltools::p(
-        style = paste0("margin: 0.35rem 0 0; font-family: monospace; ",
-                       "font-size: 0.78rem; color: #444;"),
-        path)
-    )
-  })
-  shiny::outputOptions(output, "impre_branch", suspendWhenHidden = FALSE)
 
   # ----- Indirectness subdomain table (pmatools indirectness_table) -------
   # Surfaced deliberately: it is the only rendering of exactly what the app

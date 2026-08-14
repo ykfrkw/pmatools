@@ -410,7 +410,7 @@ grade_meta(
   rob_override_rationale           = NULL,   # named chr vector, one per override (REQUIRED)
   rob_dominant_threshold           = 0.55,   # weight share for the Fig 2 dominance gate (`>=`)
   rob_refit                        = TRUE,   # refit on the low-RoB subset when Fig 2 says so
-  rob_inflation_threshold          = 0.10,   # minimum relative inflation to act on
+  rob_inflation_threshold          = 0.20,   # minimum relative inflation to act on
 
   small_values                     = NULL,   # "desirable" / "undesirable" / NULL
 
@@ -494,6 +494,8 @@ Downstream consumers MUST read pooled numbers from `$meta`, not `$meta_full`, so
 
 `grade_meta_multi()` re-raises the gate abort unchanged rather than recording the outcome as failed, so a batch run cannot be used to get around the gate.
 
+**Vocabulary: "MID" is internal, "threshold" is what users read [v0.5.1].** The argument value stays `threshold_type = "mid"`, and so do the internal names built on it (`has_mid`, `mid_suffix`, `ois_delta`) — renaming them would break callers for a word. But every string a user *reads* says **threshold**: the five `Rating target: …` notes from `.resolve_auto_target()`, the `.check_threshold_type_gate()` abort and its `suggest_threshold()` hint, and the Imprecision Fig 4 labels (`the +/-Threshold band`, `BOTH Thresholds (+/-Threshold)`, `no Threshold was supplied`, `an RRR rather than the threshold`). The two words name one thing, the app's Configuration tab calls it a threshold, and a reviewer meeting both in one notes string had to work out that they were not two. The one exception is text quoted **verbatim** from Core GRADE, which keeps the source's own word — e.g. the gate hint's *"MIDs associated with mortality of 1%…"*.
+
 #### 4.5.2 Rating target (Core GRADE 2 Fig 2)
 
 `grade_meta()` derives the target of the rating from the pooled point estimate and `threshold_type`:
@@ -541,6 +543,8 @@ inflation_ratio <- (abs(TE_all) - abs(TE_low)) / abs(TE_low)
 ```
 
 is one input to the zone-based direction check, not a judgment on its own. It is evaluated only when the shift runs in the bias-favouring direction, and what it triggers depends on which branch of the Core GRADE 4 Fig 2 flowchart is active. **§5.1 is authoritative for the whole domain.**
+
+The default lives in one place, `PMA_ROB_INFLATION_THRESHOLD` in `R/domain_rob.R`, which `assess_rob()`, `.flowchart_rob()`, `.assess_bias_direction()` and `export_bundle()`'s fallback all read. It is **0.20** as of v0.5.1 (0.10 up to v0.5.0). Core GRADE 4 quantifies neither node this feeds, so the number is a pmatools convention; 0.10 was low enough that the ordinary gap between `TE_all` (usually random-effects) and `TE_low` (always fixed-effect) could clear it on its own.
 
 **`threshold` semantics — Inconsistency (BMJ Core GRADE 3 flowchart):**
 

@@ -327,7 +327,8 @@ assess_imprecision <- function(meta_obj,
         threshold_used_note <- paste0(threshold_used_note, sprintf(
           paste0(" (ois_p1 from a modest relative risk %s, ois_rrr = ",
                  "%.0f%%: ois_p1 = %.4f%s; direction: %s; Core GRADE 2 ",
-                 "specifies an RRR rather than the MID for binary outcomes)"),
+                 "specifies an RRR rather than the threshold for binary ",
+                 "outcomes)"),
           if (isTRUE(ois_direction$increase)) "increase" else "reduction",
           100 * rrr, ois_p1,
           if (clamped) sprintf(
@@ -423,7 +424,7 @@ assess_imprecision <- function(meta_obj,
     } else {
       if (is.null(ois_delta)) {
         miss <- c(miss, paste0("ois_delta, the smallest difference worth ",
-                               "detecting (no Threshold/MID was supplied)"))
+                               "detecting (no Threshold was supplied)"))
       }
       if (is.null(ois_sd)) {
         miss <- c(miss, paste0("ois_sd, the pooled SD (not supplied, and it ",
@@ -462,14 +463,19 @@ assess_imprecision <- function(meta_obj,
     ci_ratio                = ci_ratio,
     ci_ratio_cut            = ci_ratio_cut,
     ois_missing_reason      = ois_missing_reason,
-    threshold_label         = if (has_threshold) "the Threshold (+/-MID)"
+    # These two are rendered into the Fig 4 path string a reviewer reads, so
+    # they say "Threshold" -- pmatools' own term for the band, and the word on
+    # the Configuration tab that set it. They used to say "MID"; the concept is
+    # the same and the vocabulary was not.
+    threshold_label         = if (has_threshold) "the +/-Threshold band"
                               else "the null threshold",
     two_level_label         = if (has_threshold) {
                                 "TWO thresholds (important benefit and important harm)"
                               } else {
-                                paste0("BOTH MIDs (+/-MID) -- the CI is consistent ",
-                                       "with benefit and with clearly important harm ",
-                                       "(Core GRADE 2, null-threshold path)")
+                                paste0("BOTH Thresholds (+/-Threshold) -- the CI is ",
+                                       "consistent with benefit and with clearly ",
+                                       "important harm (Core GRADE 2, null-threshold ",
+                                       "path)")
                               },
     sm                      = sm
   )
@@ -512,7 +518,13 @@ assess_imprecision <- function(meta_obj,
 
   # The +/-MID zone description is reported whenever a MID exists. On the
   # null-threshold path it is informational for -1/-0 but decisive for -2.
-  mid_suffix <- if (has_threshold) "" else " [MID zone; rating threshold = null]"
+  # The variable keeps the internal name; the string a reviewer reads says
+  # "Threshold", like every other user-facing string in this file.
+  mid_suffix <- if (has_threshold) {
+    ""
+  } else {
+    " [+/-Threshold zone; rating threshold = null]"
+  }
   thresh_str <- if (!has_mid_zone) {
     ""
   } else if (isTRUE(crosses_both_thresholds)) {

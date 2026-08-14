@@ -202,6 +202,37 @@ CERTAINTY_PALETTES <- list(
   paste0(series, ". Guyatt G, et al. BMJ. 2025")
 }
 
+# Core GRADE series number -> DOI. One paper per number, so the number is the
+# whole key; a caller that has the number never has to parse it back out of the
+# citation string .core_grade_ref() built.
+#
+# The DOIs live here rather than in the app because the app is not the only
+# thing that may want to reach the papers, and because a number-keyed map is
+# the one shape that cannot drift from .core_grade_ref() beside it: both are
+# indexed by the series number and nothing else. The citation STRING is still
+# DOI-free house style (see above) -- what this adds is a destination to hang
+# on it, not a longer citation.
+PMA_CORE_GRADE_DOIS <- c(
+  "1" = "10.1136/bmj-2024-081903",
+  "2" = "10.1136/bmj-2024-081904",
+  "3" = "10.1136/bmj-2024-081905",
+  "4" = "10.1136/bmj-2024-083864",
+  "5" = "10.1136/bmj-2024-083865"
+)
+
+# Resolvable URL for a Core GRADE paper, or NULL when the number is absent or
+# is not one this map knows. NULL rather than an error: a missing link is a
+# reference that renders as plain text, which is what the app did before, and
+# no caller should lose a whole tab over it. Papers 6 and 7 of the series have
+# no entry, so they take the NULL path until their DOIs are added.
+.core_grade_doi_url <- function(number) {
+  if (is.null(number) || length(number) != 1L || is.na(number)) return(NULL)
+  # `[` and not `[[`: an unknown name yields NA here, where `[[` would abort.
+  doi <- unname(PMA_CORE_GRADE_DOIS[as.character(number)])
+  if (is.na(doi)) return(NULL)
+  paste0("https://doi.org/", doi)
+}
+
 # The disclaimer that follows the series citation on every table this package
 # builds. One literal, because eight footnotes used to word it four ways.
 .PMA_CORE_GRADE_FOOTNOTE <- paste0(
