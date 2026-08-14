@@ -81,7 +81,7 @@
 #'   \code{\link{plot_forest}} when rendering the bundled forest plot.
 #'   Recognised names: `title`, `label_e`, `label_c`, `xlim`,
 #'   `favors_left`, `favors_right`, `show_n`, `show_events`,
-#'   `addrow_above`, `addrow_below`.
+#'   `addrow_above`, `addrow_below`, `digits_mean`, `digits_sd`.
 #' @param rob Optional character vector of per-study Risk-of-Bias labels
 #'   (length \code{length(meta_obj$studlab)} or \code{meta_obj$k}). Required
 #'   when `"forest_rob"` is in `include` to render the stratified forest plot.

@@ -313,6 +313,25 @@ plot_forest(
 
 Since v0.4 the signature also carries display arguments used by the export bundle: `threshold_lines`, `show_n`, `show_events`, `favors_left`, `favors_right`, `addrow_above`, `addrow_below`. `addrow_below = NULL` (the default) derives the bottom spacing from the drawn content so the heterogeneity text cannot overlap the x-axis band.
 
+**`digits_mean` / `digits_sd` (v0.5.1).** The decimal places printed in the
+per-arm `Mean` and `SD` columns of a continuous outcome, passed to
+`meta::forest()` as `digits.mean` / `digits.sd`. **Both default to `1`**, which
+is deliberately not `{meta}`'s own pair (`digits.mean = 2`, `digits.sd = 4`):
+those print an SD to twice the precision of the mean it belongs to, and a
+four-decimal SD column is wide enough to squeeze the forest itself. Neither is
+a precision any trial reports. The defaults therefore **change the rendered
+output of every continuous forest plot** — no argument changes meaning, and no
+call has to be updated.
+
+`NA`, a negative value, or anything that is not a length-1 finite number falls
+back to `1` rather than reaching `meta::forest()`, for the reason the
+`addrow_*` arguments are sanitised the same way: `meta::forest()` rejects the
+value, and the retry that answers an error by stripping `leftcols`/`leftlabs`
+would then delete the very columns these digits describe. A caller may still
+pass `digits.mean` / `digits.sd` through `...`; the explicit pass-through wins,
+and does not collide with the argument. Both are ignored for an outcome that
+draws no mean/SD columns.
+
 **`title` placement (v0.5.1).** The title is drawn on its own line(s) above the
 column headers, word-wrapped to the device width. It is **not** passed to
 `meta::forest()` as `smlab`: `{meta}` draws `smlab` inside the header row,

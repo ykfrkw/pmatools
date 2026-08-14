@@ -129,7 +129,7 @@ silently dropped from the generated script. See SPEC.md.}
 \code{\link{plot_forest}} when rendering the bundled forest plot.
 Recognised names: \code{title}, \code{label_e}, \code{label_c}, \code{xlim},
 \code{favors_left}, \code{favors_right}, \code{show_n}, \code{show_events},
-\code{addrow_above}, \code{addrow_below}.}
+\code{addrow_above}, \code{addrow_below}, \code{digits_mean}, \code{digits_sd}.}
 
 \item{rob}{Optional character vector of per-study Risk-of-Bias labels
 (length \code{length(meta_obj$studlab)} or \code{meta_obj$k}). Required

@@ -865,11 +865,18 @@ details > summary {
    <select> (inside .dataTables_length, outside any Shiny input container)
    keeps its table-native styling.
 
-   Inputs covered here: col_studlab, col_treat, col_n, col_event, col_mean,
-   col_sd, subgroup_col, sample_dataset, rare_primary_method
-   (native, selectize = FALSE); experimental_label, control_label, method,
-   method_tau, random_ci, subgroup_order, rob_override and the other
-   Step 3 / Step 4 pickers (selectize).
+   Inputs covered here: subgroup_col, sample_dataset, rare_primary_method
+   (native, selectize = FALSE); col_studlab, col_treat, col_n, col_event,
+   col_mean, col_sd, experimental_label, control_label, method, method_tau,
+   random_ci, subgroup_order, rob_override and the other Step 3 / Step 4
+   pickers (selectize).
+
+   The six col_* mapping selects moved from the first list to the second:
+   only the CLOSED native control is ours to paint. Its dropdown list is drawn
+   by the operating system, outside the document, and no rule below can reach
+   it - so those six changed appearance at exactly the moment they were being
+   read. A selectize dropdown is ordinary DOM and the rules further down
+   repaint it whole.
    --------------------------------------------------------------------------- */
 
 /* The caret glyph is shared by both flavours, so it lives in a custom property

@@ -343,14 +343,37 @@ The title, and nothing else. See §3.2.2.
 
 #### 3.3.3 Inputs (sidebar)
 
-One `pma_card("Model configuration")` holding a `bslib::accordion(multiple = TRUE)` of four panels, then a sticky action bar.
+One `pma_card("Model configuration")` holding a `bslib::accordion(multiple = FALSE)` of four panels, then a sticky action bar.
 
 | Panel (`value`) | Contents | Open on build |
 |---|---|---|
 | Outcome (`outcome`) | `outcome_name`, `small_values`, `outcome_type`, `outcome_follow_up`, `outcome_unit` (continuous only) | always |
-| Data mapping (`mapping`) | `col_studlab`, `col_treat`, `arm_assignment_ui`, `col_n`, `col_event` (binary) / `col_mean` + `col_sd` (continuous) | while `state$ma` is NULL |
+| Data mapping (`mapping`) | `col_studlab`, `col_treat`, `arm_assignment_ui`, `col_n`, `col_event` (binary) / `col_mean` + `col_sd` (continuous) | never |
 | Model details (`model`) | `sm_bin` / `sm_cont_ui`, `model`, `method`, `method_tau`, `random_ci`, `incr` | never |
 | Subgroup (`subgroup`) | `subgroup_col`, `subgroup_order_ui` | never |
+
+- **Exactly one panel is open at a time** (`multiple = FALSE`), and on arrival
+  it is Outcome — the only panel holding something no default can supply.
+  Opening another closes it, so the sidebar is never taller than the question
+  being answered and the sticky action bar stays in view. The open state no
+  longer depends on `state$ma`: Data mapping used to open alongside Outcome
+  until a pooled object existed, which made the two together longer than a
+  laptop viewport on the very first visit.
+- **`multiple = FALSE` is load-bearing for `www/required-fields.js`.** It is
+  what puts `data-bs-parent` on every `.accordion-collapse`, and that attribute
+  is how Bootstrap closes the open sibling. The reveal in §3.3.6 therefore goes
+  through `bootstrap.Collapse.getOrCreateInstance(panel).show()`; adding the
+  `show` class by hand bypasses the sibling-closing and leaves two panels open.
+  The hand toggle survives only as a fallback for a page without Bootstrap's
+  JS bundle, because that file must degrade rather than throw.
+- **The six column-mapping selects are selectize widgets**, not
+  `selectize = FALSE`. A native `<select>` is token-styled while closed, but its
+  open list is drawn by the operating system, outside the document, and no rule
+  in `www/shadcn.css` can reach it — so those six changed appearance at exactly
+  the moment they were being read. `subgroup_col`, `sample_dataset` and
+  `rare_primary_method` stay native. The server fills all of them with
+  `updateSelectInput()`, which preserves the current selection for either
+  flavour.
 
 - **Outcome type is identity, not mapping.** `outcome_type` sits in the
   Outcome panel: it says what kind of thing is being rated, and decides which
@@ -382,13 +405,18 @@ One `pma_card("Model configuration")` holding a `bslib::accordion(multiple = TRU
   `hakn` as `NULL` / `TRUE` / `FALSE`. `auto` is `run_ma()`'s own `k >= 3`
   rule, so the default run is byte-for-byte what it was before the control
   existed.
-- **Data mapping's open state is decided at build time from `state$ma`**, not
-  from the selects themselves — the selects are populated by the server
-  *after* this UI is built, so at build time they are all blank whatever the
-  data holds. A non-NULL `state$ma` is proof the mapping resolved, so the
-  panel stays shut on every return trip from Step 3. A select that is blank
-  when the reviewer actually asks for an analysis is handled from the other
-  end, by `www/required-fields.js` (§3.3.6).
+- **A blank mapping select cannot be caught at build time** — the selects are
+  populated by the server *after* this UI is built, so at build time they are
+  all blank whatever the data holds. One that is still blank when the reviewer
+  actually asks for an analysis is handled from the other end, by
+  `www/required-fields.js` (§3.3.6), which opens the panel holding it.
+- **The continuous summary measure defaults to `SMD`**, in
+  `output$sm_cont_ui` and in the observer that hides `RoM` when the mean column
+  holds a non-positive value. A review pooling continuous outcomes at all is
+  usually pooling several instruments (PHQ-9, HAMD, BDI), and a mean difference
+  across two scales is not a quantity; `MD` stays one click away. Both places
+  build the radio with `pma_spelled_choices()`, so changing the mean column
+  cannot silently strip the spelled-out labels the bullet above requires.
 - **Every input id is unchanged by the restructure.** Step 3 reads most of
   these off `input$` directly, so a rename is silent everywhere else;
   `tests/testthat/test-step2-layout.R` asserts each id renders.
@@ -425,8 +453,17 @@ Below the tabset: the collapsible **"Forest plot display"** panel, built by the
 single `pma_forest_display_panel(prefix)` in `R/ui_helpers.R` and shared with
 each of the four Step 3 domain tabs (`prefix = NULL` gives Step 2's unprefixed
 ids). It holds the title, the two arm labels, the two "Favors …" labels, the
-x-min / x-max overrides, the two blank-row spinners and the per-arm column
-checkbox.
+x-min / x-max overrides, the two blank-row spinners, the Mean / SD decimal
+spinners and the per-arm column checkbox.
+
+- **`digits_mean` / `digits_sd` both default to 1**, matching
+  `plot_forest()`'s own defaults (SPEC.md §4.3) rather than `{meta}`'s 2 and 4.
+  They are coerced by `pma_forest_digits()` before they leave the app: a blank
+  field is `NA`, and `NA` reaching `meta::forest()` costs the Mean and SD
+  columns rather than raising. Only a continuous outcome draws those columns,
+  but the two fields are shown unconditionally — the panel is shared with the
+  Step 3 tabs, and a control that appears and disappears with the outcome type
+  is harder to find than one that is inert.
 
 - **Layout is `.pma-display-grid`**, four columns. A child that needs the whole
   row carries `.pma-span-4` (title, the blank-row hint, the checkbox); a child
@@ -484,8 +521,10 @@ flag per id: an id dropped from the list would keep its last mark rather than
 lose it when the outcome type changes.
 
 Because §3.3.3's accordion can hide a blank select, `required-fields.js` also
-**opens the panel** containing one — but only when `armed`, and only once per
-panel per DOM build. Before the reviewer has asked for an analysis the panel
+**opens the panel** containing one — through
+`bootstrap.Collapse.getOrCreateInstance(panel).show()`, so the panel that is
+currently open closes with it (§3.3.3), and only when `armed`, and only once
+per panel per DOM build. Before the reviewer has asked for an analysis the panel
 state is theirs, and every mapping select is legitimately blank for the first
 few hundred milliseconds of each build while the server populates it; opening
 on that would fight the user and flash on every return from Step 3. The

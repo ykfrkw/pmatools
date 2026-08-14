@@ -102,16 +102,15 @@ step2_ui <- function(state = NULL) {
     }
   }
 
-  # Which accordion panels are open when the step is built. "Outcome" always:
-  # it is the only panel holding something no default can supply. "Data
-  # mapping" until an analysis exists, because a pooled result is proof the
-  # mapping resolved - after that, re-opening it on every return trip from
-  # Step 3 is noise. A mapping select that is blank when the reviewer actually
-  # asks for an analysis is handled from the other end, by required-fields.js,
-  # which forces its panel open; that check cannot be made here because the
-  # selects are populated by the server after this UI is built.
-  mapping_settled <- !is.null(state) && !is.null(shiny::isolate(state$ma))
-  open_panels <- c("outcome", if (!mapping_settled) "mapping")
+  # One panel open at a time, and on arrival it is "Outcome": the only panel
+  # holding something no default can supply. Opening another closes it (see
+  # `multiple = FALSE` below), so the sidebar is never taller than the
+  # question being answered and the sticky action bar stays in view.
+  # A mapping select that is blank when the reviewer actually asks for an
+  # analysis is handled from the other end, by required-fields.js, which opens
+  # the panel holding it; that check cannot be made here because the selects
+  # are populated by the server after this UI is built.
+  open_panels <- "outcome"
 
   htmltools::tagList(
     # Registers the `pma_required_fields` custom message handler used by the
@@ -144,10 +143,10 @@ step2_ui <- function(state = NULL) {
           title = "Model configuration",
 
           # Four accordion panels rather than one 120-line column of controls.
-          # The order is the order the questions arise, and only the panels
-          # that need an answer are open (see `open_panels` above).
+          # The order is the order the questions arise, and exactly one of them
+          # is open at a time (see `open_panels` above).
           bslib::accordion(
-            multiple = TRUE,
+            multiple = FALSE,
             open     = open_panels,
 
             bslib::accordion_panel(
@@ -164,10 +163,6 @@ step2_ui <- function(state = NULL) {
                   "Favorable - smaller is better (e.g., mortality, symptom score)" = "desirable",
                   "Unfavorable - smaller is worse (e.g., response, remission)"     = "undesirable"),
                 selected = small_values_default, inline = FALSE),
-              htmltools::p(class = "pma-card-subtitle",
-                paste0("Both are required. They name the outcome in the Summary of ",
-                       "Findings table, prefill every forest-plot title and axis label, ",
-                       "and set the bias direction used by the Risk-of-Bias check in Step 3.")),
               # Binary / continuous sits with the outcome's identity rather
               # than with the column mapping: it is a property of the outcome,
               # and it decides which of the optional fields below applies.
@@ -182,11 +177,6 @@ step2_ui <- function(state = NULL) {
                                "Follow-up / time frame (optional)",
                                value = follow_up_default, width = "100%",
                                placeholder = "e.g., longest, range 8-52 weeks"),
-              htmltools::p(class = "pma-card-subtitle",
-                paste0("Printed under the outcome name in the \"Outcome and ",
-                       "follow-up\" column of the Summary of Findings table. ",
-                       "Saved with the outcome, so several outcomes can carry ",
-                       "different follow-up times in one table.")),
               shiny::conditionalPanel(
                 "input.outcome_type == 'continuous'",
                 shiny::textInput("outcome_unit",
@@ -204,24 +194,30 @@ step2_ui <- function(state = NULL) {
 
             bslib::accordion_panel(
               "Data mapping", value = "mapping",
+              # Selectize widgets, NOT `selectize = FALSE`. A native <select>
+              # is token-styled while closed but its open list is drawn by the
+              # operating system and cannot be styled at all, so these six
+              # dropdowns changed appearance the moment they were used - the
+              # one moment they are being read. A selectize dropdown is our own
+              # DOM and www/shadcn.css repaints it whole.
               shiny::selectInput("col_studlab", "Study label (studlab)",
-                                 choices = NULL, selectize = FALSE),
+                                 choices = NULL),
               shiny::selectInput("col_treat", "Arm / treatment (treat)",
-                                 choices = NULL, selectize = FALSE),
+                                 choices = NULL),
               shiny::uiOutput("arm_assignment_ui"),
               shiny::selectInput("col_n", "Sample size (n)",
-                                 choices = NULL, selectize = FALSE),
+                                 choices = NULL),
               shiny::conditionalPanel(
                 "input.outcome_type == 'binary'",
                 shiny::selectInput("col_event", "Events",
-                                   choices = NULL, selectize = FALSE)
+                                   choices = NULL)
               ),
               shiny::conditionalPanel(
                 "input.outcome_type == 'continuous'",
                 shiny::selectInput("col_mean", "Mean",
-                                   choices = NULL, selectize = FALSE),
+                                   choices = NULL),
                 shiny::selectInput("col_sd",   "SD",
-                                   choices = NULL, selectize = FALSE)
+                                   choices = NULL)
               )
             ),
 
@@ -487,8 +483,12 @@ step2_server <- function(input, output, session, state) {
     }
     choices <- c("MD", "SMD")
     if (has_positive_means) choices <- c(choices, "RoM")
-    current <- shiny::isolate(input$sm_cont) %||% "MD"
-    if (!current %in% choices) current <- "MD"
+    # SMD, not MD: a review that pools continuous outcomes at all is usually
+    # pooling several instruments (PHQ-9, HAMD, BDI), and a mean difference
+    # across two scales is not a quantity. MD stays one click away for the
+    # single-instrument case.
+    current <- shiny::isolate(input$sm_cont) %||% "SMD"
+    if (!current %in% choices) current <- "SMD"
     shiny::radioButtons("sm_cont", "Summary measure",
                         choices = pma_spelled_choices(choices),
                         selected = current, inline = TRUE)
@@ -601,10 +601,17 @@ step2_server <- function(input, output, session, state) {
     if (!is.numeric(vals)) return()
     has_non_positive <- any(vals <= 0, na.rm = TRUE)
     choices  <- if (has_non_positive) c("MD", "SMD") else c("MD", "SMD", "RoM")
-    cur_sm   <- shiny::isolate(input$sm_cont) %||% "MD"
-    selected <- if (cur_sm %in% choices) cur_sm else "MD"
+    cur_sm   <- shiny::isolate(input$sm_cont) %||% "SMD"
+    selected <- if (cur_sm %in% choices) cur_sm else "SMD"
+    # pma_spelled_choices(), matching output$sm_cont_ui above. Passing the bare
+    # codes here rewrote the control with unspelled labels the moment the mean
+    # column changed, so "SMD (standardised mean difference)" silently became
+    # "SMD" - and §3.3.3 of shiny/SPEC.md says every abbreviation in this panel
+    # is spelled out on sight. The values are unchanged either way, which is
+    # exactly why nothing downstream noticed.
     shiny::updateRadioButtons(session, "sm_cont",
-                              choices = choices, selected = selected,
+                              choices = pma_spelled_choices(choices),
+                              selected = selected,
                               inline = TRUE)
   })
 
@@ -1274,7 +1281,9 @@ step2_server <- function(input, output, session, state) {
           favors_left        = if (nzchar(input$favors_left %||% ""))  input$favors_left  else NULL,
           favors_right       = if (nzchar(input$favors_right %||% "")) input$favors_right else NULL,
           addrow_above       = pma_addrow_above(input$addrows_above_overall),
-          addrow_below       = pma_addrow_below(input$addrows_below_overall)
+          addrow_below       = pma_addrow_below(input$addrows_below_overall),
+          digits_mean        = pma_forest_digits(input$digits_mean),
+          digits_sd          = pma_forest_digits(input$digits_sd)
         )
       }
     )
@@ -1302,7 +1311,9 @@ step2_server <- function(input, output, session, state) {
       show_n       = isTRUE(input$show_arm_columns %||% TRUE),
       show_events  = isTRUE(input$show_arm_columns %||% TRUE),
       addrow_above = pma_addrow_above(input$addrows_above_overall),
-      addrow_below = pma_addrow_below(input$addrows_below_overall)
+      addrow_below = pma_addrow_below(input$addrows_below_overall),
+      digits_mean  = pma_forest_digits(input$digits_mean),
+      digits_sd    = pma_forest_digits(input$digits_sd)
     )
   })
 

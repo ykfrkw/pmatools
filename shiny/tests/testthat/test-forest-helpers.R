@@ -58,6 +58,38 @@ test_that("pma_addrow_below() expresses 'let plot_forest() decide' as NULL", {
   expect_null(pma_addrow_below(c(1, 2)))
 })
 
+test_that("pma_forest_digits() falls back to one decimal place", {
+  # A blank spinner arrives as NA and there is no auto mode: NA would reach
+  # meta::forest(), which rejects it, and plot_forest()'s error retry answers
+  # that by dropping the Mean and SD columns these digits describe.
+  expect_equal(pma_forest_digits(0), 0)
+  expect_equal(pma_forest_digits(3), 3)
+  expect_equal(pma_forest_digits("2"), 2)
+  expect_equal(pma_forest_digits(NULL), 1)
+  expect_equal(pma_forest_digits(NA), 1)
+  expect_equal(pma_forest_digits(-1), 1)
+  expect_equal(pma_forest_digits(Inf), 1)
+  expect_equal(pma_forest_digits("abc"), 1)
+  expect_equal(pma_forest_digits(c(1, 2)), 1)
+})
+
+test_that("the display panel carries the Mean / SD decimal fields in both id schemes", {
+  # Step 2 reads the bare ids off input$ and Step 3's collector builds the
+  # prefixed ones by hand, so a panel that emitted only one of the two shapes
+  # would leave the other step silently rendering the default.
+  bare <- as.character(pma_forest_display_panel(NULL))
+  expect_true(grepl('id="digits_mean"', bare, fixed = TRUE))
+  expect_true(grepl('id="digits_sd"', bare, fixed = TRUE))
+
+  prefixed <- as.character(pma_forest_display_panel("rob"))
+  expect_true(grepl('id="rob_digits_mean"', prefixed, fixed = TRUE))
+  expect_true(grepl('id="rob_digits_sd"', prefixed, fixed = TRUE))
+  # The bare ids must not leak into a prefixed panel: Step 2 and a Step 3 tab
+  # can be in the DOM at the same time only by accident, but a duplicate id is
+  # unrecoverable when it happens.
+  expect_false(grepl('id="digits_mean"', prefixed, fixed = TRUE))
+})
+
 test_that("the forest id helpers keep Step 2 and Step 3 apart", {
   # Step 2 (no prefix) and Step 3 (prefixed) genuinely disagree on the
   # blank-row suffix; that asymmetry is the reason these helpers exist, and

@@ -2866,7 +2866,13 @@ step3_server <- function(input, output, session, state) {
       show_n       = isTRUE(input[[paste0(prefix, "_show_arm_columns")]] %||% TRUE),
       show_events  = isTRUE(input[[paste0(prefix, "_show_arm_columns")]] %||% TRUE),
       addrow_above = pma_addrow_above(input[[addrow_ids[["above"]]]]),
-      addrow_below = pma_addrow_below(input[[addrow_ids[["below"]]]])
+      addrow_below = pma_addrow_below(input[[addrow_ids[["below"]]]]),
+      # Blank or negative falls back to plot_forest()'s own default of 1
+      # rather than travelling on as NA: an NA reaches meta::forest(), which
+      # rejects it, and plot_forest()'s error retry answers that by dropping
+      # the data columns instead of reporting the value.
+      digits_mean  = pma_forest_digits(input[[paste0(prefix, "_digits_mean")]]),
+      digits_sd    = pma_forest_digits(input[[paste0(prefix, "_digits_sd")]])
     )
   }
 

@@ -676,6 +676,36 @@
 
 ## Behaviour changes
 
+* **Forest plots print `Mean` and `SD` to one decimal place, and the precision
+  is now adjustable.** `plot_forest()` gains `digits_mean` and `digits_sd`,
+  both defaulting to `1` and passed to `meta::forest()` as `digits.mean` /
+  `digits.sd`. Nothing passed them before, so `{meta}`'s own defaults applied:
+  `digits.mean = 2` and `digits.sd = 4`, i.e. an SD printed to twice the
+  precision of the mean it belongs to, in a column wide enough to squeeze the
+  forest itself. Neither is a precision any trial reports.
+
+  **This changes the rendered output of every continuous forest plot** — the
+  drawn one, the PDF in the export bundle and each of the Step 3 stratified
+  copies. It is not a breaking API change: no argument changes meaning, no call
+  has to be updated, and a caller who wants the old numbers passes
+  `digits_mean = 2, digits_sd = 4`. `NA`, a negative value or anything not a
+  length-1 finite number falls back to `1` rather than reaching
+  `meta::forest()`, for the same reason the `addrow_*` arguments are sanitised:
+  the retry that answers a `meta::forest()` error by stripping
+  `leftcols`/`leftlabs` would delete the very columns these digits describe. A
+  `digits.mean` / `digits.sd` passed through `...` still wins, and no longer
+  collides with the argument. Both are exposed in the app's "Forest plot
+  display" panel as **Mean decimals** and **SD decimals**.
+
+* **The Shiny app defaults a continuous outcome to `SMD`, not `MD`.** A review
+  pooling continuous outcomes at all is usually pooling several instruments
+  (PHQ-9, HAMD, BDI), and a mean difference across two scales is not a
+  quantity; `MD` remains one click away in the same radio. This is an app
+  default only — no package function changes, and a saved outcome keeps the
+  measure it was pooled with. Also fixes the neighbouring bug where changing
+  the mean column rebuilt that radio from bare codes, silently collapsing
+  `SMD (standardised mean difference)` back to `SMD`.
+
 * **The control-arm risk is supplied once, and `threshold_baseline`, `ois_p0`
   and `baseline_risk` now inherit it from one another.** All three name the
   same quantity — the control-arm event rate — and they feed three different

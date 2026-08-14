@@ -1917,6 +1917,21 @@ pma_forest_display_panel <- function(prefix = NULL) {
         shiny::numericInput(addrows[["below"]], "Blank rows below pooled result",
                             value = NA, min = 0, step = 1, width = "100%")),
 
+      # Decimal places in the per-arm Mean and SD columns. Both default to 1
+      # here and in plot_forest(), rather than to {meta}'s own 2 and 4: an SD
+      # printed to twice the precision of its mean is not what any trial
+      # reports, and the four-decimal SD column was wide enough to squeeze the
+      # forest itself. Only meaningful for a continuous outcome; shown
+      # unconditionally all the same, because the panel is shared with the
+      # Step 3 tabs and a control that appears and disappears with the outcome
+      # type is harder to find than one that is simply inert.
+      htmltools::div(class = "pma-span-2",
+        shiny::numericInput(.id("digits_mean"), "Mean decimals",
+                            value = 1, min = 0, step = 1, width = "100%")),
+      htmltools::div(class = "pma-span-2",
+        shiny::numericInput(.id("digits_sd"), "SD decimals",
+                            value = 1, min = 0, step = 1, width = "100%")),
+
       # One checkbox, not two: plot_forest() keeps show_n and show_events as
       # separate arguments (correct for a library), but there is no case where
       # a user wants the N columns without the per-arm data columns, so the UI
@@ -1970,6 +1985,17 @@ pma_addrow_below <- function(x) {
 # Same for "blank rows above the pooled result", where there is no auto mode;
 # a blank field falls back to the historical default of one row.
 pma_addrow_above <- function(x, default = 1) {
+  if (is.null(x) || length(x) != 1) return(default)
+  x <- suppressWarnings(as.numeric(x))
+  if (is.na(x) || !is.finite(x) || x < 0) return(default)
+  x
+}
+
+# Same again for the Mean / SD decimal-place spinners, where a blank field also
+# has no auto mode: plot_forest() would receive NA, meta::forest() would reject
+# it, and its caller's error retry drops the data columns rather than reporting
+# the bad value - so the fallback has to happen before the value leaves here.
+pma_forest_digits <- function(x, default = 1) {
   if (is.null(x) || length(x) != 1) return(default)
   x <- suppressWarnings(as.numeric(x))
   if (is.na(x) || !is.finite(x) || x < 0) return(default)
