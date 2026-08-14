@@ -38,6 +38,50 @@
   the new form. `$downgrade` is unchanged and remains the reliable thing to
   read.
 
+* **`small_values` is required, and a call without it aborts.** It says which
+  way benefit runs for the outcome: `"desirable"` when a small value is good
+  (mortality, symptom severity), `"undesirable"` when a small value is bad
+  (response rate, remission). Migration is one argument per `grade_meta()` call
+  — or one entry in `grade_meta_multi()`'s `common` list, which covers a whole
+  batch — and there is nothing to decide that the review has not already
+  decided.
+
+  It was optional, and two domains guessed in its absence. Risk of bias fell
+  back to "further from the null" (`|TE_all| > |TE_low|`) for the Core GRADE 4
+  Fig 2 direction-of-bias check, and then **warned that the assumption had
+  determined the downgrade** — a package that has to say "this guess decided
+  your rating" is saying the argument should never have been optional. The
+  optimal information size used Core GRADE 2's relative risk *reduction* as
+  written, so for an outcome whose events are the desirable thing the
+  alternative event rate landed on the wrong side of the modest RRR and the OIS
+  was powered against the wrong tail. Both guessing branches, and the warning,
+  are gone.
+
+  **The bug that motivated it:** `export_bundle()` wrote `small_values = NULL`
+  into the bundled `analysis.R` whenever the caller had not routed the argument
+  through `grade_args`, so a "reproducible" script re-ran the OIS on the other
+  side of the RRR and documented a different analysis from the one it came
+  from. The rated object now carries `$small_values` and the bundle reads it.
+
+  **There is no escape hatch, and that is deliberate.** `require_threshold =
+  FALSE` exists because rating without a MID is a legitimate methodological
+  choice — Core GRADE 7 asks users to read the CI first and pin down a MID only
+  where the verdict depends on it. Rating without a direction is not a choice:
+  every outcome a review rates has one, and "direction unknown" only ever means
+  the outcome has not finished being specified. The abort carries condition
+  class `"pmatools_direction_gate"`, and `grade_meta_multi()` re-raises it
+  rather than demoting it to a per-outcome warning, exactly as it does the
+  threshold gate. `assess_rob()` and `assess_imprecision()` require it too.
+
+  **This is the third breaking change in 0.5.1, and the only one that cannot
+  change a number behind your back.** The judgment-vocabulary rename and the
+  risk-of-bias labels above both had to be defended against silence — a script
+  that kept running and reported a different rating — which is why the
+  vocabulary rename spends a whole release erroring on `"serious"`. A missing
+  required argument has the opposite failure mode: the call stops, names what
+  is missing, and nothing is rated until you answer. That is why it is
+  acceptable to add a third break here rather than wait.
+
 * **A fourth domain level, `"extremely_serious"` (−3), exists and is manual
   only.** Core GRADE 1 lists it ("or, rarely, extremely serious") and pmatools
   had no value for it. It is now reachable through any scalar domain argument,

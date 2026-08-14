@@ -17,10 +17,12 @@ make_metabin_gr <- function() {
 make_outcomes_gr <- function() {
   m  <- make_metabin_gr()
   g1 <- suppressWarnings(grade_meta(m, study_design = "RCT", rob = "no",
+                                    small_values = "desirable",
                                     rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
                                     outcome_name = "Outcome 1", threshold_type = "null"))
   g2 <- suppressWarnings(grade_meta(m, study_design = "RCT", rob = "some_concerns",
+                                    small_values = "desirable",
                                     rob_rationale = "Consensus RoB2: some concerns overall",
                                     indirectness = "no",
                                     outcome_name = "Outcome 2", threshold_type = "null"))

@@ -110,7 +110,7 @@ setwd(APP_DIR)
 
 # Dev-only packages in pmatools Suggests that the deployed app never needs.
 # Everything else in pmatools Imports/Suggests is assumed runtime-relevant.
-DEV_ONLY_PKGS <- c("testthat", "rmarkdown", "here", "knitr", "covr",
+DEV_ONLY_PKGS <- c("testthat", "withr", "rmarkdown", "here", "knitr", "covr",
                    "devtools", "usethis", "roxygen2")
 
 # --- Package-root validation -------------------------------------------------

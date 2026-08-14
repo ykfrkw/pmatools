@@ -65,6 +65,7 @@ make_mock_dominated <- function(te_all, te_low_only,
 test_that("grade_meta returns pmatools object", {
   m <- make_metabin()
   g <- grade_meta(m, study_design = "RCT", rob = "no",
+                  small_values = "desirable",
                   rob_rationale = "Consensus RoB2: all domains low risk",
                   indirectness = "no", threshold_type = "null")
   expect_s3_class(g, "pmatools")
@@ -73,6 +74,7 @@ test_that("grade_meta returns pmatools object", {
 test_that("RCT starts at High certainty with no concerns", {
   m <- make_metabin()
   g <- grade_meta(m, study_design = "RCT", rob = "no",
+                  small_values = "desirable",
                   rob_rationale = "Consensus RoB2: all domains low risk",
                   indirectness = "no", threshold_type = "null")
   expect_true(g$starting_quality == "High")
@@ -82,6 +84,7 @@ test_that("RCT starts at High certainty with no concerns", {
 test_that("obs starts at Low certainty", {
   m <- make_metabin()
   g <- grade_meta(m, study_design = "obs", rob = "no",
+                  small_values = "desirable",
                   rob_rationale = "Consensus RoB2: all domains low risk", threshold_type = "null")
   expect_equal(g$starting_quality, "Low")
 })
@@ -89,9 +92,11 @@ test_that("obs starts at Low certainty", {
 test_that("rob = 'some' downgrades by 1", {
   m <- make_metabin()
   g_no   <- grade_meta(m, study_design = "RCT", rob = "no",
+                       small_values = "desirable",
                        rob_rationale = "Consensus RoB2: all domains low risk",
                        indirectness = "no", threshold_type = "null")
   g_some <- grade_meta(m, study_design = "RCT", rob = "some",
+                       small_values = "desirable",
                        rob_rationale = "Consensus RoB2: some concerns overall",
                        indirectness = "no", threshold_type = "null")
   diff <- g_no$certainty_score - g_some$certainty_score
@@ -101,6 +106,7 @@ test_that("rob = 'some' downgrades by 1", {
 test_that("very_serious rob downgrades by 2", {
   m <- make_metabin()
   g <- grade_meta(m, study_design = "RCT", rob = "very_serious",
+                  small_values = "desirable",
                   rob_rationale = "Consensus RoB2: high risk in most domains",
                   indirectness = "no", threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
@@ -111,7 +117,7 @@ test_that("very_serious rob downgrades by 2", {
 
 test_that("inconsistency domain is auto-computed", {
   m <- make_metabin()
-  g <- suppressWarnings(grade_meta(m, threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, threshold_type = "null", small_values = "desirable"))
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_true(incon_row$auto)
   expect_true(incon_row$judgment %in% c("not_serious", "some", "very_serious", "very_serious"))
@@ -124,7 +130,7 @@ test_that("high I2 (opposite-sided TEs) rates down two levels (auto)", {
   # the domain rates down two levels. The note has to declare the departure
   # from Core GRADE 3, which describes no two-level inconsistency downgrade.
   m <- make_metabin_high_i2()
-  g <- grade_meta(m, threshold_type = "null")
+  g <- grade_meta(m, threshold_type = "null", small_values = "desirable")
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_equal(incon_row$judgment, "very_serious")
   expect_equal(incon_row$downgrade, -2L)
@@ -139,7 +145,7 @@ test_that("the extra inconsistency level costs exactly one certainty band", {
   # High (4) - 2 - 1 = 1 = Very Low. Under the v0.5.0 cap the same fixture
   # scored 2 = Low, which is what the scalar override below reproduces.
   m <- make_metabin_high_i2()
-  g <- grade_meta(m, threshold_type = "null")
+  g <- grade_meta(m, threshold_type = "null", small_values = "desirable")
 
   downgrades <- stats::setNames(g$domain_assessments$downgrade,
                                 g$domain_assessments$domain)
@@ -155,6 +161,7 @@ test_that("the extra inconsistency level costs exactly one certainty band", {
   # Same object, same domains, inconsistency forced back to -1: one band up
   # and nothing else moves.
   g1 <- grade_meta(m, threshold_type = "null",
+                   small_values = "desirable",
                    inconsistency = "some_concerns",
                    inconsistency_rationale = "Pinning the pre-0.5.1 one level")
   expect_equal(g1$certainty_score, 2)
@@ -167,6 +174,7 @@ test_that("the scalar override still sets inconsistency independently", {
   # explicit judgment still wins over the flowchart.
   m <- make_metabin_high_i2()
   g <- grade_meta(m, threshold_type = "null", inconsistency = "no",
+                  small_values = "desirable",
                   inconsistency_rationale = "Subgroups reported separately")
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_equal(incon_row$judgment, "not_serious")
@@ -176,7 +184,8 @@ test_that("the scalar override still sets inconsistency independently", {
 
 test_that("inconsistency flowchart: ci_diff = no → do not rate down", {
   m <- make_metabin()
-  g <- grade_meta(m, inconsistency_ci_diff = "no", threshold_type = "null")
+  g <- grade_meta(m, inconsistency_ci_diff = "no", threshold_type = "null",
+    small_values = "desirable")
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_equal(incon_row$judgment, "not_serious")
   expect_false(incon_row$auto)
@@ -187,6 +196,7 @@ test_that("inconsistency flowchart: opposite_sides + no subgroup → rate down 2
   # the automated path, so it must reach the same leaf and the same -2.
   m <- make_metabin()
   g <- grade_meta(m,
+    small_values = "desirable",
     inconsistency_ci_diff            = "yes",
     inconsistency_threshold_side     = "opposite_sides",
     inconsistency_subgroup_explained = "no", threshold_type = "null")
@@ -199,6 +209,7 @@ test_that("inconsistency flowchart: opposite_sides + no subgroup → rate down 2
 test_that("inconsistency flowchart: majority_one_side → do not rate down", {
   m <- make_metabin()
   g <- grade_meta(m,
+    small_values = "desirable",
     inconsistency_ci_diff        = "yes",
     inconsistency_threshold_side = "majority_one_side", threshold_type = "null")
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
@@ -210,6 +221,7 @@ test_that("inconsistency scalar overrides flowchart", {
   # Legacy "very_serious" is normalized to canonical "very_serious" (-2) under the
   # v0.3+ 3-level system.
   g <- grade_meta(m, inconsistency = "very_serious",
+                  small_values = "desirable",
                   inconsistency_rationale = "Clinically divergent effects across settings", threshold_type = "null")
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_equal(incon_row$judgment, "very_serious")
@@ -220,7 +232,7 @@ test_that("inconsistency scalar overrides flowchart", {
 
 test_that("imprecision domain is auto-computed", {
   m <- make_metabin()
-  g <- suppressWarnings(grade_meta(m, threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, threshold_type = "null", small_values = "desirable"))
   impre_row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_true(impre_row$auto)
 })
@@ -232,7 +244,8 @@ test_that("ois_events below total events rates down one level (CI crosses null)"
   # (null) threshold, so Fig 4 rates down one level and never consults the
   # sample size; the old code applied the "<= 30% of OIS" rule unconditionally
   # and returned "very_serious".
-  g <- suppressWarnings(grade_meta(m, ois_events = 1000, threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, ois_events = 1000, threshold_type = "null",
+    small_values = "desirable"))
   impre_row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_equal(impre_row$judgment, "serious")
   expect_match(impre_row$notes, "sample size not considered on this path")
@@ -241,7 +254,8 @@ test_that("ois_events below total events rates down one level (CI crosses null)"
 test_that("ois auto-calculation from p0/p1 (binary)", {
   m <- make_metabin()
   # OIS auto-calculated; actual value depends on formula
-  g <- suppressWarnings(grade_meta(m, ois_p0 = 0.20, ois_p1 = 0.30, threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, ois_p0 = 0.20, ois_p1 = 0.30, threshold_type = "null",
+    small_values = "desirable"))
   impre_row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_true(impre_row$auto)
   expect_true(grepl("OIS", impre_row$notes))
@@ -251,7 +265,7 @@ test_that("ois auto-calculation from p0/p1 (binary)", {
 
 test_that("k < 10 gives not assessable publication bias (judgment = 'no')", {
   m <- make_metabin()  # k = 3
-  g <- suppressWarnings(grade_meta(m, threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, threshold_type = "null", small_values = "desirable"))
   pb_row <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   expect_equal(pb_row$judgment, "not_serious")
   expect_true(grepl("< 10", pb_row$notes))
@@ -259,7 +273,8 @@ test_that("k < 10 gives not assessable publication bias (judgment = 'no')", {
 
 test_that("pubias_small_industry = 'yes' rates down", {
   m <- make_metabin()
-  g <- suppressWarnings(grade_meta(m, pubias_small_industry = "yes", threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, pubias_small_industry = "yes", threshold_type = "null",
+    small_values = "desirable"))
   pb_row <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   # Step 1 of BMJ Core GRADE 4 Fig 5: small + industry-sponsored -> rate down 1.
   expect_equal(pb_row$judgment, "serious")
@@ -267,7 +282,8 @@ test_that("pubias_small_industry = 'yes' rates down", {
 
 test_that("pubias_unpublished = 'yes' rates down when k < 10", {
   m <- make_metabin()  # k = 3
-  g <- grade_meta(m, pubias_unpublished = "yes", threshold_type = "null")
+  g <- grade_meta(m, pubias_unpublished = "yes", threshold_type = "null",
+    small_values = "desirable")
   pb_row <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   # Step 2 (k < 10) of BMJ Core GRADE 4 Fig 5: documented unpublished studies
   # -> rate down 1.
@@ -279,7 +295,8 @@ test_that("pubias_unpublished = 'yes' rates down when k < 10", {
 
 test_that("rob vector: vector mode reports count and weight % (v0.3.1+: dominance gate removed)", {
   m <- make_metabin()
-  g <- grade_meta(m, rob = c("no", "some", "very_serious"), threshold_type = "null")
+  g <- grade_meta(m, rob = c("no", "some", "very_serious"), threshold_type = "null",
+    small_values = "desirable")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   # Only one high-RoB study among 3, with similar weights -> direction check
   # runs but inflation typically below threshold.
@@ -318,7 +335,8 @@ test_that("rob vector: inflating small_values=desirable rates down (some_concern
 test_that("rob vector of wrong length raises error", {
   m <- make_metabin()
   expect_error(
-    grade_meta(m, rob = c("no", "some"), threshold_type = "null"),  # k=3 だが長さ2
+    grade_meta(m, rob = c("no", "some"), threshold_type = "null",
+      small_values = "desirable"),  # k=3 だが長さ2
     regexp = "length k"
   )
 })
@@ -328,25 +346,67 @@ test_that("rob vector of wrong length raises error", {
 test_that("invalid rob level raises error", {
   m <- make_metabin()
   # 'moderate' is normalised to 'some' (alias), so use a truly unknown label
-  expect_error(suppressWarnings(grade_meta(m, rob = "totally_unknown_rob_level", threshold_type = "null")),
+  expect_error(suppressWarnings(grade_meta(m, rob = "totally_unknown_rob_level", threshold_type = "null",
+    small_values = "desirable")),
                regexp = "not a recognized GRADE level")
 })
 
 test_that("non-meta object raises error", {
-  expect_error(grade_meta(list(x = 1), threshold_type = "null"), regexp = "class 'meta'")
+  expect_error(grade_meta(list(x = 1), threshold_type = "null",
+    small_values = "desirable"), regexp = "class 'meta'")
+})
+
+# ---- the outcome-direction entry gate (v0.5.1) ------
+test_that("an omitted small_values aborts before any domain is assessed", {
+  m <- make_metabin()
+  cnd <- tryCatch(suppressWarnings(grade_meta(m, threshold_type = "null")),
+                  error = function(e) e)
+  expect_s3_class(cnd, "pmatools_direction_gate")
+
+  msg <- conditionMessage(cnd)
+  # The message has to carry the two things a reader needs: the vocabulary,
+  # and why the package will not pick one for them.
+  expect_match(msg, "'desirable' or 'undesirable'", fixed = TRUE)
+  expect_match(msg, "will not guess", fixed = TRUE)
+  expect_match(msg, "every outcome has a direction", fixed = TRUE)
+})
+
+test_that("a value outside the vocabulary aborts and is quoted back", {
+  m <- make_metabin()
+  for (bad in list("Desirable", "small", NA_character_, 1, c("desirable", "desirable"))) {
+    cnd <- tryCatch(
+      suppressWarnings(grade_meta(m, threshold_type = "null",
+                                  small_values = bad)),
+      error = function(e) e)
+    expect_s3_class(cnd, "pmatools_direction_gate")
+  }
+  expect_match(
+    tryCatch(suppressWarnings(grade_meta(m, threshold_type = "null",
+                                         small_values = "Desirable")),
+             error = conditionMessage),
+    "received \"Desirable\"", fixed = TRUE)
+})
+
+test_that("the direction the rating was made under is stored on the object", {
+  m <- make_metabin()
+  g <- suppressWarnings(grade_meta(m, threshold_type = "null",
+                                   small_values = "undesirable"))
+  # export_bundle() reads this instead of falling back to NULL; see
+  # test-export_bundle.R for the round trip that depends on it.
+  expect_identical(g$small_values, "undesirable")
 })
 
 # ---- print / summary ------
 
 test_that("print.pmatools outputs without error", {
   m <- make_metabin()
-  g <- suppressWarnings(grade_meta(m, threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, threshold_type = "null", small_values = "desirable"))
   expect_output(print(g), "Certainty Assessment \\(Core GRADE series\\)")
 })
 
 test_that("summary.pmatools outputs without error", {
   m <- make_metabin()
-  g <- suppressWarnings(grade_meta(m, threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, threshold_type = "null", small_values = "desirable"))
   expect_output(summary(g), "Certainty Assessment \\(Core GRADE series\\)")
 })
 
@@ -355,7 +415,7 @@ test_that("summary.pmatools outputs without error", {
 test_that("sof_table returns flextable", {
   skip_if_not_installed("flextable")
   m <- make_metabin()
-  g <- suppressWarnings(grade_meta(m, threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, threshold_type = "null", small_values = "desirable"))
   ft <- sof_table(g)
   expect_s3_class(ft, "flextable")
 })
@@ -365,8 +425,10 @@ test_that("sof_table returns flextable", {
 test_that("grade_table with multiple outcomes returns flextable", {
   skip_if_not_installed("flextable")
   m <- make_metabin()
-  g1 <- suppressWarnings(grade_meta(m, outcome_name = "Outcome 1", threshold_type = "null"))
-  g2 <- suppressWarnings(grade_meta(m, outcome_name = "Outcome 2", threshold_type = "null"))
+  g1 <- suppressWarnings(grade_meta(m, outcome_name = "Outcome 1", threshold_type = "null",
+    small_values = "desirable"))
+  g2 <- suppressWarnings(grade_meta(m, outcome_name = "Outcome 2", threshold_type = "null",
+    small_values = "desirable"))
   ft <- grade_table(
     list("Outcome 1" = g1, "Outcome 2" = g2),
     primary = "Outcome 1"

@@ -14,6 +14,7 @@ make_common_only_grade <- function() {
   ma <- run_ma(data, outcome_type = "binary", sm = "OR",
                random = FALSE, common = TRUE)
   g  <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    small_values = "desirable",
                                     rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
                                     outcome_name = "Common only", threshold_type = "null"))
@@ -137,6 +138,7 @@ test_that("no qualitative note when pubias was decided manually", {
   )
   ma <- run_ma(data, outcome_type = "binary", sm = "OR")
   g  <- suppressWarnings(grade_meta(ma, pubias_unpublished = "no",
+                                    small_values = "desirable",
                                     outcome_name = "Manual", threshold_type = "null"))
   expect_null(.pubias_qualitative_note(g))
   ft <- sof_table(g)

@@ -65,6 +65,7 @@ test_that("rob_some_concerns rejects anything but 'low' / 'high'", {
   m <- mk(te = c(0.8, 0.02, 0.02), w = c(30, 35, 35))
   expect_error(
     grade_meta(m, rob = c("very_serious", "some_concerns", "no"),
+               small_values = "desirable",
                rob_some_concerns = "medium", threshold_type = "null"),
     regexp = "rob_some_concerns"
   )
@@ -121,11 +122,13 @@ test_that("rob_dominant_threshold is validated", {
   m <- mk(c(0.8, 0.02, 0.02), c(3, 1, 1))
   expect_error(
     grade_meta(m, rob = c("very_serious", "no", "no"),
+               small_values = "desirable",
                rob_dominant_threshold = 0, threshold_type = "null"),
     regexp = "rob_dominant_threshold"
   )
   expect_error(
     grade_meta(m, rob = c("very_serious", "no", "no"),
+               small_values = "desirable",
                rob_dominant_threshold = 1.5, threshold_type = "null"),
     regexp = "rob_dominant_threshold"
   )
@@ -229,6 +232,7 @@ test_that("rob_overrides without a rationale aborts", {
           studlab = c("Smith 2020", "Jones 2019", "Lee 2021"))
   expect_error(
     grade_meta(m, rob = c("no", "no", "no"),
+               small_values = "desirable",
                rob_overrides = c("Smith 2020" = "high"),
                threshold_type = "null"),
     regexp = "rob_override_rationale"
@@ -236,6 +240,7 @@ test_that("rob_overrides without a rationale aborts", {
   # A rationale for a *different* study does not satisfy the gate.
   expect_error(
     grade_meta(m, rob = c("no", "no", "no"),
+               small_values = "desirable",
                rob_overrides = c("Smith 2020" = "high"),
                rob_override_rationale = c("Jones 2019" = "unblinded"),
                threshold_type = "null"),
@@ -248,6 +253,7 @@ test_that("rob_overrides with an unknown studlab aborts and lists the labels", {
           studlab = c("Smith 2020", "Jones 2019", "Lee 2021"))
   expect_error(
     grade_meta(m, rob = c("no", "no", "no"),
+               small_values = "desirable",
                rob_overrides = c("Smyth 2020" = "high"),
                rob_override_rationale = c("Smyth 2020" = "typo"),
                threshold_type = "null"),
@@ -255,6 +261,7 @@ test_that("rob_overrides with an unknown studlab aborts and lists the labels", {
   )
   expect_error(
     grade_meta(m, rob = c("no", "no", "no"),
+               small_values = "desirable",
                rob_overrides = c("Smyth 2020" = "high"),
                rob_override_rationale = c("Smyth 2020" = "typo"),
                threshold_type = "null"),
@@ -292,6 +299,7 @@ test_that("rob_overrides rejects an unrecognized level", {
           studlab = c("Smith 2020", "Jones 2019", "Lee 2021"))
   expect_error(
     grade_meta(m, rob = c("no", "no", "no"),
+               small_values = "desirable",
                rob_overrides = c("Smith 2020" = "catastrophic"),
                rob_override_rationale = c("Smith 2020" = "because"),
                threshold_type = "null"),
@@ -313,7 +321,8 @@ test_that("downstream domains use the refitted (low-RoB) analysis", {
   # Ground truth: the same meta-analysis restricted by hand.
   m_low   <- mk(te = c(0.02, 0.02, 0.02), w = rep(400 / 3, 3),
                 studlab = c("Low-1", "Low-2", "Low-3"))
-  g_low   <- quiet_grade(m_low, threshold = 1.05, threshold_scale = "ratio")
+  g_low   <- quiet_grade(m_low, threshold = 1.05, threshold_scale = "ratio",
+    small_values = "desirable")
 
   # The refit must actually change the answers, otherwise the test is vacuous.
   expect_false(identical(row_of(g_refit, "Imprecision")$judgment,
@@ -451,7 +460,8 @@ test_that("k < length(studlab): a studlab-length rob gives the same flowchart", 
 test_that("rob must be length k or length(studlab)", {
   m <- make_low_only_gap()
   expect_error(
-    assess_rob(c("very_serious", "no", "no"), m, threshold_internal = log(1.05)),
+    assess_rob(c("very_serious", "no", "no"), m, threshold_internal = log(1.05),
+      small_values = "desirable"),
     regexp = "length k \\(4\\) or length\\(meta_obj\\$studlab\\) \\(5\\)"
   )
 })
@@ -529,6 +539,7 @@ test_that("sof_table footer states the low-RoB restriction", {
 
   # An ordinary all-studies analysis gains no extra footer line.
   g_all <- quiet_grade(mk(c(0.03, 0.02, 0.02), c(1, 1, 1)),
+                       small_values = "desirable",
                        rob = c("no", "no", "no"),
                        threshold = 1.05, threshold_scale = "ratio")
   expect_no_match(footer_text(sof_table(g_all)),
@@ -590,6 +601,7 @@ test_that("the reproducibility script defaults are valid R", {
   skip_if_not_installed("flextable")
   m <- mk(c(0.03, 0.02, 0.02), c(1, 1, 1))
   g <- quiet_grade(m, rob = c("no", "no", "no"),
+                   small_values = "desirable",
                    threshold = 1.05, threshold_scale = "ratio")
 
   out <- file.path(tempdir(), "analysis_rob_defaults.R")

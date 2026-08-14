@@ -369,6 +369,13 @@ grade_meta(m, threshold_type = "null")
 grade_meta(m, require_threshold = FALSE)
 ```
 
+A second answer is required alongside it, and this one has no escape hatch:
+`small_values` says which way benefit runs for the outcome (`"desirable"` if a
+small value is good, `"undesirable"` if a small value is bad). Risk of bias and
+Imprecision both consume it, both used to guess in its absence, and every
+example below assumes it has been supplied — see the `small_values` table under
+[Risk of Bias](#1-risk-of-bias-5-rule-mece-zone-based-decision-aligned-with-bmj-core-grade-4).
+
 The target is then derived from the pooled point estimate:
 
 | `threshold_type` | point estimate | target | threshold used by Imprecision |
@@ -535,13 +542,23 @@ source:
   limited by large variability in the methods investigators use to calculate
   the SMD".
 
-**`small_values` parameter** (consistent with `netmetaviz`):
+**`small_values` parameter** (consistent with `netmetaviz`). **Required since
+0.5.1** — a call without it aborts before any domain is assessed:
 
 | Value | Meaning | Example |
 |-------|---------|---------|
 | `"undesirable"` | Small values are bad; large = good | Response rate, remission |
 | `"desirable"` | Small values are good | Mortality, symptom severity |
-| `NULL` | Unknown direction | Bias direction inferred from |TE| comparison |
+
+There is no third value and no escape hatch. Up to 0.5.0 the argument was
+optional and two domains guessed in its absence: risk of bias fell back to
+"further from the null" (`|TE_all| > |TE_low|`) and then *warned that the
+assumption had determined the downgrade*, and the optimal information size used
+Core GRADE 2's relative risk **reduction** as written, which powers the OIS
+against the wrong tail for an outcome whose events are the desirable thing.
+`require_threshold = FALSE` exists because rating without a MID is a legitimate
+choice; rating without a direction is not one, because every outcome has a
+direction.
 
 **Fallback when Threshold is not supplied** (`threshold = NULL`): the trivial
 zone collapses to `{0}`, so only sign flips can change zones. The algorithm
@@ -2091,7 +2108,7 @@ grade_meta(
   rob_dominant_threshold = 0.55,   # weight share at/above which evidence is "dominated"
   rob_refit              = TRUE,   # refit on low-RoB studies when Fig 2 says so
   rob_inflation_threshold = 0.10,  # relative inflation feeding the direction check
-  small_values  = NULL,            # "undesirable" | "desirable" | NULL (conservative)
+  small_values  = NULL,            # REQUIRED: "undesirable" | "desirable"
 
   ## Indirectness
   indirectness  = NULL,            # scalar | vector | column name; NULL = no concern

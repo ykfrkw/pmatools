@@ -412,7 +412,7 @@ grade_meta(
   rob_refit                        = TRUE,   # refit on the low-RoB subset when Fig 2 says so
   rob_inflation_threshold          = 0.10,   # minimum relative inflation to act on
 
-  small_values                     = NULL,   # "desirable" / "undesirable" / NULL
+  small_values                     = NULL,   # REQUIRED: "desirable" / "undesirable" (§4.5.1a)
 
   # --- Indirectness (Core GRADE 5; §4.5.3) ---
   indirectness                     = NULL,   # scalar judgment, or override of the subdomain table
@@ -481,6 +481,7 @@ grade_meta(
 | `$rating_target` | `"important_effect"` / `"little_to_no_difference"` / `"non_null_effect"` |
 | `$rating_target_note`, `$rating_target_auto` | derivation note and whether it was derived rather than supplied |
 | `$indirectness_subdomains` | the normalised PICO table, or NULL |
+| `$small_values` (v0.5.1) | the outcome direction the rating was made under, `"desirable"` or `"undesirable"`. Always present, because §4.5.1a makes it required; `export_bundle()` reads it to write the bundled `analysis.R` |
 | `$control_risk` (v0.5.1) | how the one control-arm risk was shared across `threshold_baseline` / `ois_p0` / `baseline_risk`: `value`, `donor`, `inherited`, `note`, and `used` (the number each of the three ended up with). See §4.5.4 |
 
 Downstream consumers MUST read pooled numbers from `$meta`, not `$meta_full`, so a refit propagates.
@@ -494,6 +495,21 @@ Downstream consumers MUST read pooled numbers from `$meta`, not `$meta_full`, so
 - `require_threshold = FALSE` — escape hatch restoring the pre-v0.5.0 MID-free behaviour.
 
 `grade_meta_multi()` re-raises the gate abort unchanged rather than recording the outcome as failed, so a batch run cannot be used to get around the gate.
+
+#### 4.5.1a Entry gate: `small_values` (v0.5.1 — breaking)
+
+`small_values` states which way benefit runs for this outcome — `"desirable"` (a small value is good: mortality, symptom severity) or `"undesirable"` (a small value is bad: response rate, remission) — and it is **required**. A call that omits it, or passes anything other than those two strings, aborts before any domain is assessed with condition class `"pmatools_direction_gate"`.
+
+It was optional up to v0.5.0, and two domains guessed in its absence:
+
+- **Risk of bias (§5.1).** The direction-of-bias gate fell back to `|TE_all| > |TE_low|` — "further from the null" — and then *warned that the assumption had determined the downgrade*. A package that has to say "this guess decided your rating" is saying the argument should never have been optional.
+- **Imprecision (§5.5).** The OIS used Core GRADE 2's relative risk *reduction* as written, so for an outcome whose events are the desirable thing the alternative event rate landed on the wrong side of the modest RRR and the OIS was powered against the wrong tail.
+
+**There is no escape hatch, and that is the difference from `require_threshold`.** Rating without a MID is a legitimate methodological choice — Core GRADE 7 asks users to read the CI first and pin down a MID only where the verdict depends on it — so `require_threshold = FALSE` exists. Rating without a direction is not a choice: every outcome a review rates has one, and "unknown direction" only ever means the question has not been finished. The gate errors loudly, which is the opposite failure mode from the one the guessing had: a missing required argument stops the call instead of quietly changing a number.
+
+`grade_meta_multi()` re-raises this abort unchanged too, for the same reason as the threshold gate: it is an argument error affecting every outcome in the batch, not a per-outcome data failure.
+
+`assess_rob()` and `assess_imprecision()` require it as well. They are internal, but a lenient assessor would re-open the same guessing hole one call deeper.
 
 #### 4.5.2 Rating target (Core GRADE 2 Fig 2)
 
@@ -1111,7 +1127,7 @@ state$grade_args <- list(
   threshold_scale = list(value = "auto",    origin = "scalar"),
   ois_p0       = list(value = 0.25,      origin = "scalar"),
   ois_events   = list(value = NULL,      origin = "null"),
-  small_values = list(value = NULL,      origin = "null"),
+  small_values = list(value = "undesirable", origin = "scalar"),
   ...
 )
 ```
@@ -1255,7 +1271,7 @@ Because `sm` and `outcome_type` may be named by outcome, binary and continuous o
 
 `run_ma()` itself is unchanged and still **aborts** on data holding more than one outcome; `run_ma_multi()` is the only supported way to batch.
 
-**Failure semantics.** An outcome that fails is recorded as `NULL` with a warning so the rest of the batch completes — **except** the Core GRADE 2 entry gate (§4.5.1), whose abort (condition class `"pmatools_threshold_gate"`) is re-raised unchanged.
+**Failure semantics.** An outcome that fails is recorded as `NULL` with a warning so the rest of the batch completes — **except** the two entry gates, whose aborts (condition classes `"pmatools_threshold_gate"`, §4.5.1, and `"pmatools_direction_gate"`, §4.5.1a) are re-raised unchanged. Both describe an argument the whole batch was called with, not a property of one outcome's data.
 
 ### 4.11 The `pmatools_set` class [v0.5.0]
 
@@ -1470,7 +1486,7 @@ If the weight share cannot be computed the count share is used and the notes say
 
 Rule 5 rated down **two** levels up to v0.4. Since v0.5.0 every automated risk-of-bias path is capped at one level: Core GRADE 4 describes no two-level risk-of-bias downgrade (every leaf of Fig 2 reads "rate down" / "do not rate down"), and `.ROB_CAP_NOTE` is appended to the judgment note wherever the cap bites. `"very_serious"` stays reachable only through the scalar `rob` override, which requires `rob_rationale`.
 
-`inflation_ratio = (|TE_all| - |TE_low|) / |TE_low|` is evaluated **only** when the shift runs in the bias-favouring direction implied by `small_values`; a deflation in that direction never triggers a downgrade. When the direction gate blocks a downgrade that the inflation threshold would otherwise have caused, the notes say so explicitly, including the direction reasoning, so readers do not conclude the threshold was ignored (v0.4.0).
+`inflation_ratio = (|TE_all| - |TE_low|) / |TE_low|` is evaluated **only** when the shift runs in the bias-favouring direction implied by `small_values`; a deflation in that direction never triggers a downgrade. `small_values` is required (§4.5.1a), so the direction is always the reviewer's declared one: the `|TE_all| > |TE_low|` fallback that stood in for it up to v0.5.0 — and the warning saying that the fallback had decided the downgrade — are gone. When the direction gate blocks a downgrade that the inflation threshold would otherwise have caused, the notes say so explicitly, including the direction reasoning, so readers do not conclude the threshold was ignored (v0.4.0).
 
 When `threshold_internal` is NULL/NA/≤ 0 the trivial zone collapses to `{0}`, so only rule 5 can fire.
 
@@ -1775,9 +1791,10 @@ The ratio-scale magnitude is `1 - exp(-|log ratio|)`, which is symmetric: RR 0.6
 
 | `small_values` | meaning for a binary outcome | `ois_p1` |
 |---|---|---|
-| `NULL` | direction unknown | `ois_p0 * (1 - ois_rrr)` — the pre-v0.5.1 behaviour, unchanged |
 | `"undesirable"` | a smaller value is worse ⇒ **events are desirable** (response, remission), and a benefit is an *increase* | `ois_p0 * (1 + ois_rrr)` |
 | `"desirable"` | a smaller value is better ⇒ **events are undesirable** (mortality, relapse), and a benefit is a *reduction* | `ois_p0 * (1 - ois_rrr)` |
+
+There is no third row. Up to v0.5.0 `small_values = NULL` meant "use the paper's *reduction* as written", which for an outcome whose events are desirable powered the OIS against the wrong tail; §4.5.1a makes the argument required, so that row cannot arise.
 
 **The declared direction decides, not the observed effect.** The OIS is an a-priori power calculation for the smallest effect worth not missing, which is a property of the question — a modest *benefit* — and `small_values` is what states which way that runs. Letting the pooled estimate pick the side would make the target partly data-driven and would collapse `"desirable"` and `"undesirable"` onto the same answer whenever the estimate sits above the null. The pooled effect is nevertheless read and reported: the note says whether it agrees, and when it does not (the evidence describes a harm on this outcome) it says so explicitly rather than silently powering against the other tail.
 
@@ -1910,7 +1927,7 @@ instead.
 | test-data_ingest.R *(new)* | long & wide CSV/data.frame/clipboard, mapping, format auto-detect, missing optional columns, validation errors |
 | test-run_ma.R *(new)* | binary OR/RR with method × method.tau matrix, continuous SMD/MD/RoM, hakn/prediction auto k>=3, subgroup, error on invalid sm |
 | test-export_bundle.R *(new)* | ZIP generated; all 9 files present; `analysis.R` is syntactically valid R (`parse()` succeeds); `analysis.R` reproduces same `meta::TE.random` when run via `Rscript` |
-| test-domain_rob.R *(new)* | inflation threshold 0/0.05/0.10/0.20 boundary, dominated + below-threshold = "no", dominated + above-threshold = "serious", `small_values = NULL` paths |
+| test-domain_rob.R *(new)* | inflation threshold 0/0.05/0.10/0.20 boundary, dominated + below-threshold = "no", dominated + above-threshold = "serious", both `small_values` directions (the `NULL` path was removed in v0.5.1, §4.5.1a) |
 | test-inconsistency_threshold.R *(new)* | manual flowchart (3 paths: ci_diff=no / majority_one_side / opposite_sides×subgroup); auto Step 1 = I² > 30% only (Q-test no longer used); auto Step 2 3-zone tally (≥80% max-zone share, ≥20% each-side share) with and without a Threshold; the I² / zone / ICEMAN provenance caveats appear in the notes |
 | test-threshold_scale.R *(new)* | `threshold_scale = "auto"` correctly maps OR/RR/HR/RoM → log, MD/SMD → te_scale, ARD → ard; abort on unknown sm |
 | test-suggest_threshold.R *(new)* | defaults match table for OR/RR/SMD/MD/ARD/RoM; MD default = 0.2 × pooled SD; unknown sm returns NULL |
@@ -1923,7 +1940,7 @@ instead.
 | test-rating_target.R | Core GRADE 2 Fig 2 target derivation, manual override + mandatory rationale, `threshold_type` entry gate |
 | test-imprecision.R | Fig 4 paths (§5.5), CI-ratio rules, OIS branch reachability |
 | test-rob_flowchart.R | Core GRADE 4 Fig 2 (§5.1): dominance gate, the 5 zone rules, `analysis_set`, refit propagation |
-| test-domain_rob.R | inflation threshold boundaries, `rob_some_concerns`, `rob_overrides` |
+| test-domain_rob.R | inflation threshold boundaries, `rob_some_concerns`, `rob_overrides`, the `small_values` direction gate deciding rule 2 vs rule 3 (§4.5.1a) |
 | test-indirectness_subdomains.R | PICO table normalisation, worst-case rollup, scalar override |
 | test-sof_bmj.R | BMJ SoF layout, Difference column, plain language summaries |
 | test-multi_outcome.R | `run_ma_multi()`, `grade_meta_multi()`, ordering, the hierarchical bundle layout |
@@ -1968,10 +1985,11 @@ instead.
 | `export_bundle` with a `grade_args` entry whose `origin` is not one of the four accepted values | abort naming the bad origin (§4.8.1) |
 | `export_bundle` on a `pmatools_set` with zero outcomes | abort "the pmatools_set holds no outcomes" |
 | `grade_meta` with `threshold_type = "mid"` and no `threshold` | abort (class `"pmatools_threshold_gate"`), quoting the `suggest_threshold()` value |
+| `grade_meta` with no `small_values`, or a value other than `"desirable"` / `"undesirable"` | abort (class `"pmatools_direction_gate"`), naming both accepted values and why no default is offered (§4.5.1a) |
 | `grade_meta` with a scalar domain override and no matching `*_rationale` | abort |
 | `rob_overrides` key matching no `studlab` | abort (never silently ignored) |
 | `run_ma` on data with more than one `outcome` value | abort; use `run_ma_multi()` |
-| One outcome of a `run_ma_multi()` / `grade_meta_multi()` batch fails | recorded as `NULL` with a warning; the batch continues — except a threshold-gate abort, which is re-raised |
+| One outcome of a `run_ma_multi()` / `grade_meta_multi()` batch fails | recorded as `NULL` with a warning; the batch continues — except a threshold-gate or direction-gate abort, which is re-raised |
 | Non-ASCII outcome name in the multi-outcome bundle | directory falls back to `outcome_NN` |
 
 ---

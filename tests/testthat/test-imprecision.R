@@ -47,7 +47,8 @@ test_that("events <= 30% of OIS but CI crosses the threshold -> rate down one", 
   # (null) threshold, so Fig 4 stops at "rate down one level" and never
   # consults the OIS; the previous implementation applied "<= 30% of OIS"
   # unconditionally and returned "very_serious".
-  g <- suppressWarnings(grade_meta(m, ois_events = 1000, threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, ois_events = 1000, threshold_type = "null",
+    small_values = "desirable"))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_equal(row$judgment, "serious")
   expect_equal(row$downgrade, -1L)
@@ -59,7 +60,8 @@ test_that("events between 30% and 100% of OIS gives some_concerns", {
   # Total events = 105, OIS = 200 -> pct = 52.5%.
   # Still -1 after the Fig 4 rewrite, but now because the CI crosses the null
   # threshold rather than because the OIS was unmet.
-  g <- suppressWarnings(grade_meta(m, ois_events = 200, threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, ois_events = 200, threshold_type = "null",
+    small_values = "desirable"))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_equal(row$judgment, "serious")
   expect_equal(row$downgrade, -1L)
@@ -75,7 +77,8 @@ test_that("continuous: large effect, CI clear of the threshold, N < 30% of OIS -
     studlab = c("X", "Y"), sm = "MD", random = TRUE, common = FALSE
   )
   # Total N = 90, OIS = 1000 -> 9%.
-  g <- suppressWarnings(grade_meta(m, outcome_type = "absolute", ois_n = 1000, threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, outcome_type = "absolute", ois_n = 1000, threshold_type = "null",
+    small_values = "desirable"))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_equal(row$judgment, "very_serious")
   # Display fixed (v0.5): the note used to read "<= 30%" while the decision
@@ -92,6 +95,7 @@ test_that("Rule (a): CI containing both Thresholds triggers serious", {
   # log(RR) CI extends below -log(1.05) and above +log(1.05) -> contains both
   # thresholds.
   g <- suppressWarnings(grade_meta(m, threshold = 1.05, threshold_scale = "ratio",
+                                    small_values = "desirable",
                                     ois_events = 10))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_equal(row$judgment, "very_serious")
@@ -108,6 +112,7 @@ test_that("Rule (a): CI within Thresholds, OIS met -> no concern", {
   )
   # Tight CI around 0; Threshold = 0.5 on TE scale; OIS_n = 100 (already met).
   g <- suppressWarnings(grade_meta(m,
+    small_values = "desirable",
     outcome_type = "absolute", threshold = 0.5, threshold_scale = "te_scale",
     ois_n = 100))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
@@ -131,7 +136,8 @@ test_that("CI entirely beyond +Threshold -> no rate down (regression)", {
     method = "Inverse", random = TRUE, common = FALSE
   )
   g <- suppressWarnings(grade_meta(
-    m, threshold = 1.25, threshold_scale = "ratio",
+    m,
+    small_values = "desirable", threshold = 1.25, threshold_scale = "ratio",
     ois_p0 = 0.2, ois_p1 = 0.4
   ))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
@@ -168,6 +174,7 @@ impre_row <- function(g) {
 
 test_that("null threshold + CI spanning both MIDs -> serious (-2)", {
   g <- suppressWarnings(grade_meta(
+    small_values = "desirable",
     .make_spans_both_mids(),
     threshold_type = "null", threshold = 1.20, threshold_scale = "ratio"
   ))
@@ -184,6 +191,7 @@ test_that("null threshold + CI spanning both MIDs -> serious (-2)", {
 
 test_that("null threshold without a MID cannot reach -2 (two-level check undecidable)", {
   g <- suppressWarnings(grade_meta(.make_spans_both_mids(),
+                                   small_values = "desirable",
                                    threshold_type = "null"))
   row <- impre_row(g)
   expect_equal(row$judgment, "serious")
@@ -193,6 +201,7 @@ test_that("null threshold without a MID cannot reach -2 (two-level check undecid
 
 test_that("the MID threshold reaches -2 on the same data (both routes agree)", {
   g <- suppressWarnings(grade_meta(.make_spans_both_mids(),
+                                   small_values = "desirable",
                                    threshold = 1.20, threshold_scale = "ratio"))
   row <- impre_row(g)
   expect_equal(row$judgment, "very_serious")
@@ -225,7 +234,8 @@ test_that("the MID threshold reaches -2 on the same data (both routes agree)", {
 test_that("binary ois_p1 comes from ois_rrr (default 20%), not the Threshold", {
   m   <- .make_binary_ois_meta()
   cer <- (50 + 55 + 60) / (3 * 100)   # control-arm pooled rate = 0.55
-  g <- suppressWarnings(grade_meta(m, threshold = 0.75, threshold_scale = "ratio"))
+  g <- suppressWarnings(grade_meta(m, threshold = 0.75, threshold_scale = "ratio",
+    small_values = "desirable"))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_equal(.ois_p1_from_notes(row$notes), round(cer * 0.80, 4),
                tolerance = 5e-4)
@@ -240,6 +250,7 @@ test_that("ois_rrr changes the binary OIS; ois_p1 takes precedence over it", {
   cer <- (50 + 55 + 60) / (3 * 100)
 
   g25 <- suppressWarnings(grade_meta(m, threshold = 0.75,
+                                     small_values = "desirable",
                                      threshold_scale = "ratio",
                                      ois_rrr = 0.25))
   row25 <- g25$domain_assessments[g25$domain_assessments$domain == "Imprecision", ]
@@ -247,6 +258,7 @@ test_that("ois_rrr changes the binary OIS; ois_p1 takes precedence over it", {
                tolerance = 5e-4)
 
   g20 <- suppressWarnings(grade_meta(m, threshold = 0.75,
+                                     small_values = "desirable",
                                      threshold_scale = "ratio"))
   row20 <- g20$domain_assessments[g20$domain_assessments$domain == "Imprecision", ]
   target_of <- function(notes) {
@@ -258,6 +270,7 @@ test_that("ois_rrr changes the binary OIS; ois_p1 takes precedence over it", {
 
   # Explicit ois_p1 wins over ois_rrr.
   g_p1 <- suppressWarnings(grade_meta(m, threshold = 0.75,
+                                      small_values = "desirable",
                                       threshold_scale = "ratio",
                                       ois_p1 = 0.30, ois_rrr = 0.25))
   row_p1 <- g_p1$domain_assessments[g_p1$domain_assessments$domain == "Imprecision", ]
@@ -268,11 +281,13 @@ test_that("ois_rrr is validated", {
   m <- .make_binary_ois_meta()
   expect_error(
     suppressWarnings(grade_meta(m, threshold = 0.75, threshold_scale = "ratio",
+                                small_values = "desirable",
                                 ois_rrr = 0)),
     regexp = "ois_rrr"
   )
   expect_error(
     suppressWarnings(grade_meta(m, threshold = 0.75, threshold_scale = "ratio",
+                                small_values = "desirable",
                                 ois_rrr = 1)),
     regexp = "ois_rrr"
   )
@@ -283,7 +298,8 @@ test_that("binary OIS is compared in participants, not events", {
   # information size"; body: "If the total sample size of all the studies
   # included in a meta-analysis exceeds the OIS, one does not rate down".
   m <- .make_binary_ois_meta()
-  g <- suppressWarnings(grade_meta(m, threshold = 0.75, threshold_scale = "ratio"))
+  g <- suppressWarnings(grade_meta(m, threshold = 0.75, threshold_scale = "ratio",
+    small_values = "desirable"))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_match(row$notes, "target N=", fixed = TRUE)
   expect_match(row$notes, "compares participants", fixed = TRUE)
@@ -294,6 +310,7 @@ test_that("binary OIS is compared in participants, not events", {
 test_that("explicit ois_events still drives an event-based comparison", {
   m <- .make_binary_ois_meta()
   g <- suppressWarnings(grade_meta(m, threshold = 0.75,
+                                   small_values = "desirable",
                                    threshold_scale = "ratio",
                                    ois_events = 1000))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
@@ -343,7 +360,8 @@ test_that("the 800 rule of thumb no longer fires off a single-arm total", {
   m$n   <- c(300, 300, 300)
   expect_equal(pmatools:::.total_n(m), 900)   # the note would have fired on this
 
-  res <- suppressWarnings(assess_imprecision(m, threshold_type = "null"))
+  res <- suppressWarnings(assess_imprecision(m, threshold_type = "null",
+    small_values = "desirable"))
   expect_false(grepl("rule of thumb", res$notes, fixed = TRUE))
   expect_false(grepl("total N =", res$notes, fixed = TRUE))
   # The judgment is unchanged: the object falls through to the "OIS could not
@@ -363,6 +381,7 @@ test_that("Crosses null but not both Thresholds, OIS met (>=100%) -> some_concer
     sm = "RR", method = "MH", random = TRUE, common = FALSE
   )
   g <- suppressWarnings(grade_meta(m, threshold = 1.5, threshold_scale = "ratio",
+                                    small_values = "desirable",
                                     ois_events = 100))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
   expect_true(row$judgment %in% c("not_serious", "serious"))
@@ -402,7 +421,6 @@ test_that("small_values decides which side of ois_p0 the OIS target sits on", {
   args <- list(outcome_type = "relative", threshold_internal = log(1.25),
                ois_p0 = 0.20, ois_rrr = 0.20)
 
-  r_null <- do.call(assess_imprecision, c(list(m), args))
   r_und  <- do.call(assess_imprecision,
                     c(list(m), args, list(small_values = "undesirable")))
   r_des  <- do.call(assess_imprecision,
@@ -414,36 +432,23 @@ test_that("small_values decides which side of ois_p0 the OIS target sits on", {
   # Desirable outcome value => undesirable event => a benefit is a reduction.
   expect_match(r_des$notes, "ois_p1 = 0.1600", fixed = TRUE)
   expect_match(r_des$notes, "modest relative risk reduction", fixed = TRUE)
-  # No direction supplied: the pre-0.5.1 reduction, and the note says why
-  # rather than implying a direction was known.
-  expect_match(r_null$notes, "ois_p1 = 0.1600", fixed = TRUE)
-  expect_match(r_null$notes, "small_values = NULL", fixed = TRUE)
 
-  # The two directions therefore power the OIS to different sample sizes.
+  # The two directions therefore power the OIS to different sample sizes,
+  # which is why the argument cannot be optional: up to 0.5.0 an omitted
+  # direction silently took the "desirable" arithmetic for both outcomes.
   n_und  <- ois_target_from_notes(r_und$notes)
   n_des  <- ois_target_from_notes(r_des$notes)
-  n_null <- ois_target_from_notes(r_null$notes)
   expect_true(is.finite(n_und) && is.finite(n_des))
   expect_false(identical(n_und, n_des))
-  # NULL keeps exactly the reduction arithmetic, so it matches "desirable".
-  expect_identical(n_null, n_des)
 })
 
-test_that("small_values = NULL leaves the ois_p1 clause as it was", {
-  # The regression guard for "nothing changes for callers that do not supply
-  # it". The only text the direction work adds on the NULL path is the reason
-  # clause, so compare with that stripped out.
+test_that("assess_imprecision() refuses to guess the direction", {
   m <- direction_meta()
-  r <- assess_imprecision(m, outcome_type = "relative",
-                          threshold_internal = log(1.25),
-                          ois_p0 = 0.20, ois_rrr = 0.20)
-  stripped <- sub("; direction: [^;]+;", ";", r$notes)
-  expect_match(
-    stripped,
-    paste0("(ois_p1 from a modest relative risk reduction, ois_rrr = 20%: ",
-           "ois_p1 = 0.1600; Core GRADE 2 specifies an RRR rather than the ",
-           "MID for binary outcomes)"),
-    fixed = TRUE
+  expect_error(
+    assess_imprecision(m, outcome_type = "relative",
+                       threshold_internal = log(1.25),
+                       ois_p0 = 0.20, ois_rrr = 0.20),
+    class = "pmatools_direction_gate"
   )
 })
 
@@ -498,7 +503,8 @@ test_that("the ois_target_rate fact records the rate and the direction", {
 test_that("an effect above the null is not called a relative risk reduction", {
   # The magnitude 1 - exp(-|log RR|) is right either way; the word was not.
   m <- direction_meta()
-  r <- assess_imprecision(m, outcome_type = "relative", threshold_type = "null")
+  r <- assess_imprecision(m, outcome_type = "relative", threshold_type = "null",
+    small_values = "desirable")
   expect_match(r$notes, "relative risk increase", fixed = TRUE)
   expect_false(grepl("effect implausibly large (relative risk reduction",
                      r$notes, fixed = TRUE))
@@ -513,7 +519,8 @@ test_that("an effect below the null still reads as a reduction", {
     studlab = c("A", "B", "C"),
     sm = "RR", method = "Inverse", random = TRUE, common = FALSE
   )
-  r <- assess_imprecision(m, outcome_type = "relative", threshold_type = "null")
+  r <- assess_imprecision(m, outcome_type = "relative", threshold_type = "null",
+    small_values = "desirable")
   expect_match(r$notes, "relative risk reduction", fixed = TRUE)
   expect_false(grepl("relative risk increase", r$notes, fixed = TRUE))
 })
@@ -538,6 +545,7 @@ continuous_meta <- function() {
 test_that("a continuous outcome derives ois_sd instead of skipping the OIS", {
   m <- continuous_meta()
   r <- assess_imprecision(m, outcome_type = "absolute",
+                          small_values = "desirable",
                           threshold_internal = 2)
   expect_match(r$notes, "derived from the pooled within-study SD", fixed = TRUE)
   expect_match(r$notes, "OIS: delta=2.000", fixed = TRUE)
@@ -552,6 +560,7 @@ test_that("a continuous outcome derives ois_sd instead of skipping the OIS", {
 test_that("a supplied ois_sd still wins and is not reported as derived", {
   m <- continuous_meta()
   r <- assess_imprecision(m, outcome_type = "absolute",
+                          small_values = "desirable",
                           threshold_internal = 2, ois_sd = 10)
   expect_match(r$notes, "sigma=10.000", fixed = TRUE)
   expect_false(grepl("derived from the pooled within-study SD", r$notes,
@@ -568,6 +577,7 @@ test_that("an SMD outcome uses sigma = 1 rather than the raw pooled SD", {
   m <- continuous_meta()
   m$sm <- "SMD"
   r <- assess_imprecision(m, outcome_type = "absolute",
+                          small_values = "desirable",
                           threshold_internal = 0.20)
   expect_match(r$notes, "sigma=1.000", fixed = TRUE)
   expect_match(r$notes, "OIS: delta=0.200", fixed = TRUE)
@@ -589,6 +599,7 @@ test_that("an SMD outcome uses sigma = 1 rather than the raw pooled SD", {
 test_that("an MD outcome still derives sigma from the pooled SD", {
   m <- continuous_meta()
   r <- assess_imprecision(m, outcome_type = "absolute",
+                          small_values = "desirable",
                           threshold_internal = 0.20)
   sd_pooled <- compute_pooled_sd(m)
   expect_gt(sd_pooled, 1)
@@ -600,6 +611,7 @@ test_that("a supplied ois_sd still wins over the SMD's sigma = 1", {
   m <- continuous_meta()
   m$sm <- "SMD"
   r <- assess_imprecision(m, outcome_type = "absolute",
+                          small_values = "desirable",
                           threshold_internal = 0.20, ois_sd = 2)
   expect_match(r$notes, "sigma=2.000", fixed = TRUE)
   expect_false(grepl("the SMD is expressed in within-study SD units", r$notes,
@@ -614,6 +626,7 @@ test_that("'OIS could not be computed' names the input that was missing", {
   m$n.e <- c(100, 100, 100)
   m$n.c <- c(100, 100, 100)
   r <- suppressWarnings(assess_imprecision(m, outcome_type = "absolute",
+                                           small_values = "desirable",
                                            threshold_type = "null"))
   expect_match(r$notes, "OIS could not be computed (missing ois_delta",
                fixed = TRUE)

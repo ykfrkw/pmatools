@@ -68,7 +68,7 @@ meta_md_large <- function() {
 
 test_that("threshold_type = 'mid' without a threshold aborts with a suggested value", {
   m <- meta_rr()
-  err <- tryCatch(grade_meta(m, threshold_type = "mid"),
+  err <- tryCatch(grade_meta(m, threshold_type = "mid", small_values = "desirable"),
                   error = function(e) conditionMessage(e))
   expect_type(err, "character")
   expect_match(err, "threshold_type = 'mid' requires a threshold", fixed = TRUE)
@@ -82,12 +82,13 @@ test_that("threshold_type = 'mid' without a threshold aborts with a suggested va
 
 test_that("threshold_type = 'mid' is the default, so a bare call aborts", {
   m <- meta_rr()
-  expect_error(grade_meta(m), "requires a threshold")
+  expect_error(grade_meta(m, small_values = "desirable"), "requires a threshold")
 })
 
 test_that("require_threshold = FALSE proceeds without a MID", {
   m <- meta_rr()
   g <- suppressWarnings(grade_meta(m, threshold_type = "mid",
+                                   small_values = "desirable",
                                    require_threshold = FALSE))
   expect_s3_class(g, "pmatools")
   expect_equal(g$rating_target, "non_null_effect")
@@ -97,6 +98,7 @@ test_that("require_threshold = FALSE proceeds without a MID", {
 test_that("supplying a threshold satisfies the gate", {
   m <- meta_rr()
   g <- suppressWarnings(grade_meta(m, threshold = 1.2,
+                                   small_values = "desirable",
                                    threshold_scale = "ratio"))
   expect_equal(g$threshold_type, "mid")
 })
@@ -107,6 +109,7 @@ test_that("supplying a threshold satisfies the gate", {
 
 test_that("MID threshold: |TE| > MID -> important_effect", {
   g <- suppressWarnings(grade_meta(meta_large_rr(), threshold = 1.2,
+                                   small_values = "desirable",
                                    threshold_scale = "ratio",
                                    ois_events = 40))
   expect_equal(g$rating_target, "important_effect")
@@ -116,6 +119,7 @@ test_that("MID threshold: |TE| > MID -> important_effect", {
 
 test_that("MID threshold: |TE| <= MID -> little_to_no_difference", {
   g <- suppressWarnings(grade_meta(meta_near_null(), threshold = 1.2,
+                                   small_values = "desirable",
                                    threshold_scale = "ratio"))
   expect_equal(g$rating_target, "little_to_no_difference")
   expect_match(g$rating_target_note, "Little or no difference")
@@ -127,6 +131,7 @@ test_that("MID threshold: |TE| <= MID -> little_to_no_difference", {
 
 test_that("null threshold + point estimate near null -> little_to_no_difference, judged against the MID", {
   g <- suppressWarnings(grade_meta(meta_near_null(), threshold_type = "null",
+                                   small_values = "desirable",
                                    threshold = 1.2, threshold_scale = "ratio"))
   expect_equal(g$rating_target, "little_to_no_difference")
   expect_match(g$rating_target_note, "very near the null")
@@ -136,6 +141,7 @@ test_that("null threshold + point estimate near null -> little_to_no_difference,
 
 test_that("null threshold + point estimate not near null -> non_null_effect, judged against the null", {
   g <- suppressWarnings(grade_meta(meta_large_rr(), threshold_type = "null",
+                                   small_values = "desirable",
                                    threshold = 1.2, threshold_scale = "ratio",
                                    ois_events = 40))
   expect_equal(g$rating_target, "non_null_effect")
@@ -143,7 +149,8 @@ test_that("null threshold + point estimate not near null -> non_null_effect, jud
 })
 
 test_that("null threshold without a MID falls back to non_null_effect and says so", {
-  g <- suppressWarnings(grade_meta(meta_near_null(), threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(meta_near_null(), threshold_type = "null",
+    small_values = "desirable"))
   expect_equal(g$rating_target, "non_null_effect")
   expect_match(g$rating_target_note, "No MID was supplied")
 })
@@ -156,7 +163,8 @@ test_that("a MID-based target without a MID aborts", {
   m <- meta_near_null()
   expect_error(
     suppressWarnings(grade_meta(
-      m, threshold_type = "null",
+      m,
+      small_values = "desirable", threshold_type = "null",
       rating_target = "little_to_no_difference",
       rating_target_rationale = "Panel judged the estimate to be at the null"
     )),
@@ -172,6 +180,7 @@ test_that("manual rating_target without a rationale aborts", {
   m <- meta_rr()
   expect_error(
     suppressWarnings(grade_meta(m, threshold_type = "null",
+                                small_values = "desirable",
                                 rating_target = "non_null_effect")),
     "Overriding the rating target judgment requires rating_target_rationale"
   )
@@ -180,7 +189,8 @@ test_that("manual rating_target without a rationale aborts", {
 test_that("manual rating_target with a rationale succeeds and is recorded", {
   m <- meta_rr()
   g <- suppressWarnings(grade_meta(
-    m, threshold_type = "null", rating_target = "non_null_effect",
+    m,
+    small_values = "desirable", threshold_type = "null", rating_target = "non_null_effect",
     rating_target_rationale = "Panel rated certainty in any true effect"
   ))
   expect_equal(g$rating_target, "non_null_effect")
@@ -195,6 +205,7 @@ test_that("an unknown rating_target aborts", {
   m <- meta_rr()
   expect_error(
     suppressWarnings(grade_meta(m, threshold_type = "null",
+                                small_values = "desirable",
                                 rating_target = "bogus",
                                 rating_target_rationale = "x")),
     "rating_target must be one of"
@@ -207,6 +218,7 @@ test_that("an unknown rating_target aborts", {
 
 test_that("(a) CI crosses the threshold -> rate down one level", {
   g <- suppressWarnings(grade_meta(meta_rr(), threshold_type = "null",
+                                   small_values = "desirable",
                                    ois_events = 1000))
   row <- impre(g)
   expect_equal(row$judgment, "serious")
@@ -222,6 +234,7 @@ test_that("(b) CI crosses both thresholds -> rate down two levels", {
     random = TRUE, common = FALSE, incr = 0.1
   )
   g <- suppressWarnings(grade_meta(m, threshold = 1.05,
+                                   small_values = "desirable",
                                    threshold_scale = "ratio",
                                    ois_events = 10))
   row <- impre(g)
@@ -231,6 +244,7 @@ test_that("(b) CI crosses both thresholds -> rate down two levels", {
 
 test_that("(c) CI does not cross and effect is moderate -> do not rate down", {
   g <- suppressWarnings(grade_meta(meta_md_moderate(),
+                                   small_values = "desirable",
                                    outcome_type = "absolute",
                                    threshold = 1.0,
                                    threshold_scale = "te_scale",
@@ -243,6 +257,7 @@ test_that("(c) CI does not cross and effect is moderate -> do not rate down", {
 
 test_that("(d) continuous: CI does not cross, effect large, N < OIS -> rate down one", {
   g <- suppressWarnings(grade_meta(meta_md_large(),
+                                   small_values = "desirable",
                                    outcome_type = "absolute",
                                    threshold = 0.5,
                                    threshold_scale = "te_scale",
@@ -255,6 +270,7 @@ test_that("(d) continuous: CI does not cross, effect large, N < OIS -> rate down
 
 test_that("(e) binary: CI ratio >= 3 -> consider rating down two levels", {
   g <- suppressWarnings(grade_meta(meta_large_rr(), threshold = 1.2,
+                                   small_values = "desirable",
                                    threshold_scale = "ratio",
                                    ois_events = 40))
   row <- impre(g)
@@ -272,6 +288,7 @@ test_that("continuous rule of thumb: total N >= 800 does not rate down", {
     studlab = c("A", "B"), sm = "MD", random = TRUE, common = FALSE
   )
   g <- suppressWarnings(grade_meta(m, outcome_type = "absolute",
+                                   small_values = "desirable",
                                    threshold = 0.5,
                                    threshold_scale = "te_scale",
                                    ois_n = 100000))
@@ -289,6 +306,7 @@ test_that("regression: moderate effect, CI inside the thresholds, N far below OI
   # the CI sat. Core GRADE 2 Fig 4 only consults the OIS when the CI does not
   # cross the threshold AND the effect is implausibly large.
   g <- suppressWarnings(grade_meta(meta_md_moderate(),
+                                   small_values = "desirable",
                                    outcome_type = "absolute",
                                    threshold = 1.0,
                                    threshold_scale = "te_scale",

@@ -331,8 +331,9 @@ grade_meta_multi <- function(ma_list,
     g <- tryCatch(
       do.call(grade_meta, c(list(meta_obj = ma), args)),
       error = function(e) {
-        # Core GRADE 2 entry gate: never downgraded to a warning.
-        if (.is_threshold_gate(e)) stop(e)
+        # An entry gate describes the arguments the whole batch was called
+        # with, not this outcome's data: never downgraded to a warning.
+        if (.is_entry_gate(e)) stop(e)
         rlang::warn(sprintf(
           paste0("grade_meta() failed for outcome '%s': %s The outcome is ",
                  "recorded as NULL and the remaining outcomes continue."),
@@ -369,11 +370,17 @@ grade_meta_multi <- function(ma_list,
   set
 }
 
-# The Core GRADE 2 entry gate aborts with class "pmatools_threshold_gate"
-# (see .check_threshold_type_gate()). The message test is a fallback for
-# gate-like aborts raised by code paths that predate the class.
-.is_threshold_gate <- function(e) {
+# grade_meta()'s two entry gates: the Core GRADE 2 threshold gate
+# (.check_threshold_type_gate(), class "pmatools_threshold_gate") and the
+# outcome-direction gate (.check_small_values(), class
+# "pmatools_direction_gate"). Both are argument errors that would repeat
+# identically for every outcome, so recording one outcome as failed and
+# carrying on would just produce the same abort n times over -- or, worse, let
+# a batch run be used to get around a gate. The message test is a fallback for
+# gate-like aborts raised by code paths that predate the classes.
+.is_entry_gate <- function(e) {
   if (inherits(e, "pmatools_threshold_gate")) return(TRUE)
+  if (inherits(e, "pmatools_direction_gate")) return(TRUE)
   msg <- tryCatch(conditionMessage(e), error = function(...) "")
   grepl("requires a threshold", msg, fixed = TRUE)
 }

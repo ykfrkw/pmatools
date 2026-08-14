@@ -44,6 +44,7 @@ bmj_subdomains <- function(outcome_judgment = "probably_no") {
 grade_with_subdomains <- function(sub, ...) {
   suppressWarnings(
     grade_meta(make_metabin_ind(), threshold_type = "null",
+               small_values = "desirable",
                indirectness_subdomains = sub, ...)
   )
 }
@@ -211,6 +212,7 @@ test_that("do.call() with indirectness = NULL keeps the subdomain worst case", {
   args <- list(
     meta_obj                = make_metabin_ind(),
     threshold_type          = "null",
+    small_values            = "desirable",
     indirectness            = NULL,
     indirectness_rationale  = NULL,
     indirectness_subdomains = bmj_subdomains()
@@ -227,6 +229,7 @@ test_that("do.call() forwarding an explicit 'no' is still an override", {
   args <- list(
     meta_obj                = make_metabin_ind(),
     threshold_type          = "null",
+    small_values            = "desirable",
     indirectness            = "no",
     indirectness_subdomains = bmj_subdomains()
   )
@@ -240,7 +243,8 @@ test_that("do.call() forwarding an explicit 'no' is still an override", {
 })
 
 test_that("do.call() without subdomains is unchanged by the NULL default", {
-  base_args <- list(meta_obj = make_metabin_ind(), threshold_type = "null")
+  base_args <- list(meta_obj = make_metabin_ind(), threshold_type = "null",
+                    small_values = "desirable")
   g_omitted <- suppressWarnings(do.call(grade_meta, base_args))
   g_null    <- suppressWarnings(
     do.call(grade_meta, c(base_args, list(indirectness = NULL)))
@@ -281,12 +285,14 @@ test_that("subdomains live on the object, not in domain_assessments", {
 })
 
 test_that("calls without subdomains are unaffected", {
-  g <- suppressWarnings(grade_meta(make_metabin_ind(), threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(make_metabin_ind(), threshold_type = "null",
+    small_values = "desirable"))
   expect_null(g$indirectness_subdomains)
   expect_equal(indir_row(g)$judgment, "not_serious")
 
   g2 <- suppressWarnings(
     grade_meta(make_metabin_ind(), threshold_type = "null",
+               small_values = "desirable",
                indirectness = "very_serious",
                indirectness_rationale = "Surrogate outcome only")
   )
@@ -316,7 +322,8 @@ test_that("indirectness_table returns a flextable and saves to docx", {
 })
 
 test_that("indirectness_table aborts without subdomain judgments", {
-  g <- suppressWarnings(grade_meta(make_metabin_ind(), threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(make_metabin_ind(), threshold_type = "null",
+    small_values = "desirable"))
   expect_error(indirectness_table(g),
                regexp = "no Indirectness subdomain judgments")
   expect_error(indirectness_table(list()),

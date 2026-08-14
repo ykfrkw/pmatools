@@ -55,7 +55,7 @@
 - [x] utils.R 拡張（chinn_smd_to_or, suggest_threshold, compute_pooled_sd, threshold_to_te_scale）
 - [x] grade_meta() に rob_inflation_threshold, threshold, threshold_scale 引数
 - [x] sof_table() に convert_smd_to_or, baseline_risk, threshold_label
-- [x] domain_rob.R: inflation 閾値（既定 10%）+ small_values=NULL の |TE| ロジック
+- [x] domain_rob.R: inflation 閾値（既定 10%）+ small_values=NULL の |TE| ロジック（この NULL フォールバックは v0.5.1 で削除。下記 v0.5.1 節を参照）
 - [x] domain_inconsistency.R: Step 2 で Threshold-3-zone（auto）、Q-test 駆動撤去
 - [x] domain_imprecision.R: Threshold から ois_p1/ois_delta 自動派生
 - [x] tests: test-data_ingest, test-run_ma, test-domain_rob, test-inconsistency_threshold, test-chinn, test-export_bundle
@@ -106,6 +106,18 @@
 - [x] 連続アウトカムの arm-level 列：両 SoF レイアウトが対照群セル（対照アームの逆分散加重平均）と介入群セルを埋めるようになった。SMD は対照アームの pooled within-arm SD（Cochrane Handbook 15.5.3.2）を掛けてから加算。導出は脚注化、binary 表は不変（SPEC §4.6）
 - [x] `export_bundle()` の両メソッドに `style` 引数（既定は `"bmj"` に変更、**behaviour change**）、`export_bundle.meta()` に `follow_up` / `unit`、両メソッドに `sof_notes`。いずれも `analysis.R` にレンダリングされる
 - [x] `sof_add_notes(x, notes)` を export（呼び出し側の脚注行を SoF flextable に追記）
+
+**破壊的変更（抜粋）**
+
+- [x] `small_values` is required (`"desirable"` / `"undesirable"`); a call
+  without it aborts with condition class `"pmatools_direction_gate"`, and no
+  escape hatch is offered. It removes the two branches that guessed the outcome
+  direction — the risk-of-bias `|TE_all| > |TE_low|` fallback (with the warning
+  that announced the assumption had decided the downgrade) and the OIS's use of
+  Core GRADE 2's relative risk *reduction* for outcomes whose events are the
+  desirable thing. The rated object now carries `$small_values`, so
+  `export_bundle()` writes the real direction into the bundled `analysis.R`
+  instead of `NULL` (SPEC §4.5.1a).
 
 **バグ修正（抜粋）**
 

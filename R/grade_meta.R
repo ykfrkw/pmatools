@@ -112,13 +112,28 @@
 #'   the domain is rated \code{"very_serious"} (rate down 2 levels) unconditionally.
 #'   Set to \code{0} to restore v0.1.0 behavior (any bias-favouring change
 #'   rates down). Only used when \code{rob} is a vector or column name.
-#' @param small_values Are small outcome values desirable?
-#'   \code{"desirable"} if small values are good (eg, mortality, symptom severity) or
-#'   \code{"undesirable"} if small values are bad (eg, response rate, remission OR > 1).
-#'   Used to automatically determine whether dominated high-RoB studies inflate the
-#'   apparent effect. If \code{NULL} (default), a conservative rate-down is applied
-#'   when dominated. Only used when \code{rob} is a vector or column name.
+#' @param small_values \strong{Required} (v0.5.1, breaking). Are small outcome
+#'   values desirable? \code{"desirable"} if small values are good (eg,
+#'   mortality, symptom severity) or \code{"undesirable"} if small values are
+#'   bad (eg, response rate, remission OR > 1). Anything else, including the
+#'   \code{NULL} that used to be the default, aborts before any domain is
+#'   assessed, with condition class \code{"pmatools_direction_gate"}.
 #'   (Consistent with \code{netmetaviz} \code{small_values} parameter.)
+#'
+#'   Two domains consume it. Risk of bias uses it to decide which shift of the
+#'   pooled estimate would flatter the intervention (Core GRADE 4 Fig 2, "check
+#'   direction of bias"); Imprecision uses it to decide which side of the
+#'   control-group risk the Optimal Information Size is powered against (Core
+#'   GRADE 2's "modest relative risk reduction" is written for an undesirable
+#'   event and does not generalise on its own).
+#'
+#'   \strong{There is no escape hatch}, unlike \code{require_threshold}. Rating
+#'   without a MID is a legitimate methodological choice; rating without a
+#'   direction is not, because every outcome has one. Up to v0.5.0 the argument
+#'   was optional and both domains guessed — risk of bias fell back to
+#'   \eqn{|TE_{all}| > |TE_{low}|} and then warned that the assumption had
+#'   determined the downgrade, and the OIS used the paper's \emph{reduction} as
+#'   written even for outcomes whose events are the desirable thing.
 #' @param indirectness Indirectness judgment. Same format as \code{rob} (scalar/vector/column).
 #'   Default \code{NULL}, which is treated as \code{"not_serious"} (no
 #'   downgrade). Pass \code{NULL} — rather than \code{"not_serious"} — whenever no manual judgment is
@@ -362,8 +377,7 @@
 #'   effect (v0.5.1): the paper writes "reduction" because its worked example
 #'   has an undesirable event, but when \code{small_values = "undesirable"} the
 #'   events themselves are the desirable outcome and the intervention raises
-#'   them, so the alternative rate is \eqn{p_0 (1 + ois\_rrr)}. With
-#'   \code{small_values = NULL} the reduction is used, as before.
+#'   them, so the alternative rate is \eqn{p_0 (1 + ois\_rrr)}.
 #'   Core GRADE 2 specifies exactly this input for binary outcomes: "For binary
 #'   outcomes, these involve specifying the acceptable error rates: alpha
 #'   (typically 0.05) and beta (typically 0.20), the control group event rate
@@ -452,7 +466,7 @@
 #' \code{$control_risk} and stated in the Imprecision domain notes, so a reader
 #' of the Evidence Profile or the exported bundle can see it without reading
 #' the call. Consolidating the three onto a single \code{baseline_risk} remains
-#' the eventual destination; see SPEC.md \S4.5.4 for why it is not this
+#' the eventual destination; see SPEC.md section 4.5.4 for why it is not this
 #' release.
 #'
 #' @section Domain judgment levels:
@@ -592,6 +606,10 @@ grade_meta <- function(meta_obj,
                        rob_dominant_threshold           = 0.55,
                        rob_refit                        = TRUE,
                        rob_inflation_threshold          = 0.10,
+                       # Required. The NULL default is kept only so that the
+                       # omission is answered by .check_small_values()'s message
+                       # rather than by R's "argument is missing" -- the same
+                       # shape as `threshold`, whose gate works this way too.
                        small_values                     = NULL,
                        indirectness                     = NULL,
                        indirectness_dominant_threshold  = 0.55,
@@ -657,6 +675,12 @@ grade_meta <- function(meta_obj,
   # "mid" means importance is being judged, which is impossible without a MID.
   .check_threshold_type_gate(meta_obj, threshold_type, threshold,
                              require_threshold)
+
+  # --- the outcome direction must be explicit (v0.5.1) ---
+  # Risk of bias and Imprecision both consume it, and both used to guess in its
+  # absence. Checked here, before any domain runs, so the call stops rather than
+  # returning a rating that a guess helped produce.
+  .check_small_values(small_values)
 
   # --- starting certainty ---
   start_score     <- if (study_design == "RCT") 4L else 2L
@@ -912,6 +936,11 @@ grade_meta <- function(meta_obj,
       study_design       = study_design,
       outcome_name       = if (is.null(outcome_name)) "Outcome" else outcome_name,
       outcome_type       = outcome_type,
+      # The direction the rating was made under. Required since v0.5.1, so it
+      # is always here -- which is what lets export_bundle() write it into the
+      # bundled analysis.R by reading the object instead of falling back to a
+      # NULL that reproduced a different analysis.
+      small_values       = small_values,
       baseline_risk      = baseline_risk_used,
       # Provenance for the one number the three arguments share: which argument
       # supplied it, which ones inherited it, and the value each of the three

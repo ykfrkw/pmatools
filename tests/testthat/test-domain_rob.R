@@ -160,6 +160,7 @@ test_that("Rule 5's own wording says one level, not two", {
 test_that("Rule 5 can still reach -2 through the scalar rob override", {
   m <- make_mock_dominated(te_all = 0.50, te_low_only = -0.50)
   g <- grade_meta(m, rob = "very_serious",
+                  small_values = "desirable",
                   rob_rationale = "Sign flip when high-RoB studies are removed",
                   threshold = 1.20, threshold_scale = "ratio")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
@@ -171,8 +172,10 @@ test_that("Rule 5 can still reach -2 through the scalar rob override", {
 # Updated (v0.5): same -1 cap as above.
 test_that("Fallback: Threshold not supplied + sign flip -> some_concerns (rule 5)", {
   m <- make_mock_dominated(te_all = 1.0, te_low_only = -0.5)
+  # The direction gate plays no part in rule 5 (the zones flip across the
+  # null), so the declared direction is immaterial here.
   g <- grade_meta(m, rob = c("very_serious", "no", "no"),
-                  small_values = NULL,
+                  small_values = "desirable",
                   rob_inflation_threshold = 0.10, threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   expect_equal(rob_row$judgment, "serious")
@@ -225,40 +228,54 @@ test_that("Direction gate result is always reported in notes", {
   expect_match(rob_row$notes, "threshold 10%", fixed = TRUE)
 })
 
-test_that("small_values = NULL: warning when |TE| assumption drives a rule-3 downgrade", {
-  # Same non-trivial zone, ratio 50% > 10%; with small_values = NULL the gate
-  # falls back to |TE_all| > |TE_low|, which decides the downgrade -> warn once.
+# The two tests that used to live here exercised the small_values = NULL
+# fallback -- the |TE_all| > |TE_low| guess, and the warning that said the guess
+# had decided the downgrade. Both are gone in 0.5.1 (the argument is required),
+# and the honest replacement is the test below: the same body of evidence, rated
+# twice, with the declared direction and nothing else deciding the verdict.
+test_that("the declared direction, not the magnitude, decides the rule-3 downgrade", {
+  # Both estimates sit in the 'above' zone (above log(1.20) ~ 0.182) and the
+  # relative change is (0.60 - 0.40) / 0.40 = 50%, well past the 10% threshold.
+  # Whether that shift is bias-FAVOURING is the whole question, and only
+  # small_values answers it.
   m <- make_mock_dominated(te_all = 0.60, te_low_only = 0.40)
-  expect_warning(
+  rate <- function(sv) {
     g <- grade_meta(m, rob = c("very_serious", "no", "no"),
-                    small_values = NULL,
+                    small_values = sv,
                     threshold = 1.20, threshold_scale = "ratio",
-                    rob_inflation_threshold = 0.10),
-    regexp = "small_values"
-  )
-  rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "serious")
-  expect_match(rob_row$notes, "Rule 3")
-})
+                    rob_inflation_threshold = 0.10)
+    g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
+  }
 
-test_that("small_values = NULL: no warning when the gate is not decisive", {
-  # Deflating direction (ratio negative): no downgrade regardless of
-  # small_values, so no warning should be emitted.
-  m <- make_mock_dominated(te_all = 0.2, te_low_only = 1.1)
-  expect_no_warning(
+  # Events are the desirable thing, so a larger TE flatters the intervention.
+  up <- rate("undesirable")
+  expect_equal(up$judgment, "serious")
+  expect_match(up$notes, "Rule 3")
+
+  # The mirror outcome: the same shift now runs away from benefit, so the gate
+  # blocks the downgrade the magnitude alone would have produced.
+  down <- rate("desirable")
+  expect_equal(down$judgment, "not_serious")
+  expect_match(down$notes, "Rule 2")
+
+  # And neither rating announces an assumption about the direction, because
+  # neither made one. (The fixture's k = 3 still draws the publication-bias
+  # warning, which is why this looks for the subject rather than for silence.)
+  w <- testthat::capture_warnings(
     grade_meta(m, rob = c("very_serious", "no", "no"),
-               small_values = NULL,
-               rob_inflation_threshold = 0.10, threshold_type = "null"),
-    message = "small_values"
-  )
+               small_values = "undesirable",
+               threshold = 1.20, threshold_scale = "ratio",
+               rob_inflation_threshold = 0.10))
+  expect_false(any(grepl("small_values", w, fixed = TRUE)))
 })
 
 # --- small_values direction handling ----------------------------------------
-test_that("small_values = NULL: high-RoB toward null does NOT rate down", {
-  # |te_all|=0.2 < |te_low|=1.1 -> direction_ok FALSE; both 'above' (no Threshold).
+test_that("a shift back toward the null does NOT rate down", {
+  # te_all = 0.2, te_low = 1.1: both 'above' (no Threshold), and dropping the
+  # high-RoB studies makes the effect LARGER, so bias cannot account for it.
   m <- make_mock_dominated(te_all = 0.2, te_low_only = 1.1)
   g <- grade_meta(m, rob = c("very_serious", "no", "no"),
-                  small_values = NULL,
+                  small_values = "desirable",
                   rob_inflation_threshold = 0.10, threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   expect_equal(rob_row$judgment, "not_serious")
@@ -442,6 +459,7 @@ test_that("a studlab-length rob aborts when the alignment is unresolvable", {
   m$k        <- 3L
   expect_error(
     assess_rob(c("very_serious", "no", "no", "no"), m,
+               small_values = "desirable",
                threshold_internal = log(1.20)),
     regexp = "estimable rows could not be identified"
   )

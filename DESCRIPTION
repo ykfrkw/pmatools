@@ -40,6 +40,7 @@ Suggests:
     mmeta,
     rmarkdown,
     testthat (>= 3.0.0),
+    withr,
     readxl,
     DT,
     here

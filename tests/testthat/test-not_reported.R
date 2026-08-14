@@ -121,7 +121,7 @@ test_that("add_not_reported() guards names and honours 'after'", {
   ml  <- quiet_ma(nr_data(), sm = "RR")
   set <- quiet_grade(ml, common = list(study_design = "RCT",
                                        threshold_type = "null",
-                                       indirectness = "no"))
+                                       indirectness = "no", small_values = "desirable"))
 
   s1 <- add_not_reported(set, "Quality of life")
   expect_equal(s1$order, c("Mortality", "Serious adverse events",
@@ -239,7 +239,7 @@ test_that("the not-reported footnote is emitted once per table", {
   ml   <- quiet_ma(nr_data(), sm = "RR")
   rated <- quiet_grade(ml, common = list(study_design = "RCT",
                                          threshold_type = "null",
-                                         indirectness = "no"))
+                                         indirectness = "no", small_values = "desirable"))
   expect_equal(count_note(grade_table(rated, style = "bmj")), 0L)
 })
 

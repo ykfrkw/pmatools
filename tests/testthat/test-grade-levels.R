@@ -75,7 +75,8 @@ test_that("a stored judgment is always canonical, whichever alias went in", {
   m <- make_levels_metabin()
   for (alias in c("no", "some", "some_concerns", "very_serious")) {
     g <- suppressWarnings(grade_meta(
-      m, rob = alias, rob_rationale = "Recorded by the review team",
+      m,
+      small_values = "desirable", rob = alias, rob_rationale = "Recorded by the review team",
       threshold_type = "null"))
     row <- domain_of(g, "Risk of bias")
     expect_identical(row$judgment,
@@ -93,6 +94,7 @@ test_that("a bare 'serious' aborts and names both of its historical meanings", {
   m <- make_levels_metabin()
   err <- tryCatch(
     suppressWarnings(grade_meta(m, rob = "serious",
+                                small_values = "desirable",
                                 rob_rationale = "Anything",
                                 threshold_type = "null")),
     error = function(e) conditionMessage(e))
@@ -112,16 +114,19 @@ test_that("every domain argument refuses a bare 'serious' by its own name", {
   m <- make_levels_metabin()
   expect_error(
     suppressWarnings(grade_meta(m, inconsistency = "serious",
+                                small_values = "desirable",
                                 inconsistency_rationale = "x",
                                 threshold_type = "null")),
     "inconsistency = \"serious\"", fixed = TRUE)
   expect_error(
     suppressWarnings(grade_meta(m, indirectness = "serious",
+                                small_values = "desirable",
                                 indirectness_rationale = "x",
                                 threshold_type = "null")),
     "indirectness = \"serious\"", fixed = TRUE)
   expect_error(
     suppressWarnings(grade_meta(m, imprecision = "serious",
+                                small_values = "desirable",
                                 imprecision_rationale = "x",
                                 threshold_type = "null")),
     "imprecision = \"serious\"", fixed = TRUE)
@@ -129,6 +134,7 @@ test_that("every domain argument refuses a bare 'serious' by its own name", {
   # 0.5.0 and the middle one now.
   expect_error(
     suppressWarnings(grade_meta(m, rob = c("no", "serious", "no"),
+                                small_values = "desirable",
                                 threshold_type = "null")),
     "rob = \"serious\"", fixed = TRUE)
   expect_error(rob_strata(c("low", "serious")), "serious", fixed = TRUE)
@@ -137,9 +143,13 @@ test_that("every domain argument refuses a bare 'serious' by its own name", {
 test_that("the unambiguous spellings still pass silently", {
   m <- make_levels_metabin()
   expect_no_error(suppressWarnings(grade_meta(
-    m, rob = "some_concerns", rob_rationale = "Recorded", threshold_type = "null")))
+    m,
+    small_values = "desirable",
+      rob = "some_concerns", rob_rationale = "Recorded", threshold_type = "null")))
   expect_no_error(suppressWarnings(grade_meta(
-    m, rob = "very_serious", rob_rationale = "Recorded", threshold_type = "null")))
+    m,
+    small_values = "desirable",
+      rob = "very_serious", rob_rationale = "Recorded", threshold_type = "null")))
   expect_identical(rob_strata(c("no", "some_concerns", "very_serious")),
                    c("low", "some", "high"))
 })
@@ -191,6 +201,7 @@ test_that("an automated rating never rates one domain down more than 2", {
   for (i in seq_len(nrow(grid))) {
     g <- suppressWarnings(grade_meta(
       m,
+      small_values = "desirable",
       rob                              = c("no", "some_concerns", "very_serious"),
       inconsistency_ci_diff            = grid$ci_diff[i],
       inconsistency_threshold_side     = grid$side[i],
@@ -209,7 +220,8 @@ test_that("extremely_serious is reachable by hand, on every domain argument", {
   m <- make_levels_metabin()
 
   g <- suppressWarnings(grade_meta(
-    m, rob = "extremely_serious",
+    m,
+    small_values = "desirable", rob = "extremely_serious",
     rob_rationale = "Every trial unblinded, with outcome adjudication by the sponsor",
     threshold_type = "null"))
   row <- domain_of(g, "Risk of bias")
@@ -220,14 +232,17 @@ test_that("extremely_serious is reachable by hand, on every domain argument", {
   # ...and the rationale gate is not weakened for it.
   expect_error(
     suppressWarnings(grade_meta(m, rob = "extremely_serious",
+                                small_values = "desirable",
                                 threshold_type = "null")),
     "rob_rationale", fixed = TRUE)
   expect_error(
     suppressWarnings(grade_meta(m, indirectness = "extremely_serious",
+                                small_values = "desirable",
                                 threshold_type = "null")),
     "indirectness_rationale", fixed = TRUE)
   expect_error(
     suppressWarnings(grade_meta(m, imprecision = "extremely_serious",
+                                small_values = "desirable",
                                 threshold_type = "null")),
     "imprecision_rationale", fixed = TRUE)
 })
@@ -235,7 +250,8 @@ test_that("extremely_serious is reachable by hand, on every domain argument", {
 test_that("the Evidence Profile words the manual -3 as Core GRADE does", {
   m <- make_levels_metabin()
   g <- suppressWarnings(grade_meta(
-    m, indirectness = "extremely_serious",
+    m,
+    small_values = "desirable", indirectness = "extremely_serious",
     indirectness_rationale = "Surrogate outcome, unrelated population, and a dose nobody prescribes",
     threshold_type = "null"))
   ep  <- evidence_profile(g)
@@ -250,7 +266,8 @@ test_that("certainty stops at Very Low however far past it the sum goes", {
 
   # -3 from one domain already reaches the floor from a High start.
   g1 <- suppressWarnings(grade_meta(
-    m, rob = "extremely_serious", rob_rationale = "Recorded",
+    m,
+    small_values = "desirable", rob = "extremely_serious", rob_rationale = "Recorded",
     threshold_type = "null"))
   expect_equal(domain_of(g1, "Risk of bias")$downgrade, -3)
   expect_lte(sum(g1$domain_assessments$downgrade), -3)
@@ -261,7 +278,8 @@ test_that("certainty stops at Very Low however far past it the sum goes", {
   # no rating under Very Low on the GRADE scale, so the score clamps rather
   # than running negative into CERTAINTY_LABELS.
   g2 <- suppressWarnings(grade_meta(
-    m, rob = "extremely_serious", rob_rationale = "Recorded",
+    m,
+    small_values = "desirable", rob = "extremely_serious", rob_rationale = "Recorded",
     indirectness = "very_serious", indirectness_rationale = "Recorded",
     threshold_type = "null"))
   expect_lte(sum(g2$domain_assessments$downgrade), -5)
@@ -278,7 +296,8 @@ test_that("certainty stops at Very Low however far past it the sum goes", {
   # An observational review starts at Low (2), so a single -3 is already past
   # the floor there.
   g3 <- suppressWarnings(grade_meta(
-    m, study_design = "obs", rob = "extremely_serious",
+    m,
+    small_values = "desirable", study_design = "obs", rob = "extremely_serious",
     rob_rationale = "Recorded", threshold_type = "null"))
   expect_identical(g3$certainty, "Very Low")
   expect_equal(g3$certainty_score, 1)

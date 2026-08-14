@@ -34,6 +34,7 @@ graded_fixture <- function(...) {
                               rob_rationale = "Consensus RoB2: all domains low",
                               indirectness = "no",
                               outcome_name = "Table font",
+                              small_values = "desirable",
                               threshold_type = "null", ...))
 }
 
@@ -74,6 +75,7 @@ test_that("every table builder sets one family across body and footer", {
     "evidence_profile"      = evidence_profile(graded),
     "indirectness_table"    = indirectness_table(
       suppressWarnings(grade_meta(metabin_fixture(), threshold_type = "null",
+                                  small_values = "desirable",
                                   indirectness_subdomains = subdomain_fixture()))
     )
   )

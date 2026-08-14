@@ -38,6 +38,7 @@ pl_binary <- function(harm = FALSE, sm = "RR", outcome_name = "Mortality",
     ma, study_design = "RCT", rob = "no",
     rob_rationale = "Consensus RoB2: all domains low risk",
     indirectness = "no", outcome_name = outcome_name,
+    small_values = "desirable",
     threshold_type = threshold_type, ...))
 }
 
@@ -56,6 +57,7 @@ pl_sae <- function(threshold_type = "mid", ...) {
     ma, study_design = "RCT", rob = "no",
     rob_rationale = "Consensus RoB2: all domains low risk",
     indirectness = "no", outcome_name = "Serious adverse events",
+    small_values = "desirable",
     threshold_type = threshold_type, ...))
 }
 
@@ -125,7 +127,8 @@ test_that("the direction is read off the TE scale for every effect measure", {
     n.c = c(50, 60, 70), mean.c = c(8, 9, 8),    sd.c = c(10, 11, 12),
     studlab = c("A", "B", "C"), sm = "MD")
   g <- suppressWarnings(grade_meta(
-    m, study_design = "RCT", rob = "no",
+    m,
+    small_values = "desirable", study_design = "RCT", rob = "no",
     rob_rationale = "Consensus RoB2: all domains low risk",
     indirectness = "no", outcome_name = "Sleep duration",
     outcome_type = "absolute", threshold_type = "null"))

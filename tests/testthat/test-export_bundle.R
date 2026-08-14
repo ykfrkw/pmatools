@@ -18,6 +18,7 @@ make_meta_for_bundle <- function() {
 test_that("export_bundle creates ZIP with expected files (data + script + results)", {
   ma <- make_meta_for_bundle()
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    small_values = "desirable",
                                     rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
                                     outcome_name = "Test", threshold_type = "null"))
@@ -39,6 +40,7 @@ test_that("export_bundle creates ZIP with expected files (data + script + result
 test_that("export_bundle generated analysis.R parses as valid R", {
   ma <- make_meta_for_bundle()
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    small_values = "desirable",
                                     rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
                                     outcome_name = "Test", threshold_type = "null"))
@@ -62,6 +64,7 @@ test_that("export_bundle generated analysis.R parses as valid R", {
 test_that("analysis.R renders all GRADE arguments and run_ma arm labels", {
   ma <- make_meta_for_bundle()
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    small_values = "desirable",
                                     rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
                                     outcome_name = "Test", threshold_type = "null"))
@@ -115,6 +118,7 @@ test_that("analysis.R renders all GRADE arguments and run_ma arm labels", {
 test_that("analysis.R falls back to sensible GRADE defaults when specs absent", {
   ma <- make_meta_for_bundle()
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    small_values = "desirable",
                                     rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
                                     outcome_name = "Test", threshold_type = "null"))
@@ -153,7 +157,8 @@ test_that("analysis.R falls back to sensible GRADE defaults when specs absent", 
 test_that("analysis.R reproduces a manual rating-target override", {
   ma <- make_meta_for_bundle()
   g <- suppressWarnings(grade_meta(
-    ma, study_design = "RCT", outcome_name = "Test",
+    ma,
+    small_values = "desirable", study_design = "RCT", outcome_name = "Test",
     threshold_type = "null",
     rating_target = "non_null_effect",
     rating_target_rationale = "Panel rated certainty in any true effect"
@@ -198,7 +203,8 @@ test_that("the bundled analysis.R reproduces the rating's control-arm risk", {
   # One value, given to one of the three, plus a SoF baseline that is
   # deliberately a different population.
   g <- suppressWarnings(grade_meta(
-    ma, study_design = "RCT", outcome_name = "Test",
+    ma,
+    small_values = "desirable", study_design = "RCT", outcome_name = "Test",
     threshold = 0.05, threshold_scale = "ard", threshold_baseline = 0.25,
     baseline_risk = 0.40
   ))
@@ -230,7 +236,8 @@ test_that("a pooling method for the table does not re-derive the OIS baseline", 
   # to a GLMM-pooled number, the other two to the crude one. The script emits
   # three literals, so nothing inherits on the re-run.
   g <- suppressWarnings(grade_meta(
-    ma, study_design = "RCT", outcome_name = "Test",
+    ma,
+    small_values = "desirable", study_design = "RCT", outcome_name = "Test",
     threshold = 0.05, threshold_scale = "ard", baseline_risk = "metaprop"
   ))
   out_dir <- tempfile(); dir.create(out_dir)
@@ -248,6 +255,50 @@ test_that("a pooling method for the table does not re-derive the OIS baseline", 
   expect_equal(again$baseline_risk, g$baseline_risk)
   expect_equal(again$threshold_internal, g$threshold_internal)
   expect_equal(again$certainty, g$certainty)
+})
+
+# ---- the outcome direction survives the round trip --------------------------
+# The bug that made small_values required: export_bundle() wrote
+# `small_values = NULL` whenever the caller had not routed the argument through
+# grade_args, so the bundled script re-ran the OIS on the other side of the
+# modest RRR and documented a different analysis from the one it came from.
+
+test_that("a bundle exported without grade_args still states the direction", {
+  ma <- make_meta_for_bundle()
+  # "undesirable" is the side the old NULL fallback got wrong: the events are
+  # the desirable thing, so the OIS alternative rate is p0 * (1 + rrr).
+  g <- suppressWarnings(grade_meta(
+    ma, study_design = "RCT", outcome_name = "Response",
+    small_values = "undesirable", threshold_type = "null", ois_p0 = 0.20))
+  out_dir <- tempfile(); dir.create(out_dir)
+  zip_path <- export_bundle(ma, g, output_dir = out_dir,
+                            bundle_name = "direction_bundle",
+                            include = c("script"))
+  unz_dir <- tempfile(); dir.create(unz_dir)
+  zip::unzip(zip_path, exdir = unz_dir)
+  script_path <- file.path(unz_dir, "analysis.R")
+
+  script <- paste(readLines(script_path), collapse = "\n")
+  expect_match(script, "small_values            = 'undesirable'", fixed = TRUE)
+  expect_false(grepl("small_values            = NULL", script, fixed = TRUE))
+
+  again <- regrade_from_script(script_path, ma)
+  expect_identical(again$small_values, g$small_values)
+  expect_equal(again$certainty, g$certainty)
+  # The domain the wrong side would have moved: same OIS, same judgment.
+  impre <- function(x) {
+    x$domain_assessments[x$domain_assessments$domain == "Imprecision", ]
+  }
+  expect_equal(impre(again)$judgment, impre(g)$judgment)
+  # The OIS is powered against p0 * (1 + rrr) in both runs. Before this change
+  # the re-run read `small_values = NULL` and used p0 * (1 - rrr) instead, so
+  # the two target sample sizes disagreed.
+  expect_match(impre(again)$notes, "modest relative risk increase", fixed = TRUE)
+  expect_match(impre(again)$notes, "ois_p1 = 0.2400", fixed = TRUE)
+  ois_target <- function(x) {
+    regmatches(x, regexpr("target N=[0-9]+", x))
+  }
+  expect_identical(ois_target(impre(again)$notes), ois_target(impre(g)$notes))
 })
 
 # ---- .arg_lit() origin validation ------------------------------------------
@@ -282,6 +333,7 @@ test_that(".arg_lit aborts on an unknown origin instead of emitting NULL", {
 test_that("export_bundle surfaces a typo'd grade_args origin", {
   ma <- make_meta_for_bundle()
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    small_values = "desirable",
                                     rob_rationale = "Consensus RoB2: all low",
                                     outcome_name = "Test",
                                     threshold_type = "null"))
@@ -309,6 +361,7 @@ test_that(".check_script_parses accepts valid R and aborts on broken R", {
 test_that(".render_analysis_script refuses to write an unparseable script", {
   ma <- make_meta_for_bundle()
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    small_values = "desirable",
                                     rob_rationale = "Consensus RoB2: all low",
                                     outcome_name = "Test",
                                     threshold_type = "null"))
@@ -346,6 +399,7 @@ grade_for_style <- function(...) {
                               rob_rationale = "Consensus RoB2: all domains low risk",
                               indirectness = "no",
                               outcome_name = "Test", threshold_type = "null",
+                              small_values = "desirable",
                               ...))
 }
 
@@ -522,6 +576,7 @@ test_that("export_bundle includes rare-event artifacts when supplied", {
   rare <- run_rare_ma(d, effect_scale = "OR")
   ma <- rare$primary
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    small_values = "desirable",
                                     rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
                                     outcome_name = "Rare Test", threshold_type = "null"))
@@ -548,6 +603,7 @@ test_that("export_bundle script reruns rare-event methods when rare object suppl
   rare <- run_rare_ma(d, effect_scale = "OR")
   ma <- rare$primary
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    small_values = "desirable",
                                     rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
                                     outcome_name = "Rare Test", threshold_type = "null"))
@@ -570,6 +626,7 @@ test_that("export_bundle script reruns rare-event methods when rare object suppl
 test_that("legacy export_bundle(ma = ) named call works with a deprecation warning", {
   ma <- make_meta_for_bundle()
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    small_values = "desirable",
                                     rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
                                     outcome_name = "Test", threshold_type = "null"))
@@ -597,6 +654,7 @@ test_that("legacy export_bundle(ma = ) named call works with a deprecation warni
 test_that("legacy ma = call dispatches on a pmatools object too", {
   ma <- make_meta_for_bundle()
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                    small_values = "desirable",
                                     rob_rationale = "Consensus RoB2: all domains low risk",
                                     indirectness = "no",
                                     outcome_name = "Test", threshold_type = "null"))
@@ -701,6 +759,7 @@ test_that("results.txt prints one qualified block when the rated analysis is pas
 test_that("results.txt keeps the unqualified heading with no refit", {
   ma <- make_meta_for_bundle()
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                   small_values = "desirable",
                                    rob_rationale = "Consensus RoB2: all domains low risk",
                                    indirectness = "no",
                                    outcome_name = "Test", threshold_type = "null"))
@@ -745,6 +804,7 @@ arg_line <- function(txt, arg) {
 grade_args_fixture <- function() {
   ma <- make_meta_for_bundle()
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                   small_values = "desirable",
                                    rob_rationale = "Consensus RoB2: all low",
                                    indirectness = "no",
                                    outcome_name = "Test",
@@ -843,7 +903,8 @@ test_that("the script pins the reviewer's threshold_baseline, not a re-derived o
   # rescale the threshold and can change the rating.
   ma <- make_meta_for_bundle()
   g <- suppressWarnings(grade_meta(
-    ma, study_design = "RCT", rob = "no",
+    ma,
+    small_values = "desirable", study_design = "RCT", rob = "no",
     rob_rationale = "Consensus RoB2: all low",
     indirectness = "no", outcome_name = "Test",
     threshold_type = "mid", threshold = 0.05,
@@ -901,7 +962,7 @@ test_that("the multi-outcome script carries threshold_baseline through", {
                   rob_rationale = "Consensus RoB2: all low",
                   indirectness = "no",
                   threshold_type = "mid", threshold = 0.05,
-                  threshold_scale = "ard", threshold_baseline = 0.12)
+                  threshold_scale = "ard", threshold_baseline = 0.12, small_values = "desirable")
   ))
 
   out_path <- tempfile(fileext = ".R")

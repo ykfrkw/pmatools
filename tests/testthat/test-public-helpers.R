@@ -187,7 +187,8 @@ test_that("format_effect() matches what the SoF table prints", {
   )
   ma <- run_ma(data, outcome_type = "binary", sm = "RR")
   g  <- suppressWarnings(grade_meta(
-    ma, study_design = "RCT", rob = "no",
+    ma,
+    small_values = "desirable", study_design = "RCT", rob = "no",
     rob_rationale = "Consensus RoB2: all domains low risk",
     indirectness = "no", outcome_name = "Depression response",
     threshold_type = "null"))

@@ -150,12 +150,11 @@
 # two-level risk-of-bias downgrade, so a reviewer who judges -2 appropriate
 # must say so with rob = "very_serious" + rob_rationale.
 #
-# small_values:
+# small_values (required since v0.5.1; see .check_small_values()):
 #   "undesirable": small values are bad (e.g., response rate, OR for benefit)
 #                  TE_all > TE_low indicates inflation toward favorable
 #   "desirable"  : small values are good (e.g., mortality, severity)
 #                  TE_all < TE_low indicates inflation toward favorable
-#   NULL         : direction unknown; use |TE_all| > |TE_low| (further from null)
 
 # --------------------------------------------------------------------------
 # Flowchart node vocabulary (inst/figures/rob.svg)
@@ -256,9 +255,10 @@
 #'   When every study is high-RoB, no low/some-RoB comparator pool exists,
 #'   the check cannot run, and the domain is rated `"serious"` (rate
 #'   down 1 level).
-#' @param small_values `"desirable"`, `"undesirable"`, or `NULL`. Defines the
-#'   bias-favouring direction; when `NULL`, `|TE_all| > |TE_low|` is used and
-#'   a warning is emitted if that assumption drives a downgrade.
+#' @param small_values `"desirable"` or `"undesirable"`, required: it defines
+#'   the bias-favouring direction. Validated here as well as at `grade_meta()`'s
+#'   entry gate, because an assessor called directly would otherwise re-open the
+#'   guessing hole one call deeper.
 #' @param threshold_internal Clinical decision threshold on the analysis
 #'   scale (defines the trivial zone).
 #' @return A 1-row tibble with attributes `"analysis_set"` (`"all"` or
@@ -272,11 +272,15 @@ assess_rob <- function(rob, meta_obj,
                        rob_override_rationale  = NULL,
                        rob_dominant_threshold  = 0.55,
                        rob_inflation_threshold = 0.10,
-                       small_values            = NULL,
+                       small_values,
                        threshold_internal      = NULL,
                        rationale               = NULL) {
   k <- meta_obj$k
 
+  # No default on the formal, so the requirement shows in the signature;
+  # missing() routes an omission to the same explanatory abort a NULL gets.
+  if (missing(small_values)) small_values <- NULL
+  .check_small_values(small_values)
   rob_some_concerns      <- .check_rob_some_concerns(rob_some_concerns)
   rob_dominant_threshold <- .check_dominant_threshold(rob_dominant_threshold)
 
@@ -620,7 +624,7 @@ assess_rob <- function(rob, meta_obj,
 # --------------------------------------------------------------------------
 .flowchart_rob <- function(rob_vec, meta_obj,
                            dominant_threshold = 0.55,
-                           inflation_threshold = 0.10, small_values = NULL,
+                           inflation_threshold = 0.10, small_values,
                            threshold_internal = NULL,
                            some_concerns_as = "low",
                            override_notes = NULL) {
@@ -837,12 +841,7 @@ assess_rob <- function(rob, meta_obj,
     small_values        = small_values,
     inflation_threshold = inflation_threshold,
     sm                  = meta_obj$sm,
-    threshold_internal  = threshold_internal,
-    # The non-dominated branch neither rates down nor consults the direction
-    # gate (its Fig 2 node is symmetric), so the small_values warning would be
-    # doubly wrong there; only the dominated "check direction of bias" branch
-    # can be driven by the assumption.
-    warn_direction_assumption = dominated
+    threshold_internal  = threshold_internal
   )
 
   # Structured companion to diff_note: the two pooled estimates, the zone each
@@ -1002,9 +1001,7 @@ assess_rob <- function(rob, meta_obj,
 # on the non-dominated branch, the source of the "substantial difference"
 # answer (rules 3-5 = yes). Two additions for that second caller:
 #   * `rule` and `diff_note` are returned on every path (NA / the full note on
-#     the early not-assessable returns) so the caller can re-word the outcome;
-#   * `warn_direction_assumption` suppresses the small_values warning when the
-#     caller emits its own (the non-dominated branch never rates down).
+#     the early not-assessable returns) so the caller can re-word the outcome.
 #
 # Zones (defined by +/-Threshold on the analysis scale):
 #   above   : TE > +Threshold
@@ -1039,8 +1036,7 @@ assess_rob <- function(rob, meta_obj,
 # --------------------------------------------------------------------------
 .assess_bias_direction <- function(te_all, se_all, te_vec, se_vec, low_idx,
                                    small_values, inflation_threshold = 0.10,
-                                   sm = NULL, threshold_internal = NULL,
-                                   warn_direction_assumption = TRUE) {
+                                   sm = NULL, threshold_internal = NULL) {
 
   n_low <- sum(low_idx)
 
@@ -1051,9 +1047,9 @@ assess_rob <- function(rob, meta_obj,
          magnitude_substantial = NA, diff_note = note, note = note)
   }
 
-  if (!is.null(small_values) && !small_values %in% c("desirable", "undesirable")) {
-    rlang::abort("small_values must be 'desirable' or 'undesirable'.")
-  }
+  # `small_values` is not re-checked here. assess_rob() gates it on the way in,
+  # and it is a required formal of every function between there and here, so a
+  # missing one cannot reach this arithmetic.
 
   # Display label and back-transform for ratio measures
   log_scale <- !is.null(sm) && sm %in% c("OR", "RR", "HR", "RoM")
@@ -1143,9 +1139,7 @@ assess_rob <- function(rob, meta_obj,
   zl <- zone_of(te_low)
 
   # Direction of the bias contribution (only relevant for rule 3)
-  direction_ok <- if (is.null(small_values)) {
-    abs(te_all) > abs(te_low)
-  } else if (small_values == "undesirable") {
+  direction_ok <- if (small_values == "undesirable") {
     te_all > te_low
   } else {
     te_all < te_low
@@ -1187,16 +1181,6 @@ assess_rob <- function(rob, meta_obj,
     } else if (inflates) {
       judgment <- "serious"; rule <- 3L
       rule_desc <- "Rule 3: same non-trivial zone but bias-favouring inflation > threshold -> rate down 1"
-      if (is.null(small_values) && isTRUE(warn_direction_assumption)) {
-        rlang::warn(paste0(
-          "assess_rob(): small_values was not supplied, so the bias-direction ",
-          "gate assumed that a larger absolute pooled effect ",
-          "(|TE_all| > |TE_low|) indicates bias-favouring inflation. This ",
-          "assumption determined the risk-of-bias downgrade (rule 3). Supply ",
-          "small_values = 'desirable' or 'undesirable' to make the direction ",
-          "of bias explicit."
-        ))
-      }
     } else {
       judgment <- "not_serious"; rule <- 2L
       rule_desc <- "Rule 2: same non-trivial zone, inflation within threshold (or not bias-favouring) -> do not rate down"
@@ -1205,12 +1189,7 @@ assess_rob <- function(rob, meta_obj,
       # not conclude the threshold was ignored.
       if (!isTRUE(direction_ok) && is.finite(inflation_ratio) &&
           abs(inflation_ratio) > inflation_threshold) {
-        shift_expl <- if (is.null(small_values)) {
-          paste0("the pooled estimate moves closer to the null when high-RoB ",
-                 "studies are included, so bias would not inflate the ",
-                 "apparent effect (small_values not supplied; |TE| ",
-                 "comparison used)")
-        } else if (identical(small_values, "undesirable")) {
+        shift_expl <- if (identical(small_values, "undesirable")) {
           paste0("the shift is toward smaller values, the unfavourable ",
                  "direction given small_values = 'undesirable', so bias ",
                  "would not inflate the apparent benefit")
@@ -1241,11 +1220,7 @@ assess_rob <- function(rob, meta_obj,
     }
   }
 
-  sv_desc <- if (is.null(small_values)) {
-    "small_values = NULL (using |TE| comparison for inflation direction)"
-  } else {
-    sprintf("small_values = '%s'", small_values)
-  }
+  sv_desc <- sprintf("small_values = '%s'", small_values)
 
   inflation_str <- if (is.finite(inflation_ratio)) {
     sprintf("relative inflation = %.1f%% (threshold %.0f%%)",

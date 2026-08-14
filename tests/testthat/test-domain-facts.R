@@ -48,6 +48,7 @@ make_facts <- function() {
 # Fig 4's large-effect branch does not rate Imprecision down either.
 make_clean <- function() {
   quiet_grade(mk_binary(),
+              small_values = "desirable",
               rob            = "no",
               rob_rationale  = "Consensus RoB2: all domains low risk",
               threshold_type = "null",
@@ -280,6 +281,7 @@ test_that("evidence_profile() footnotes the structured facts, not the first sent
 
 test_that("evidence_profile() falls back to the notes for a domain without facts", {
   g <- quiet_grade(mk_binary(),
+                   small_values = "desirable",
                    rob            = "no",
                    rob_rationale  = "Consensus RoB2: all domains low risk",
                    indirectness   = "very_serious",

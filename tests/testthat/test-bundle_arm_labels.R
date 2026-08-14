@@ -20,6 +20,7 @@
     common = list(study_design = "RCT", rob = "no",
                   rob_rationale = "Consensus RoB2: all domains low risk",
                   indirectness = "no", outcome_type = "absolute",
+                  small_values = "desirable",
                   threshold_type = "null")))
 }
 

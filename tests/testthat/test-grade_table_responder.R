@@ -36,6 +36,7 @@ mk_continuous <- function(name = "Sleep duration", sm = "MD") {
     studlab = c("A", "B", "C"), sm = sm
   )
   quiet_grade(m, study_design = "RCT", rob = "no",
+              small_values = "desirable",
               rob_rationale = "Consensus RoB2: all domains low risk",
               indirectness = "no", outcome_name = name,
               outcome_type = "absolute", threshold_type = "null")
@@ -51,6 +52,7 @@ mk_binary <- function(name = "Mortality") {
   )
   ma <- run_ma(data, outcome_type = "binary", sm = "RR")
   quiet_grade(ma, study_design = "RCT", rob = "no",
+              small_values = "desirable",
               rob_rationale = "Consensus RoB2: all domains low risk",
               indirectness = "no", outcome_name = name,
               threshold_type = "null", baseline_risk = 0.30)
@@ -241,7 +243,7 @@ test_that("the bundled table, CSV and analysis.R all carry the conversion", {
     common = list(study_design = "RCT", rob = "no",
                   rob_rationale = "Consensus RoB2: all domains low risk",
                   indirectness = "no", outcome_type = "absolute",
-                  threshold_type = "null")))
+                  threshold_type = "null", small_values = "desirable")))
   set$outcomes[["Depression"]] <- stamp_responder(
     set$outcomes[["Depression"]], baseline_risk = 0.30,
     threshold_label = ">=50% drop in PHQ-9", chinn_invert = TRUE)
@@ -284,6 +286,6 @@ test_that("a set with no converted outcome gets no re-stamp block", {
     common = list(study_design = "RCT", rob = "no",
                   rob_rationale = "Consensus RoB2: all domains low risk",
                   indirectness = "no", outcome_type = "absolute",
-                  threshold_type = "null")))
+                  threshold_type = "null", small_values = "desirable")))
   expect_identical(pmatools:::.responder_stamp_block(set), "")
 })

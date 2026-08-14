@@ -122,8 +122,8 @@
 #     remission) a benefit is an INCREASE in the event rate, and powering the
 #     OIS against p0 * (1 - rrr) targets the wrong tail. `small_values` decides
 #     the sign and the pooled effect is reported alongside it; see
-#     .ois_target_increase(). With small_values = NULL the pre-0.5.1
-#     behaviour (p0 * (1 - rrr)) is preserved exactly.
+#     .ois_target_increase(). `small_values` is required as of 0.5.1, so there
+#     is no "direction unknown" case left to fall back on.
 #
 #   ois_sd の自動導出 (連続, v0.5.1):
 #     .calc_ois() は連続アウトカムで ois_delta と ois_sd の両方を要求するが、
@@ -144,11 +144,11 @@ assess_imprecision <- function(meta_obj,
                                ois_rrr            = 0.20,
                                # Outcome direction, as collected in the app's
                                # Step 2 and already forwarded to assess_rob():
-                               # "desirable" / "undesirable" / NULL. It decides
-                               # which way the modest RRR moves the OIS
+                               # "desirable" or "undesirable", required. It
+                               # decides which way the modest RRR moves the OIS
                                # alternative rate, and the wording of the
                                # large-effect note.
-                               small_values       = NULL,
+                               small_values,
                                threshold_internal = NULL,
                                threshold_kind     = NULL,
                                threshold_ard      = NULL,
@@ -165,6 +165,15 @@ assess_imprecision <- function(meta_obj,
                                rating_target      = NULL,
                                threshold_type     = NULL,
                                threshold_for_imprecision = NULL) {
+  # Validated here as well as at grade_meta()'s entry gate: an assessor called
+  # directly is a caller too, and a lenient one would re-open the guessing hole
+  # the gate exists to close. The formal carries no default so that the
+  # requirement is visible in the signature; missing() then routes an omission
+  # to the same explanatory abort a NULL gets, rather than to R's bare
+  # "argument is missing".
+  if (missing(small_values)) small_values <- NULL
+  .check_small_values(small_values)
+
   if (isTRUE(meta_obj$random)) {
     lower <- meta_obj$lower.random
     upper <- meta_obj$upper.random
@@ -683,18 +692,18 @@ assess_imprecision <- function(meta_obj,
 # powered for the benefit direction while the estimate runs the other way --
 # which is worth seeing, not worth silently papering over.
 #
-# small_values = NULL keeps the pre-0.5.1 behaviour EXACTLY -- p0 * (1 - rrr),
-# whatever the data show -- so no existing caller changes silently.
+# There is no "direction unknown" branch. Up to 0.5.0 a missing `small_values`
+# meant "use the paper's REDUCTION as written, whatever the outcome is", which
+# for an outcome whose events are the desirable thing powered the OIS against
+# the wrong tail. `small_values` is required as of 0.5.1
+# (see .check_small_values()), so the caller has always answered.
+#
+# Not re-validated here: assess_imprecision() gates it, and the app's read-only
+# echo of the RRR direction (step3_grade.R) calls this before the reviewer can
+# have answered anything, so an abort would surface as a red box on a tab that
+# is merely waiting for an analysis. It reads `$increase` only, and an
+# unanswered direction yields FALSE there exactly as it did before 0.5.1.
 .ois_target_increase <- function(small_values, te_point) {
-  if (is.null(small_values) || length(small_values) != 1L ||
-      is.na(small_values) || !nzchar(as.character(small_values))) {
-    return(list(
-      increase = FALSE,
-      reason   = paste0("no outcome direction supplied (small_values = NULL), ",
-                        "so Core GRADE 2's relative risk REDUCTION is used as ",
-                        "written")
-    ))
-  }
   sv <- as.character(small_values)
   # "undesirable" = a smaller outcome value is bad = the events are desirable.
   events_desirable <- identical(sv, "undesirable")

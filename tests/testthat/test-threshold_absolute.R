@@ -112,6 +112,7 @@ test_that("grade_meta converts ARD threshold and OIS uses p1 = p0 + ARD", {
   m <- make_metabin_ard()
   g <- suppressWarnings(grade_meta(
     m,
+    small_values = "desirable",
     threshold          = 0.05,
     threshold_scale    = "ard",
     threshold_baseline = 0.18,
@@ -154,6 +155,7 @@ test_that("grade_meta converts ARD threshold and OIS uses p1 = p0 + ARD", {
 test_that("grade_meta without threshold_baseline uses pooled CER", {
   m <- make_metabin_ard()
   g <- suppressWarnings(grade_meta(m, threshold = 0.05,
+                                   small_values = "desirable",
                                    threshold_scale = "ard"))
   expect_equal(g$threshold_baseline, 0.18)
   expect_equal(g$threshold_internal, log(0.23 / 0.18))
@@ -162,6 +164,7 @@ test_that("grade_meta without threshold_baseline uses pooled CER", {
 test_that("relative-scale grade_meta results carry no ARD fields", {
   m <- make_metabin_ard()
   g <- suppressWarnings(grade_meta(m, threshold = 1.25,
+                                   small_values = "desirable",
                                    threshold_scale = "ratio"))
   expect_equal(g$threshold_internal, log(1.25))
   expect_null(g$threshold_ard)
@@ -175,6 +178,7 @@ test_that("explicit ois_p0/ois_p1 take precedence over ARD derivation", {
   m <- make_metabin_ard()
   g <- suppressWarnings(grade_meta(
     m,
+    small_values = "desirable",
     threshold          = 0.05,
     threshold_scale    = "ard",
     threshold_baseline = 0.18,
@@ -216,6 +220,7 @@ test_that("evidence_profile carries the threshold note as a footer line", {
   m <- make_metabin_ard()
   g <- suppressWarnings(grade_meta(
     m,
+    small_values = "desirable",
     threshold          = 0.05,
     threshold_scale    = "ard",
     threshold_baseline = 0.18,

@@ -731,7 +731,15 @@ export_bundle.meta <- function(x,
                      !isTRUE(grade$rob_refit)) "FALSE" else "TRUE"
     ),
     rob_inf_threshold= grade_args[["rob_inflation_threshold", exact = TRUE]][["value"]] %||% 0.10,
-    small_values_arg = .arg_lit(grade_args[["small_values", exact = TRUE]],  fallback = "NULL"),
+    # small_values: read the rated object when the caller did not route it
+    # through grade_args. This used to fall back to "NULL", which was the bug
+    # that made the argument required: a bundle exported without grade_args
+    # produced a script whose OIS was powered on the wrong side of the modest
+    # RRR, so the "reproducible" analysis.R documented a different analysis
+    # from the one it came from. grade_meta() requires the argument now, so the
+    # object always carries it and this is a plain read, not a guess.
+    small_values_arg = .arg_lit(grade_args[["small_values", exact = TRUE]],
+                                fallback = .small_values_lit(grade)),
     # Indirectness: with a Core GRADE 5 subdomain table the scalar argument and
     # its rationale are derived from the recorded judgment, so the bundled
     # script reproduces (or omits) the override exactly.
@@ -943,6 +951,26 @@ export_bundle.meta <- function(x,
 # Scalar `indirectness` literal for the bundled script: NULL when the recorded
 # judgment is the worst-case subdomain default, the recorded level otherwise
 # (which grade_meta() then treats as a manual override).
+# The outcome direction the rating was made under, as an R literal. Every
+# object grade_meta() returns carries one (it is a required argument since
+# 0.5.1); an object built by hand, or unpickled from before that, does not, and
+# aborting is the only honest answer -- a bundle cannot claim to reproduce a
+# rating whose direction it does not know.
+.small_values_lit <- function(grade) {
+  sv <- grade$small_values
+  if (is.character(sv) && length(sv) == 1L && !is.na(sv) && nzchar(sv)) {
+    return(shQuote(sv))
+  }
+  rlang::abort(paste0(
+    "This rated object carries no small_values, so the bundled analysis.R ",
+    "cannot state the outcome direction the rating was made under, and a ",
+    "script that omitted it would re-run the optimal information size on the ",
+    "wrong side of the modest relative risk reduction. Re-rate the outcome ",
+    "with grade_meta(..., small_values = 'desirable' | 'undesirable'), or ",
+    "pass the direction through grade_args."
+  ))
+}
+
 .indirectness_arg_lit <- function(grade) {
   sub <- grade$indirectness_subdomains
   if (is.null(sub) || !nrow(sub)) return(shQuote("no"))

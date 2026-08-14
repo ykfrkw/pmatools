@@ -43,6 +43,7 @@ test_that("rob scalar override with rationale succeeds and records it in notes",
   m <- make_metabin_or()
   g <- suppressWarnings(
     grade_meta(m, rob = "very_serious",
+               small_values = "desirable",
                rob_rationale = "RoB2 consensus: high risk in most domains", threshold_type = "null")
   )
   row <- domain_row(g, "Risk of bias")
@@ -54,22 +55,25 @@ test_that("rob scalar override with rationale succeeds and records it in notes",
 test_that("rob scalar override without rationale errors", {
   m <- make_metabin_or()
   expect_error(
-    grade_meta(m, rob = "very_serious", threshold_type = "null"),
+    grade_meta(m, rob = "very_serious", threshold_type = "null", small_values = "desirable"),
     regexp = "Overriding the Risk of Bias judgment requires rob_rationale"
   )
 })
 
 test_that("rob scalar override with empty or whitespace rationale errors", {
   m <- make_metabin_or()
-  expect_error(grade_meta(m, rob = "no", rob_rationale = "", threshold_type = "null"),
+  expect_error(grade_meta(m, rob = "no", rob_rationale = "", threshold_type = "null",
+    small_values = "desirable"),
                regexp = "rob_rationale")
-  expect_error(grade_meta(m, rob = "no", rob_rationale = "   ", threshold_type = "null"),
+  expect_error(grade_meta(m, rob = "no", rob_rationale = "   ", threshold_type = "null",
+    small_values = "desirable"),
                regexp = "rob_rationale")
 })
 
 test_that("rob per-study vector (automated path) needs no rationale", {
   m <- make_metabin_or()
-  g <- suppressWarnings(grade_meta(m, rob = c("no", "some", "very_serious"), threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, rob = c("no", "some", "very_serious"), threshold_type = "null",
+    small_values = "desirable"))
   row <- domain_row(g, "Risk of bias")
   expect_match(row$notes, "by count")
   expect_no_match(row$notes, "Manual override")
@@ -77,7 +81,7 @@ test_that("rob per-study vector (automated path) needs no rationale", {
 
 test_that("rob = NULL (default) needs no rationale", {
   m <- make_metabin_or()
-  g <- suppressWarnings(grade_meta(m, threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, threshold_type = "null", small_values = "desirable"))
   row <- domain_row(g, "Risk of bias")
   expect_equal(row$judgment, "not_serious")
 })
@@ -86,7 +90,8 @@ test_that("rob = NULL (default) needs no rationale", {
 
 test_that("indirectness = 'no' (default value) needs no rationale", {
   m <- make_metabin_or()
-  g <- suppressWarnings(grade_meta(m, indirectness = "no", threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, indirectness = "no", threshold_type = "null",
+    small_values = "desirable"))
   row <- domain_row(g, "Indirectness")
   expect_equal(row$judgment, "not_serious")
   expect_no_match(row$notes, "Manual override")
@@ -95,7 +100,8 @@ test_that("indirectness = 'no' (default value) needs no rationale", {
 test_that("indirectness scalar other than 'no' requires rationale", {
   m <- make_metabin_or()
   expect_error(
-    suppressWarnings(grade_meta(m, indirectness = "very_serious", threshold_type = "null")),
+    suppressWarnings(grade_meta(m, indirectness = "very_serious", threshold_type = "null",
+      small_values = "desirable")),
     regexp = "Overriding the Indirectness judgment requires indirectness_rationale"
   )
 })
@@ -103,7 +109,8 @@ test_that("indirectness scalar other than 'no' requires rationale", {
 test_that("indirectness override with rationale succeeds and notes carry it", {
   m <- make_metabin_or()
   g <- suppressWarnings(grade_meta(
-    m, indirectness = "some_concerns",
+    m,
+    small_values = "desirable", indirectness = "some_concerns",
     indirectness_rationale = "Population restricted to inpatients", threshold_type = "null"
   ))
   row <- domain_row(g, "Indirectness")
@@ -118,7 +125,8 @@ test_that("indirectness per-study vector (aggregation path) needs no rationale",
   # Studies B and C carry 78% of the weight here, which does.
   m <- make_metabin_or()
   g <- suppressWarnings(grade_meta(
-    m, indirectness = c("no", "some_concerns", "some_concerns"),
+    m,
+    small_values = "desirable", indirectness = c("no", "some_concerns", "some_concerns"),
     threshold_type = "null"))
   row <- domain_row(g, "Indirectness")
   expect_equal(row$judgment, "serious")
@@ -130,7 +138,8 @@ test_that("indirectness per-study vector (aggregation path) needs no rationale",
 test_that("inconsistency scalar override requires rationale", {
   m <- make_metabin_or()
   expect_error(
-    suppressWarnings(grade_meta(m, inconsistency = "very_serious", threshold_type = "null")),
+    suppressWarnings(grade_meta(m, inconsistency = "very_serious", threshold_type = "null",
+      small_values = "desirable")),
     regexp = "Overriding the Inconsistency judgment requires inconsistency_rationale"
   )
 })
@@ -138,7 +147,8 @@ test_that("inconsistency scalar override requires rationale", {
 test_that("inconsistency override with rationale succeeds and notes carry it", {
   m <- make_metabin_or()
   g <- suppressWarnings(grade_meta(
-    m, inconsistency = "very_serious",
+    m,
+    small_values = "desirable", inconsistency = "very_serious",
     inconsistency_rationale = "Clinically divergent effects across settings", threshold_type = "null"
   ))
   row <- domain_row(g, "Inconsistency")
@@ -149,10 +159,11 @@ test_that("inconsistency override with rationale succeeds and notes carry it", {
 
 test_that("inconsistency auto path and manual flowchart need no rationale", {
   m <- make_metabin_or()
-  g_auto <- suppressWarnings(grade_meta(m, threshold_type = "null"))
+  g_auto <- suppressWarnings(grade_meta(m, threshold_type = "null", small_values = "desirable"))
   expect_true(domain_row(g_auto, "Inconsistency")$auto)
 
-  g_flow <- suppressWarnings(grade_meta(m, inconsistency_ci_diff = "no", threshold_type = "null"))
+  g_flow <- suppressWarnings(grade_meta(m, inconsistency_ci_diff = "no", threshold_type = "null",
+    small_values = "desirable"))
   row <- domain_row(g_flow, "Inconsistency")
   expect_equal(row$judgment, "not_serious")
   expect_no_match(row$notes, "Manual override")
@@ -163,7 +174,8 @@ test_that("inconsistency auto path and manual flowchart need no rationale", {
 test_that("imprecision scalar override requires rationale", {
   m <- make_metabin_or()
   expect_error(
-    suppressWarnings(grade_meta(m, imprecision = "very_serious", threshold_type = "null")),
+    suppressWarnings(grade_meta(m, imprecision = "very_serious", threshold_type = "null",
+      small_values = "desirable")),
     regexp = "Overriding the Imprecision judgment requires imprecision_rationale"
   )
 })
@@ -171,7 +183,8 @@ test_that("imprecision scalar override requires rationale", {
 test_that("imprecision override bypasses automated assessment and notes carry rationale", {
   m <- make_metabin_or()
   g <- suppressWarnings(grade_meta(
-    m, imprecision = "very_serious",
+    m,
+    small_values = "desirable", imprecision = "very_serious",
     imprecision_rationale = "CI includes both important benefit and harm", threshold_type = "null"
   ))
   row <- domain_row(g, "Imprecision")
@@ -184,7 +197,7 @@ test_that("imprecision override bypasses automated assessment and notes carry ra
 
 test_that("imprecision auto path (default) needs no rationale", {
   m <- make_metabin_or()
-  g <- suppressWarnings(grade_meta(m, threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, threshold_type = "null", small_values = "desirable"))
   expect_true(domain_row(g, "Imprecision")$auto)
 })
 
@@ -192,6 +205,7 @@ test_that("invalid imprecision scalar errors", {
   m <- make_metabin_or()
   expect_error(
     suppressWarnings(grade_meta(m, imprecision = "bogus",
+                                small_values = "desirable",
                                 imprecision_rationale = "x", threshold_type = "null")),
     regexp = "invalid GRADE level"
   )
@@ -203,6 +217,7 @@ test_that("rating_target override requires rationale", {
   m <- make_metabin_or()
   expect_error(
     suppressWarnings(grade_meta(m, threshold_type = "null",
+                                small_values = "desirable",
                                 rating_target = "non_null_effect")),
     regexp = "Overriding the rating target judgment requires rating_target_rationale"
   )
@@ -212,12 +227,14 @@ test_that("rating_target override with empty or whitespace rationale errors", {
   m <- make_metabin_or()
   expect_error(
     suppressWarnings(grade_meta(m, threshold_type = "null",
+                                small_values = "desirable",
                                 rating_target = "non_null_effect",
                                 rating_target_rationale = "")),
     regexp = "rating_target_rationale"
   )
   expect_error(
     suppressWarnings(grade_meta(m, threshold_type = "null",
+                                small_values = "desirable",
                                 rating_target = "non_null_effect",
                                 rating_target_rationale = "   ")),
     regexp = "rating_target_rationale"
@@ -227,7 +244,8 @@ test_that("rating_target override with empty or whitespace rationale errors", {
 test_that("rating_target override with rationale succeeds and notes carry it", {
   m <- make_metabin_or()
   g <- suppressWarnings(grade_meta(
-    m, threshold = 1.2, threshold_scale = "ratio",
+    m,
+    small_values = "desirable", threshold = 1.2, threshold_scale = "ratio",
     rating_target = "little_to_no_difference",
     rating_target_rationale = "Panel targets an unimportant effect"
   ))
@@ -240,7 +258,7 @@ test_that("rating_target override with rationale succeeds and notes carry it", {
 
 test_that("auto-derived rating target needs no rationale", {
   m <- make_metabin_or()
-  g <- suppressWarnings(grade_meta(m, threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, threshold_type = "null", small_values = "desirable"))
   expect_true(g$rating_target_auto)
   expect_no_match(domain_row(g, "Imprecision")$notes, "Manual override")
 })
@@ -250,7 +268,8 @@ test_that("auto-derived rating target needs no rationale", {
 test_that("pubias_funnel_asymmetry requires pubias_rationale", {
   m <- make_metabin_k10()
   expect_error(
-    suppressWarnings(grade_meta(m, pubias_funnel_asymmetry = "yes", threshold_type = "null")),
+    suppressWarnings(grade_meta(m, pubias_funnel_asymmetry = "yes", threshold_type = "null",
+      small_values = "desirable")),
     regexp = "Overriding the Publication bias judgment requires pubias_rationale"
   )
 })
@@ -258,7 +277,8 @@ test_that("pubias_funnel_asymmetry requires pubias_rationale", {
 test_that("pubias visual override with rationale succeeds and notes carry it", {
   m <- make_metabin_k10()
   g <- suppressWarnings(grade_meta(
-    m, pubias_funnel_asymmetry = "yes",
+    m,
+    small_values = "desirable", pubias_funnel_asymmetry = "yes",
     pubias_rationale = "Contour-enhanced funnel plot clearly asymmetric", threshold_type = "null"
   ))
   row <- domain_row(g, "Publication bias")
@@ -270,17 +290,20 @@ test_that("pubias visual override with rationale succeeds and notes carry it", {
 
 test_that("pubias auto Egger path and informational inputs need no rationale", {
   m <- make_metabin_k10()
-  g <- suppressWarnings(grade_meta(m, threshold_type = "null"))
+  g <- suppressWarnings(grade_meta(m, threshold_type = "null", small_values = "desirable"))
   row <- domain_row(g, "Publication bias")
   expect_no_match(row$notes, "Manual override")
 
   # informational (non-override) inputs stay rationale-free
   m3 <- make_metabin_or()
-  g2 <- suppressWarnings(grade_meta(m3, pubias_unpublished = "yes", threshold_type = "null"))
+  g2 <- suppressWarnings(grade_meta(m3, pubias_unpublished = "yes", threshold_type = "null",
+    small_values = "desirable"))
   expect_equal(domain_row(g2, "Publication bias")$judgment, "serious")
-  g3 <- suppressWarnings(grade_meta(m3, pubias_small_industry = "yes", threshold_type = "null"))
+  g3 <- suppressWarnings(grade_meta(m3, pubias_small_industry = "yes", threshold_type = "null",
+    small_values = "desirable"))
   expect_equal(domain_row(g3, "Publication bias")$judgment, "serious")
-  g4 <- suppressWarnings(grade_meta(m3, pubias_registry_complete = "yes", threshold_type = "null"))
+  g4 <- suppressWarnings(grade_meta(m3, pubias_registry_complete = "yes", threshold_type = "null",
+    small_values = "desirable"))
   expect_equal(domain_row(g4, "Publication bias")$judgment, "not_serious")
 })
 
@@ -290,7 +313,8 @@ test_that("override rationale propagates to evidence_profile footnotes", {
   skip_if_not_installed("flextable")
   m <- make_metabin_or()
   g <- suppressWarnings(grade_meta(
-    m, rob = "very_serious",
+    m,
+    small_values = "desirable", rob = "very_serious",
     rob_rationale = "RoB2 consensus: high risk in most domains",
     outcome_name = "Rationale Outcome", threshold_type = "null"
   ))
@@ -303,7 +327,8 @@ test_that("override rationale propagates to evidence_profile footnotes", {
 test_that("override rationale propagates to grade_report markdown", {
   m <- make_metabin_or()
   g <- suppressWarnings(grade_meta(
-    m, rob = "very_serious",
+    m,
+    small_values = "desirable", rob = "very_serious",
     rob_rationale = "RoB2 consensus: high risk in most domains",
     outcome_name = "Rationale Outcome", threshold_type = "null"
   ))

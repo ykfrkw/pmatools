@@ -7,8 +7,10 @@
 # .vendored_version_stamp() validates that option; .pmatools_version() puts
 # the installed version first and falls back to it.
 #
-# The option is saved and restored with on.exit() rather than
-# withr::local_options(): withr is not a declared dependency.
+# The option is saved and restored with on.exit(). withr became a declared
+# Suggests in 0.5.1, so withr::local_options() is available here too; the
+# on.exit() form is kept because it is correct as it stands and rewriting it
+# would change nothing a reader or a test can observe.
 
 library(testthat)
 

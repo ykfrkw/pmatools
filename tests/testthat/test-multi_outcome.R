@@ -87,7 +87,7 @@ test_that("ingest -> run_ma_multi -> grade_meta_multi -> grade_table -> export_b
 
   set <- quiet_grade_multi(ml, common = list(study_design = "RCT",
                                              threshold_type = "null",
-                                             indirectness = "no"))
+                                             indirectness = "no", small_values = "desirable"))
   expect_s3_class(set, "pmatools_set")
   expect_equal(set$order, c("Mortality", "Depression severity",
                             "Serious adverse events"))
@@ -160,7 +160,7 @@ test_that("per_outcome arguments override common ones", {
   set <- quiet_grade_multi(
     ml,
     common = list(study_design = "RCT", threshold_type = "null",
-                  indirectness = "no"),
+                  indirectness = "no", small_values = "desirable"),
     per_outcome = list(
       "Mortality" = list(study_design = "obs",
                          indirectness = "very_serious",
@@ -191,13 +191,15 @@ test_that("a missing MID aborts grade_meta_multi rather than skipping the outcom
   # threshold_type = "mid" (the default) with no threshold: the gate must
   # propagate out of the batch loop untouched.
   expect_error(
-    suppressWarnings(grade_meta_multi(ml, common = list(study_design = "RCT"))),
+    suppressWarnings(grade_meta_multi(ml, common = list(study_design = "RCT",
+      small_values = "desirable"))),
     regexp = "requires a threshold"
   )
   # ... and it must still be the classed entry-gate condition, not a warning
   # that happens to mention a threshold.
   cnd <- tryCatch(
-    suppressWarnings(grade_meta_multi(ml, common = list(study_design = "RCT"))),
+    suppressWarnings(grade_meta_multi(ml, common = list(study_design = "RCT",
+      small_values = "desirable"))),
     error = function(e) e)
   expect_s3_class(cnd, "pmatools_threshold_gate")
 
@@ -205,14 +207,27 @@ test_that("a missing MID aborts grade_meta_multi rather than skipping the outcom
   expect_error(
     suppressWarnings(grade_meta_multi(
       ml,
-      common = list(study_design = "RCT", threshold_type = "null"),
+      common = list(study_design = "RCT", threshold_type = "null", small_values = "desirable"),
       per_outcome = list("Mortality" = list(threshold_type = "mid")))),
     class = "pmatools_threshold_gate"
   )
 
   # The manual rating-target gate is classed the same way.
-  expect_true(.is_threshold_gate(
+  expect_true(.is_entry_gate(
     tryCatch(rlang::abort("x requires a threshold (MID)"), error = function(e) e)))
+})
+
+test_that("a missing outcome direction aborts the batch too", {
+  ml <- quiet_ma_multi(multi_data())
+
+  # The direction gate describes the arguments the batch was called with, not
+  # one outcome's data, so it must propagate rather than be demoted to a
+  # per-outcome warning that leaves the set silently short.
+  expect_error(
+    suppressWarnings(grade_meta_multi(
+      ml, common = list(study_design = "RCT", threshold_type = "null"))),
+    class = "pmatools_direction_gate"
+  )
 })
 
 # --------------------------------------------------------------------------
@@ -241,7 +256,7 @@ test_that("a failing outcome yields NULL plus a warning, the rest complete", {
 
   set <- quiet_grade_multi(ml, common = list(study_design = "RCT",
                                              threshold_type = "null",
-                                             indirectness = "no"))
+                                             indirectness = "no", small_values = "desirable"))
   expect_length(set$outcomes, 3L)
   expect_false("Relapse" %in% set$order)
 })
@@ -252,7 +267,7 @@ test_that("grade_meta_multi warns and drops an outcome it cannot rate", {
     set <- grade_meta_multi(
       ml,
       common = list(study_design = "RCT", threshold_type = "null",
-                    indirectness = "no"),
+                    indirectness = "no", small_values = "desirable"),
       per_outcome = list(
         # An override without its mandatory rationale: a plain per-outcome
         # failure, so the batch continues.
@@ -338,7 +353,7 @@ test_that("non-ASCII outcome names still export to unique directories", {
   ml <- quiet_ma_multi(d)
   set <- quiet_grade_multi(ml, common = list(study_design = "RCT",
                                              threshold_type = "null",
-                                             indirectness = "no"))
+                                             indirectness = "no", small_values = "desirable"))
   out_dir <- tempfile(); dir.create(out_dir)
   zip_path <- suppressWarnings(
     export_bundle(set, output_dir = out_dir, bundle_name = "jp",
@@ -458,7 +473,7 @@ test_that("indirectness_table.docx is written only where subdomains exist", {
   set <- quiet_grade_multi(
     ml,
     common = list(study_design = "RCT", threshold_type = "null",
-                  indirectness = "no"),
+                  indirectness = "no", small_values = "desirable"),
     per_outcome = list(
       "Mortality" = list(indirectness = NULL,
                          indirectness_subdomains = sub_tbl)
@@ -654,6 +669,7 @@ test_that("export_bundle on a single pmatools object produces the same flat ZIP"
     sm = "OR", method = "Inverse"
   )
   g <- suppressWarnings(grade_meta(ma, study_design = "RCT", rob = "no",
+                                   small_values = "desirable",
                                    rob_rationale = "Consensus RoB2: all low",
                                    indirectness = "no", outcome_name = "Test",
                                    threshold_type = "null"))

@@ -123,6 +123,7 @@ control_risk_used <- function(...) {
     threshold       = 0.05,
     threshold_scale = "ard",
     outcome_name    = "Control risk",
+    small_values    = "desirable",
     ...
   ))
   g$control_risk
@@ -186,6 +187,7 @@ test_that("the provenance names the donor and every argument that inherited", {
   # Where a reader meets it: the Imprecision domain notes, which summary(),
   # the Evidence Profile and the exported bundle all reproduce.
   g <- suppressWarnings(grade_meta(
+    small_values = "desirable",
     control_risk_metabin(), threshold = 0.05, threshold_scale = "ard",
     ois_p0 = 0.25, outcome_name = "Control risk"))
   impre <- g$domain_assessments$notes[
@@ -195,6 +197,7 @@ test_that("the provenance names the donor and every argument that inherited", {
   # Nothing to report when nothing was inherited: three explicit values leave
   # the domain notes alone.
   quiet <- suppressWarnings(grade_meta(
+    small_values = "desirable",
     control_risk_metabin(), threshold = 0.05, threshold_scale = "ard",
     threshold_baseline = 0.25, ois_p0 = 0.30, baseline_risk = 0.40,
     outcome_name = "Control risk"))
@@ -229,6 +232,7 @@ test_that("a character baseline_risk names a method, so it does not donate", {
     event.c = c(10, 60), n.c = c(100, 150),
     studlab = c("Study A", "Study B"), sm = "RR", method = "MH"))
   g <- suppressWarnings(grade_meta(
+    small_values = "desirable",
     spread, threshold = 0.05, threshold_scale = "ard",
     baseline_risk = "metaprop", outcome_name = "Control risk"))
   expect_equal(g$control_risk$used$threshold_baseline,

@@ -32,6 +32,7 @@ make_binary <- function(benefit = TRUE, sm = "RR", ...) {
   quiet_grade(ma, study_design = "RCT", rob = "no",
               rob_rationale = "Consensus RoB2: all domains low risk",
               indirectness = "no", outcome_name = "Mortality",
+              small_values = "desirable",
               threshold_type = "null", ...)
 }
 
@@ -42,6 +43,7 @@ make_continuous <- function() {
     studlab = c("A", "B", "C"), sm = "MD"
   )
   quiet_grade(m, study_design = "RCT", rob = "no",
+              small_values = "desirable",
               rob_rationale = "Consensus RoB2: all domains low risk",
               indirectness = "no", outcome_name = "Sleep duration",
               outcome_type = "absolute", threshold_type = "null")
@@ -612,6 +614,7 @@ make_continuous_smd <- function() {
     studlab = c("A", "B", "C"), sm = "SMD"
   )
   quiet_grade(m, study_design = "RCT", rob = "no",
+              small_values = "desirable",
               rob_rationale = "Consensus RoB2: all domains low risk",
               indirectness = "no", outcome_name = "Sleep duration",
               outcome_type = "absolute", threshold_type = "null")
