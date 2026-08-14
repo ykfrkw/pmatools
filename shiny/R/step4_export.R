@@ -8,6 +8,11 @@ PMA_EXPORT_INCLUDE_DEFAULT <- c(
   "funnel", "funnel_trimfill", "pubias_missing_forest", "sof",
   "evidence_profile", "indirectness", "readme")
 
+# Id of the "preparing the download" toast, so the on.exit() that removes it
+# names the same notification the handler put up rather than clearing whatever
+# happens to be on screen.
+PMA_DOWNLOAD_BUSY_ID <- "pma_download_busy"
+
 step4_ui <- function() {
   s <- EDU_COPY$steps$step4
 
@@ -34,8 +39,8 @@ step4_ui <- function() {
       htmltools::p(
         class = "pma-card-subtitle",
         style = "margin-top: 0.4rem;",
-        "Returns to Step 2 with the outcome name, direction, follow-up and ",
-        "every Step 3 answer cleared, ready for the next outcome. The saved ",
+        "Asks whether the next outcome is one to analyse from the data or one ",
+        "no included study reported (Core GRADE 6). Either way the saved ",
         "outcomes above, the loaded data and the per-study risk-of-bias and ",
         "indirectness ratings are kept.")
     ),
@@ -73,27 +78,83 @@ step4_ui <- function() {
 
     pma_card(
       title = "How to cite",
+      # THIS CARD IS THE ONE EXCEPTION TO THE APP'S HOUSE CITATION STYLE, and
+      # deliberately so [0.5.1]. Everywhere else a reference points a reviewer
+      # at a paper while they work, and the short form (.core_grade_ref():
+      # first author, "et al.", journal, year) is the right length for that.
+      # Here the reference IS the deliverable: the reviewer copies these lines
+      # into a manuscript, and a manuscript needs full author lists, volume,
+      # elocation id and DOI. So the list below is Vancouver -- six authors
+      # then "et al." -- and must NOT be folded back onto .core_grade_ref().
+      #
+      # The prose cites by bracketed number into that list rather than
+      # repeating short forms inline, so the card is one citation system and
+      # not two. Numbering runs Core GRADE 1-5, {meta}, pmatools rather than
+      # by first appearance: an author pasting this in renumbers against their
+      # own bibliography regardless, and keeping the series contiguous is what
+      # makes it readable as a block.
       htmltools::p(paste0(
-        "Pairwise meta-analysis was performed using the {meta} R package ",
-        "(Balduzzi S, et al. Evid Based Ment Health. 2019). Certainty of ",
-        "evidence was rated following the BMJ 2025 Core GRADE series ",
-        "(Guyatt G, et al. BMJ. 2025), implemented in pmatools ",
-        "(Furukawa Y, https://yukifurukawa.jp/pmatools/).")),
-      # No DOIs and no hyperlinks, but software is not an article: a reader
-      # copying this into a manuscript needs somewhere to find pmatools, and
-      # there is no journal, volume or DOI to point them at. The URL is plain
-      # text, so the block still reads as one style rather than one linked
-      # entry among six.
-      htmltools::tags$ul(
-        htmltools::tags$li(
-          "Furukawa Y. pmatools. 2025. https://yukifurukawa.jp/pmatools/"),
-        htmltools::tags$li(
-          "Balduzzi S, et al. Evid Based Ment Health. 2019."),
-        htmltools::tags$li("Core GRADE 1. Guyatt G, et al. BMJ. 2025."),
-        htmltools::tags$li("Core GRADE 2. Guyatt G, et al. BMJ. 2025."),
-        htmltools::tags$li("Core GRADE 3. Guyatt G, et al. BMJ. 2025."),
-        htmltools::tags$li("Core GRADE 4. Guyatt G, et al. BMJ. 2025."),
-        htmltools::tags$li("Core GRADE 5. Guyatt G, et al. BMJ. 2025.")
+        "Pairwise meta-analysis was performed using the {meta} R package [6]. ",
+        "Certainty of evidence was rated following the BMJ 2025 Core GRADE ",
+        "series [1-5], implemented in pmatools [7].")),
+      # Each entry is ONE paste0() string, not several arguments to tags$li():
+      # htmltools puts a newline between arguments, and "R" + "&uuml;" +
+      # "cker G" came out as "R u:: cker G" on screen. A citation cannot
+      # survive being reflowed, so it is assembled before it reaches the tag.
+      #
+      # ASCII hyphens and no accented characters: the shinyapps.io build has
+      # bitten this app over Latin-1 before (see the HTML entities in
+      # pma_wizard_nav()). The one name that needs a diacritic, Rucker, is
+      # written with the HTML entity for the same reason, which is why that
+      # entry alone is wrapped in HTML().
+      htmltools::tags$ol(
+        htmltools::tags$li(paste0(
+          "Guyatt G, Agoritsas T, Brignardello-Petersen R, Mustafa RA, ",
+          "Rylance J, Foroutan F, et al. Core GRADE 1: overview of the Core ",
+          "GRADE approach. BMJ. 2025;389:e081903. doi:10.1136/bmj-2024-081903")),
+        htmltools::tags$li(paste0(
+          "Guyatt G, Zeng L, Brignardello-Petersen R, Prasad M, De Beer H, ",
+          "Murad MH, et al. Core GRADE 2: choosing the target of certainty ",
+          "rating and assessing imprecision. BMJ. 2025;389:e081904. ",
+          "doi:10.1136/bmj-2024-081904")),
+        htmltools::tags$li(paste0(
+          "Guyatt G, Schandelmaier S, Brignardello-Petersen R, De Beer H, ",
+          "Prasad M, Murad MH, et al. Core GRADE 3: rating certainty of ",
+          "evidence-assessing inconsistency. BMJ. 2025;389:e081905. ",
+          "doi:10.1136/bmj-2024-081905")),
+        htmltools::tags$li(paste0(
+          "Guyatt G, Wang Y, Eachempati P, Iorio A, Murad MH, Hultcrantz M, ",
+          "et al. Core GRADE 4: rating certainty of evidence-risk of bias, ",
+          "publication bias, and reasons for rating up certainty. BMJ. ",
+          "2025;389:e083864. doi:10.1136/bmj-2024-083864")),
+        htmltools::tags$li(paste0(
+          "Guyatt G, Iorio A, De Beer H, Owen A, Agoritsas T, Murad MH, et ",
+          "al. Core GRADE 5: rating certainty of evidence-assessing ",
+          "indirectness. BMJ. 2025;389:e083865. doi:10.1136/bmj-2024-083865")),
+        htmltools::tags$li(htmltools::HTML(paste0(
+          "Balduzzi S, R&uuml;cker G, Schwarzer G. How to perform a ",
+          "meta-analysis with R: a practical tutorial. Evid Based Ment ",
+          "Health. 2019;22(4):153-60. doi:10.1136/ebmental-2019-300117"))),
+        # Software, not an article: no journal, volume or DOI to give, so
+        # Vancouver's "Available from:" form carries the URL. The version is
+        # part of the citation because an analysis is only reproducible
+        # against one, and it comes from pma_pmatools_version_number() --
+        # never utils::packageVersion(), which errors under the vendored
+        # source() the deployed app runs on.
+        #
+        # The bare number, NOT pma_pmatools_version(): that one appends a
+        # "(vendored)" provenance marker which is right for the Step 2
+        # environment block and wrong here, where the line is pasted into a
+        # manuscript. NULL (version genuinely unknown) drops the clause
+        # entirely rather than admitting the marker through the back door.
+        htmltools::tags$li(local({
+          version <- pma_pmatools_version_number()
+          paste0(
+            "Furukawa Y. pmatools: pairwise meta-analysis with Core GRADE ",
+            "certainty rating. ",
+            if (is.null(version)) "" else paste0("Version ", version, ". "),
+            "2025. Available from: https://yukifurukawa.jp/pmatools/")
+        }))
       )
       # The "pooling is only a small part of a systematic review" paragraph
       # used to be restated here, verbatim, from the Step 1 header. It is now
@@ -108,10 +169,15 @@ step4_server <- function(input, output, session, state) {
 
   # ----- Multi-outcome Summary of Findings --------------------------------
   # state$outcomes is a named list of pmatools objects, banked automatically
-  # once every certainty domain of an outcome is confirmed (see
+  # once every certainty domain of an outcome is confirmed, plus any
+  # pmatools_not_reported rows the reviewer declared by hand (see
   # pma_outcomes_list()). It is exactly what the vendored grade_table()
   # consumes, so no reshaping is needed here.
   saved_outcomes <- shiny::reactive(pma_outcomes_list(state$outcomes))
+  # Everything downstream of this that needs an ANALYSIS - the rare-event
+  # scan, the risk-of-bias labels for the stratified forests - reads this
+  # instead. A not-reported row has no $meta to interrogate.
+  rated_outcomes <- shiny::reactive(pma_rated_outcomes(state$outcomes))
 
   # Signature of the dataset currently loaded in Step 1; saved outcomes whose
   # own signature differs were rated on other data (pma_outcomes_stale()).
@@ -137,7 +203,7 @@ step4_server <- function(input, output, session, state) {
   # One rare-event alert per saved outcome (Core GRADE 6). NULL entries are
   # dropped, so an empty list means nothing in the table is rare.
   combined_rare_alerts <- shiny::reactive({
-    outs <- saved_outcomes()
+    outs <- rated_outcomes()
     if (length(outs) == 0) return(list())
     alerts <- lapply(names(outs), function(nm) {
       pma_rare_event_alert(outs[[nm]], label = nm)
@@ -244,9 +310,14 @@ step4_server <- function(input, output, session, state) {
   # alone, so an unnamed outcome can reach this button with nothing banked.
   .export_outcomes <- function() {
     outs <- saved_outcomes()
-    if (length(outs) > 0) return(outs)
+    # RATED rows, not rows: a bundle needs one analysis to build from, and a
+    # session can reach this button with nothing banked but a not-reported row
+    # (the reviewer declared one, then rated an outcome without naming it).
+    # Those rows stay in the table either way - they are appended to, not
+    # replaced by, the rating on screen.
+    if (length(pma_rated_outcomes(outs)) > 0) return(outs)
     g <- state$grade
-    if (is.null(g)) return(list())
+    if (is.null(g)) return(outs)
     g$follow_up <- state$display$follow_up
     g$unit      <- state$display$unit
     g <- pma_bank_export_material(
@@ -261,7 +332,9 @@ step4_server <- function(input, output, session, state) {
           # and every message about this outcome is keyed on. It cannot be
           # blank, and this is the one path that can reach here without one.
           else "Outcome"
-    stats::setNames(list(g), nm)
+    # c(), not setNames() alone: any not-reported rows the reviewer declared
+    # belong in the same table as the rating on screen.
+    c(outs[setdiff(names(outs), nm)], stats::setNames(list(g), nm))
   }
 
   output$rare_export_note <- shiny::renderUI({
@@ -282,6 +355,10 @@ step4_server <- function(input, output, session, state) {
   # only be right for one of them. A study with no label is drawn as "*"
   # rather than dropping the whole plot.
   .export_rob <- function(outs) {
+    # Rated only: the lookup below reads g$meta$studlab, and there is no $meta
+    # on a not-reported row - it would come back as a zero-length vector and
+    # hand export_bundle() an `rob` entry for an outcome it never plots.
+    outs   <- pma_rated_outcomes(outs)
     labels <- lapply(names(outs), function(nm) {
       g   <- outs[[nm]]
       src <- attr(g, PMA_OUTCOME_SOURCE_ATTR, exact = TRUE)
@@ -305,6 +382,7 @@ step4_server <- function(input, output, session, state) {
   # outcomes being exported rather than from combined_rare_alerts(), so the
   # single rating on screen gets its alert too.
   .export_sof_notes <- function(outs) {
+    outs   <- pma_rated_outcomes(outs)
     alerts <- lapply(names(outs), function(nm) {
       pma_rare_event_alert(outs[[nm]], label = nm)
     })
@@ -391,6 +469,25 @@ step4_server <- function(input, output, session, state) {
       paste0(input$bundle_name %||% "pmatools_results", ".zip")
     },
     content = function(file) {
+      # Nothing on screen changed between the click and the first
+      # incProgress() below, and everything before it - the guards, then
+      # collecting the settings - happens before withProgress() paints. The
+      # complaint was "the download takes ages to start", which is what an
+      # unacknowledged click looks like.
+      #
+      # on.exit(), not a call at the end: three of the paths out of this
+      # handler are early returns from the guards below, and a fourth is an
+      # error inside the tryCatch. A notification with duration = NULL that
+      # nothing takes down stays on screen for the rest of the session.
+      shiny::showNotification(
+        "Preparing the download - building the export bundle...",
+        id = PMA_DOWNLOAD_BUSY_ID, duration = NULL, type = "message")
+      on.exit({
+        shiny::removeNotification(PMA_DOWNLOAD_BUSY_ID)
+        # Stops the spinner the click started on the button itself (app.R).
+        session$sendCustomMessage("download_done", list())
+      }, add = TRUE)
+
       if (is.null(state$ma)) {
         shiny::showNotification(
           "Cannot export: Step 2 (run analysis) must be completed first.",

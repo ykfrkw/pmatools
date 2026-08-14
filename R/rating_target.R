@@ -146,9 +146,9 @@ RATING_TARGET_LABELS <- c(
         target_label              = RATING_TARGET_LABELS[["important_effect"]],
         threshold_for_imprecision = threshold_internal,
         note = paste0(sprintf(
-          paste0("Rating target: Important effect (Core GRADE 2 Fig 2, MID ",
-                 "threshold; |point estimate| = %.4f > MID = %.4f on the TE ",
-                 "scale)."),
+          paste0("Rating target: Important effect (Core GRADE 2 Fig 2, ",
+                 "clinical decision threshold; |point estimate| = %.4f > ",
+                 "threshold = %.4f on the TE scale)."),
           abs(te_point), threshold_internal), scale_note)
       ))
     }
@@ -158,8 +158,8 @@ RATING_TARGET_LABELS <- c(
       threshold_for_imprecision = threshold_internal,
       note = paste0(sprintf(
         paste0("Rating target: Little or no difference (Core GRADE 2 Fig 2, ",
-               "MID threshold; |point estimate| = %.4f <= MID = %.4f on the ",
-               "TE scale)."),
+               "clinical decision threshold; |point estimate| = %.4f <= ",
+               "threshold = %.4f on the TE scale)."),
         abs(te_point), threshold_internal), scale_note)
     ))
   }
@@ -172,9 +172,9 @@ RATING_TARGET_LABELS <- c(
       threshold_for_imprecision = 0,
       note = paste0(
         "Rating target: Non-null effect (Core GRADE 2 Fig 2, null threshold). ",
-        "No MID was supplied, so whether the point estimate is very near the ",
-        "null cannot be judged; certainty is rated in a true underlying ",
-        "effect and imprecision uses the null threshold."
+        "No threshold was supplied, so whether the point estimate is very ",
+        "near the null cannot be judged; certainty is rated in a true ",
+        "underlying effect and imprecision uses the null threshold."
       )
     ))
   }
@@ -188,8 +188,8 @@ RATING_TARGET_LABELS <- c(
       note = paste0(sprintf(
         paste0("Rating target: Little or no difference (Core GRADE 2 Fig 2, ",
                "null threshold, point estimate very near the null; |point ",
-               "estimate| = %.4f <= MID = %.4f on the TE scale). Imprecision ",
-               "is judged against the MID."),
+               "estimate| = %.4f <= threshold = %.4f on the TE scale). ",
+               "Imprecision is judged against the threshold."),
         abs(te_point), threshold_internal), scale_note)
     ))
   }
@@ -199,8 +199,8 @@ RATING_TARGET_LABELS <- c(
     threshold_for_imprecision = 0,
     note = paste0(sprintf(
       paste0("Rating target: Non-null effect (Core GRADE 2 Fig 2, null ",
-             "threshold; |point estimate| = %.4f > MID = %.4f on the TE ",
-             "scale, so the estimate is not very near the null)."),
+             "threshold; |point estimate| = %.4f > threshold = %.4f on the ",
+             "TE scale, so the estimate is not very near the null)."),
       abs(te_point), threshold_internal), scale_note)
   )
 }
@@ -233,8 +233,8 @@ RATING_TARGET_LABELS <- c(
       paste0(
         "That value is a pmatools placeholder (source = 'package_convention'), ",
         "NOT a Core GRADE number: the Core GRADE series contains no ratio-scale ",
-        "MID, and every binary MID it discusses is on the absolute scale (per ",
-        "1000 or percent)."
+        "threshold, and every binary threshold it discusses is on the absolute ",
+        "scale (per 1000 or percent)."
       )
     }
     alt <- if (!is.null(sugg$threshold_ratio)) {
@@ -251,17 +251,19 @@ RATING_TARGET_LABELS <- c(
         format(signif(sugg$threshold_user, 4)), sugg$threshold_scale, sm
       ),
       alt, " ", provenance,
-      " Core GRADE 7 ties the MID to the outcome, not to the effect measure ",
-      "('MIDs associated with mortality of 1%, stroke of 2%, myocardial ",
-      "infarction of 3%, and serious gastrointestinal bleeding of 5% reflect ",
-      "the gradient of importance across these outcomes'), and asks users to ",
-      "read the CI first and pin down a MID only where the verdict depends on ",
-      "it. Treat the number above as a placeholder to replace, not as a ",
-      "recommendation."
+      # The bracketed sentence is Core GRADE 7 verbatim and keeps the source's
+      # own word ("MIDs"); pmatools' own prose around it says "threshold".
+      " Core GRADE 7 ties the threshold to the outcome, not to the effect ",
+      "measure ('MIDs associated with mortality of 1%, stroke of 2%, ",
+      "myocardial infarction of 3%, and serious gastrointestinal bleeding of ",
+      "5% reflect the gradient of importance across these outcomes'), and ",
+      "asks users to read the CI first and pin down a threshold only where ",
+      "the verdict depends on it. Treat the number above as a placeholder to ",
+      "replace, not as a recommendation."
     )
   } else {
     paste0("No placeholder default is available for sm = '", sm,
-           "'; supply a published or expert-derived MID.")
+           "'; supply a published or expert-derived threshold.")
   }
 
   # Classed so batch orchestration (grade_meta_multi()) can tell the entry gate

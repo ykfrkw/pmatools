@@ -730,7 +730,8 @@ export_bundle.meta <- function(x,
       fallback = if (identical(grade$rob_analysis_set, "low_only") &&
                      !isTRUE(grade$rob_refit)) "FALSE" else "TRUE"
     ),
-    rob_inf_threshold= grade_args[["rob_inflation_threshold", exact = TRUE]][["value"]] %||% 0.10,
+    rob_inf_threshold= grade_args[["rob_inflation_threshold", exact = TRUE]][["value"]] %||%
+      PMA_ROB_INFLATION_THRESHOLD,
     # small_values: read the rated object when the caller did not route it
     # through grade_args. This used to fall back to "NULL", which was the bug
     # that made the argument required: a bundle exported without grade_args

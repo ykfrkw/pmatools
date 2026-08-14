@@ -354,18 +354,45 @@
   hdrs
 }
 
+# The three columns "Absolute effects (95% CI)" heads: With control, With
+# intervention, Difference. Every other column stands on its own and is merged
+# across both header rows instead.
+BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
+
 # Shared flextable chrome: spanning "Absolute effects (95% CI)" header,
-# fonts, alignment, widths.
-.bmj_decorate <- function(ft, has_plain) {
-  vals  <- c("", "", "", "Absolute effects (95% CI)", "", "")
-  cw    <- c(1, 1, 1, 3, 1, 1)
-  if (!has_plain) { vals <- vals[-6]; cw <- cw[-6] }
+# fonts, alignment, widths. `headers` is .bmj_headers() output, needed here
+# because the added top row has to repeat the labels it merges over.
+.bmj_decorate <- function(ft, has_plain, headers) {
+  span_start <- BMJ_ABSOLUTE_EFFECT_COLS[1L]
+  covered    <- BMJ_ABSOLUTE_EFFECT_COLS[-1L]
+  # The top row repeats each stand-alone column's OWN label rather than being
+  # left blank: a vertical merge renders the top-left cell of the span, so
+  # merging a blank top cell over "Outcome and follow-up" would erase it.
+  vals <- headers
+  vals[span_start] <- "Absolute effects (95% CI)"
+  vals <- vals[-covered]
+  cw <- rep(1L, length(headers))
+  cw[span_start] <- length(BMJ_ABSOLUTE_EFFECT_COLS)
+  cw <- cw[-covered]
   ft <- flextable::add_header_row(ft, top = TRUE, values = vals, colwidths = cw)
+
+  # Without this the five columns outside the span keep an empty cell above
+  # their label. The header background is one solid navy, so those blanks read
+  # as a full-width band with "Absolute effects (95% CI)" floating on it rather
+  # than as a heading over three columns.
+  for (j in setdiff(seq_along(headers), BMJ_ABSOLUTE_EFFECT_COLS)) {
+    ft <- flextable::merge_at(ft, i = 1:2, j = j, part = "header")
+  }
 
   ft <- flextable::theme_vanilla(ft)
   ft <- flextable::fontsize(ft, size = 9, part = "all")
   ft <- flextable::font(ft, fontname = .PMA_TABLE_FONT, part = "all")
   ft <- flextable::align(ft, align = "center", part = "header")
+  # Bottom, not top or centre: the seven column labels are peers and read as
+  # one band when they share a baseline. Top-aligned, the merged five ride up
+  # level with "Absolute effects (95% CI)", which heads three of them and is
+  # not a peer of the rest.
+  ft <- flextable::valign(ft, valign = "bottom", part = "header")
   ft <- flextable::align(ft, align = "left",   part = "body")
   ft <- flextable::align(ft, j = 2, align = "center", part = "body")
   ft <- flextable::valign(ft, valign = "top", part = "body")
@@ -455,7 +482,7 @@
   names(df) <- hdrs
 
   ft <- flextable::flextable(df)
-  ft <- .bmj_decorate(ft, has_plain)
+  ft <- .bmj_decorate(ft, has_plain, hdrs)
 
   cell_colors <- pal[[x$certainty]]
   ft <- flextable::bg(ft,    j = 7, bg    = cell_colors$bg,   part = "body")
@@ -603,7 +630,7 @@
 
   df <- do.call(rbind, all_rows)
   ft <- flextable::flextable(df)
-  ft <- .bmj_decorate(ft, has_plain)
+  ft <- .bmj_decorate(ft, has_plain, hdrs)
 
   for (lr in label_rows) {
     ft <- flextable::merge_h(ft,  i = lr, part = "body")

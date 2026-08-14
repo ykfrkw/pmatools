@@ -260,9 +260,15 @@ test_that("a reason gets a [n] marker alongside a real analysis-set note", {
   ml   <- quiet_ma(nr_data(c("very_serious", "no", "no", "no")), sm = "OR")
   set2 <- quiet_grade(
     ml,
+    # rob_inflation_threshold pinned at the pre-0.5.1 default. This fixture's
+    # inflation sits between the two values, so on the current default of 0.20
+    # it stops refitting, the analysis-set note it exists to produce never
+    # appears, and the skip below silently retires the numbering assertions.
+    # The subject here is the shared footnote pool, not the threshold.
     common = list(study_design = "RCT", indirectness = "no",
                   small_values = "undesirable",
                   rob = c("very_serious", "no", "no", "no"),
+                  rob_inflation_threshold = 0.10,
                   threshold = 1.05, threshold_scale = "ratio")
   )
   skip_if_not(any(vapply(set2$outcomes, function(g) isTRUE(g$rob_refit),

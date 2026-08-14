@@ -1,11 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 592" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="pubias-title pubias-desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 626" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="pubias-title pubias-desc">
   <title id="pubias-title">Publication bias: the Core GRADE 4 Figure 5 decision as pmatools implements it</title>
-  <desc id="pubias-desc">Flowchart. The first question asks whether most or all studies are small and industry sponsored; yes means rate down one level. Otherwise a pmatools input, drawn dashed because it is not a node of Figure 5, asks whether registry coverage is complete; yes means do not rate down. Otherwise the chart asks whether statistical analysis is feasible, that is whether a meta-analysis of ten or more studies was performed. If it is, the next question asks whether funnel plot asymmetry, visually or by Egger&#8217;s test, strongly suggests publication bias: yes rates down one level, no does not, and a test that could not be run takes the same no as a default while the domain note asks for a qualitative assessment. If statistical analysis is not feasible, the chart asks instead whether unpublished studies are documented in a trial registry or FDA records: yes rates down one level, and no, or no answer at all, does not. This is pmatools&#8217; operationalisation of the Core GRADE 4 Figure 5 decision, not a reproduction of the published figure.</desc>
+  <desc id="pubias-desc">Flowchart. The first question asks whether most or all studies are small and industry sponsored; yes means rate down one level. Otherwise a pmatools input, labelled on the box itself because it is not a node of Figure 5, asks whether registry coverage is complete; yes means do not rate down. Otherwise the chart asks whether statistical analysis is feasible, that is whether a meta-analysis of ten or more studies was performed. pmatools counts the studies and answers that node itself. If it is, the next question asks whether funnel plot asymmetry, visually or by Egger&#8217;s test, strongly suggests publication bias: yes rates down one level, no does not, and a test that could not be run takes the same no as a default while the domain note asks for a qualitative assessment. If statistical analysis is not feasible, the chart asks instead whether unpublished studies are documented in a trial registry or FDA records: yes rates down one level, and no, or no answer at all, does not. This is pmatools&#8217; operationalisation of the Core GRADE 4 Figure 5 decision, not a reproduction of the published figure.</desc>
   <style>
     .pma-fc-node rect, .pma-fc-leaf rect {
       fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2;
     }
-    .pma-fc-pmatools rect { stroke-dasharray: 5 3; }
     .pma-fc-edge path { stroke: #cbd5e1; stroke-width: 1.5; fill: none; }
     .pma-fc-node text, .pma-fc-leaf text, .pma-fc-edge text {
       fill: #475569; font-size: 13px; font-weight: 400;
@@ -37,44 +36,44 @@
     <text class="pma-fc-edge-label" x="263" y="130" text-anchor="start">No</text>
   </g>
   <g id="pma-pubias-edge-registry-yes" class="pma-fc-edge">
-    <path d="M 490 178 L 560 178"/>
-    <path d="M 553 182.5 L 560 178 L 553 173.5"/>
-    <text class="pma-fc-edge-label" x="525" y="171" text-anchor="middle">Yes</text>
+    <path d="M 490 186 L 560 186"/>
+    <path d="M 553 190.5 L 560 186 L 553 181.5"/>
+    <text class="pma-fc-edge-label" x="525" y="179" text-anchor="middle">Yes</text>
   </g>
   <g id="pma-pubias-edge-registry-no" class="pma-fc-edge">
-    <path d="M 255 206 L 255 258"/>
-    <path d="M 250.5 251 L 255 258 L 259.5 251"/>
-    <text class="pma-fc-edge-label" x="263" y="235" text-anchor="start">No or not answered</text>
+    <path d="M 255 223 L 255 275"/>
+    <path d="M 250.5 268 L 255 275 L 259.5 268"/>
+    <text class="pma-fc-edge-label" x="263" y="252" text-anchor="start">No or not answered</text>
   </g>
   <g id="pma-pubias-edge-q2-yes" class="pma-fc-edge">
-    <path d="M 200 314 L 200 366"/>
-    <path d="M 195.5 359 L 200 366 L 204.5 359"/>
-    <text class="pma-fc-edge-label" x="208" y="343" text-anchor="start">Yes</text>
+    <path d="M 200 348 L 200 400"/>
+    <path d="M 195.5 393 L 200 400 L 204.5 393"/>
+    <text class="pma-fc-edge-label" x="208" y="377" text-anchor="start">Yes</text>
   </g>
   <g id="pma-pubias-edge-q2-no" class="pma-fc-edge">
-    <path d="M 490 286 L 720 286 L 720 366"/>
-    <path d="M 715.5 359 L 720 366 L 724.5 359"/>
-    <text class="pma-fc-edge-label" x="500" y="278" text-anchor="start">No</text>
+    <path d="M 490 311 L 720 311 L 720 400"/>
+    <path d="M 715.5 393 L 720 400 L 724.5 393"/>
+    <text class="pma-fc-edge-label" x="500" y="303" text-anchor="start">No</text>
   </g>
   <g id="pma-pubias-edge-q3-yes" class="pma-fc-edge">
-    <path d="M 164 439 L 164 483"/>
-    <path d="M 159.5 476 L 164 483 L 168.5 476"/>
-    <text class="pma-fc-edge-label" x="164" y="475" text-anchor="middle">Yes</text>
+    <path d="M 164 473 L 164 517"/>
+    <path d="M 159.5 510 L 164 517 L 168.5 510"/>
+    <text class="pma-fc-edge-label" x="164" y="509" text-anchor="middle">Yes</text>
   </g>
   <g id="pma-pubias-edge-q3-no" class="pma-fc-edge">
-    <path d="M 316 439 L 316 483"/>
-    <path d="M 311.5 476 L 316 483 L 320.5 476"/>
-    <text class="pma-fc-edge-label" x="316" y="475" text-anchor="middle">No</text>
+    <path d="M 316 473 L 316 517"/>
+    <path d="M 311.5 510 L 316 517 L 320.5 510"/>
+    <text class="pma-fc-edge-label" x="316" y="509" text-anchor="middle">No</text>
   </g>
   <g id="pma-pubias-edge-q4-yes" class="pma-fc-edge">
-    <path d="M 644 422 L 644 483"/>
-    <path d="M 639.5 476 L 644 483 L 648.5 476"/>
-    <text class="pma-fc-edge-label" x="644" y="475" text-anchor="middle">Yes</text>
+    <path d="M 644 456 L 644 517"/>
+    <path d="M 639.5 510 L 644 517 L 648.5 510"/>
+    <text class="pma-fc-edge-label" x="644" y="509" text-anchor="middle">Yes</text>
   </g>
   <g id="pma-pubias-edge-q4-no" class="pma-fc-edge">
-    <path d="M 796 422 L 796 483"/>
-    <path d="M 791.5 476 L 796 483 L 800.5 476"/>
-    <text class="pma-fc-edge-label" x="796" y="475" text-anchor="middle">No</text>
+    <path d="M 796 456 L 796 517"/>
+    <path d="M 791.5 510 L 796 517 L 800.5 510"/>
+    <text class="pma-fc-edge-label" x="796" y="509" text-anchor="middle">No</text>
   </g>
   <g id="pma-pubias-node-q1" class="pma-fc-node">
     <rect x="20" y="48" width="470" height="56" rx="6" ry="6"/>
@@ -89,72 +88,74 @@
       <tspan x="750" dy="0">Rate down 1 level</tspan>
     </text>
   </g>
-  <g id="pma-pubias-node-registry" class="pma-fc-node pma-fc-pmatools">
-    <rect x="20" y="150" width="470" height="56" rx="6" ry="6"/>
+  <g id="pma-pubias-node-registry" class="pma-fc-node">
+    <rect x="20" y="150" width="470" height="73" rx="6" ry="6"/>
     <text x="255" y="173" text-anchor="middle">
       <tspan x="255" dy="0">Is registry coverage complete, so that every</tspan>
       <tspan x="255" dy="17">registered trial can be accounted for?</tspan>
+      <tspan x="255" dy="17">A pmatools input; Figure 5 has no such node.</tspan>
     </text>
   </g>
   <g id="pma-pubias-leaf-nodown-registry" class="pma-fc-leaf">
-    <rect x="560" y="158" width="380" height="39" rx="6" ry="6"/>
-    <text x="750" y="181" text-anchor="middle">
+    <rect x="560" y="167" width="380" height="39" rx="6" ry="6"/>
+    <text x="750" y="190" text-anchor="middle">
       <tspan x="750" dy="0">Do not rate down</tspan>
     </text>
   </g>
   <g id="pma-pubias-node-q2" class="pma-fc-node">
-    <rect x="20" y="258" width="470" height="56" rx="6" ry="6"/>
-    <text x="255" y="281" text-anchor="middle">
+    <rect x="20" y="275" width="470" height="73" rx="6" ry="6"/>
+    <text x="255" y="298" text-anchor="middle">
       <tspan x="255" dy="0">Is statistical analysis feasible?</tspan>
       <tspan x="255" dy="17">(a meta-analysis of 10 or more studies)</tspan>
+      <tspan x="255" dy="17">Computed from the analysis, never asked.</tspan>
     </text>
   </g>
   <g id="pma-pubias-node-q3" class="pma-fc-node">
-    <rect x="20" y="366" width="440" height="73" rx="6" ry="6"/>
-    <text x="240" y="389" text-anchor="middle">
+    <rect x="20" y="400" width="440" height="73" rx="6" ry="6"/>
+    <text x="240" y="423" text-anchor="middle">
       <tspan x="240" dy="0">Does funnel plot asymmetry, visually</tspan>
       <tspan x="240" dy="17">or by Egger&#8217;s test, strongly suggest</tspan>
       <tspan x="240" dy="17">publication bias?</tspan>
     </text>
   </g>
   <g id="pma-pubias-node-q4" class="pma-fc-node">
-    <rect x="500" y="366" width="440" height="56" rx="6" ry="6"/>
-    <text x="720" y="389" text-anchor="middle">
+    <rect x="500" y="400" width="440" height="56" rx="6" ry="6"/>
+    <text x="720" y="423" text-anchor="middle">
       <tspan x="720" dy="0">Is there documentation of unpublished</tspan>
       <tspan x="720" dy="17">studies (a trial registry, FDA records)?</tspan>
     </text>
   </g>
   <g id="pma-pubias-leaf-down1-q3" class="pma-fc-leaf">
-    <rect x="94" y="483" width="140" height="56" rx="6" ry="6"/>
-    <text x="164" y="506" text-anchor="middle">
+    <rect x="94" y="517" width="140" height="56" rx="6" ry="6"/>
+    <text x="164" y="540" text-anchor="middle">
       <tspan x="164" dy="0">Rate down</tspan>
       <tspan x="164" dy="17">1 level</tspan>
     </text>
   </g>
   <g id="pma-pubias-leaf-nodown-q3" class="pma-fc-leaf">
-    <rect x="246" y="483" width="140" height="56" rx="6" ry="6"/>
-    <text x="316" y="506" text-anchor="middle">
+    <rect x="246" y="517" width="140" height="56" rx="6" ry="6"/>
+    <text x="316" y="540" text-anchor="middle">
       <tspan x="316" dy="0">Do not</tspan>
       <tspan x="316" dy="17">rate down</tspan>
     </text>
   </g>
   <g id="pma-pubias-leaf-down1-q4" class="pma-fc-leaf">
-    <rect x="574" y="483" width="140" height="56" rx="6" ry="6"/>
-    <text x="644" y="506" text-anchor="middle">
+    <rect x="574" y="517" width="140" height="56" rx="6" ry="6"/>
+    <text x="644" y="540" text-anchor="middle">
       <tspan x="644" dy="0">Rate down</tspan>
       <tspan x="644" dy="17">1 level</tspan>
     </text>
   </g>
   <g id="pma-pubias-leaf-nodown-q4" class="pma-fc-leaf">
-    <rect x="726" y="483" width="140" height="56" rx="6" ry="6"/>
-    <text x="796" y="506" text-anchor="middle">
+    <rect x="726" y="517" width="140" height="56" rx="6" ry="6"/>
+    <text x="796" y="540" text-anchor="middle">
       <tspan x="796" dy="0">Do not</tspan>
       <tspan x="796" dy="17">rate down</tspan>
     </text>
   </g>
-  <text class="pma-fc-caption" x="20" y="563">
+  <text class="pma-fc-caption" x="20" y="597">
     <tspan x="20" dy="0">After BMJ Core GRADE 4 (Guyatt et al., 2025) Figure 5. pmatools&#8217; operationalisation, not a reproduction:</tspan>
-    <tspan x="20" dy="16">the dashed registry node is a pmatools input and is not in Figure 5.</tspan>
+    <tspan x="20" dy="16">the registry node is a pmatools input and is not in Figure 5; the study-count node is computed, never asked.</tspan>
   </text>
 </svg>
 

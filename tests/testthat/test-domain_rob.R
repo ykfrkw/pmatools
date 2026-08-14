@@ -464,3 +464,39 @@ test_that("a studlab-length rob aborts when the alignment is unresolvable", {
     regexp = "estimable rows could not be identified"
   )
 })
+
+# --- The default inflation threshold -----------------------------------------
+# Every test above passes rob_inflation_threshold explicitly, so none of them
+# would notice the default moving. These two pin it down: a 15% relative
+# inflation sits between the old default (0.10) and the current one (0.20), so
+# the verdict flips on the default alone.
+test_that("the default inflation threshold is PMA_ROB_INFLATION_THRESHOLD = 0.20", {
+  expect_equal(pmatools:::PMA_ROB_INFLATION_THRESHOLD, 0.20)
+  expect_equal(formals(pmatools:::assess_rob)$rob_inflation_threshold,
+               quote(PMA_ROB_INFLATION_THRESHOLD))
+  expect_equal(formals(pmatools::grade_meta)$rob_inflation_threshold,
+               quote(PMA_ROB_INFLATION_THRESHOLD))
+})
+
+test_that("a 15% inflation does not rate down under the default threshold", {
+  # Both te_all = 0.46 and te_low = 0.40 are above +log(1.20) = 0.182, so the
+  # zones agree; inflation = (0.46 - 0.40) / 0.40 = 15%.
+  m <- make_mock_dominated(te_all = 0.46, te_low_only = 0.40)
+
+  g_default <- grade_meta(m, rob = c("very_serious", "no", "no"),
+                          small_values = "undesirable",
+                          threshold = 1.20, threshold_scale = "ratio")
+  rob_default <- g_default$domain_assessments[
+    g_default$domain_assessments$domain == "Risk of bias", ]
+  expect_equal(rob_default$judgment, "not_serious")
+  expect_match(rob_default$notes, "Rule 2")
+
+  g_old <- grade_meta(m, rob = c("very_serious", "no", "no"),
+                      small_values = "undesirable",
+                      threshold = 1.20, threshold_scale = "ratio",
+                      rob_inflation_threshold = 0.10)
+  rob_old <- g_old$domain_assessments[
+    g_old$domain_assessments$domain == "Risk of bias", ]
+  expect_equal(rob_old$judgment, "serious")
+  expect_match(rob_old$notes, "Rule 3")
+})

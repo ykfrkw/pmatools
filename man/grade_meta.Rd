@@ -14,7 +14,7 @@ grade_meta(
   rob_override_rationale = NULL,
   rob_dominant_threshold = 0.55,
   rob_refit = TRUE,
-  rob_inflation_threshold = 0.1,
+  rob_inflation_threshold = PMA_ROB_INFLATION_THRESHOLD,
   small_values = NULL,
   indirectness = NULL,
   indirectness_dominant_threshold = 0.55,
@@ -146,7 +146,8 @@ two low-RoB studies remain or when \code{update()} fails.}
 the pooled estimate when high-RoB studies are excluded, computed on the
 absolute analysis scale: \eqn{(|TE_{all}| - |TE_{low}|) / |TE_{low}|},
 where \eqn{TE_{low}} is the inverse-variance weighted mean of the
-low/some-concerns RoB studies. Default \code{0.10} (10 percent).
+low/some-concerns RoB studies. Default
+\code{PMA_ROB_INFLATION_THRESHOLD} (\code{0.20}, 20 percent).
 \strong{\eqn{TE_{low}} is always a fixed-effect estimate}
 (\eqn{\sum w \cdot TE / \sum w} with \eqn{w = 1/se^2}), even when the
 parent meta-analysis is a random-effects model. Part of any observed shift

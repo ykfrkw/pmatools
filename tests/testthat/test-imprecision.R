@@ -444,6 +444,9 @@ test_that("small_values decides which side of ois_p0 the OIS target sits on", {
 
 test_that("assess_imprecision() refuses to guess the direction", {
   m <- direction_meta()
+  # The direction gate fires before the note is built, so the wording of that
+  # note (ours says "threshold", not "MID", since 0.5.1) is asserted by the
+  # tests that supply small_values rather than here.
   expect_error(
     assess_imprecision(m, outcome_type = "relative",
                        threshold_internal = log(1.25),

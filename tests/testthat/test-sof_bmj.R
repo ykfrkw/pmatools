@@ -108,6 +108,35 @@ test_that("style = 'bmj' returns a flextable with the spanning absolute header",
   expect_match(.body_col(ft, 3), "^Risk ratio [0-9.]+ \\([0-9.]+ to [0-9.]+\\)$")
 })
 
+test_that("every column outside the absolute-effects span is merged vertically", {
+  # The blanks the spanning row used to leave above the other five labels made
+  # the navy header read as one full-width band with "Absolute effects (95%
+  # CI)" floating on it. Each of those columns now carries its own label across
+  # both header rows.
+  for (drop_plain in c(FALSE, TRUE)) {
+    g <- make_binary()
+    if (drop_plain) g$rating_target <- NULL
+    ft   <- sof_table(g, style = "bmj")
+    hdrs <- names(ft$body$dataset)
+    ncol <- length(hdrs)
+
+    vspan <- ft$header$spans$columns
+    # 2 = the top cell opens a two-row span; 0 = the cell below is covered.
+    standalone <- setdiff(seq_len(ncol), 4:6)
+    expect_equal(unname(vspan[1L, standalone]), rep(2L, length(standalone)),
+                 info = paste("has_plain =", !drop_plain))
+    expect_equal(unname(vspan[2L, standalone]), rep(0L, length(standalone)))
+    # The three absolute-effect columns keep their own second-row label.
+    expect_equal(unname(vspan[1L, 4:6]), rep(1L, 3L))
+
+    # A merged span renders its TOP-LEFT cell, so the label has to be in row 1
+    # or it disappears from the rendered table.
+    top <- as.character(unlist(ft$header$dataset[1L, ]))
+    expect_identical(top[standalone], hdrs[standalone])
+    expect_equal(sum(top == "Absolute effects (95% CI)"), 3L)
+  }
+})
+
 test_that("the bmj table can be written to docx", {
   skip_if_not_installed("officer")
   g   <- make_binary()
@@ -116,7 +145,20 @@ test_that("the bmj table can be written to docx", {
   expect_no_error(flextable::save_as_docx(ft, path = out))
   expect_true(file.exists(out))
   expect_gt(file.size(out), 0)
-  unlink(out)
+
+  # Word expresses a vertical span as w:vMerge, so the merge has to survive the
+  # docx writer and not only the flextable object: one restart per merged
+  # column, and the "Absolute effects" span as a w:gridSpan.
+  xml_dir <- tempfile()
+  dir.create(xml_dir)
+  utils::unzip(out, exdir = xml_dir)
+  doc <- paste(readLines(file.path(xml_dir, "word", "document.xml"),
+                         warn = FALSE), collapse = "")
+  expect_equal(
+    lengths(regmatches(doc, gregexpr("w:vMerge w:val=\"restart\"", doc))), 5L)
+  expect_gte(lengths(regmatches(doc, gregexpr("<w:gridSpan", doc))), 1L)
+
+  unlink(c(out, xml_dir), recursive = TRUE)
 })
 
 test_that("follow_up = NULL leaves the outcome cell without a time-frame line", {
@@ -756,4 +798,83 @@ test_that("unusable control SDs fall back to sample-size weighting", {
   expect_equal(got$mean, (50 * 8 + 60 * 9) / 110, tolerance = 1e-9)
   expect_match(.cont_arm_note("sample-size"), "sample-size weighted mean",
                fixed = TRUE)
+})
+
+# --- an overridden domain reaches the footer (0.5.1) ------------------------
+#
+# The bug this closes: a reviewer overrode publication bias, the certainty cell
+# and the "Due to ..." sentence moved with them, and the footnote underneath
+# went on reciting the automatic reasoning - because it is built from
+# domain_facts, which record what the ALGORITHM found and are not rewritten by
+# an override. The fix is keyed on the "Manual override" head that
+# make_domain_row() writes, so it works for every domain rather than for the
+# one that was reported.
+
+# The shape the Shiny app writes when a reviewer sets a domain by hand: the
+# override clause, the separator, and the automatic note left underneath it.
+.override_domain <- function(g, domain, judgment, rationale) {
+  idx <- which(g$domain_assessments$domain == domain)
+  g$domain_assessments$judgment[idx]  <- judgment
+  g$domain_assessments$auto[idx]      <- FALSE
+  g$domain_assessments$downgrade[idx] <- -1L
+  g$domain_assessments$notes[idx] <- paste0(
+    sprintf("Manual override (%s): %s", judgment, rationale),
+    " | ", g$domain_assessments$notes[idx])
+  g
+}
+
+test_that("an overridden domain's footnote states the reviewer's rationale", {
+  g <- .override_domain(make_binary(), "Publication bias", "serious",
+                        "Two registered trials with no results posted")
+  footer <- .footer_text(sof_table(g, style = "bmj"))
+
+  expect_match(footer, "Two registered trials with no results posted",
+               fixed = TRUE)
+  expect_match(footer, "not by the algorithm", fixed = TRUE)
+  # The automatic numbers are kept, but named as what they are rather than
+  # left standing as the justification for a rating they did not produce.
+  expect_match(footer, "The automatic assessment recorded", fixed = TRUE)
+
+  # Only the override clause travels into the footnote, not the flowchart
+  # prose behind the "|", which is written for a reader following Figure 5 and
+  # is far too long for a table footer. Asserted on the footnote itself: the
+  # BMJ footer also carries the separate publication-bias qualitative-
+  # assessment sentence, which has always quoted the note in full.
+  expect_no_match(.domain_fact_note(g, "Publication bias"), "Q1:",
+                  fixed = TRUE)
+})
+
+test_that("a domain with no facts still gets a footnote once overridden", {
+  # Indirectness emits no facts at all, so before this it was the one domain
+  # that could rate the evidence down and explain nothing.
+  g <- .override_domain(make_binary(), "Indirectness", "serious",
+                        "Surrogate outcome only")
+  footer <- .footer_text(sof_table(g, style = "bmj"))
+
+  expect_true("Indirectness" %in% .rated_down_fact_domains(g))
+  expect_match(footer, "Surrogate outcome only", fixed = TRUE)
+  expect_no_match(footer, "The automatic assessment recorded", fixed = TRUE)
+})
+
+test_that("an automatic rating's footnote is unchanged", {
+  g <- make_refit()
+  footer <- .footer_text(sof_table(g, style = "bmj"))
+  expect_no_match(footer, "not by the algorithm", fixed = TRUE)
+  expect_no_match(footer, "The automatic assessment recorded", fixed = TRUE)
+})
+
+test_that("the override head is read from the notes, not inferred from auto", {
+  # auto = FALSE also means "the reviewer supplied an input the algorithm
+  # cannot compute" - an answered pubias_small_industry, say - where the
+  # flowchart still decided the rating and the facts still explain it.
+  expect_null(.parse_override_note("Manual override (serious): why",
+                                   auto = TRUE))
+  expect_null(.parse_override_note("Q1: answered by hand -> serious.",
+                                   auto = FALSE))
+  expect_null(.parse_override_note(NA_character_, auto = FALSE))
+
+  parsed <- .parse_override_note("Manual override (serious): why | Q1: auto.",
+                                 auto = FALSE)
+  expect_identical(parsed$judgment, "serious")
+  expect_identical(parsed$rationale, "why")
 })

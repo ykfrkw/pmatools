@@ -326,7 +326,7 @@ step3_ui <- function(state = NULL) {
           # tabs; the flowchart under the verdict draws the same algorithm and
           # lights up the branch taken. output$rob_how_body went with it, and
           # so did output$rob_rule_note before that.
-          pma_reference(EDU_COPY$domains$rob$ref),
+          pma_domain_reference(EDU_COPY$domains$rob),
           # Review-wide, and edited here because this is the tab where it
           # decides something: it sets which side of the binary split each
           # study falls on, and the stratified forest below draws exactly that
@@ -394,7 +394,7 @@ step3_ui <- function(state = NULL) {
         # --- Inconsistency ---
         shiny::tabPanel(.tab_title("inconsistency"), value = "Inconsistency",
           .domain_header("Inconsistency", "incon_badge", "incon_chip"),
-          pma_reference(EDU_COPY$domains$inconsistency$ref),
+          pma_domain_reference(EDU_COPY$domains$inconsistency),
           shiny::uiOutput("threshold_block_inco"),
           shiny::uiOutput("incon_evaluation"),
           htmltools::h5("Forest plot"),
@@ -441,7 +441,7 @@ step3_ui <- function(state = NULL) {
         # --- Indirectness ---
         shiny::tabPanel(.tab_title("indirectness"), value = "Indirectness",
           .domain_header("Indirectness", "indir_badge", "indir_chip"),
-          pma_reference(EDU_COPY$domains$indirectness$ref),
+          pma_domain_reference(EDU_COPY$domains$indirectness),
 
           # ----- The four Core GRADE 5 PICO questions ----------------------
           # Every one PRESELECTED to "yes" - the default is now on screen
@@ -464,6 +464,8 @@ step3_ui <- function(state = NULL) {
               "Population - trial population sufficiently similar to target patients?",
               choices = STEP3_INDIR_ANSWERS, inline = TRUE,
               selected = "yes"),
+            htmltools::p(class = "pma-card-subtitle",
+                         EDU_COPY$domains$indirectness$population),
             shiny::radioButtons("indir_intervention",
               "Intervention - deliverable as studied?",
               choices = STEP3_INDIR_ANSWERS, inline = TRUE,
@@ -554,16 +556,17 @@ step3_ui <- function(state = NULL) {
         # --- Imprecision ---
         shiny::tabPanel(.tab_title("imprecision"), value = "Imprecision",
           .domain_header("Imprecision", "impre_badge", "impre_chip"),
-          pma_reference(EDU_COPY$domains$imprecision$ref),
+          pma_domain_reference(EDU_COPY$domains$imprecision),
           shiny::uiOutput("threshold_block_impre"),
-          # Which Fig 4 branch this analysis took. Stated on the tab because
-          # the branch decides whether sample size is consulted at all: on
-          # the CI-crosses-threshold path the OIS is never reached, and a
-          # reviewer reading OIS figures further down must be able to see
-          # that they did not drive the judgment.
-          htmltools::h5("Core GRADE 2 Figure 4 branch taken",
-                        style = "margin-top: 1rem;"),
-          shiny::uiOutput("impre_branch"),
+          # The "Core GRADE 2 Figure 4 branch taken" section that stood here
+          # is deleted (0.5.1). It restated in three paragraphs which branch
+          # the `fig4_path` fact names -- and the Fig 4 flowchart inside
+          # `impre_evaluation` below draws that same fact with the route lit
+          # up. The point it existed to make (sample size is not consulted
+          # unless the OIS branch is reached) is legible from a chart whose
+          # OIS node is unlit, and the two-level reviewer judgment it also
+          # carried is stated at the override further down, where it is
+          # actionable.
           shiny::uiOutput("impre_evaluation"),
           .inputs_details(open = TRUE, title = "Inputs for this domain",
             shiny::conditionalPanel(
@@ -621,7 +624,7 @@ step3_ui <- function(state = NULL) {
         # --- Publication bias ---
         shiny::tabPanel(.tab_title("pubias"), value = "Publication bias",
           .domain_header("Publication bias", "pubias_badge", "pubias_chip"),
-          pma_reference(EDU_COPY$domains$pubias$ref),
+          pma_domain_reference(EDU_COPY$domains$pubias),
           # ----- Figure 5 as a wizard, one node at a time -------------------
           # The whole of Fig 5 used to render at once: a static Q1, a static
           # non-Fig-5 overall judgment with two bulleted lists, a
@@ -822,19 +825,13 @@ step3_ui <- function(state = NULL) {
           ),
           htmltools::hr(),
 
-          # ----- This outcome's place in the multi-outcome SoF table -----
-          # The end of the step: the rating for one outcome is complete here,
-          # so this is where the app says it has been banked and offers the
-          # next outcome. There is no Save button (shiny/SPEC.md 3.4.14), and
-          # the list of banked outcomes is on Step 4, beside the table it
-          # feeds.
-          htmltools::h5("Saved for the Summary of Findings table"),
-          htmltools::p(class = "pma-card-subtitle",
-                       EDU_COPY$multi_outcome$save_intro),
-          shiny::uiOutput("autosave_status"),
-          # Returns to Step 2 and clears everything belonging to this outcome
-          # (app.R's begin_new_outcome()).
-          pma_add_next_outcome_button(),
+          # Banking, and starting the next outcome, are Step 4's business now.
+          # A "Saved for the Summary of Findings table" section used to end this
+          # tab, explaining the automatic save and offering "+ Add next
+          # outcome". It said all of that a step away from the table it was
+          # about, where the same list, the same count and the same button now
+          # sit beside the rows they describe. The save itself is unchanged --
+          # it never depended on this UI (see the auto-save observer below).
 
           # The only Next in Step 3 that leaves the step (every other one
           # just moves to the following sub-tab, which stays free), so it is
@@ -1704,18 +1701,24 @@ step3_server <- function(input, output, session, state) {
 
   # Read-only threshold display inside RoB / Inconsistency / Imprecision.
   #
-  # `detail = FALSE` prints the head line alone. The equivalence block below it
-  # says what the absolute threshold becomes on the analysis scale in each
-  # direction, and which of the two conversions is exact - a derivation, not an
-  # answer, on every tab but one. Risk of Bias compares two pooled estimates
-  # against the band and Inconsistency reads a zone tally the algorithm has
-  # already computed; on neither does a reviewer do anything with the numbers.
+  # `detail = FALSE` prints the head line alone, and all three domains take it
+  # as of 0.5.1. The equivalence block below it says what the absolute
+  # threshold becomes on the analysis scale in each direction, and which of the
+  # two conversions is exact: a derivation, not an answer. Risk of Bias
+  # compares two pooled estimates against the band and Inconsistency reads a
+  # zone tally the algorithm has already computed; on neither does a reviewer
+  # do anything with the numbers.
   #
-  # `detail = TRUE` is Imprecision, where they ARE operative: Core GRADE 2's
-  # two-level rule tests the confidence interval against the important-benefit
-  # AND important-harm thresholds by eye, so both bounds have to be on screen -
-  # and the residual-asymmetry sentence with them, because by construction only
-  # one of the two conversions is exact on the absolute scale.
+  # Imprecision used to pass `detail = TRUE`, on the argument that Core GRADE
+  # 2's two-level rule tests the interval against the important-benefit AND
+  # important-harm thresholds by eye, so both bounds and the residual-asymmetry
+  # caveat had to be on screen. That is true of the RULE and was still wrong
+  # for this BOX: `output$impre_evaluation` right below already renders the
+  # interval against the thresholds and states the verdict, so the box was
+  # showing a reviewer the arithmetic behind an answer they were about to be
+  # given. Three tabs, three identical boxes, is also one less thing to read.
+  # `detail` stays a parameter because the argument for the long form is about
+  # a specific tab and could win again.
   #
   # The trailing "change it in the Configuration tab" sentence is now the tab's
   # own name, as a link. One id prefix per domain: all seven tab panels live in
@@ -1754,7 +1757,7 @@ step3_server <- function(input, output, session, state) {
   output$threshold_block_inco  <-
     shiny::renderUI(.render_threshold_readonly("inco",  detail = FALSE))
   output$threshold_block_impre <-
-    shiny::renderUI(.render_threshold_readonly("impre", detail = TRUE))
+    shiny::renderUI(.render_threshold_readonly("impre", detail = FALSE))
   shiny::outputOptions(output, "threshold_block_rob",   suspendWhenHidden = FALSE)
   shiny::outputOptions(output, "threshold_block_inco",  suspendWhenHidden = FALSE)
   shiny::outputOptions(output, "threshold_block_impre", suspendWhenHidden = FALSE)
@@ -2154,15 +2157,13 @@ step3_server <- function(input, output, session, state) {
                                     "Imprecision")
 
     # --- Publication bias ---
-    # The wizard needs each node to distinguish "not reached yet" from "the
-    # reviewer looked and has no opinion", so the two optional widgets carry
-    # an explicit deferral VALUE rather than the empty string. Neither value
-    # reaches grade_meta(): both mean "let the algorithm decide", which is
-    # what NULL means to assess_pubias().
+    # The Q3 select needs to distinguish "not reached yet" from "the reviewer
+    # looked and accepts the test", so it carries an explicit VALUE rather
+    # than the empty string. That value does not reach grade_meta(): it means
+    # "let the algorithm decide", which is what NULL means to assess_pubias().
     pubias_si <- if (nzchar(input$pubias_small_industry %||% "")) input$pubias_small_industry else NULL
     pubias_un <- if (nzchar(input$pubias_unpublished %||% "")) input$pubias_unpublished else NULL
     pubias_rc <- if (nzchar(input$pubias_registry_complete %||% "")) input$pubias_registry_complete else NULL
-    if (identical(pubias_rc, STEP3_PUBIAS_DEFER)) pubias_rc <- NULL
     # Visual override of Egger's test: v0.4.0 requires pubias_rationale
     # whenever pubias_funnel_asymmetry is supplied. "egger" is the explicit
     # "accept the automated test" answer and is NOT an override, so it must
@@ -2204,8 +2205,10 @@ step3_server <- function(input, output, session, state) {
       # rob_inflation_threshold is deliberately NOT passed. The app used to
       # expose it as a slider; it is a pmatools convention rather than a Core
       # GRADE 4 rule, and a reviewer had no basis on which to move it. The
-      # package default of 0.10 (R/domain_rob.R) now applies unconditionally,
-      # and export_bundle() writes the same 0.10 into the bundled analysis.R.
+      # package default PMA_ROB_INFLATION_THRESHOLD (R/domain_rob.R) now
+      # applies unconditionally, and export_bundle() writes that same value
+      # into the bundled analysis.R. Not naming the number here is the point:
+      # it moved from 0.10 to 0.20 in 0.5.1 and the app followed for free.
       small_values             = sv,
       indirectness             = indir_arg,
       indirectness_rationale   = indir_rationale,
@@ -2252,9 +2255,11 @@ step3_server <- function(input, output, session, state) {
       pubias_funnel_asymmetry  = pubias_fa,
       pubias_rationale         = pubias_rationale,
       pubias_unpublished       = pubias_un,
-      # Q1: only "yes" (denied) is forwarded to the package short-circuit;
-      # "no" (suspected) is handled by a post-override below so it forces
-      # rate-down regardless of Q2-Q5.
+      # Only "yes" is forwarded, because only "yes" decides anything: it is
+      # the pmatools short-circuit assess_pubias() reads. "no" means "carry on
+      # down Fig 5", which is what NULL already means to the package, and it
+      # is sent as NULL rather than "no" so the domain note does not report an
+      # answered registry question the flowchart then ignored.
       pubias_registry_complete = if (identical(pubias_rc, "yes")) "yes" else NULL,
       outcome_name = state$outcome_name %||% "Outcome"
     )
@@ -2341,21 +2346,16 @@ step3_server <- function(input, output, session, state) {
     }
 
     if (!is.null(g)) {
-      # Q1 = "no" (reporting bias suspected) forces rate-down 1 regardless
-      # of Q2-Q5. Run BEFORE pubias_ov so the manual override below can still
-      # win if the user explicitly sets it.
-      if (identical(pubias_rc, "no")) {
-        idx <- which(g$domain_assessments$domain == "Publication bias")
-        if (length(idx)) {
-          g$domain_assessments$judgment[idx]  <- "serious"
-          g$domain_assessments$auto[idx]      <- FALSE
-          g$domain_assessments$downgrade[idx] <- -1L
-          g$domain_assessments$notes[idx] <- paste0(
-            "Q1: reporting bias suspected based on the overall judgment ",
-            "of the listed conditions; rate down 1 (serious) regardless ",
-            "of Q2-Q5. | ", g$domain_assessments$notes[idx])
-        }
-      }
+      # "Reporting bias is plausible" used to be rewritten here into a forced
+      # rate-down 1, overriding whatever the Fig 5 nodes had just decided.
+      # Deleted in 0.5.1: Core GRADE 4 Fig 5 has no such rule, and the app was
+      # the only thing that had one - a reviewer who thought reporting bias
+      # plausible AND then answered the funnel question found the funnel
+      # answer had counted for nothing. Suspecting reporting bias is now a
+      # reason to go on and look, which is what the remaining nodes are for.
+      # A reviewer who wants the rating regardless still has the scalar
+      # override below, which asks for a written rationale.
+      #
       # Final scalar publication-bias override (app-level; recorded in the
       # notes in the same "Manual override (<judgment>): <rationale>"
       # format the vendored make_domain_row() uses).
@@ -2609,23 +2609,21 @@ step3_server <- function(input, output, session, state) {
   # over the fixed set of domain keys, and guard against the 0 a freshly
   # rendered actionLink reports.
   #
-  # Two prefixes because two messages on the Final certainty tab name the same
-  # domains at the same time - the incomplete banner at the top and the
-  # auto-save line at the bottom - and both are in the DOM at once, so one set
-  # of ids would collide.
-  for (.jump_prefix in c("cert_jump_", "autosave_jump_")) {
-    for (.domain_key in names(PMA_DOMAIN_LABELS)) {
-      local({
-        key <- .domain_key
-        link_id <- paste0(.jump_prefix, key)
-        shiny::observeEvent(input[[link_id]], {
-          if (!isTRUE((input[[link_id]] %||% 0L) > 0L)) return()
-          shiny::updateTabsetPanel(session, "grade_tabs",
-                                   selected = PMA_DOMAIN_LABELS[[key]])
-          session$sendCustomMessage("scroll_top", list())
-        }, ignoreInit = TRUE)
-      })
-    }
+  # One prefix. There used to be two, because the auto-save line at the end of
+  # this tab named the same domains as the incomplete banner at the top and
+  # both were in the DOM at once, so one set of ids would have collided. That
+  # line is gone (see step3_ui()) and the banner is alone again.
+  for (.domain_key in names(PMA_DOMAIN_LABELS)) {
+    local({
+      key <- .domain_key
+      link_id <- paste0("cert_jump_", key)
+      shiny::observeEvent(input[[link_id]], {
+        if (!isTRUE((input[[link_id]] %||% 0L) > 0L)) return()
+        shiny::updateTabsetPanel(session, "grade_tabs",
+                                 selected = PMA_DOMAIN_LABELS[[key]])
+        session$sendCustomMessage("scroll_top", list())
+      }, ignoreInit = TRUE)
+    })
   }
 
   # Banner on the Final certainty tab while domains remain unconfirmed.
@@ -2810,84 +2808,6 @@ step3_server <- function(input, output, session, state) {
   })
   shiny::outputOptions(output, "incon_subgroup_relevant",
                        suspendWhenHidden = FALSE)
-
-  # ----- Which Core GRADE 2 Fig 4 branch the analysis took ----------------
-  # Read from the STRUCTURED facts the assessor records ("fig4_path" and
-  # "ois_used", R/domain_imprecision.R), not by regex over the prose note.
-  # The facts exist precisely so a caller can branch on the path without
-  # re-parsing sentences, and the old sub("^.*Fig 4 path: ", "", notes) chain
-  # would have silently produced the wrong headline the first time the note
-  # wording moved.
-  output$impre_branch <- shiny::renderUI({
-    g <- grade_obj()
-    if (is.null(g)) {
-      return(htmltools::p(
-        class = "pma-card-subtitle", style = "font-style: italic;",
-        "Run the analysis and set a threshold to see which branch applies."))
-    }
-    f <- domain_fact_table("Imprecision")
-    .fact_value <- function(key) {
-      if (is.null(f) || !"key" %in% names(f)) return("")
-      v <- f$value[f$key == key]
-      if (!length(v) || is.na(v[1])) "" else as.character(v[1])
-    }
-    path <- .fact_value("fig4_path")
-    if (!nzchar(path)) {
-      return(htmltools::div(
-        style = paste0(
-          "padding: 0.6rem 0.85rem; background: #f5f5f5; ",
-          "border-left: 4px solid #6b7280; margin: 0.5rem 0; ",
-          "font-size: 0.85rem;"),
-        htmltools::p(style = "margin: 0;",
-          htmltools::strong("Figure 4 was not applied."),
-          " The imprecision judgment was supplied manually through the ",
-          "override below, which bypasses the automated assessment.")))
-    }
-    crosses  <- grepl("^CI crosses", path)
-    ois_used <- identical(.fact_value("ois_used"), "yes")
-    head <- if (crosses) {
-      "Yes branch - the CI crosses the chosen threshold."
-    } else if (ois_used) {
-      "No branch, implausibly large effect - the OIS approach was applied."
-    } else {
-      "No branch, moderate effect - do not rate down."
-    }
-    detail <- if (crosses) {
-      paste0("Sample size is NOT considered on this path: the Optimal ",
-             "Information Size is not consulted, and any OIS figures in the ",
-             "evaluation below are reported for information only. Rate down ",
-             "one level; two only if the CI crosses two thresholds ",
-             "(important benefit and important harm), or if the most ",
-             "appropriate plain language summary warrants 'may' rather than ",
-             "'likely'. The second condition is a reviewer judgment and is ",
-             "not assessed automatically - record it through the override ",
-             "below.")
-    } else if (ois_used) {
-      paste0("This is the only route to the OIS: the CI stays clear of the ",
-             "threshold AND the effect is implausibly large. The participant ",
-             "count therefore did drive the judgment. Figure 4 compares the ",
-             "OIS against participants, not events.")
-    } else {
-      paste0("Figure 4 stops here. A moderate effect whose CI stays clear of ",
-             "the threshold does not rate down, and sample size never enters ",
-             "the decision: the OIS is reached only when the effect is ",
-             "implausibly large.")
-    }
-    color <- if (crosses) "#c07020" else if (ois_used) "#0f172a" else "#208050"
-    htmltools::div(
-      style = sprintf(paste0(
-        "padding: 0.6rem 0.85rem; background: #f5f5f5; ",
-        "border-left: 4px solid %s; margin: 0.5rem 0; font-size: 0.85rem;"),
-        color),
-      htmltools::p(style = "margin: 0;", htmltools::strong(head)),
-      htmltools::p(style = "margin: 0.25rem 0 0;", detail),
-      htmltools::p(
-        style = paste0("margin: 0.35rem 0 0; font-family: monospace; ",
-                       "font-size: 0.78rem; color: #444;"),
-        path)
-    )
-  })
-  shiny::outputOptions(output, "impre_branch", suspendWhenHidden = FALSE)
 
   # ----- Indirectness subdomain table (pmatools indirectness_table) -------
   # Surfaced deliberately: it is the only rendering of exactly what the app
@@ -3215,12 +3135,17 @@ step3_server <- function(input, output, session, state) {
           paste0("It is unlikely when unpublished studies were found and ",
                  "agree, or prospective registration is the field standard ",
                  "with no discrepancies.")),
+        # Two answers, and only "Yes" decides anything. "No" used to force
+        # rate down 1 on its own, which is a rule Core GRADE 4 Fig 5 does not
+        # have; it now means what a third "leave it to the Figure 5 nodes"
+        # option used to mean, so that option is gone with the rule.
         shiny::radioButtons("pubias_registry_complete",
           "Overall, does the situation argue against reporting bias?",
           choices = c(
-            "No - reporting bias is plausible (rate down 1)"  = "no",
-            "Yes - reporting bias is unlikely (no rate down)" = "yes",
-            "Leave it to the Figure 5 nodes"                  = STEP3_PUBIAS_DEFER
+            "No - reporting bias is plausible; go on to the Figure 5 nodes"
+              = "no",
+            "Yes - reporting bias is unlikely; do not rate down"
+              = "yes"
           ),
           selected = character(0), inline = FALSE)
       ))
@@ -3447,6 +3372,30 @@ step3_server <- function(input, output, session, state) {
                   (sign(te_orig) != sign(te_adj)) &&
                   (abs(te_orig) > 1e-6) && (abs(te_adj) > 1e-6)
 
+    # The same 20% exaggeration question the Risk of bias tab asks of the low
+    # risk of bias subset, asked here of the trim-and-fill adjustment. It is
+    # material for the funnel-asymmetry question above and NOTHING else: Core
+    # GRADE 4 Fig 5 has no trim-and-fill node, so the arithmetic and the
+    # wording both live in the package (R/pubias_trimfill.R), where a test can
+    # hold them to that.
+    # Step 2 makes small_values required, so it is set by the time a fitted
+    # analysis exists; anything else is normalised to NULL rather than passed
+    # on, because the package function rejects a value it does not know and an
+    # aborting renderUI would replace this panel with a stack trace.
+    sv_direction <- if (identical(state$small_values, "desirable") ||
+                        identical(state$small_values, "undesirable")) {
+      state$small_values
+    } else {
+      NULL
+    }
+    inflation <- .pubias_trimfill_inflation(
+      te_original  = te_orig,
+      te_adjusted  = te_adj,
+      small_values = sv_direction)
+    inflation_line <- .pubias_trimfill_line(
+      inflation, te_original = te_orig, te_adjusted = te_adj,
+      format_te = fmt)
+
     htmltools::div(
       style = paste0(
         "padding: 0.6rem 0.85rem; background: #f9f9f9; ",
@@ -3461,7 +3410,12 @@ step3_server <- function(input, output, session, state) {
         sprintf("Original pooled TE.random  = %s", fmt(te_orig))),
       htmltools::p(style = "margin: 0;",
         sprintf("Adjusted pooled TE.random = %s%s", fmt(te_adj),
-                if (sign_flips) "  [direction flips]" else ""))
+                if (sign_flips) "  [direction flips]" else "")),
+      htmltools::p(
+        style = paste0(
+          "margin: 0.4rem 0 0; padding-left: 0.5rem; border-left: 3px solid ",
+          if (isTRUE(inflation$exaggerated)) "#c07020" else "#208050", ";"),
+        inflation_line)
     )
   })
 
@@ -3867,8 +3821,9 @@ step3_server <- function(input, output, session, state) {
   # read: while the user is on Step 3, the Step 2 body (and therefore
   # input$experimental_label / input$control_label) does not exist.
   #
-  # The title suffix mirrors what export_bundle.R writes for each stratified
-  # plot, so the on-screen title and the exported one agree.
+  # The title these prefill is what the export carries too: the app hands the
+  # panel's values to export_bundle(), whose own "(stratified by RoB)" default
+  # only fires when a title reaches it blank.
   .forest_label_defaults <- shiny::reactive({
     iv  <- state$arm_e %||% ""
     ct  <- state$arm_c %||% ""
@@ -3876,11 +3831,23 @@ step3_server <- function(input, output, session, state) {
     list(title = state$outcome_name %||% "", label_e = iv, label_c = ct,
          favors_left = fav$left, favors_right = fav$right)
   })
+  # The suffix starts on its OWN LINE, not after a space: the outcome name plus
+  # the stratification ran wide enough that the wrapped title reached down into
+  # the column headers (Events / N / OR (95% CI) / Weight). plot_forest()
+  # honours "\n" as an explicit break (SPEC.md 4.3), and the Title field is a
+  # textarea for the same reason - an <input type="text"> would strip it.
+  #
+  # Publication bias gets NO suffix. Its plot is a two-group figure whose
+  # subgroup heading already reads "available" / "missing results", so the
+  # suffix said the same thing a second time while costing a title line.
+  #
+  # Indirectness still appends on the same line: it has not been reported as
+  # overlapping, and its heading is shorter. Move it to "\n(" as well if it is.
   .forest_title_suffix <- c(
-    rob    = " (stratified by Risk of Bias)",
+    rob    = "\n(stratified by Risk of Bias)",
     incon  = "",
     indir  = " (stratified by Indirectness)",
-    pubias = " (available vs missing results)"
+    pubias = ""
   )
   for (.pfx in names(.forest_title_suffix)) {
     # local() binds the prefix per iteration; without it all four panels would
@@ -3923,38 +3890,10 @@ step3_server <- function(input, output, session, state) {
     reasons
   })
 
-  # The one line that reports what happened, beside "+ Add next outcome" at
-  # the end of the tab. There is nothing to press: it either names the row
-  # that was banked, or names what is still in the way.
-  output$autosave_status <- shiny::renderUI({
-    if (is.null(state$ma) || is.null(grade_obj())) {
-      return(htmltools::p(
-        class = "pma-card-subtitle",
-        "Not saved yet: run the analysis in Step 2 and set a decision threshold."))
-    }
-    keys <- pma_unconfirmed_domain_keys(domain_confirmed())
-    if (length(keys)) {
-      # Its own id prefix: cert_incomplete_banner is on this same tab with the
-      # same domain names, and two actionLinks cannot share an input id.
-      return(htmltools::p(
-        class = "pma-card-subtitle",
-        pma_domain_jump_links(
-          keys, "autosave_jump_",
-          before = "Saved once every domain is confirmed. Still open: ",
-          after = ".")))
-    }
-    key <- .save_key()
-    if (is.null(key)) {
-      return(htmltools::p(
-        class = "pma-card-subtitle",
-        "Name this outcome in Step 2 - a saved row is keyed by its name."))
-    }
-    htmltools::p(
-      class = "pma-card-subtitle",
-      htmltools::HTML(sprintf("Saved automatically as <strong>%s</strong>.",
-                              htmltools::htmlEscape(key))))
-  })
-  shiny::outputOptions(output, "autosave_status", suspendWhenHidden = FALSE)
+  # output$autosave_status used to render a line here reporting what the
+  # auto-save had done, at the end of the Final certainty tab. Its section is
+  # gone (see step3_ui()); the same answer is on Step 4, where the saved rows
+  # are listed and counted beside the table they build.
 
   # Signature of the dataset currently loaded in Step 1. Used to stamp each
   # banked outcome so Step 4 can flag rows that came from a different dataset
@@ -4215,7 +4154,8 @@ step3_server <- function(input, output, session, state) {
       changed <- FALSE
       if (any(!is.na(rt$rob))) {
         new_rob <- rt$rob[idx]
-        cur_rob <- d$rob %||% rep(NA_character_, nrow(d))
+        # tibble's `$` warns on an absent column, so ask names() instead.
+        cur_rob <- if ("rob" %in% names(d)) d$rob else rep(NA_character_, nrow(d))
         if (!identical(as.character(cur_rob), new_rob)) {
           d$rob <- new_rob
           changed <- TRUE
@@ -4223,7 +4163,11 @@ step3_server <- function(input, output, session, state) {
       }
       if (any(!is.na(rt$indirectness))) {
         new_indir <- rt$indirectness[idx]
-        cur_indir <- d$indirectness %||% rep(NA_character_, nrow(d))
+        cur_indir <- if ("indirectness" %in% names(d)) {
+          d$indirectness
+        } else {
+          rep(NA_character_, nrow(d))
+        }
         if (!identical(as.character(cur_indir), new_indir)) {
           d$indirectness <- new_indir
           changed <- TRUE

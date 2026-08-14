@@ -85,6 +85,27 @@ pma_pmatools_version <- function() {
   "(vendored; version unknown)"
 }
 
+# The same version as a bare number, for a citation.
+#
+# pma_pmatools_version() returns a PROVENANCE string: its " (vendored)" marker
+# says the run came from staged sources rather than an installed package, which
+# is exactly what the Step 2 environment block and the app footer need. A
+# citation is not provenance. Step 4's "How to cite" card is copied into someone
+# else's manuscript, where "Version 0.5.1 (vendored)." lands in their reference
+# list and reads as part of the version number. So the marker is stripped here
+# and pma_pmatools_version() is left alone -- its two callers still need it.
+#
+# NULL when the version is genuinely unknown, so the caller drops the version
+# clause rather than printing "(vendored; version unknown)" into a bibliography.
+# A citation without a version is incomplete; that string is misinformation.
+# The guard is "starts with a digit" because it catches the unknown sentinel
+# (which starts with "(") without having to spell the sentinel out twice.
+pma_pmatools_version_number <- function() {
+  version <- sub(" \\(vendored\\)$", "", pma_pmatools_version())
+  if (!grepl("^[0-9]", version)) return(NULL)
+  version
+}
+
 # ----- W4-A output gate: shared confirmation-domain labels -----
 # Named after the keys of the state$domain_confirmed logical vector set in
 # step3_server(); used by both Step 3 (banner/badge) and Step 4 (export gate).
@@ -345,7 +366,10 @@ pma_bank_export_material <- function(g, display = list(),
 # overwritten: it describes the measurement scale within one analysis, and here
 # the column has to name the analysis.
 pma_export_data <- function(outcomes) {
-  outcomes <- pma_outcomes_list(outcomes)
+  # Rated only: a not-reported outcome carries no data by construction, and
+  # naming it in data_long.csv's `outcome` column would tell the bundled
+  # analysis.R to pool an outcome with no rows.
+  outcomes <- pma_rated_outcomes(outcomes)
   if (length(outcomes) == 0L) return(NULL)
   frames <- list()
   for (nm in names(outcomes)) {
@@ -408,7 +432,11 @@ pma_bind_rows_union <- function(frames) {
 PMA_MA_UNIFORM_ARGS <- c("method.tau", "random", "common", "incr")
 
 pma_set_ma_args <- function(outcomes) {
-  outcomes <- pma_outcomes_list(outcomes)
+  # Rated only. `outcomes` here becomes run_ma_multi(outcomes = ) in the
+  # generated analysis.R, and a not-reported outcome has nothing to run: the
+  # script declares it with add_not_reported() after grade_meta_multi()
+  # instead (.not_reported_block(), R/export_bundle_multi.R).
+  outcomes <- pma_rated_outcomes(outcomes)
   per_outcome_value <- function(f) {
     out <- lapply(outcomes, f)
     out[!vapply(out, is.null, logical(1))]
@@ -491,10 +519,17 @@ pma_outcome_grade_args <- function(g) {
 # shape as a three-outcome one and a reader learns it once.
 pma_export_set <- function(outcomes, primary = character(0)) {
   outcomes <- pma_outcomes_list(outcomes)
-  if (length(outcomes) == 0L) {
+  # Not-reported rows travel in `outcomes` and `order` - they are rows of the
+  # Summary of Findings and get their own numbered directory - but a bundle of
+  # nothing but them has no analysis, no data and no script to write, and the
+  # combined table would have no effect measure to head its columns.
+  if (length(pma_rated_outcomes(outcomes)) == 0L) {
     stop("pma_export_set: at least one rated outcome is required")
   }
-  grade_args <- lapply(outcomes, pma_outcome_grade_args)
+  # Rated only, for the same reason as pma_set_ma_args(): these become the
+  # grade_meta_multi(per_outcome = ) list, and grade_meta() is never called for
+  # an outcome nobody reported.
+  grade_args <- lapply(pma_rated_outcomes(outcomes), pma_outcome_grade_args)
   .new_pmatools_set(
     outcomes    = outcomes,
     order       = names(outcomes),
@@ -852,7 +887,8 @@ pma_arg_spec <- function(value) {
 PMA_GRADE_ARGS_EXPORTED <- c(
   # rob_inflation_threshold is off this list as of 0.5.1: the app no longer
   # sets it, so it could never be emitted, and export_bundle() already writes
-  # the package default of 0.10 into the bundled analysis.R.
+  # the package default (PMA_ROB_INFLATION_THRESHOLD) into the bundled
+  # analysis.R.
   "rob", "rob_rationale", "rob_some_concerns",
   "small_values",
   "indirectness", "indirectness_rationale", "indirectness_subdomains",
@@ -921,12 +957,29 @@ pma_stale_warning_banner <- function(n_stale) {
 }
 
 # Normalizes whatever is in state$outcomes into a valid named list.
+#
+# Two classes get through, not one. A row the reviewer declared not reported
+# (Core GRADE 6) is a `pmatools_not_reported`, which deliberately does NOT
+# inherit "pmatools" so that no consumer of a rated object can be handed one by
+# accident (see R/not_reported.R). Every filter it meets therefore has to name
+# it, and this is the first: while it did not, an outcome added as not reported
+# vanished from state$outcomes the moment anything read the list back.
 pma_outcomes_list <- function(outcomes) {
   if (is.null(outcomes) || !is.list(outcomes) || length(outcomes) == 0) {
     return(list())
   }
-  keep <- vapply(outcomes, inherits, logical(1), "pmatools")
+  keep <- vapply(outcomes, function(g) {
+    inherits(g, "pmatools") || .is_not_reported(g)
+  }, logical(1))
   outcomes[keep]
+}
+
+# The rated subset of a saved-outcome list: everything the app can pool, plot
+# or re-run. `.rated_outcomes()` is pmatools'; this wrapper exists so callers
+# read one vocabulary (`pma_outcomes_list()` then `pma_rated_outcomes()`) and
+# so the normalisation cannot be forgotten in front of it.
+pma_rated_outcomes <- function(outcomes) {
+  .rated_outcomes(pma_outcomes_list(outcomes))
 }
 
 # Clock time a row was last written, as the reviewer reads it. Empty string
@@ -947,23 +1000,33 @@ pma_outcome_summary_df <- function(outcomes, signature = NULL) {
     return(data.frame(name = character(0), k = character(0),
                       effect = character(0), certainty = character(0),
                       updated = character(0), stale = logical(0),
+                      not_reported = logical(0),
                       stringsAsFactors = FALSE))
   }
+  # A not-reported row has no analysis behind it, so k / effect / certainty
+  # would all read "-" and look like a rated row whose numbers failed to
+  # compute. It says what it is instead, in the one line the list shows.
   data.frame(
     name = names(outcomes),
     k = vapply(outcomes, function(g) {
+      if (.is_not_reported(g)) return("0")
       k <- g$meta$k %||% NA_integer_
       if (is.na(k)) "-" else as.character(k)
     }, character(1)),
     effect = vapply(outcomes, function(g) {
+      if (.is_not_reported(g)) return(.not_reported_label(g))
       # format_effect() is pmatools public API as of 0.5.0 (the dot-prefixed
       # .format_effect() is only a back-compat alias) -- keep the public name.
       out <- tryCatch(format_effect(g$meta, g$outcome_type), error = function(e) NA_character_)
       if (is.null(out) || is.na(out)) "-" else gsub("\n", "; ", out)
     }, character(1)),
-    certainty = vapply(outcomes, function(g) g$certainty %||% "-", character(1)),
+    certainty = vapply(outcomes, function(g) {
+      if (.is_not_reported(g)) return(NOT_REPORTED_CERTAINTY)
+      g$certainty %||% "-"
+    }, character(1)),
     updated = vapply(outcomes, pma_outcome_updated_label, character(1)),
     stale = unname(pma_outcomes_stale(outcomes, signature)),
+    not_reported = vapply(outcomes, .is_not_reported, logical(1)),
     stringsAsFactors = FALSE, row.names = NULL
   )
 }
@@ -1062,12 +1125,14 @@ pma_saved_outcomes_ui <- function(outcomes, delete_input_id = "outcome_delete",
   htmltools::div(style = "margin-top: 0.5rem;", rows)
 }
 
-# "+ Add next outcome". Shown at the bottom of Step 4's combined Summary of
-# Findings card and at the end of Step 3's Final certainty tab, so the reviewer
-# can start the next outcome straight from either place. Both
-# copies write to the same input id via Shiny.setInputValue (rather than being
-# two actionButtons sharing an id), because only one step body is ever mounted
-# at a time and this keeps that assumption out of the code.
+# "+ Add next outcome", at the bottom of Step 4's combined Summary of Findings
+# card: straight from the finished table to the next row of it. It used to be
+# rendered at the end of Step 3's Final certainty tab as well, which is why it
+# writes to its input id via Shiny.setInputValue rather than being an
+# actionButton - two actionButtons cannot share an id, and the two copies had
+# to drive one observer. There is one call site now, but the mechanism stays:
+# an actionButton would make the id an assumption about there being exactly
+# one, and this button is the kind that gets rendered twice again.
 pma_add_next_outcome_button <- function(input_id = "add_next_outcome",
                                         style = NULL) {
   htmltools::tags$button(
@@ -1080,6 +1145,123 @@ pma_add_next_outcome_button <- function(input_id = "add_next_outcome",
     "+ Add next outcome")
 }
 
+# ----- Adding an outcome nobody reported ----------------------------------
+# Core GRADE 6 asks the Summary of Findings table to cover every outcome the
+# review prespecified, including the ones the evidence base turns out to be
+# silent on. Those have no data to map and no analysis to run, so "+ Add next
+# outcome" asks which kind is being added before it clears Step 2.
+#
+# The three ids below are written from hand-written JavaScript in the modals
+# and read by observers in app.R. Named constants because a typo on either
+# side is silent: nothing happens and there is no error to find.
+PMA_ADD_OUTCOME_ANALYSE_ID      <- "add_outcome_analyse"
+PMA_ADD_OUTCOME_NOT_REPORTED_ID <- "add_outcome_not_reported"
+PMA_NOT_REPORTED_SAVE_ID        <- "not_reported_save"
+
+# Full-width choice button. Shiny.setInputValue with priority "event" rather
+# than an actionButton for the reason pma_add_next_outcome_button() gives: a
+# modal is destroyed and rebuilt on every showing, and a rebuilt actionButton
+# reports 0 before it reports 1, which every observer then has to guard.
+.pma_choice_button <- function(input_id, title, detail) {
+  htmltools::tags$button(
+    type  = "button",
+    class = "btn btn-secondary",
+    style = paste("display: block; width: 100%; text-align: left;",
+                  "padding: 0.75rem 1rem; margin-bottom: 0.5rem;",
+                  "white-space: normal;"),
+    onclick = sprintf(
+      "Shiny.setInputValue('%s', Math.random(), {priority: 'event'})",
+      input_id),
+    htmltools::div(style = "font-weight: 600;", title),
+    htmltools::div(
+      style = paste("font-size: 0.82rem; font-weight: 400; margin-top: 0.2rem;",
+                    "color: hsl(var(--muted-foreground));"),
+      detail))
+}
+
+pma_add_outcome_choice_modal <- function() {
+  shiny::modalDialog(
+    title     = "Add the next outcome",
+    easyClose = TRUE,
+    htmltools::p(
+      class = "pma-card-subtitle",
+      "A Summary of Findings table covers every outcome the review ",
+      "prespecified, including those no included study reported ",
+      "(Core GRADE 6)."),
+    .pma_choice_button(
+      PMA_ADD_OUTCOME_ANALYSE_ID,
+      "Analyse it from the data",
+      paste0("Returns to Step 2 with the outcome name, direction, follow-up ",
+             "and every Step 3 answer cleared, ready for the next analysis.")),
+    .pma_choice_button(
+      PMA_ADD_OUTCOME_NOT_REPORTED_ID,
+      "Record it as not reported",
+      paste0("Adds a row saying the review looked for this outcome and found ",
+             "no usable data. No analysis, no effect estimate, no certainty ",
+             "rating.")),
+    footer = shiny::modalButton("Cancel"))
+}
+
+pma_not_reported_modal <- function() {
+  shiny::modalDialog(
+    title     = "Outcome not reported by any included study",
+    easyClose = TRUE,
+    shiny::textInput("not_reported_name", "Outcome name", width = "100%",
+                     placeholder = "e.g. Quality of life"),
+    shiny::textInput("not_reported_follow_up", "Follow-up (optional)",
+                     width = "100%", placeholder = "e.g. 12 months"),
+    shiny::textAreaInput(
+      "not_reported_reason", "Why nothing was reported (optional)",
+      width = "100%", rows = 2,
+      placeholder = paste0("Prespecified in the protocol; no included trial ",
+                           "measured it.")),
+    htmltools::p(
+      class = "pma-card-subtitle",
+      "The reason becomes a numbered footnote on the row."),
+    footer = htmltools::tagList(
+      shiny::modalButton("Cancel"),
+      htmltools::tags$button(
+        type    = "button",
+        class   = "btn btn-primary",
+        onclick = sprintf(
+          "Shiny.setInputValue('%s', Math.random(), {priority: 'event'})",
+          PMA_NOT_REPORTED_SAVE_ID),
+        "Add to the table")))
+}
+
+# Validate the "not reported" form and build the row it describes. Returns
+# list(ok = TRUE, name = , outcome = ) or list(ok = FALSE, message = ).
+#
+# Pure, and separate from the observer that calls it, because these are the
+# rules a reviewer actually meets and a Shiny observer is the one place this
+# app cannot test. `existing` is names(state$outcomes).
+pma_not_reported_entry <- function(name, follow_up = NULL, reason = NULL,
+                                   existing = character(0)) {
+  clean <- function(v) {
+    v <- trimws(as.character(v %||% "")[1L])
+    if (is.na(v) || !nzchar(v)) NULL else v
+  }
+  name <- clean(name)
+  if (is.null(name)) {
+    return(list(ok = FALSE, message = paste0(
+      "Name the outcome. Every row of the table, and every message about it, ",
+      "is keyed on its name.")))
+  }
+  if (name %in% as.character(existing %||% character(0))) {
+    # Same rule, and near enough the same words, as add_not_reported()'s own
+    # collision check - reached earlier, so the reviewer sees it in the form
+    # rather than as an abort from the table builder.
+    return(list(ok = FALSE, message = sprintf(paste0(
+      "There is already a saved outcome named \"%s\". An outcome is either ",
+      "rated or not reported, not both."), name)))
+  }
+  list(ok      = TRUE,
+       name    = name,
+       outcome = not_reported_outcome(name,
+                                      follow_up = clean(follow_up),
+                                      reason    = clean(reason)))
+}
+
 # GRADE certainty badge
 pma_certainty_badge <- function(label) {
   cls <- switch(tolower(label),
@@ -1087,6 +1269,9 @@ pma_certainty_badge <- function(label) {
     "moderate" = "grade-moderate",
     "low"      = "grade-low",
     "very low" = "grade-vlow",
+    # NOT_REPORTED_CERTAINTY. Named rather than left to fall through to the
+    # "low" default, which would colour an unrated outcome as a rated one.
+    "not rated" = "grade-unrated",
     "grade-low"
   )
   symbol <- switch(label,
@@ -1677,17 +1862,31 @@ pma_forest_display_panel <- function(prefix = NULL) {
     htmltools::tags$summary("Forest plot display"),
     htmltools::div(
       class = "pma-display-grid",
+      # A textarea, not a textInput. plot_forest() honours a newline in the
+      # title as an explicit line break (SPEC.md 4.3), and <input type="text">
+      # cannot carry one: the HTML value sanitisation algorithm strips CR/LF,
+      # so a break would be swallowed both when the user typed it and when the
+      # autofill below pushed the stratified default in - joining the suffix
+      # onto the outcome name with no separator at all. updateTextInput() and
+      # updateTextAreaInput() send the same message, so pma_autofill_text()
+      # drives this field unchanged.
       htmltools::div(
         class = "pma-span-4",
-        shiny::textInput(labels[["title"]], "Title", value = "", width = "100%")),
+        shiny::textAreaInput(labels[["title"]], "Title (line breaks honoured)",
+                             value = "", rows = 2, width = "100%")),
 
       shiny::textInput(labels[["label_e"]], "Intervention label", value = "", width = "100%"),
       shiny::textInput(labels[["label_c"]], "Control label",      value = "", width = "100%"),
       shiny::textInput(labels[["favors_left"]],  "Favors (left)",  placeholder = "e.g., Favors Control", width = "100%"),
       shiny::textInput(labels[["favors_right"]], "Favors (right)", placeholder = "e.g., Favors CBT-I",   width = "100%"),
 
-      shiny::numericInput(.id("xlim_lo"), "x-min", value = NA, width = "100%"),
-      shiny::numericInput(.id("xlim_hi"), "x-max", value = NA, width = "100%"),
+      # Two per row rather than four: a row holding only x-min and x-max left
+      # the third and fourth columns empty, so the fields below it sat a column
+      # out of step with the ones above. .pma-span-2 fills the row instead.
+      htmltools::div(class = "pma-span-2",
+        shiny::numericInput(.id("xlim_lo"), "x-min", value = NA, width = "100%")),
+      htmltools::div(class = "pma-span-2",
+        shiny::numericInput(.id("xlim_hi"), "x-max", value = NA, width = "100%")),
 
       # Blank rows around the pooled result. Always visible: they matter most
       # once the per-arm columns are hidden (that is when the heterogeneity
@@ -1711,10 +1910,12 @@ pma_forest_display_panel <- function(prefix = NULL) {
                "these to move it up or down. Above: 0 removes the ",
                "blank row before the pooled result. Below: blank ",
                "= automatic.")),
-      shiny::numericInput(addrows[["above"]], "Blank rows above pooled result",
-                          value = 1, min = 0, step = 1, width = "100%"),
-      shiny::numericInput(addrows[["below"]], "Blank rows below pooled result",
-                          value = NA, min = 0, step = 1, width = "100%"),
+      htmltools::div(class = "pma-span-2",
+        shiny::numericInput(addrows[["above"]], "Blank rows above pooled result",
+                            value = 1, min = 0, step = 1, width = "100%")),
+      htmltools::div(class = "pma-span-2",
+        shiny::numericInput(addrows[["below"]], "Blank rows below pooled result",
+                            value = NA, min = 0, step = 1, width = "100%")),
 
       # One checkbox, not two: plot_forest() keeps show_n and show_events as
       # separate arguments (correct for a library), but there is no case where
@@ -2171,14 +2372,36 @@ pma_analysis_set_banner <- function(g) {
 # style (first author, "et al.", journal abbreviation, year), joined by the
 # caller when there is more than one.
 #
-# The DOI argument is gone. A hyperlink here bought nothing a reviewer could
-# not get from the citation itself, and it made the same paper render four
-# different ways across the wizard depending on which call site rendered it.
-pma_reference <- function(...) {
+# `url` links the whole citation, opening in a new tab so the reviewer does not
+# lose a half-filled wizard to a navigation. The argument came back in 0.5.1:
+# it had been removed on the grounds that the citation carried everything a
+# reviewer needed, but a reviewer who wants to check a domain against its
+# source paper wants the paper, not the ability to retype the citation into a
+# search box. What that removal was actually right about was the inconsistency
+# -- the same paper used to render four different ways -- so the link now hangs
+# off ONE map (.core_grade_doi_url() in R/utils.R) reached through ONE helper
+# (pma_domain_reference() below), and every Core GRADE tab renders alike.
+# Citation TEXT is unchanged and still carries no DOI.
+pma_reference <- function(..., url = NULL) {
+  citation <- if (is.null(url)) {
+    list(...)
+  } else {
+    # rel = "noopener" because target = "_blank" otherwise hands the opened
+    # page a live window.opener back into the app.
+    list(htmltools::a(href = url, target = "_blank", rel = "noopener", ...))
+  }
   htmltools::p(class = "pma-reference",
     style = "font-style: italic; color: hsl(var(--muted-foreground)); font-size: 0.85rem;",
-    "Reference: ", ...
+    "Reference: ", citation
   )
+}
+
+# The reference line for one rated domain. Takes the whole EDU_COPY entry, not
+# its `$ref` string, so the citation and the link are read from the same place
+# and a domain cannot end up pointing at another domain's paper.
+pma_domain_reference <- function(domain_copy) {
+  pma_reference(domain_copy$ref,
+                url = .core_grade_doi_url(domain_copy$core_grade))
 }
 
 # pma_how_collapse() was deleted here, with the five EDU_COPY `how` bodies it
@@ -2381,18 +2604,21 @@ pma_rare_event_banner <- function(alert) {
   )
 }
 
-# One Core GRADE 6 feature neither pmatools layout implements, plus what is
-# left of two others: pmatools now fills the arm-level columns of a continuous
-# outcome from the control arms (but only when the analysis carries them), and
-# now footnotes the numbers behind a downgrade (but only for the three domains
-# that record them). It lives in the table footer only: a second copy used to
-# sit under the table as page text, which said the same thing twice in two
-# different fonts, and the footer is the copy that travels into the .docx.
+# What is left of the Core GRADE 6 features pmatools does not fully implement.
+# Two of the three have since shrunk to caveats: pmatools now fills the
+# arm-level columns of a continuous outcome from the control arms (but only
+# when the analysis carries them), and now footnotes the numbers behind a
+# downgrade (but only for the three domains that record them). The third -
+# "\"Not reported\" rows: outcomes the evidence base did not measure are
+# absent from this table" - is gone entirely: the reviewer adds those rows from
+# Step 4's "+ Add next outcome" (pma_not_reported_modal()).
+#
+# It lives in the table footer only: a second copy used to sit under the table
+# as page text, which said the same thing twice in two different fonts, and the
+# footer is the copy that travels into the .docx.
 PMA_SOF_LIMITATIONS_NOTE <- paste0(
   "Not implemented in this table (Core GRADE 6 features pmatools does not yet ",
-  "produce). \"Not reported\" rows: outcomes the evidence base did not ",
-  "measure are absent from this table, so it is not the full list of outcomes ",
-  "important to patients. Arm-level values for continuous outcomes -- the ",
+  "produce). Arm-level values for continuous outcomes -- the ",
   "control-group value, the intervention-group value and the difference, ",
   "which Core GRADE 6 calls its preferred approach -- are now reported, ",
   "except where the analysis carries no arm-level means (a generic ",

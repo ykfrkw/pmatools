@@ -219,3 +219,39 @@ test_that("plot_trimfill_forest annotates the adjusted pooled estimate", {
   expect_true(inherits(tf, "meta"))
   expect_true(!is.null(tf$k0) && tf$k0 >= 1L)
 })
+
+# --- the k fact -------------------------------------------------------------
+test_that("the k fact records the bare count, with no question number", {
+  m <- make_symmetric()
+  g <- grade_meta(m, threshold_type = "null", small_values = "desirable")
+  facts <- domain_facts(g, "Publication bias")
+  k_row <- facts[facts$key == "k", ]
+
+  expect_equal(nrow(k_row), 1L)
+  expect_equal(k_row$value, as.character(as.integer(k_row$numeric)))
+  # "12 (Q2 threshold: 10)" was the old value, and a SoF footnote is the one
+  # place a reader meets it with no flowchart beside it to say what a "Q2" is.
+  expect_false(grepl("Q2", k_row$value, fixed = TRUE))
+  # The threshold itself is not lost: the prose note still states it.
+  pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
+  expect_match(pb$notes, ">= 10")
+})
+
+test_that("a path through the study-count node lights the edge out of it too", {
+  # That node is answered by counting, not by asking, so the edge is the only
+  # thing in the figure that says which branch the count chose. Lighting the
+  # node alone would draw the chart stopping at an unanswered question.
+  .flow <- function(g) {
+    f <- domain_facts(g, "Publication bias")
+    strsplit(f$value[f$key == "flow_path"], " ", fixed = TRUE)[[1L]]
+  }
+
+  big <- .flow(grade_meta(make_symmetric(), threshold_type = "null",
+                          small_values = "desirable"))
+  expect_true(all(c("pma-pubias-node-q2", "pma-pubias-edge-q2-yes") %in% big))
+
+  small <- .flow(grade_meta(make_small_meta(), pubias_unpublished = "no",
+                            threshold_type = "null",
+                            small_values = "desirable"))
+  expect_true(all(c("pma-pubias-node-q2", "pma-pubias-edge-q2-no") %in% small))
+})
