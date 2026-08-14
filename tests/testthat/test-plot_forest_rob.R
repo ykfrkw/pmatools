@@ -85,7 +85,7 @@ test_that(".normalise_rob accepts the Cochrane RoB2 labels documented in README"
   # levels, legacy aliases and free capitalisation all land in a stratum.
   expect_equal(
     pmatools:::.normalise_rob(c("L", "S", "H", "low", "some", "high",
-                                "no", "some_concerns", "serious",
+                                "no", "some_concerns", "very_serious",
                                 "moderate", "unclear", "very_serious",
                                 "SOME CONCERNS", " Low ")),
     c("low", "some", "high", "low", "some", "high",

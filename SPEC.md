@@ -348,7 +348,7 @@ Re-runs the analysis with a risk-of-bias subgroup and draws the per-stratum pool
 | `NULL` (default) | `low` / `some` / `high` / `unknown` — the four descriptive strata | `"Risk of bias"` |
 | `"low"` / `"high"` | `Low risk of bias` / `High risk of bias` — **two** groups | `"Risk of bias (as analysed)"` |
 
-The two-group fold is not a second implementation: `.rob_analysis_strata()` maps the plot strata back to the internal levels and asks **`.rob_high_levels()`**, the same internal `assess_rob()` consults for `rob_some_concerns`. The argument is named after `grade_meta(rob_some_concerns =)` for that reason, and a study on the high side of the plot is by construction a study on the high side of the rating. Unrated studies follow whichever side "some concerns" takes, matching `grade_meta()`, where an unrated study arrives as `"*"` and normalises to `some_concerns`.
+The two-group fold is not a second implementation: `.rob_analysis_strata()` maps the plot strata back to the internal levels and asks **`.rob_high_levels()`**, the same internal `assess_rob()` consults for `rob_some_concerns`. The argument is named after `grade_meta(rob_some_concerns =)` for that reason, and a study on the high side of the plot is by construction a study on the high side of the rating. Unrated studies follow whichever side "some concerns" takes, matching `grade_meta()`, where an unrated study arrives as `"*"` and normalises to `serious`.
 
 Both levels are always present in the factor, even when one is empty, so the subgroup rows do not reorder as the boundary moves.
 
@@ -467,7 +467,7 @@ grade_meta(
 | `"ratio"` | user gave an OR/RR ratio (e.g. 1.25); internally `log(threshold)` |
 | `"ard"` | absolute risk difference; converted to the ratio scale at `threshold_baseline` (or the pooled baseline risk) for OR/RR/HR/RoM |
 
-**Mandatory rationales (v0.4.0, breaking).** Supplying a scalar `rob`, an `indirectness` other than `"no"`, an `inconsistency`, an `imprecision`, a `pubias_funnel_asymmetry`, a manual `rating_target`, or any `rob_overrides` **without** the matching `*_rationale` argument is an error. Rationales are stored in the domain notes and surfaced by `sof_table()`, `grade_report()` and `export_bundle()`.
+**Mandatory rationales (v0.4.0, breaking).** Supplying a scalar `rob`, an `indirectness` other than `"not_serious"`, an `inconsistency`, an `imprecision`, a `pubias_funnel_asymmetry`, a manual `rating_target`, or any `rob_overrides` **without** the matching `*_rationale` argument is an error. Rationales are stored in the domain notes and surfaced by `sof_table()`, `grade_report()` and `export_bundle()`.
 
 **Return value additions (v0.5.0).** Beyond the v0.2 fields, the `pmatools` object carries:
 
@@ -550,16 +550,16 @@ is one input to the zone-based direction check, not a judgment on its own. It is
 
 ```
 Step 1: Are there important differences in point estimates AND limited CI overlap?
-  NO  → judgment = "no"  (do not rate down)
+  NO  → judgment = "not_serious"  (do not rate down)
   YES → continue to Step 2
 
 Step 2: Where do the point estimates fall relative to the clinical decision Threshold?
-  Majority on one side of Threshold → judgment = "no"  (do not rate down)
+  Majority on one side of Threshold → judgment = "not_serious"  (do not rate down)
   Substantial proportion on opposite sides → continue to Step 3
 
 Step 3: Is the opposite-sided inconsistency explained by a credible subgroup analysis?
-  YES → judgment = "no" + note "present subgroups separately"
-  NO  → judgment = "serious"
+  YES → judgment = "not_serious" + note "present subgroups separately"
+  NO  → judgment = "very_serious"
 ```
 
 The "clinical decision Threshold" in Step 2 is **null = 0 by default**, but **±Threshold** when `threshold` is supplied. This is the v0.2 enhancement.
@@ -569,8 +569,9 @@ The "clinical decision Threshold" in Step 2 is **null = 0 by default**, but **±
 **Path A — Scalar override:**
 
 ```r
-grade_meta(m, inconsistency = "serious")
-# → judgment = "serious", auto = FALSE
+grade_meta(m, inconsistency = "very_serious",
+           inconsistency_rationale = "Panel judgment")
+# → judgment = "very_serious", auto = FALSE
 ```
 
 **Path B — Manual flowchart (full BMJ-faithful):**
@@ -580,21 +581,21 @@ grade_meta(m,
   inconsistency_ci_diff            = "yes",
   inconsistency_threshold_side     = "majority_one_side"
 )
-# → judgment = "no"  (Step 2: majority on one side → do not rate down)
+# → judgment = "not_serious"  (Step 2: majority on one side → do not rate down)
 
 grade_meta(m,
   inconsistency_ci_diff            = "yes",
   inconsistency_threshold_side     = "opposite_sides",
   inconsistency_subgroup_explained = "no"
 )
-# → judgment = "serious"
+# → judgment = "very_serious"
 
 grade_meta(m,
   inconsistency_ci_diff            = "yes",
   inconsistency_threshold_side     = "opposite_sides",
   inconsistency_subgroup_explained = "yes"
 )
-# → judgment = "no" + note "present subgroups separately"
+# → judgment = "not_serious" + note "present subgroups separately"
 ```
 
 These paths are **unchanged from v0.1.0**.
@@ -627,9 +628,9 @@ Step 2 surrogate (3-zone tally, identical shape with and without a threshold):
   pct_max_zone  <- max(n_above, n_trivial, n_below) / k
   pct_each_side <- min(n_above, n_below) / k
 
-  if (pct_max_zone  >= ZONE_MAJORITY)  → "majority_one_side"    → "no"
-  else if (pct_each_side >= OPPOSITE_EACH) → "opposite_substantial" → "serious"
-  else                                  → "heterogeneous"       → "some_concerns"
+  if (pct_max_zone  >= ZONE_MAJORITY)  → "majority_one_side"    → "not_serious"
+  else if (pct_each_side >= OPPOSITE_EACH) → "opposite_substantial" → "very_serious"
+  else                                  → "heterogeneous"       → "serious"
 
   ZONE_MAJORITY = 0.80   # CINeMA (Nikolakopoulou 2020); Core GRADE 3 Fig 2
                          # says only "Majority are on one side of threshold"
@@ -652,14 +653,14 @@ Step 3:
 
 | Auto path outcome | Auto judgment | Manual flowchart equivalent |
 |---|---|---|
-| ci_diff_yes = FALSE | `"no"` | `"no"` (same) |
-| ci_diff_yes & majority_one_side | `"no"` | `"no"` (same) |
-| ci_diff_yes & opposite_substantial | `"serious"` | `"serious"` (same, modulo Step 3) |
-| ci_diff_yes & heterogeneous | `"some_concerns"` | — (no manual counterpart) |
+| ci_diff_yes = FALSE | `"not_serious"` | `"not_serious"` (same) |
+| ci_diff_yes & majority_one_side | `"not_serious"` | `"not_serious"` (same) |
+| ci_diff_yes & opposite_substantial | `"very_serious"` | `"very_serious"` (same, modulo Step 3) |
+| ci_diff_yes & heterogeneous | `"serious"` | — (no manual counterpart) |
 
 **The opposite-sided branch rates down two levels, and this departs from the source.** Core GRADE 3 (p5–6) says a compelling reason to rate down twice for inconsistency is "sufficiently unusual that it need not concern users of Core GRADE", and v0.5.0 read that as a cap. pmatools no longer does. The branch is not "studies disagree by more than the eye likes"; it is the narrow case where a substantial share of estimates sits **above** the chosen threshold and a substantial share sits **below** it, and no credible subgroup explains the split — the reviewer cannot say which direction the intervention works in. One level would leave a body of evidence at Moderate while the sign of the effect is unresolved, which overstates it. Core GRADE 3 calls the case unusual rather than impossible, and pmatools' 20%-each-side gate is exactly what makes it unusual: the ordinary disagreements land on `heterogeneous`, which still rates down one.
 
-`"heterogeneous"` (a scattered tally with no substantial opposite mass) stays at `"some_concerns"` (−1), and so does every risk-of-bias path — the cap that was removed here was never a general rule.
+`"heterogeneous"` (a scattered tally with no substantial opposite mass) stays at `"serious"` (−1), and so does every risk-of-bias path — the cap that was removed here was never a general rule.
 
 **Notes content (all signals shown for transparency):**
 
@@ -1349,10 +1350,12 @@ applied iteratively over the rows of a group; rows with `NA` in `n` / `mean` / `
 
 | Stratum | Accepted labels |
 |---|---|
-| `low` | `no`, `low`, `L`, `No concerns` |
+| `low` | `not_serious`, `no`, `low`, `L`, `No concerns` |
 | `some` | `some_concerns`, `some`, `S`, `M`, `*`, `moderate`, `unclear` (RoB 1), `Some concerns` |
-| `high` | `serious`, `very_serious`, `high`, `very high`, `H`, `C`, `Serious concerns`, `Critical concerns` |
+| `high` | `very_serious`, `extremely_serious`, `high`, `very high`, `H`, `C`, `Serious concerns`, `Critical concerns` |
 | `unknown` | `NA`, `""`, `?`, `unknown`, `na` |
+
+A bare `serious` is **rejected** here, not mapped: it named the `high` stratum up to v0.5.0 and names `some` from v0.5.1 (§5.0). Write `some_concerns` or `very_serious`.
 
 Anything else also becomes `"unknown"`, but **with a warning naming the offending labels** — it deliberately does not abort, because it feeds plots and a plot with an "unknown" stratum beats no plot. `arg` prefixes that warning so a caller can name its own argument (`rob_strata(v, arg = "my_app: rob column")`). Callers needing a hard failure check the result for `"unknown"` themselves.
 
@@ -1362,23 +1365,30 @@ Anything else also becomes `"unknown"`, but **with a warning naming the offendin
 
 ### 5.0 Domain judgment vocabulary
 
-Every domain returns one of **three** levels (v0.3+):
+The stored values **are** Core GRADE's words (v0.5.1). Core GRADE 1, verbatim: "We characterise limitations in each of these domains involved in rating down certainty as not serious; serious; very serious; or, rarely, extremely serious."
 
 ```r
-GRADE_LEVELS <- c("no", "some_concerns", "serious")   # 0, -1, -2
+GRADE_LEVELS <- c("not_serious", "serious", "very_serious", "extremely_serious")
+GRADE_DOWNGRADE <- c(not_serious = 0, serious = -1,
+                     very_serious = -2, extremely_serious = -3)
 ```
 
-The legacy spellings `"some"` and `"very_serious"` are accepted on input and normalised (`"some"` → `"some_concerns"`, `"very_serious"` → `"serious"`), but **`"some_concerns"` is what the objects, notes and tables contain**. Consumers matching on judgment strings must match the normalised form. Anything outside the accepted set aborts via `validate_grade_level()`.
-
-**Display vocabulary (single source, v0.5.1).** The internal levels are *not* what a reader sees. Core GRADE's own wording is held in `GRADE_LEVEL_SOURCE_WORDING` and rendered by **`.grade_level_wording()`** (`R/utils.R`), which is the **only** function permitted to turn a judgment into user-facing words:
-
-| internal level | displayed | downgrade |
+| value | Core GRADE wording | downgrade |
 |---|---|---|
-| `"no"` | not serious | 0 |
-| `"some_concerns"` | serious | −1 |
-| `"serious"` | very serious | −2 |
+| `"not_serious"` | not serious | 0 |
+| `"serious"` | serious | −1 |
+| `"very_serious"` | very serious | −2 |
+| `"extremely_serious"` | extremely serious | −3 |
 
-`evidence_profile()` calls it, and so do the Shiny app's domain badges, verdict lines and override menus. Note the trap it closes: the internal name `"serious"` is the source's **very serious** (−2), so a second hand-written mapping — which is what `evidence_profile()` and the app badge each used to carry — could and did print "Serious" for −1 in one place and for −2 in the other. A new renderer must call `.grade_level_wording()` rather than write a third `switch()`.
+**`"extremely_serious"` is manual only.** No assessor in the package emits it, and none may: Core GRADE describes no three-level downgrade in any of its flowcharts, and calls the level rare ("or, *rarely*, extremely serious"). `GRADE_LEVEL_AUTO_MAX` names the deepest level an automated path may produce (`"very_serious"`, −2), and `tests/testthat/test-grade-levels.R` asserts the invariant against every function in the namespace that calls `make_domain_row()` — not against a fixture sweep, which could only cover the branches it happens to reach. The level is reached through the scalar domain arguments (`rob =`, `inconsistency =`, `indirectness =`, `imprecision =`), each of which already requires its written rationale, and through the Shiny override menus (`pma_judgment_choices()`), which offer it on all five domain tabs. It is deliberately **not** offered on the app's "Other considerations" control, which stays 0 / −1 / −2: that control is not a Core GRADE domain and a −3 there would invent a rating the source does not describe.
+
+**Aliases.** `"no"` → `"not_serious"`, and `"some"` / `"some_concerns"` → `"serious"`. These are the spellings whose *meaning* did not move in the v0.5.1 rename, so they are accepted silently and permanently. **`"not_serious"` / `"serious"` / `"very_serious"` / `"extremely_serious"` are what the objects, notes and tables contain**; consumers matching on judgment strings must match the canonical form. Anything outside the accepted set aborts via `validate_grade_level()`.
+
+**A bare `"serious"` aborts, for one release.** Up to v0.5.0 `"serious"` was pmatools' internal name for the source's *very serious* (−2); from v0.5.1 it carries the source's own meaning (−1). Nothing about the spelling changed, so a script written against either release would keep running and report a **different certainty rating**. `.check_grade_level_input()` (`R/utils.R`) therefore refuses the string at every user-input boundary — the four scalar domain arguments, per-study `rob` / `indirectness` vectors, `rob_overrides` values and `rob_strata()` — with a message naming both readings and the spelling for each (`"some_concerns"` for −1, `"very_serious"` for −2, both unchanged in meaning since v0.5.0). The refusal is a temporary migration aid: it is to be deleted one release later, after which `"serious"` is simply the −1 level. `validate_grade_level(check_ambiguous = FALSE)` is the one exemption, used by `assess_rob()` where the values have already been normalised from the Cochrane RoB2 vocabulary.
+
+**Display vocabulary (single source, v0.5.1).** `GRADE_LEVEL_SOURCE_WORDING` holds Core GRADE's wording and **`.grade_level_wording()`** (`R/utils.R`) is the **only** function permitted to turn a judgment into user-facing words. The seam survived the rename that made the values Core GRADE's own words, because it still does three things a renderer must not re-implement: it resolves the aliases a stored object or a user argument may carry, it turns a value into prose (`"very_serious"` is not what a table cell should read), and it is the single place to change if the display vocabulary ever diverges from the stored one again. The table is written out rather than derived with `sub("_", " ", .)` so that a level added later cannot silently acquire invented source wording.
+
+`evidence_profile()` calls it; so do `sof_bmj()`'s certainty sentence, `indirectness_table()`'s notes, and the Shiny app's domain badges, verdict lines and override menus. Note the trap it closes: a second hand-written mapping — which `evidence_profile()`, `sof_bmj()`, `domain_indirectness.R` and the app badge each used to carry — could and did print "Serious" for −1 in one place and for −2 in another. A new renderer must call `.grade_level_wording()` rather than write another `switch()`. Likewise, the level → downgrade lookup is **`.grade_level_downgrade()`**, which reports 0 for an unrecognised level rather than aborting a render; the Shiny app's badge, chip and verdict helpers call it instead of the private copies they used to keep in step by hand.
 
 ### 5.1 Risk of bias — Core GRADE 4 Fig 2 flowchart (v0.5.0)
 
@@ -1388,8 +1398,8 @@ The legacy spellings `"some"` and `"very_serious"` are accepted on input and nor
 
 | `rob_some_concerns` | low | high |
 |---|---|---|
-| `"low"` (default) | `no`, `some_concerns` | `serious` |
-| `"high"` | `no` | `some_concerns`, `serious` |
+| `"low"` (default) | `not_serious`, `serious` | `very_serious`, `extremely_serious` |
+| `"high"` | `not_serious` | `serious`, `very_serious`, `extremely_serious` |
 
 `rob_overrides` (named by `studlab`) are applied **before** the fold; each override requires a rationale, and a key matching no study label aborts rather than being silently ignored.
 
@@ -1407,13 +1417,13 @@ If the weight share cannot be computed the count share is used and the notes say
 
 | Rule | Condition | Judgment |
 |---|---|---|
-| 1 | `za == zl == "trivial"` | `"no"` |
-| 2 | `za == zl`, non-trivial, inflation ≤ `rob_inflation_threshold` | `"no"` |
-| 3 | `za == zl`, non-trivial, inflation > `rob_inflation_threshold` | `"some_concerns"` (−1) |
-| 4 | `za != zl`, no sign flip across null | `"some_concerns"` (−1) |
-| 5 | `za != zl`, sign flip (`above` ↔ `below`) | `"some_concerns"` (−1) |
+| 1 | `za == zl == "trivial"` | `"not_serious"` |
+| 2 | `za == zl`, non-trivial, inflation ≤ `rob_inflation_threshold` | `"not_serious"` |
+| 3 | `za == zl`, non-trivial, inflation > `rob_inflation_threshold` | `"serious"` (−1) |
+| 4 | `za != zl`, no sign flip across null | `"serious"` (−1) |
+| 5 | `za != zl`, sign flip (`above` ↔ `below`) | `"serious"` (−1) |
 
-Rule 5 rated down **two** levels up to v0.4. Since v0.5.0 every automated risk-of-bias path is capped at one level: Core GRADE 4 describes no two-level risk-of-bias downgrade (every leaf of Fig 2 reads "rate down" / "do not rate down"), and `.ROB_CAP_NOTE` is appended to the judgment note wherever the cap bites. `"serious"` stays reachable only through the scalar `rob` override, which requires `rob_rationale`.
+Rule 5 rated down **two** levels up to v0.4. Since v0.5.0 every automated risk-of-bias path is capped at one level: Core GRADE 4 describes no two-level risk-of-bias downgrade (every leaf of Fig 2 reads "rate down" / "do not rate down"), and `.ROB_CAP_NOTE` is appended to the judgment note wherever the cap bites. `"very_serious"` stays reachable only through the scalar `rob` override, which requires `rob_rationale`.
 
 `inflation_ratio = (|TE_all| - |TE_low|) / |TE_low|` is evaluated **only** when the shift runs in the bias-favouring direction implied by `small_values`; a deflation in that direction never triggers a downgrade. When the direction gate blocks a downgrade that the inflation threshold would otherwise have caused, the notes say so explicitly, including the direction reasoning, so readers do not conclude the threshold was ignored (v0.4.0).
 
@@ -1459,7 +1469,7 @@ if (!is.null(inconsistency_ci_diff)) {
 
   # Step 1
   if (inconsistency_ci_diff == "no") {
-    return judgment = "no", auto = FALSE,
+    return judgment = "not_serious", auto = FALSE,
            notes = "Step 1: no important differences in point estimates / adequate CI overlap."
   }
 
@@ -1469,7 +1479,7 @@ if (!is.null(inconsistency_ci_diff)) {
   }
 
   if (inconsistency_threshold_side == "majority_one_side") {
-    return judgment = "no", auto = FALSE,
+    return judgment = "not_serious", auto = FALSE,
            notes = "Step 2: important differences exist, but majority on one side of clinical Threshold → do not rate down (per BMJ Core GRADE 3 flowchart)."
   }
 
@@ -1479,11 +1489,11 @@ if (!is.null(inconsistency_ci_diff)) {
   }
 
   if (inconsistency_subgroup_explained == "yes") {
-    return judgment = "no", auto = FALSE,
+    return judgment = "not_serious", auto = FALSE,
            notes = "Step 3: opposite-sided estimates explained by credible subgroup; present subgroups separately."
   }
 
-  return judgment = "some_concerns", auto = FALSE,
+  return judgment = "serious", auto = FALSE,
          notes = "Step 3: opposite-sided estimates not explained by credible subgroup → rate down one level."
 }
 
@@ -1493,7 +1503,7 @@ if (!is.null(inconsistency_ci_diff)) {
 ci_diff_yes <- (i2_pct > 30)
 
 if (!ci_diff_yes) {
-  return judgment = "no", auto = TRUE,
+  return judgment = "not_serious", auto = TRUE,
          notes = "AUTO Step 1: No important heterogeneity (I2 <= 30%) → do not rate down." + I2 caveat
 }
 
@@ -1508,23 +1518,23 @@ pct_max_zone  <- max(n_above, n_trivial, n_below) / k
 pct_each_side <- min(n_above, n_below)  / k
 
 if (pct_max_zone >= 0.80) {                    # ZONE_MAJORITY (CINeMA)
-  threshold_side <- "majority_one_side";    judgment <- "no"
+  threshold_side <- "majority_one_side";    judgment <- "not_serious"
 } else if (pct_each_side >= 0.20) {            # OPPOSITE_EACH (pmatools)
-  threshold_side <- "opposite_substantial"; judgment <- "serious"
+  threshold_side <- "opposite_substantial"; judgment <- "very_serious"
 } else {
-  threshold_side <- "heterogeneous";        judgment <- "some_concerns"
+  threshold_side <- "heterogeneous";        judgment <- "serious"
 }
 
 # AUTO Step 3 (v0.5.1). Reached ONLY on the opposite_substantial branch.
 # inconsistency_subgroup_explained is read here as well as on Path B.
 if (threshold_side == "opposite_substantial") {
   if (inconsistency_subgroup_explained == "yes") {
-    return judgment = "no", auto = TRUE,
+    return judgment = "not_serious", auto = TRUE,
            notes = "AUTO Step 3: opposite-sided estimates explained by a
                     credible subgroup → do not rate down; present subgroup
                     results separately." + ICEMAN caveat
   }
-  # "no" or unanswered: judgment stays "serious" (−2).
+  # "no" or unanswered: judgment stays "very_serious" (−2).
 }
 # Notes carry: the I² surrogate caveat, the zone-cut-off provenance caveat,
 # and (for opposite_substantial) the ICEMAN subgroup caveat and the note
@@ -1533,35 +1543,35 @@ if (threshold_side == "opposite_substantial") {
 
 **AUTO Step 3 (v0.5.1, behaviour change).** `inconsistency_subgroup_explained` now reaches the automated path. Before v0.5.1 the automated opposite-sides note advised the reviewer to supply it, and doing so switched the domain onto Path B — which then aborted unless `inconsistency_ci_diff` **and** `inconsistency_threshold_side` were supplied too. The advice was therefore a no-op, and this closes that gap rather than adding a new judgment route:
 
-- `"yes"` → `"no"` (do not rate down), `auto = TRUE`, with `.INCONSISTENCY_SUBGROUP_CAVEAT`;
-- `"no"` → `"serious"`, `auto = TRUE`, note says the subgroup did not explain it;
-- unanswered → `"serious"`, note points at the argument.
+- `"yes"` → `"not_serious"` (do not rate down), `auto = TRUE`, with `.INCONSISTENCY_SUBGROUP_CAVEAT`;
+- `"no"` → `"very_serious"`, `auto = TRUE`, note says the subgroup did not explain it;
+- unanswered → `"very_serious"`, note points at the argument.
 
 It is read **only** on the `opposite_substantial` branch: on `majority_one_side` and `heterogeneous` Core GRADE 3 never reaches Step 3, so an answer there changes nothing. The value is validated (`"yes"` / `"no"`) on both paths.
 
 **Edge cases:**
 
-- `k < 2`: cannot assess inconsistency. Return judgment = `"no"` with note "k < 2; inconsistency not assessable."
-- I² is NA (e.g., k = 1): the Step 1 surrogate returns FALSE → judgment = `"no"` with note "I² unavailable; cannot detect heterogeneity."
-- All TE values equal (τ² = 0): I² will be 0 → the Step 1 surrogate returns FALSE → judgment = `"no"`.
-- Study-level TEs unavailable: Step 2 is not assessable → `"some_concerns"` (conservative).
+- `k < 2`: cannot assess inconsistency. Return judgment = `"not_serious"` with note "k < 2; inconsistency not assessable."
+- I² is NA (e.g., k = 1): the Step 1 surrogate returns FALSE → judgment = `"not_serious"` with note "I² unavailable; cannot detect heterogeneity."
+- All TE values equal (τ² = 0): I² will be 0 → the Step 1 surrogate returns FALSE → judgment = `"not_serious"`.
+- Study-level TEs unavailable: Step 2 is not assessable → `"serious"` (conservative).
 - Threshold supplied but `threshold_internal` cannot be derived (unknown sm): function aborts before reaching this domain.
 
 **Judgment interpretation table:**
 
 | Path | Step 1 / I² | Step 2 / Threshold check | Step 3 / subgroup | Judgment |
 |---|---|---|---|---|
-| Manual | ci_diff = "no" | — | — | **No** |
-| Manual | ci_diff = "yes" | majority_one_side | — | **No** |
-| Manual | ci_diff = "yes" | opposite_sides | yes | **No** + note |
-| Manual | ci_diff = "yes" | opposite_sides | no | **serious** (−2) |
-| Auto | I² ≤ 30% | — | — | **No** |
-| Auto | I² > 30% | majority_one_side (max zone ≥ 80%) | not reached | **No** |
-| Auto | I² > 30% | opposite_substantial (≥ 20% each side) | yes | **No** + note *(v0.5.1)* |
-| Auto | I² > 30% | opposite_substantial (≥ 20% each side) | no / unanswered | **serious** (−2) |
-| Auto | I² > 30% | heterogeneous (neither) | not reached | **some_concerns** (−1) |
+| Manual | ci_diff = "no" | — | — | **not_serious** |
+| Manual | ci_diff = "yes" | majority_one_side | — | **not_serious** |
+| Manual | ci_diff = "yes" | opposite_sides | yes | **not_serious** + note |
+| Manual | ci_diff = "yes" | opposite_sides | no | **very_serious** (−2) |
+| Auto | I² ≤ 30% | — | — | **not_serious** |
+| Auto | I² > 30% | majority_one_side (max zone ≥ 80%) | not reached | **not_serious** |
+| Auto | I² > 30% | opposite_substantial (≥ 20% each side) | yes | **not_serious** + note *(v0.5.1)* |
+| Auto | I² > 30% | opposite_substantial (≥ 20% each side) | no / unanswered | **very_serious** (−2) |
+| Auto | I² > 30% | heterogeneous (neither) | not reached | **serious** (−1) |
 
-The two `serious` rows are the deliberate departure from Core GRADE 3 described above; they are the only automated route to −2 in this domain. Everything else stops at −1, and the scalar `inconsistency` override (with `inconsistency_rationale`) remains available for judgments the flowchart does not reach.
+The two `very_serious` rows are the deliberate departure from Core GRADE 3 described above; they are the only automated route to −2 in this domain. Everything else stops at −1, and the scalar `inconsistency` override (with `inconsistency_rationale`) remains available for judgments the flowchart does not reach.
 
 ### 5.3 Chinn's formula (SMD ↔ OR)
 
@@ -1730,7 +1740,7 @@ The ratio-scale magnitude is `1 - exp(-|log ratio|)`, which is symmetric: RR 0.6
 
 **Auto-derived `ois_sd` (continuous).** `.calc_ois()` needs both `ois_delta` and `ois_sd`. `ois_delta` has always fallen back to the Threshold; `ois_sd` had no fallback, so a continuous outcome with no reviewer-supplied SD reached Fig 4's large-effect path, found no OIS and landed on "do not rate down" with no explanation. `ois_sd` now falls back to `compute_pooled_sd(meta_obj)`, and the notes and the `ois_sd_source` fact record that it was derived rather than supplied.
 
-**`ois_sd = 1` for SMD.** `n_arm = 2(z_α + z_β)² σ² / δ²` requires δ and σ on the same scale, and an SMD is *by construction* expressed in within-study SD units — so σ is 1 and the raw pooled SD must not be applied to a threshold that is already standardized. Deriving it from the data anyway inflated the target N by σ² (a pooled SD of 4 gives 16×, of 8 gives 64×), which reaches the rating: Fig 4's large-effect path consults the "< 30% of OIS" rule, so an inflated OIS can turn `no` into `some_concerns` or `serious`. MD and RoM keep the pooled-SD derivation, where the threshold is on the raw scale. `ois_sd_source` reports which of the two applied, in words. An explicitly supplied `ois_sd` still takes precedence for every measure.
+**`ois_sd = 1` for SMD.** `n_arm = 2(z_α + z_β)² σ² / δ²` requires δ and σ on the same scale, and an SMD is *by construction* expressed in within-study SD units — so σ is 1 and the raw pooled SD must not be applied to a threshold that is already standardized. Deriving it from the data anyway inflated the target N by σ² (a pooled SD of 4 gives 16×, of 8 gives 64×), which reaches the rating: Fig 4's large-effect path consults the "< 30% of OIS" rule, so an inflated OIS can turn `not_serious` into `serious` or `very_serious`. MD and RoM keep the pooled-SD derivation, where the threshold is on the raw scale. `ois_sd_source` reports which of the two applied, in words. An explicitly supplied `ois_sd` still takes precedence for every measure.
 
 **"OIS could not be computed" names the missing input.** When the OIS is still unavailable, the Fig 4 path string names which of `ois_p0` / `ois_p1` / `ois_delta` / `ois_sd` was missing, or says that the analysis carries no complete arm-level sample sizes to compare against.
 
@@ -1809,7 +1819,7 @@ figure says so in its `<desc>` and names the source figure in its caption.
   `evidence_profile()` and the `.docx`, where they are the ordered machine-readable
   record of the assessment and no figure is present to disagree with them.
 - The Publication-bias chart drops its two "qualitative assessment required" leaves.
-  Both were reached with judgment `"no"`, so they are drawn as the `nodown` leaves they
+  Both were reached with judgment `"not_serious"`, so they are drawn as the `nodown` leaves they
   are; the qualitative caveat is carried by the note and the `rlang::warn()`, which is
   where a reader can act on it.
 

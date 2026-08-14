@@ -42,7 +42,7 @@ test_that("rob_some_concerns folds 'some concerns' into the chosen side", {
   # alone (30%); folding 'some concerns' high adds study 2 (65%), which flips
   # the dominance gate.
   m <- mk(te = c(0.8, 0.8, 0.02), w = c(30, 35, 35))
-  rob <- c("serious", "some_concerns", "no")
+  rob <- c("very_serious", "some_concerns", "no")
 
   g_low <- quiet_grade(m, rob = rob, small_values = "undesirable",
                        threshold = 1.05, threshold_scale = "ratio")
@@ -64,7 +64,7 @@ test_that("rob_some_concerns folds 'some concerns' into the chosen side", {
 test_that("rob_some_concerns rejects anything but 'low' / 'high'", {
   m <- mk(te = c(0.8, 0.02, 0.02), w = c(30, 35, 35))
   expect_error(
-    grade_meta(m, rob = c("serious", "some_concerns", "no"),
+    grade_meta(m, rob = c("very_serious", "some_concerns", "no"),
                rob_some_concerns = "medium", threshold_type = "null"),
     regexp = "rob_some_concerns"
   )
@@ -80,16 +80,16 @@ test_that("dominance gate switches at 55% with an inclusive boundary", {
   # latter round-trips through sqrt(1/w) to 0.5499999999999999, one ulp below
   # the threshold, which is exactly the boundary this test is about.
   g54 <- quiet_grade(mk(c(0.8, 0.02, 0.02), c(54, 23, 23)),
-                     rob = c("serious", "no", "no"),
+                     rob = c("very_serious", "no", "no"),
                      small_values = "undesirable",
                      threshold = 1.05, threshold_scale = "ratio",
                      rob_refit = FALSE)
   g55 <- quiet_grade(mk(c(0.8, 0.02, 0.02), c(11, 4.5, 4.5)),
-                     rob = c("serious", "no", "no"),
+                     rob = c("very_serious", "no", "no"),
                      small_values = "undesirable",
                      threshold = 1.05, threshold_scale = "ratio")
   g56 <- quiet_grade(mk(c(0.8, 0.02, 0.02), c(56, 22, 22)),
-                     rob = c("serious", "no", "no"),
+                     rob = c("very_serious", "no", "no"),
                      small_values = "undesirable",
                      threshold = 1.05, threshold_scale = "ratio")
 
@@ -100,7 +100,7 @@ test_that("dominance gate switches at 55% with an inclusive boundary", {
   # The 55% fixture sits exactly on the threshold: nudging the threshold above
   # it flips the gate, which is what makes the `>=` boundary observable.
   g55_strict <- quiet_grade(mk(c(0.8, 0.02, 0.02), c(11, 4.5, 4.5)),
-                            rob = c("serious", "no", "no"),
+                            rob = c("very_serious", "no", "no"),
                             small_values = "undesirable",
                             threshold = 1.05, threshold_scale = "ratio",
                             rob_dominant_threshold = 0.5500001,
@@ -109,7 +109,7 @@ test_that("dominance gate switches at 55% with an inclusive boundary", {
 
   # The other candidate the footnote names (>65%) is still selectable.
   g60_at_65 <- quiet_grade(mk(c(0.8, 0.02, 0.02), c(3, 1, 1)),
-                           rob = c("serious", "no", "no"),
+                           rob = c("very_serious", "no", "no"),
                            small_values = "undesirable",
                            threshold = 1.05, threshold_scale = "ratio",
                            rob_dominant_threshold = 0.65,
@@ -120,12 +120,12 @@ test_that("dominance gate switches at 55% with an inclusive boundary", {
 test_that("rob_dominant_threshold is validated", {
   m <- mk(c(0.8, 0.02, 0.02), c(3, 1, 1))
   expect_error(
-    grade_meta(m, rob = c("serious", "no", "no"),
+    grade_meta(m, rob = c("very_serious", "no", "no"),
                rob_dominant_threshold = 0, threshold_type = "null"),
     regexp = "rob_dominant_threshold"
   )
   expect_error(
-    grade_meta(m, rob = c("serious", "no", "no"),
+    grade_meta(m, rob = c("very_serious", "no", "no"),
                rob_dominant_threshold = 1.5, threshold_type = "null"),
     regexp = "rob_dominant_threshold"
   )
@@ -135,24 +135,24 @@ test_that("dominated = yes uses the direction-of-bias check verdict", {
   # 75% weight on the high-RoB study; same non-trivial zone but a large
   # bias-favouring inflation -> rule 3 -> rate down 1.
   m <- mk(te = c(0.60, 0.40, 0.40), w = c(75, 12.5, 12.5))
-  g <- quiet_grade(m, rob = c("serious", "no", "no"),
+  g <- quiet_grade(m, rob = c("very_serious", "no", "no"),
                    small_values = "undesirable",
                    threshold = 1.20, threshold_scale = "ratio")
   row <- rob_row(g)
   expect_match(row$notes, "dominated: yes", fixed = TRUE)
   expect_match(row$notes, "Rule 3")
-  expect_equal(row$judgment, "some_concerns")
+  expect_equal(row$judgment, "serious")
   expect_equal(row$downgrade, -1)
   expect_equal(g$rob_analysis_set, "all")
   expect_false(g$rob_refit)
 })
 
 test_that("not dominated + substantial difference: no downgrade, low_only", {
-  g <- quiet_grade(make_low_only(), rob = c("serious", "no", "no", "no"),
+  g <- quiet_grade(make_low_only(), rob = c("very_serious", "no", "no", "no"),
                    small_values = "undesirable",
                    threshold = 1.05, threshold_scale = "ratio")
   row <- rob_row(g)
-  expect_equal(row$judgment, "no")
+  expect_equal(row$judgment, "not_serious")
   expect_equal(row$downgrade, 0)
   expect_equal(g$rob_analysis_set, "low_only")
   expect_true(g$rob_refit)
@@ -167,11 +167,11 @@ test_that("not dominated + no substantial difference: no downgrade, all", {
   # both estimates stay in the trivial zone (rule 1).
   m <- mk(te = c(0.03, 0.02, 0.02, 0.02),
           w  = c(400, 400 / 3, 400 / 3, 400 / 3))
-  g <- quiet_grade(m, rob = c("serious", "no", "no", "no"),
+  g <- quiet_grade(m, rob = c("very_serious", "no", "no", "no"),
                    small_values = "undesirable",
                    threshold = 1.05, threshold_scale = "ratio")
   row <- rob_row(g)
-  expect_equal(row$judgment, "no")
+  expect_equal(row$judgment, "not_serious")
   expect_equal(row$downgrade, 0)
   expect_equal(g$rob_analysis_set, "all")
   expect_false(g$rob_refit)
@@ -190,11 +190,11 @@ test_that("not dominated: substantial difference is judged on magnitude alone", 
   # direction gate used to block this and report "no substantial difference".
   m <- mk(te = c(0.20, 0.50, 0.50, 0.50),
           w  = c(400, 400 / 3, 400 / 3, 400 / 3))
-  g <- quiet_grade(m, rob = c("serious", "no", "no", "no"),
+  g <- quiet_grade(m, rob = c("very_serious", "no", "no", "no"),
                    small_values = "undesirable",
                    threshold = 1.05, threshold_scale = "ratio")
   row <- rob_row(g)
-  expect_equal(row$judgment, "no")           # this branch never rates down
+  expect_equal(row$judgment, "not_serious")           # this branch never rates down
   expect_equal(g$rob_analysis_set, "low_only")
   expect_true(g$rob_refit)
   expect_equal(g$meta$k, 3L)
@@ -212,12 +212,12 @@ test_that("dominated branch still applies the direction gate", {
   # bias-favouring, so rule 2 applies and the domain is not rated down.
   m <- mk(te = c(0.20, 0.50, 0.50, 0.50),
           w  = c(600, 400 / 3, 400 / 3, 400 / 3))
-  g <- quiet_grade(m, rob = c("serious", "no", "no", "no"),
+  g <- quiet_grade(m, rob = c("very_serious", "no", "no", "no"),
                    small_values = "undesirable",
                    threshold = 1.05, threshold_scale = "ratio")
   row <- rob_row(g)
   expect_match(row$notes, "dominated: yes", fixed = TRUE)
-  expect_equal(row$judgment, "no")
+  expect_equal(row$judgment, "not_serious")
   expect_match(row$notes, "Rule 2", fixed = TRUE)
   expect_equal(g$rob_analysis_set, "all")
 })
@@ -277,10 +277,10 @@ test_that("every override is recorded in the domain notes", {
   )
   notes <- rob_row(g)$notes
   expect_match(notes,
-    "Study-level override: Smith 2020 no -> serious (Unblinded outcome assessment found after publication)",
+    "Study-level override: Smith 2020 not_serious -> very_serious (Unblinded outcome assessment found after publication)",
     fixed = TRUE)
   expect_match(notes,
-    "Study-level override: Jones 2019 no -> some_concerns (Deviations from the registered analysis plan)",
+    "Study-level override: Jones 2019 not_serious -> serious (Deviations from the registered analysis plan)",
     fixed = TRUE)
   # The override actually changed the classification: Smith 2020 now carries
   # 60% of the weight, so the evidence is dominated.
@@ -303,7 +303,7 @@ test_that("rob_overrides rejects an unrecognized level", {
 
 test_that("downstream domains use the refitted (low-RoB) analysis", {
   m       <- make_low_only()
-  rob_vec <- c("serious", "no", "no", "no")
+  rob_vec <- c("very_serious", "no", "no", "no")
 
   g_refit <- quiet_grade(m, rob = rob_vec, small_values = "undesirable",
                          threshold = 1.05, threshold_scale = "ratio")
@@ -329,7 +329,7 @@ test_that("downstream domains use the refitted (low-RoB) analysis", {
 
 test_that("the rating target is derived from the refitted point estimate", {
   m       <- make_low_only()
-  rob_vec <- c("serious", "no", "no", "no")
+  rob_vec <- c("very_serious", "no", "no", "no")
 
   g_refit <- quiet_grade(m, rob = rob_vec, small_values = "undesirable",
                          threshold = 1.05, threshold_scale = "ratio")
@@ -344,7 +344,7 @@ test_that("the rating target is derived from the refitted point estimate", {
 })
 
 test_that("rob_refit = FALSE returns the recommendation without refitting", {
-  g <- quiet_grade(make_low_only(), rob = c("serious", "no", "no", "no"),
+  g <- quiet_grade(make_low_only(), rob = c("very_serious", "no", "no", "no"),
                    small_values = "undesirable",
                    threshold = 1.05, threshold_scale = "ratio",
                    rob_refit = FALSE)
@@ -359,7 +359,7 @@ test_that("a refit that would leave k < 2 is skipped with a warning", {
   # to low RoB leaves a single study, which cannot be pooled.
   m <- mk(te = c(1.2, 0.02), w = c(100, 150), studlab = c("High-1", "Low-1"))
   expect_warning(
-    g <- grade_meta(m, rob = c("serious", "no"), small_values = "undesirable",
+    g <- grade_meta(m, rob = c("very_serious", "no"), small_values = "undesirable",
                     threshold = 1.05, threshold_scale = "ratio",
                     pubias_unpublished = "no"),
     regexp = "cannot be pooled"
@@ -384,10 +384,10 @@ make_low_only_gap <- function() {
 }
 
 test_that("k == length(studlab): high_idx is unchanged", {
-  g <- quiet_grade(make_low_only(), rob = c("serious", "no", "no", "no"),
+  g <- quiet_grade(make_low_only(), rob = c("very_serious", "no", "no", "no"),
                    small_values = "undesirable",
                    threshold = 1.05, threshold_scale = "ratio")
-  d_rob <- assess_rob(c("serious", "no", "no", "no"), make_low_only(),
+  d_rob <- assess_rob(c("very_serious", "no", "no", "no"), make_low_only(),
                       small_values = "undesirable",
                       threshold_internal = log(1.05))
   expect_equal(attr(d_rob, "high_idx"), c(TRUE, FALSE, FALSE, FALSE))
@@ -401,7 +401,7 @@ test_that("k < length(studlab): a k-length rob still refits, on the right studie
   expect_equal(m$k, 4L)
   expect_equal(length(m$studlab), 5L)
 
-  d_rob <- assess_rob(c("serious", "no", "no", "no"), m,
+  d_rob <- assess_rob(c("very_serious", "no", "no", "no"), m,
                       small_values = "undesirable",
                       threshold_internal = log(1.05))
   # Studlab-aligned, and the non-estimable study is not "high": a k-length
@@ -409,7 +409,7 @@ test_that("k < length(studlab): a k-length rob still refits, on the right studie
   expect_equal(attr(d_rob, "high_idx"),
                c(TRUE, FALSE, FALSE, FALSE, FALSE))
 
-  g <- quiet_grade(m, rob = c("serious", "no", "no", "no"),
+  g <- quiet_grade(m, rob = c("very_serious", "no", "no", "no"),
                    small_values = "undesirable",
                    threshold = 1.05, threshold_scale = "ratio")
   expect_equal(g$rob_analysis_set, "low_only")
@@ -424,10 +424,10 @@ test_that("k < length(studlab): a k-length rob still refits, on the right studie
 
 test_that("k < length(studlab): a studlab-length rob gives the same flowchart", {
   m <- make_low_only_gap()
-  d_k    <- assess_rob(c("serious", "no", "no", "no"), m,
+  d_k    <- assess_rob(c("very_serious", "no", "no", "no"), m,
                        small_values = "undesirable",
                        threshold_internal = log(1.05))
-  d_slab <- assess_rob(c("serious", "serious", "no", "no", "no"), m,
+  d_slab <- assess_rob(c("very_serious", "very_serious", "no", "no", "no"), m,
                        small_values = "undesirable",
                        threshold_internal = log(1.05))
   # The extra study is trimmed before the k-space maths, so the judgment and
@@ -441,7 +441,7 @@ test_that("k < length(studlab): a studlab-length rob gives the same flowchart", 
   # the refit subset.
   expect_equal(attr(d_slab, "high_idx"),
                c(TRUE, TRUE, FALSE, FALSE, FALSE))
-  g <- quiet_grade(m, rob = c("serious", "serious", "no", "no", "no"),
+  g <- quiet_grade(m, rob = c("very_serious", "very_serious", "no", "no", "no"),
                    small_values = "undesirable",
                    threshold = 1.05, threshold_scale = "ratio")
   expect_true(g$rob_refit)
@@ -451,32 +451,32 @@ test_that("k < length(studlab): a studlab-length rob gives the same flowchart", 
 test_that("rob must be length k or length(studlab)", {
   m <- make_low_only_gap()
   expect_error(
-    assess_rob(c("serious", "no", "no"), m, threshold_internal = log(1.05)),
+    assess_rob(c("very_serious", "no", "no"), m, threshold_internal = log(1.05)),
     regexp = "length k \\(4\\) or length\\(meta_obj\\$studlab\\) \\(5\\)"
   )
 })
 
 test_that("rob_overrides key on studlab when k < length(studlab)", {
   m <- make_low_only_gap()
-  d <- assess_rob(c("serious", "no", "no", "no"), m,
+  d <- assess_rob(c("very_serious", "no", "no", "no"), m,
                   rob_overrides          = c("Low-3" = "high"),
                   rob_override_rationale = c("Low-3" = "Unblinded outcome assessment"),
                   small_values = "undesirable",
                   threshold_internal = log(1.05))
   expect_match(d$notes,
-    "Study-level override: Low-3 no -> serious (Unblinded outcome assessment)",
+    "Study-level override: Low-3 not_serious -> very_serious (Unblinded outcome assessment)",
     fixed = TRUE)
   expect_equal(attr(d, "high_idx"), c(TRUE, FALSE, FALSE, FALSE, TRUE))
 
   # A study {meta} could not pool can be overridden too: it has no assessed
   # level in a k-length vector, but it is still a row of the data.
-  d_gap <- assess_rob(c("serious", "no", "no", "no"), m,
+  d_gap <- assess_rob(c("very_serious", "no", "no", "no"), m,
                       rob_overrides          = c("Gap-1" = "high"),
                       rob_override_rationale = c("Gap-1" = "Results never reported"),
                       small_values = "undesirable",
                       threshold_internal = log(1.05))
   expect_match(d_gap$notes,
-    "Study-level override: Gap-1 not estimable -> serious (Results never reported)",
+    "Study-level override: Gap-1 not estimable -> very_serious (Results never reported)",
     fixed = TRUE)
   expect_equal(attr(d_gap, "high_idx"), c(TRUE, TRUE, FALSE, FALSE, FALSE))
 })
@@ -492,7 +492,7 @@ test_that("a metabin that drops a double-zero study refits end to end", {
   expect_equal(m$k, 4L)
   expect_equal(length(m$studlab), 5L)
 
-  g <- quiet_grade(m, rob = c("serious", "no", "no", "no"),
+  g <- quiet_grade(m, rob = c("very_serious", "no", "no", "no"),
                    small_values = "undesirable",
                    threshold = 1.05, threshold_scale = "ratio")
   expect_equal(g$rob_analysis_set, "low_only")
@@ -510,7 +510,7 @@ test_that("sof_table footer states the low-RoB restriction", {
   skip_if_not_installed("flextable")
   footer_text <- function(ft) paste(unlist(ft$footer$dataset), collapse = " ")
 
-  g <- quiet_grade(make_low_only(), rob = c("serious", "no", "no", "no"),
+  g <- quiet_grade(make_low_only(), rob = c("very_serious", "no", "no", "no"),
                    small_values = "undesirable",
                    threshold = 1.05, threshold_scale = "ratio")
   expect_match(
@@ -520,7 +520,7 @@ test_that("sof_table footer states the low-RoB restriction", {
   )
 
   # The unapplied recommendation is stated too.
-  g_no_refit <- quiet_grade(make_low_only(), rob = c("serious", "no", "no", "no"),
+  g_no_refit <- quiet_grade(make_low_only(), rob = c("very_serious", "no", "no", "no"),
                             small_values = "undesirable",
                             threshold = 1.05, threshold_scale = "ratio",
                             rob_refit = FALSE)
@@ -536,7 +536,7 @@ test_that("sof_table footer states the low-RoB restriction", {
 })
 
 test_that("print.pmatools reports the analysis set after a refit", {
-  g <- quiet_grade(make_low_only(), rob = c("serious", "no", "no", "no"),
+  g <- quiet_grade(make_low_only(), rob = c("very_serious", "no", "no", "no"),
                    small_values = "undesirable",
                    threshold = 1.05, threshold_scale = "ratio")
   expect_output(print(g), "low risk of bias studies only \\(3 of 4 studies\\)")

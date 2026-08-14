@@ -14,62 +14,85 @@
 }
 
 test_that("the app reads its wording from the package constant", {
-  expect_identical(unname(GRADE_LEVEL_SOURCE_WORDING[["no"]]), "not serious")
-  expect_identical(unname(GRADE_LEVEL_SOURCE_WORDING[["some_concerns"]]),
-                   "serious")
-  expect_identical(unname(GRADE_LEVEL_SOURCE_WORDING[["serious"]]),
+  expect_identical(unname(GRADE_LEVEL_SOURCE_WORDING[["not_serious"]]),
+                   "not serious")
+  expect_identical(unname(GRADE_LEVEL_SOURCE_WORDING[["serious"]]), "serious")
+  expect_identical(unname(GRADE_LEVEL_SOURCE_WORDING[["very_serious"]]),
                    "very serious")
+  expect_identical(unname(GRADE_LEVEL_SOURCE_WORDING[["extremely_serious"]]),
+                   "extremely serious")
 
-  expect_identical(pma_judgment_label("no"), "Not serious")
-  expect_identical(pma_judgment_label("some_concerns"), "Serious")
-  expect_identical(pma_judgment_label("serious"), "Very serious")
-  # Legacy labels normalise rather than falling through as themselves.
-  expect_identical(pma_judgment_label("some"), "Serious")
+  expect_identical(pma_judgment_label("not_serious"), "Not serious")
+  expect_identical(pma_judgment_label("serious"), "Serious")
   expect_identical(pma_judgment_label("very_serious"), "Very serious")
+  expect_identical(pma_judgment_label("extremely_serious"),
+                   "Extremely serious")
+  # Legacy labels normalise rather than falling through as themselves.
+  expect_identical(pma_judgment_label("no"), "Not serious")
+  expect_identical(pma_judgment_label("some"), "Serious")
+  expect_identical(pma_judgment_label("some_concerns"), "Serious")
   expect_identical(pma_judgment_label(NULL), "Not serious")
 })
 
 test_that("the badge keeps its severity classes while changing its words", {
-  expect_match(.badge_text(pma_judgment_badge("no")), "Not serious")
-  expect_match(as.character(pma_judgment_badge("no")), "grade-high")
-  expect_match(.badge_text(pma_judgment_badge("some_concerns")), "Serious")
-  expect_match(as.character(pma_judgment_badge("some_concerns")), "grade-low")
-  expect_match(.badge_text(pma_judgment_badge("serious")), "Very serious")
-  expect_match(as.character(pma_judgment_badge("serious")), "grade-vlow")
+  expect_match(.badge_text(pma_judgment_badge("not_serious")), "Not serious")
+  expect_match(as.character(pma_judgment_badge("not_serious")), "grade-high")
+  expect_match(.badge_text(pma_judgment_badge("serious")), "Serious")
+  expect_match(as.character(pma_judgment_badge("serious")), "grade-low")
+  expect_match(.badge_text(pma_judgment_badge("very_serious")), "Very serious")
+  expect_match(as.character(pma_judgment_badge("very_serious")), "grade-vlow")
+  expect_match(.badge_text(pma_judgment_badge("extremely_serious")),
+               "Extremely serious")
+  expect_match(as.character(pma_judgment_badge("extremely_serious")),
+               "grade-vlow")
 
-  # An unrecognised level must not abort a tab.
+  # An unrecognised level must not abort a tab, and must not be painted as
+  # "no concern" either.
   expect_silent(pma_judgment_badge("something_new"))
+  expect_match(as.character(pma_judgment_badge("something_new")), "grade-low")
 })
 
-test_that("the override menus relabel without moving any value", {
+test_that("every domain override menu offers all four Core GRADE levels", {
   ch <- pma_judgment_choices()
-  # VALUES are the internal levels and nothing downstream is aware the labels
-  # changed. This is the assertion that keeps a relabelling from becoming a
-  # behaviour change.
-  expect_identical(unname(ch), c("", "no", "some_concerns", "serious"))
+  # The values are the stored GRADE levels. This is the assertion that keeps a
+  # relabelling from becoming a behaviour change -- and that keeps the manual
+  # -3 reachable, which is the ONLY way into it.
+  expect_identical(unname(ch),
+                   c("", "not_serious", "serious", "very_serious",
+                     "extremely_serious"))
   expect_identical(names(ch)[1], "(no override)")
   expect_identical(names(ch)[-1],
-                   c("Not serious (-0)", "Serious (-1)", "Very serious (-2)"))
+                   c("Not serious (-0)", "Serious (-1)", "Very serious (-2)",
+                     "Extremely serious (-3)"))
 
   # The Indirectness radio has no "(no override)": leaving the group
   # unselected is how the reviewer accepts the worst-case fold.
   bare <- pma_judgment_choices(include_blank = FALSE)
-  expect_identical(unname(bare), c("no", "some_concerns", "serious"))
+  expect_identical(unname(bare),
+                   c("not_serious", "serious", "very_serious",
+                     "extremely_serious"))
 })
 
 test_that("the verdict line states the level and the downgrade it carries", {
-  expect_match(as.character(pma_domain_verdict("no")), "Not serious")
-  expect_match(as.character(pma_domain_verdict("no")), "do not rate down")
-  expect_match(as.character(pma_domain_verdict("some_concerns")),
-               "rate down 1 level")
+  expect_match(as.character(pma_domain_verdict("not_serious")), "Not serious")
+  expect_match(as.character(pma_domain_verdict("not_serious")),
+               "do not rate down")
   expect_match(as.character(pma_domain_verdict("serious")),
+               "rate down 1 level")
+  expect_match(as.character(pma_domain_verdict("very_serious")),
                "rate down 2 levels")
+  expect_match(as.character(pma_domain_verdict("extremely_serious")),
+               "Extremely serious")
+  expect_match(as.character(pma_domain_verdict("extremely_serious")),
+               "rate down 3 levels")
 
   # An explicit downgrade from the rated object wins over the level's default
   # (the app-level publication-bias override writes both).
-  expect_match(as.character(pma_domain_verdict("no", -1L)), "rate down 1 level")
+  expect_match(as.character(pma_domain_verdict("not_serious", -1L)),
+               "rate down 1 level")
   # ... and an unusable one falls back rather than aborting.
-  expect_match(as.character(pma_domain_verdict("no", NA)), "do not rate down")
+  expect_match(as.character(pma_domain_verdict("not_serious", NA)),
+               "do not rate down")
   expect_match(as.character(pma_domain_verdict("mystery", NULL)),
                "do not rate down")
 })

@@ -47,12 +47,12 @@ make_mock_dominated <- function(te_all, te_low_only,
 test_that("Rule 1: TE_all and TE_low both in trivial zone -> no", {
   # log(1.20) ~ 0.182; both 0.05 and 0.05 fall inside +/-0.182.
   m <- make_mock_dominated(te_all = 0.05, te_low_only = 0.05)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "no")
+  expect_equal(rob_row$judgment, "not_serious")
   expect_match(rob_row$notes, "Rule 1")
 })
 
@@ -61,12 +61,12 @@ test_that("Rule 2: same non-trivial zone, inflation <= 10% -> no", {
   # Both te_all=0.50 and te_low=0.48 are above +log(1.20)=0.182 (zone 'above').
   # inflation = (0.50 - 0.48) / 0.48 = 4.2% < 10%.
   m <- make_mock_dominated(te_all = 0.50, te_low_only = 0.48)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "no")
+  expect_equal(rob_row$judgment, "not_serious")
   expect_match(rob_row$notes, "Rule 2")
 })
 
@@ -74,12 +74,12 @@ test_that("Rule 2: same non-trivial zone, deflating direction -> no", {
   # te_all=0.40 < te_low=0.60: high-RoB pulls *toward* null; not bias-favouring.
   # Both still in 'above' zone (above +0.182). -> Rule 2.
   m <- make_mock_dominated(te_all = 0.40, te_low_only = 0.60)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "no")
+  expect_equal(rob_row$judgment, "not_serious")
   expect_match(rob_row$notes, "Rule 2")
 })
 
@@ -87,12 +87,12 @@ test_that("Rule 2: same non-trivial zone, deflating direction -> no", {
 test_that("Rule 3: same non-trivial zone, inflation > 10% -> some_concerns", {
   # Both te_all=0.60 and te_low=0.40 in 'above' zone; inflation = 50% > 10%.
   m <- make_mock_dominated(te_all = 0.60, te_low_only = 0.40)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "some_concerns")
+  expect_equal(rob_row$judgment, "serious")
   expect_match(rob_row$notes, "Rule 3")
 })
 
@@ -100,24 +100,24 @@ test_that("Rule 3: same non-trivial zone, inflation > 10% -> some_concerns", {
 test_that("Rule 4: 'above' -> 'trivial' zone change -> some_concerns", {
   # te_all=0.50 (above), te_low=0.10 (trivial). Zones differ; no sign flip.
   m <- make_mock_dominated(te_all = 0.50, te_low_only = 0.10)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "some_concerns")
+  expect_equal(rob_row$judgment, "serious")
   expect_match(rob_row$notes, "Rule 4")
 })
 
 test_that("Rule 4: 'trivial' -> 'above' zone change -> some_concerns", {
   # high-RoB pulls into trivial: te_all=0.10 (trivial), te_low=0.50 (above).
   m <- make_mock_dominated(te_all = 0.10, te_low_only = 0.50)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "some_concerns")
+  expect_equal(rob_row$judgment, "serious")
   expect_match(rob_row$notes, "Rule 4")
 })
 
@@ -127,12 +127,12 @@ test_that("Rule 4: 'trivial' -> 'above' zone change -> some_concerns", {
 # rate down"); -2 requires the scalar rob override.
 test_that("Rule 5: 'above' <-> 'below' sign flip -> some_concerns (capped at -1)", {
   m <- make_mock_dominated(te_all = 0.50, te_low_only = -0.50)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "some_concerns")
+  expect_equal(rob_row$judgment, "serious")
   expect_equal(rob_row$downgrade, -1L)
   expect_match(rob_row$notes, "Rule 5")
   expect_match(rob_row$notes, "capped at one level", fixed = TRUE)
@@ -145,7 +145,7 @@ test_that("Rule 5's own wording says one level, not two", {
   # This pins the sentence the code itself emits, so a doc that drifts back can
   # be caught against something executable.
   m <- make_mock_dominated(te_all = 0.50, te_low_only = -0.50)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
@@ -159,11 +159,11 @@ test_that("Rule 5's own wording says one level, not two", {
 
 test_that("Rule 5 can still reach -2 through the scalar rob override", {
   m <- make_mock_dominated(te_all = 0.50, te_low_only = -0.50)
-  g <- grade_meta(m, rob = "serious",
+  g <- grade_meta(m, rob = "very_serious",
                   rob_rationale = "Sign flip when high-RoB studies are removed",
                   threshold = 1.20, threshold_scale = "ratio")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "serious")
+  expect_equal(rob_row$judgment, "very_serious")
   expect_equal(rob_row$downgrade, -2L)
 })
 
@@ -171,11 +171,11 @@ test_that("Rule 5 can still reach -2 through the scalar rob override", {
 # Updated (v0.5): same -1 cap as above.
 test_that("Fallback: Threshold not supplied + sign flip -> some_concerns (rule 5)", {
   m <- make_mock_dominated(te_all = 1.0, te_low_only = -0.5)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = NULL,
                   rob_inflation_threshold = 0.10, threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "some_concerns")
+  expect_equal(rob_row$judgment, "serious")
   expect_match(rob_row$notes, "Threshold not supplied")
 })
 
@@ -183,11 +183,11 @@ test_that("Fallback: Threshold not supplied + same-sign small inflation -> no (r
   # Without Threshold, trivial zone collapses to {0}; both 0.05 and 0.04 are 'above'.
   # te_all < te_low under small_values='undesirable' -> direction_ok FALSE -> rule 2.
   m <- make_mock_dominated(te_all = 0.04, te_low_only = 0.05)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   rob_inflation_threshold = 0.10, threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "no")
+  expect_equal(rob_row$judgment, "not_serious")
   expect_match(rob_row$notes, "Rule 2")
 })
 
@@ -199,12 +199,12 @@ test_that("Direction gate blocks downgrade despite ratio > threshold -> no + exp
   # bias-favouring; here te_all < te_low (shift toward smaller values), so the
   # direction gate blocks the downgrade (rule 2) and the note must say why.
   m <- make_mock_dominated(te_all = -0.60, te_low_only = -0.40)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "no")
+  expect_equal(rob_row$judgment, "not_serious")
   expect_match(rob_row$notes, "Rule 2")
   expect_match(rob_row$notes, "direction gate \\(bias-favouring shift\\): no")
   expect_match(rob_row$notes, "exceeding the 10% threshold", fixed = TRUE)
@@ -215,7 +215,7 @@ test_that("Direction gate blocks downgrade despite ratio > threshold -> no + exp
 test_that("Direction gate result is always reported in notes", {
   # Bias-favouring case (rule 3): gate = yes.
   m <- make_mock_dominated(te_all = 0.60, te_low_only = 0.40)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
@@ -230,14 +230,14 @@ test_that("small_values = NULL: warning when |TE| assumption drives a rule-3 dow
   # falls back to |TE_all| > |TE_low|, which decides the downgrade -> warn once.
   m <- make_mock_dominated(te_all = 0.60, te_low_only = 0.40)
   expect_warning(
-    g <- grade_meta(m, rob = c("serious", "no", "no"),
+    g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                     small_values = NULL,
                     threshold = 1.20, threshold_scale = "ratio",
                     rob_inflation_threshold = 0.10),
     regexp = "small_values"
   )
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "some_concerns")
+  expect_equal(rob_row$judgment, "serious")
   expect_match(rob_row$notes, "Rule 3")
 })
 
@@ -246,7 +246,7 @@ test_that("small_values = NULL: no warning when the gate is not decisive", {
   # small_values, so no warning should be emitted.
   m <- make_mock_dominated(te_all = 0.2, te_low_only = 1.1)
   expect_no_warning(
-    grade_meta(m, rob = c("serious", "no", "no"),
+    grade_meta(m, rob = c("very_serious", "no", "no"),
                small_values = NULL,
                rob_inflation_threshold = 0.10, threshold_type = "null"),
     message = "small_values"
@@ -257,30 +257,30 @@ test_that("small_values = NULL: no warning when the gate is not decisive", {
 test_that("small_values = NULL: high-RoB toward null does NOT rate down", {
   # |te_all|=0.2 < |te_low|=1.1 -> direction_ok FALSE; both 'above' (no Threshold).
   m <- make_mock_dominated(te_all = 0.2, te_low_only = 1.1)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = NULL,
                   rob_inflation_threshold = 0.10, threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "no")
+  expect_equal(rob_row$judgment, "not_serious")
 })
 
 # --- Threshold = 0 backward compatibility -----------------------------------
 test_that("Threshold = 0 inside same non-trivial zone rates down for any inflation", {
   # te_all=0.20 (above), te_low=0.19 (above); 5% inflation; threshold 0 -> rule 3.
   m <- make_mock_dominated(te_all = 0.20, te_low_only = 0.19)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "some_concerns")
+  expect_equal(rob_row$judgment, "serious")
   expect_match(rob_row$notes, "Rule 3")
 })
 
 # --- Reporting ---------------------------------------------------------------
 test_that("weight_note reports both count % and weight %", {
   m <- make_mock_dominated(te_all = 0.05, te_low_only = 0.05)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
@@ -291,14 +291,14 @@ test_that("weight_note reports both count % and weight %", {
 test_that("All studies high-RoB -> some_concerns (1 level down, no comparator pool)", {
   # Updated (v0.5): this used to rate down 2 levels. Core GRADE 4 supports no
   # automatic two-level risk-of-bias downgrade, so the automated judgment is
-  # capped at -1; -2 requires rob = "serious" + rob_rationale.
+  # capped at -1; -2 requires rob = "very_serious" + rob_rationale.
   m <- make_mock_dominated(te_all = 0.30, te_low_only = 0.30)
-  g <- grade_meta(m, rob = c("serious", "serious", "serious"),
+  g <- grade_meta(m, rob = c("very_serious", "very_serious", "very_serious"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "some_concerns")
+  expect_equal(rob_row$judgment, "serious")
   expect_equal(rob_row$downgrade, -1L)
   expect_match(rob_row$notes, "All studies high-RoB", fixed = TRUE)
   expect_match(rob_row$notes, "capped at one level", fixed = TRUE)
@@ -306,7 +306,7 @@ test_that("All studies high-RoB -> some_concerns (1 level down, no comparator po
 
 test_that("diff_note reports zone labels and relative inflation", {
   m <- make_mock_dominated(te_all = 0.60, te_low_only = 0.40)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
@@ -380,18 +380,18 @@ test_that(".rob_expand / .rob_contract move a vector between the two spaces", {
   al      <- pmatools:::.rob_alignment(make_mock_gap(), 3L)
   al_full <- pmatools:::.rob_alignment(
     make_mock_gap(te = c(0.60, 0.30, 0.02, 0.02)), 4L)
-  rob_k   <- c("serious", "no", "no")
+  rob_k   <- c("very_serious", "no", "no")
 
   # k-space -> studlab space: NA padding on the row {meta} could not pool.
   expect_equal(pmatools:::.rob_expand(rob_k, al),
-               c("serious", NA, "no", "no"))
+               c("very_serious", NA, "no", "no"))
   # ... and back again (round trip is the identity on k-space vectors).
   expect_equal(pmatools:::.rob_contract(pmatools:::.rob_expand(rob_k, al), al),
                rob_k)
   # studlab space -> k-space drops the unpooled row.
   expect_equal(
-    pmatools:::.rob_contract(c("serious", "no", "no", "some_concerns"), al),
-    c("serious", "no", "some_concerns"))
+    pmatools:::.rob_contract(c("very_serious", "no", "no", "serious"), al),
+    c("very_serious", "no", "serious"))
 
   # A ready-made studlab-space `fill` supplies the unpooled rows: that is how
   # "high_idx" keeps a dropped study high only when the caller judged it so.
@@ -423,7 +423,7 @@ test_that("an unresolvable alignment skips the refit instead of mis-subsetting",
   m$seTE     <- c(0.10, 0.45, 0.45)
   m$w.random <- c(80, 10, 10)
   m$k        <- 3L
-  d <- assess_rob(c("serious", "no", "no"), m, small_values = "undesirable",
+  d <- assess_rob(c("very_serious", "no", "no"), m, small_values = "undesirable",
                   threshold_internal = log(1.20))
   expect_equal(length(attr(d, "high_idx")), 3L)
   expect_warning(
@@ -441,7 +441,7 @@ test_that("a studlab-length rob aborts when the alignment is unresolvable", {
   m$w.random <- c(80, 10, 10)
   m$k        <- 3L
   expect_error(
-    assess_rob(c("serious", "no", "no", "no"), m,
+    assess_rob(c("very_serious", "no", "no", "no"), m,
                threshold_internal = log(1.20)),
     regexp = "estimable rows could not be identified"
   )

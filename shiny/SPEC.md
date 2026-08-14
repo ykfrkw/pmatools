@@ -509,7 +509,7 @@ Resulting judgment: {{judgment}}
 
 **Override controls (collapsed by default):**
 
-- `selectInput("rob_override", "Override RoB judgment", c("(use auto)" = "", "No" = "no", "Some" = "some", "Serious" = "serious", "Very serious" = "very_serious"))`
+- `selectInput("rob_override", "Override RoB judgment", pma_judgment_choices(blank_label = "(use auto)"))` — the four Core GRADE levels, values and labels per §3.4.11
 - `sliderInput("rob_dom_threshold", "Dominance threshold", min = 0.5, max = 0.7, value = 0.6, step = 0.05)`
 - ~~`sliderInput("rob_inf_threshold", …)`~~ — deleted in 0.5.1; see §3.4.11
 - `radioButtons("small_values", "Small values are...", c("Desirable (e.g., mortality, severity)" = "desirable", "Undesirable (e.g., response rate)" = "undesirable", "(use auto)" = ""))`
@@ -584,7 +584,7 @@ The BMJ flowchart can be driven manually for a fully clinically-informed judgmen
 
 **Override controls (collapsed by default):**
 
-- `selectInput("inconsistency_override", "Override Inconsistency judgment with a single value", c("(use flowchart)" = "", "No" = "no", "Some" = "some", "Serious" = "serious", "Very serious" = "very_serious"))`
+- `selectInput("inconsistency_override", "Override Inconsistency judgment with a single value", pma_judgment_choices(blank_label = "(use flowchart)"))`
 
 #### 3.4.6 Educational copy — Indirectness
 
@@ -599,7 +599,7 @@ This is the only domain that cannot be informed by your data.
 
 **Required (always visible):**
 
-- `radioButtons("indirectness", "Overall indirectness rating", c("No" = "no", "Some" = "some", "Serious" = "serious", "Very serious" = "very_serious"), selected = "no")`
+- `radioButtons("indirectness", "Overall indirectness rating", pma_judgment_choices(include_blank = FALSE))`
 
 **Educational sub-prompts (collapsed by default, do not affect rating):**
 
@@ -628,7 +628,7 @@ Resulting judgment: {{judgment}}
 - `numericInput("ois_p0", "Baseline (control) event rate for OIS", value = NA, min = 0, max = 1)` *(binary only)*
 - `numericInput("ois_sd", ...)` *(continuous only)*, rendered by `output$ois_sd_ui` and **prefilled from the data**, because `.calc_ois()` needs δ and σ on the same scale:
   - **MD / RoM** — label "Pooled SD for OIS (auto from data)", value `compute_pooled_sd(state$ma)`. The threshold is on the raw outcome scale, so σ has to be too.
-  - **SMD** — label "SD for OIS (1: the SMD is already expressed in SD units, so the threshold above is standardized)", value `1`. An SMD threshold is *already* standardized; prefilling the raw pooled SD there inflated the target N by σ² and could flip Fig 4's large-effect path from `no` to `some_concerns`/`serious` through the "< 30% of OIS" rule.
+  - **SMD** — label "SD for OIS (1: the SMD is already expressed in SD units, so the threshold above is standardized)", value `1`. An SMD threshold is *already* standardized; prefilling the raw pooled SD there inflated the target N by σ² and could flip Fig 4's large-effect path from `not_serious` to `serious`/`very_serious` through the "< 30% of OIS" rule.
   - A value the reviewer types always wins, for every measure.
 - `numericInput("ois_events", "Override OIS — target events", value = NA, min = 0)` *(binary only)*
 - `numericInput("ois_n", "Override OIS — target N", value = NA, min = 0)` *(continuous only)*
@@ -766,10 +766,28 @@ on Steps 1 and 3, and the Step 4 "How to cite" card all follow it.
 
 **Judgment wording.** Badges, verdict lines and the four override
 `selectInput`s read `.grade_level_wording()` from the package (SPEC.md §5.0),
-so they say *Not serious* / *Serious* / *Very serious*. The override **values**
-are unchanged (`no` / `some_concerns` / `serious`), and their labels carry the
-downgrade — `"Serious (-1)"` — because "serious" alone is ambiguous between
-Core GRADE's −1 and the internal level name for −2.
+so they say *Not serious* / *Serious* / *Very serious* / *Extremely serious*.
+Since 0.5.1 the override **values** are those same Core GRADE words
+(`not_serious` / `serious` / `very_serious` / `extremely_serious`), and their
+labels still carry the downgrade — `"Serious (-1)"` — so a reviewer can see
+what a level costs before picking it.
+
+**The fourth level, and where it is not offered.** `pma_judgment_choices()`
+offers `Extremely serious (-3)` on all five domain tabs. No assessor produces
+it (SPEC.md §5.0), so this menu is the only route into the level, and it lands
+in the same rationale gate as every other override: selecting it without a
+written rationale leaves the automatic judgment standing and raises the
+"a written rationale is required" notification. It is deliberately **absent**
+from `radioButtons("other_downgrade")`, which stays `0 / -1 / -2`: "Other
+considerations" is not a Core GRADE domain, and a −3 there would invent a
+rating the source does not describe.
+
+**Level → downgrade is the package's table, not the app's.**
+`pma_downgrade_chip()`, `pma_judgment_badge()`, `pma_domain_verdict()` and
+`pmatools_GRADE_DOWNGRADE()` call the vendored `.grade_level_downgrade()`.
+They used to carry four private copies of `c(no = 0, some = -1, ...)`, each
+needing a hand edit whenever the package gained a level; a level the app did
+not know about scored 0 and painted green.
 
 **Configuration owns the cross-cutting settings**, and each is in a
 `.config_section()` box of its own — Control-group risk, **Outcome direction**,
@@ -941,7 +959,7 @@ branch, via a `conditionalPanel` on `output.incon_subgroup_relevant`
 
 > **That question is now worth two levels (0.5.1).** Leaving
 > `subgroup_explained` unanswered on the opposite-sides branch rates
-> Inconsistency `serious` (−2), not `some_concerns` (−1): with a substantial
+> Inconsistency `very_serious` (−2), not `serious` (−1): with a substantial
 > share of estimates on each side of the threshold and no credible subgroup,
 > the direction of effect is unresolved. The app renders whatever the package
 > returns — no app-side arithmetic changes — but the domain badge, the

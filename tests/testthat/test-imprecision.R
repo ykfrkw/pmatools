@@ -46,10 +46,10 @@ test_that("events <= 30% of OIS but CI crosses the threshold -> rate down one", 
   # Expectation changed with the Fig 4 rewrite: the CI crosses the chosen
   # (null) threshold, so Fig 4 stops at "rate down one level" and never
   # consults the OIS; the previous implementation applied "<= 30% of OIS"
-  # unconditionally and returned "serious".
+  # unconditionally and returned "very_serious".
   g <- suppressWarnings(grade_meta(m, ois_events = 1000, threshold_type = "null"))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
-  expect_equal(row$judgment, "some_concerns")
+  expect_equal(row$judgment, "serious")
   expect_equal(row$downgrade, -1L)
   expect_match(row$notes, "OIS not applied on this Fig 4 path", fixed = TRUE)
 })
@@ -61,7 +61,7 @@ test_that("events between 30% and 100% of OIS gives some_concerns", {
   # threshold rather than because the OIS was unmet.
   g <- suppressWarnings(grade_meta(m, ois_events = 200, threshold_type = "null"))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
-  expect_equal(row$judgment, "some_concerns")
+  expect_equal(row$judgment, "serious")
   expect_equal(row$downgrade, -1L)
   # Notes should display observed / target counts alongside the percentage
   # so users can verify the OIS check at a glance.
@@ -77,7 +77,7 @@ test_that("continuous: large effect, CI clear of the threshold, N < 30% of OIS -
   # Total N = 90, OIS = 1000 -> 9%.
   g <- suppressWarnings(grade_meta(m, outcome_type = "absolute", ois_n = 1000, threshold_type = "null"))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
-  expect_equal(row$judgment, "serious")
+  expect_equal(row$judgment, "very_serious")
   # Display fixed (v0.5): the note used to read "<= 30%" while the decision
   # used a strict "<". Fig 4's node is "N<30% of OIS".
   expect_match(row$notes, "< 30%", fixed = TRUE)
@@ -94,7 +94,7 @@ test_that("Rule (a): CI containing both Thresholds triggers serious", {
   g <- suppressWarnings(grade_meta(m, threshold = 1.05, threshold_scale = "ratio",
                                     ois_events = 10))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
-  expect_equal(row$judgment, "serious")
+  expect_equal(row$judgment, "very_serious")
   expect_match(row$notes, "BOTH Thresholds", fixed = TRUE)
 })
 
@@ -111,7 +111,7 @@ test_that("Rule (a): CI within Thresholds, OIS met -> no concern", {
     outcome_type = "absolute", threshold = 0.5, threshold_scale = "te_scale",
     ois_n = 100))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
-  expect_equal(row$judgment, "no")
+  expect_equal(row$judgment, "not_serious")
   expect_equal(row$downgrade, 0L)
   expect_match(row$notes, "within Threshold", fixed = TRUE)
 })
@@ -135,7 +135,7 @@ test_that("CI entirely beyond +Threshold -> no rate down (regression)", {
     ois_p0 = 0.2, ois_p1 = 0.4
   ))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
-  expect_equal(row$judgment, "no")
+  expect_equal(row$judgment, "not_serious")
   expect_equal(row$downgrade, 0L)
   expect_match(row$notes, "beyond Threshold", fixed = TRUE)
   expect_false(grepl("crosses one Threshold", row$notes, fixed = TRUE))
@@ -176,7 +176,7 @@ test_that("null threshold + CI spanning both MIDs -> serious (-2)", {
   expect_equal(g$rating_target, "non_null_effect")
   row <- impre_row(g)
   # ...but the CI also includes clearly important harm, so two levels.
-  expect_equal(row$judgment, "serious")
+  expect_equal(row$judgment, "very_serious")
   expect_equal(row$downgrade, -2L)
   expect_match(row$notes, "crosses BOTH Thresholds", fixed = TRUE)
   expect_match(row$notes, "null-threshold path", fixed = TRUE)
@@ -186,7 +186,7 @@ test_that("null threshold without a MID cannot reach -2 (two-level check undecid
   g <- suppressWarnings(grade_meta(.make_spans_both_mids(),
                                    threshold_type = "null"))
   row <- impre_row(g)
-  expect_equal(row$judgment, "some_concerns")
+  expect_equal(row$judgment, "serious")
   expect_equal(row$downgrade, -1L)
   expect_match(row$notes, "the null threshold", fixed = TRUE)
 })
@@ -195,7 +195,7 @@ test_that("the MID threshold reaches -2 on the same data (both routes agree)", {
   g <- suppressWarnings(grade_meta(.make_spans_both_mids(),
                                    threshold = 1.20, threshold_scale = "ratio"))
   row <- impre_row(g)
-  expect_equal(row$judgment, "serious")
+  expect_equal(row$judgment, "very_serious")
 })
 
 # --------------------------------------------------------------------------
@@ -348,7 +348,7 @@ test_that("the 800 rule of thumb no longer fires off a single-arm total", {
   expect_false(grepl("total N =", res$notes, fixed = TRUE))
   # The judgment is unchanged: the object falls through to the "OIS could not
   # be computed" branch, which also does not rate down.
-  expect_equal(res$judgment, "no")
+  expect_equal(res$judgment, "not_serious")
   expect_match(res$notes, "OIS could not be computed", fixed = TRUE)
 })
 
@@ -365,7 +365,7 @@ test_that("Crosses null but not both Thresholds, OIS met (>=100%) -> some_concer
   g <- suppressWarnings(grade_meta(m, threshold = 1.5, threshold_scale = "ratio",
                                     ois_events = 100))
   row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
-  expect_true(row$judgment %in% c("no", "some_concerns"))
+  expect_true(row$judgment %in% c("not_serious", "serious"))
 })
 
 # --------------------------------------------------------------------------

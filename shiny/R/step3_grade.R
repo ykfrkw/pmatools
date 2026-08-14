@@ -34,10 +34,10 @@ STEP3_INDIR_ANSWERS <- c(
 # needed) or overrides it (rationale required) without a second grade_meta()
 # call.
 STEP3_INDIR_ANSWER_TO_LEVEL <- c(
-  yes          = "no",
-  probably_yes = "no",
-  probably_no  = "some_concerns",
-  no           = "serious"
+  yes          = "not_serious",
+  probably_yes = "not_serious",
+  probably_no  = "serious",
+  no           = "very_serious"
 )
 
 # --------------------------------------------------------------------------
@@ -83,10 +83,10 @@ STEP3_INDIR_ANSWER_TO_LEVEL <- c(
 }
 
 pmatools_GRADE_DOWNGRADE <- function(j) {
-  # 3-level system (v0.3+): -1 = some_concerns, -2 = serious. Legacy
-  # labels are still mapped so old user input doesn't break.
-  c(no = 0, some = -1, some_concerns = -1,
-    serious = -2, very_serious = -2)[[j]]
+  # The table is the package's (vendored .grade_level_downgrade()), not a copy
+  # kept in step by hand -- an app-side copy is how the app came to disagree
+  # with grade_meta() about what a level costs.
+  .grade_level_downgrade(j)
 }
 
 .pubias_missing_empty <- function() {
@@ -439,7 +439,7 @@ step3_ui <- function(state = NULL) {
           # ----- The four Core GRADE 5 PICO questions ----------------------
           # Every one PRESELECTED to "yes" - the default is now on screen
           # rather than in the code. Leaving them blank used to send
-          # indirectness = "no" to grade_meta() (see grade_obj()), so the
+          # indirectness = "not_serious" to grade_meta() (see grade_obj()), so the
           # domain scored no downgrade while the screen showed four unanswered
           # questions. The judgment is identical either way; what changes is
           # that the reviewer can see what they are accepting, and downgrades
@@ -2104,19 +2104,19 @@ step3_server <- function(input, output, session, state) {
     # --- Indirectness: the four Core GRADE 5 subdomain answers, plus an
     # optional scalar override of their worst-case fold.
     #
-    # `indirectness` MUST be NULL - not "no" - whenever no override is
+    # `indirectness` MUST be NULL - not "not_serious" - whenever no override is
     # intended: grade_meta() reads any non-NULL scalar alongside a subdomain
     # table as a manual override and demands indirectness_rationale for it.
-    # With no subdomain answers the scalar path is unchanged and "no" is the
-    # safe default; the confirmation gate (not an error) is what tells the
-    # user the domain is still unassessed.
+    # With no subdomain answers the scalar path is unchanged and "not_serious"
+    # is the safe default; the confirmation gate (not an error) is what tells
+    # the user the domain is still unassessed.
     indir_sub       <- indir_subdomains()
     indir_worst     <- indir_worst_case()
-    indir_arg       <- if (is.null(indir_sub)) "no" else NULL
+    indir_arg       <- if (is.null(indir_sub)) "not_serious" else NULL
     indir_rationale <- NULL
     indir_sel <- input$indirectness
     if (!is.null(indir_sel) && length(indir_sel) == 1 && nzchar(indir_sel)) {
-      auto_level <- indir_worst %||% "no"
+      auto_level <- indir_worst %||% "not_serious"
       if (identical(indir_sel, auto_level)) {
         # A restatement of the automatic judgment: accepted without a
         # rationale, and it changes nothing.
@@ -2335,12 +2335,12 @@ step3_server <- function(input, output, session, state) {
       if (identical(pubias_rc, "no")) {
         idx <- which(g$domain_assessments$domain == "Publication bias")
         if (length(idx)) {
-          g$domain_assessments$judgment[idx]  <- "some_concerns"
+          g$domain_assessments$judgment[idx]  <- "serious"
           g$domain_assessments$auto[idx]      <- FALSE
           g$domain_assessments$downgrade[idx] <- -1L
           g$domain_assessments$notes[idx] <- paste0(
             "Q1: reporting bias suspected based on the overall judgment ",
-            "of the listed conditions; rate down 1 (some concerns) regardless ",
+            "of the listed conditions; rate down 1 (serious) regardless ",
             "of Q2-Q5. | ", g$domain_assessments$notes[idx])
         }
       }
@@ -2662,17 +2662,17 @@ step3_server <- function(input, output, session, state) {
     row$notes[1]
   }
 
-  output$rob_badge    <- shiny::renderUI(pma_judgment_badge(domain_judgment("Risk of bias")    %||% "no"))
-  output$incon_badge  <- shiny::renderUI(pma_judgment_badge(domain_judgment("Inconsistency")   %||% "no"))
-  output$indir_badge  <- shiny::renderUI(pma_judgment_badge(domain_judgment("Indirectness")    %||% "no"))
-  output$impre_badge  <- shiny::renderUI(pma_judgment_badge(domain_judgment("Imprecision")     %||% "no"))
-  output$pubias_badge <- shiny::renderUI(pma_judgment_badge(domain_judgment("Publication bias")%||% "no"))
+  output$rob_badge    <- shiny::renderUI(pma_judgment_badge(domain_judgment("Risk of bias")    %||% "not_serious"))
+  output$incon_badge  <- shiny::renderUI(pma_judgment_badge(domain_judgment("Inconsistency")   %||% "not_serious"))
+  output$indir_badge  <- shiny::renderUI(pma_judgment_badge(domain_judgment("Indirectness")    %||% "not_serious"))
+  output$impre_badge  <- shiny::renderUI(pma_judgment_badge(domain_judgment("Imprecision")     %||% "not_serious"))
+  output$pubias_badge <- shiny::renderUI(pma_judgment_badge(domain_judgment("Publication bias")%||% "not_serious"))
 
-  output$rob_chip    <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Risk of bias")    %||% "no"))
-  output$incon_chip  <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Inconsistency")   %||% "no"))
-  output$indir_chip  <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Indirectness")    %||% "no"))
-  output$impre_chip  <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Imprecision")     %||% "no"))
-  output$pubias_chip <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Publication bias")%||% "no"))
+  output$rob_chip    <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Risk of bias")    %||% "not_serious"))
+  output$incon_chip  <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Inconsistency")   %||% "not_serious"))
+  output$indir_chip  <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Indirectness")    %||% "not_serious"))
+  output$impre_chip  <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Imprecision")     %||% "not_serious"))
+  output$pubias_chip <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Publication bias")%||% "not_serious"))
 
   # ----- Risk-of-bias analysis set (Core GRADE 4 Fig 2) -------------------
   # Display only: these three outputs read the rated object and change no
@@ -2743,7 +2743,7 @@ step3_server <- function(input, output, session, state) {
       facts <- domain_fact_table(domain)
       htmltools::tagList(
         htmltools::h5("Evaluation"),
-        pma_domain_verdict(domain_judgment(domain) %||% "no",
+        pma_domain_verdict(domain_judgment(domain) %||% "not_serious",
                            domain_downgrade(domain)),
         pma_facts_list(facts, keys = keys),
         # The picture of the decision, with the branch this analysis took lit
@@ -3311,7 +3311,7 @@ step3_server <- function(input, output, session, state) {
         "Egger's test could not be computed."))
     }
     pval <- res$p.value
-    # Single tier. pmatools 0.5 removed the p < 0.01 -> "serious" (-2) rule
+    # Single tier. pmatools 0.5 removed the p < 0.01 -> "very_serious" (-2) rule
     # because Core GRADE 4 never rates down two levels for publication bias.
     judgment <- if (pval < 0.05) {
       list(text = sprintf(paste0("p = %.3f < 0.05 - evidence of asymmetry. ",

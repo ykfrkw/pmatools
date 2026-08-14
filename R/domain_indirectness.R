@@ -4,7 +4,8 @@
 # domain_rob.R と同じ入力パターンをサポート。
 #
 # Inputs (mutually exclusive with the subdomain table):
-#   (a) scalar GRADE level ("no" / "some_concerns" / "serious")
+#   (a) scalar GRADE level ("not_serious" / "serious" / "very_serious" /
+#       "extremely_serious")
 #   (b) length-k vector of per-study GRADE levels (weight-share aggregation)
 #   (c) column name in meta_obj$data (expanded to (b))
 #   (d) `indirectness_subdomains`: a PICO subdomain table (Core GRADE 5)
@@ -24,12 +25,15 @@
 # when a single study out of eighteen was indirect, which is the opposite of
 # "all or almost all". Since v0.5 the aggregation is:
 #
-#   w_serious = inverse-variance weight share of studies rated "serious"
-#   w_any     = weight share of studies rated "some_concerns" or "serious"
+#   w_serious = inverse-variance weight share of studies rated "very_serious"
+#   w_any     = weight share of studies rated "serious" or "very_serious"
 #
-#   w_serious >= indirectness_dominant_threshold -> "serious"       (-2)
-#   w_any     >= indirectness_dominant_threshold -> "some_concerns" (-1)
-#   otherwise                                    -> "no"
+#   w_serious >= indirectness_dominant_threshold -> "very_serious" (-2)
+#   w_any     >= indirectness_dominant_threshold -> "serious"      (-1)
+#   otherwise                                    -> "not_serious"  ( 0)
+#
+# "extremely_serious" (-3) is never produced here; it is a manual override
+# only, like everywhere else in the package.
 #
 # CAVEAT: the threshold itself has NO basis in Core GRADE 5, which offers no
 # numeric operationalisation of "all or almost all". The default 0.55 is a
@@ -92,15 +96,11 @@
 #   probably_no     | important differences            | some_concerns  (-1)
 #   no              | evidence is not applicable       | serious        (-2)
 #
-# NOTE ON VOCABULARY. The internal level names are shared with Risk of bias and
-# do NOT match the Core GRADE wording for this domain. Core GRADE 1 (verbatim)
-# characterises limitations as "not serious; serious; very serious; or, rarely,
-# extremely serious", so:
-#   internal "no"            = Core GRADE "not serious"   (0 levels)
-#   internal "some_concerns" = Core GRADE "serious"       (-1)
-#   internal "serious"       = Core GRADE "very serious"  (-2)
-# Domain notes render the Core GRADE wording via .indirectness_level_label();
-# the stored level names are unchanged.
+# NOTE ON VOCABULARY. The level names are shared with Risk of bias and are Core
+# GRADE's own words ("not serious; serious; very serious; or, rarely, extremely
+# serious", Core GRADE 1). See R/utils.R for the table and for why a bare
+# "serious" is refused in this release. Domain notes render the level through
+# .indirectness_level_label(), which defers to .grade_level_wording().
 #
 # The overall domain judgment defaults to the WORST case across subdomains
 # (unlike the per-study aggregation above, which is weight-share based: a
@@ -117,12 +117,14 @@
 # 4-point subdomain answer scale (Core GRADE 5)
 INDIRECTNESS_ANSWERS <- c("yes", "probably_yes", "probably_no", "no")
 
-# Answer -> GRADE level contribution (see the table above)
+# Answer -> GRADE level contribution (see the table above). The keys are the
+# 4-point answers to "Is the evidence sufficiently direct?", NOT GRADE levels;
+# only the values moved when the level vocabulary did.
 INDIRECTNESS_ANSWER_TO_GRADE <- c(
-  yes          = "no",
-  probably_yes = "no",
-  probably_no  = "some_concerns",
-  no           = "serious"
+  yes          = "not_serious",
+  probably_yes = "not_serious",
+  probably_no  = "serious",
+  no           = "very_serious"
 )
 
 # Human-readable answer labels (table rendering / domain notes)
@@ -133,25 +135,19 @@ INDIRECTNESS_ANSWER_LABELS <- c(
   no           = "No"
 )
 
-# Internal GRADE level -> Core GRADE wording for THIS domain (Core GRADE 1:
-# "not serious; serious; very serious"). Used for display in the domain notes
-# only; the stored level names stay "no" / "some_concerns" / "serious".
-INDIRECTNESS_LEVEL_LABELS <- c(
-  no            = "not serious",
-  some_concerns = "serious",
-  serious       = "very serious"
-)
-
+# The domain notes used to carry their own copy of the level -> wording table.
+# There is one display vocabulary for the whole package (.grade_level_wording()
+# in R/utils.R) and this domain has no reason to be the exception.
 .indirectness_level_label <- function(level) {
-  out <- unname(INDIRECTNESS_LEVEL_LABELS[level])
-  ifelse(is.na(out), gsub("_", " ", level), out)
+  .grade_level_wording(level)
 }
 
 # Overall-judgment labels for the subdomain table footer row
 INDIRECTNESS_OVERALL_LABELS <- c(
-  no            = "No serious indirectness\n(no rating down)",
-  some_concerns = "Serious indirectness\n(rate down 1 level)",
-  serious       = "Very serious indirectness\n(rate down 2 levels)"
+  not_serious       = "No serious indirectness\n(no rating down)",
+  serious           = "Serious indirectness\n(rate down 1 level)",
+  very_serious      = "Very serious indirectness\n(rate down 2 levels)",
+  extremely_serious = "Extremely serious indirectness\n(rate down 3 levels)"
 )
 
 #' Assess the Indirectness domain (Core GRADE series; internal)
@@ -180,12 +176,13 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
   k <- meta_obj$k
   dominant_threshold <- .check_indirectness_dominant_threshold(dominant_threshold)
 
-  # デフォルト: スカラ "no"
-  if (is.null(indirectness)) indirectness <- "no"
+  # デフォルト: スカラ "not_serious"
+  if (is.null(indirectness)) indirectness <- "not_serious"
 
-  # 列名参照
+  # 列名参照. The legacy spellings have to be recognised here too, or a scalar
+  # `indirectness = "no"` is taken for a column name and aborts.
   if (length(indirectness) == 1 && is.character(indirectness) &&
-      !indirectness %in% GRADE_LEVELS) {
+      !indirectness %in% c(GRADE_LEVELS, names(GRADE_LEVEL_ALIASES))) {
     col <- indirectness
     data <- meta_obj$data
     if (is.null(data) || !col %in% names(data)) {
@@ -199,13 +196,14 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
   }
 
   # スカラ
-  # v0.4.0 (breaking): any scalar other than the default "no" is a manual
-  # override and requires indirectness_rationale. "no" (= no downgrade, the
-  # documented default) stays exempt so default calls keep working.
+  # v0.4.0 (breaking): any scalar other than the default "not_serious" is a
+  # manual override and requires indirectness_rationale. "not_serious" (= no
+  # downgrade, the documented default) stays exempt so default calls keep
+  # working.
   if (length(indirectness) == 1) {
     validate_grade_level(indirectness, "indirectness")
     ind_norm <- .normalize_grade_level(indirectness)
-    if (!identical(ind_norm, "no")) {
+    if (!identical(ind_norm, "not_serious")) {
       .check_override_rationale(rationale, "indirectness_rationale",
                                 "Indirectness")
     }
@@ -302,8 +300,8 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
     paste0(names(tbl), ": n=", as.integer(tbl)), collapse = "; "
   )
 
-  idx_serious <- ind_vec == "serious"
-  idx_any     <- ind_vec %in% c("some_concerns", "serious")
+  idx_serious <- ind_vec == "very_serious"
+  idx_any     <- ind_vec %in% c("serious", "very_serious")
 
   share_serious <- .indirectness_weight_share(meta_obj, idx_serious, n)
   share_any     <- .indirectness_weight_share(meta_obj, idx_any, n)
@@ -326,7 +324,7 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
   }
 
   if (share_serious >= dominant_threshold) {
-    judgment <- "serious"
+    judgment <- "very_serious"
     decision <- sprintf(
       paste0("Studies with a per-study rating of 'serious' carry %.0f%% of ",
              "the %s >= %.0f%% -> the body of evidence is dominated by ",
@@ -335,7 +333,7 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
       100 * share_serious, basis, 100 * dominant_threshold
     )
   } else if (share_any >= dominant_threshold) {
-    judgment <- "some_concerns"
+    judgment <- "serious"
     decision <- sprintf(
       paste0("Indirect studies (per-study rating 'some concerns' or ",
              "'serious') carry %.0f%% of the %s >= %.0f%% -> serious ",
@@ -343,7 +341,7 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
       100 * share_any, basis, 100 * dominant_threshold
     )
   } else {
-    judgment <- "no"
+    judgment <- "not_serious"
     decision <- sprintf(
       paste0("Indirect studies carry only %.0f%% of the %s (< %.0f%%), so the ",
              "body of evidence is not dominated by indirect evidence -> do ",
@@ -509,8 +507,10 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
 # Worst case across subdomains (deliberately NOT the weight-share rule used for
 # per-study vectors: subdomains are facets of a single judgment).
 .indirectness_worst_case <- function(sub_tbl) {
-  order_map <- c(no = 1, some_concerns = 2, serious = 3)
-  names(which.max(order_map[sub_tbl$grade_level]))
+  # Severity order is the downgrade itself, so the four levels stay ranked
+  # without a second table that could fall out of step with GRADE_DOWNGRADE.
+  levels_here <- .normalize_grade_level(sub_tbl$grade_level)
+  levels_here[which.min(.grade_level_downgrade(levels_here))]
 }
 
 # Compact one-line summary of the subdomain judgments for the domain notes.
@@ -550,8 +550,8 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
       "the worst-case subdomain judgment."
     ))
   }
-  if (!indirectness %in% c("no", "some", "some_concerns", "serious",
-                           "very_serious")) {
+  .check_grade_level_input(indirectness, "indirectness")
+  if (!indirectness %in% c(GRADE_LEVELS, names(GRADE_LEVEL_ALIASES))) {
     rlang::abort(paste0(
       "indirectness = '", indirectness, "' is not a GRADE level. When ",
       "indirectness_subdomains is supplied, column-name input is not allowed; ",
@@ -573,7 +573,7 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
   }
 
   # The hint matters for programmatic callers (do.call(), Shiny) that pass every
-  # argument: forwarding a default "no" alongside a subdomain table reads as an
+  # argument: forwarding a default "not_serious" alongside a subdomain table reads as an
   # override here, and omitting the argument (or passing NULL) is the fix.
   .check_override_rationale(
     rationale, "indirectness_rationale", "Indirectness",

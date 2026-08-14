@@ -241,14 +241,14 @@ m <- meta::metabin(event.e = c(10,15,20), n.e = c(50,60,70),
                    prediction = TRUE)
 
 # v0.4 breaking change: every manual domain-judgment override (scalar rob,
-# indirectness != "no", inconsistency, imprecision, pubias_funnel_asymmetry)
+# indirectness != "not_serious", inconsistency, imprecision, pubias_funnel_asymmetry)
 # requires a matching *_rationale argument.
 # v0.5 breaking change: threshold_type defaults to "mid", which requires a
 # threshold. Use threshold_type = "null" to rate certainty in a true
 # underlying effect, or require_threshold = FALSE to run without a MID.
 g <- grade_meta(m, study_design = "RCT", rob = "some_concerns",
                 rob_rationale = "RoB2 consensus: some concerns from missing outcome data",
-                small_values = "undesirable", indirectness = "no",
+                small_values = "undesirable", indirectness = "not_serious",
                 threshold = 1.25, threshold_scale = "ratio",
                 outcome_name = "My Outcome")
 print(g)
@@ -286,10 +286,10 @@ GRADE certainty starts at **High** for RCTs (or **Low** for observational studie
 | Imprecision | **Yes** | CI width, null crossing, OIS |
 | Publication Bias | **Yes** (Egger's test when k ≥ 10) | meta object |
 
-### Downgrade scale — read this before comparing code with the papers
+### Downgrade scale
 
-The names pmatools uses are **not** the names the Core GRADE papers use, and
-they are off by exactly one step. Core GRADE 1:
+The values pmatools stores **are** the words the Core GRADE papers use. Core
+GRADE 1:
 
 > We characterise limitations in each of these domains involved in rating down
 > certainty as **not serious; serious; very serious; or, rarely, extremely
@@ -297,21 +297,41 @@ they are off by exactly one step. Core GRADE 1:
 
 | pmatools value | Core GRADE wording | Downgrade |
 |----------------|--------------------|-----------|
-| `"no"` | not serious | 0 |
-| `"some_concerns"` | **serious** | −1 |
-| `"serious"` | **very serious** | −2 |
-| *(not implemented)* | extremely serious | −3 |
+| `"not_serious"` | not serious | 0 |
+| `"serious"` | serious | −1 |
+| `"very_serious"` | very serious | −2 |
+| `"extremely_serious"` | extremely serious | −3 |
 
-So `rob = "serious"` means the source's **very serious** (−2), not its
-"serious". If you are reading a Core GRADE paper with one hand and this code
-with the other, this is the single easiest place to be off by a level. The
-`$downgrade` column always carries the signed number — trust that when in
-doubt, and prefer the legacy alias `"very_serious"` when writing −2 by hand.
+Read a Core GRADE paper with one hand and this code with the other and the two
+now say the same thing. The `$downgrade` column still carries the signed number
+if you want to be certain.
 
-Legacy labels are still accepted and normalized: `"some"` → `"some_concerns"` (−1), `"very_serious"` → `"serious"` (−2).
+`"extremely_serious"` (−3) is **manual only**. No automated path in pmatools
+produces it — none of the Core GRADE flowcharts describes a three-level
+downgrade, and the source calls the level rare. Write it yourself, on any of
+the scalar domain arguments (with the rationale they already require), or pick
+`Extremely serious (-3)` from a domain override menu in the Shiny app. The
+maximum any assessor reaches on its own is −2.
 
-`"extremely serious"` (−3) has no pmatools value; the maximum downgrade from a
-single domain is −2.
+Legacy labels are accepted and normalized permanently, because their meaning
+never moved: `"no"` → `"not_serious"` (0), and `"some"` / `"some_concerns"` →
+`"serious"` (−1).
+
+> **Migrating from 0.5.0 or earlier: a bare `"serious"` now errors.**
+> Up to 0.5.0 `"serious"` was pmatools' own name for the source's *very
+> serious* and rated a domain down **two** levels. From 0.5.1 it carries the
+> source's meaning and rates down **one**. The spelling did not change, so a
+> script written against either release would keep running and report a
+> different certainty rating. pmatools therefore refuses the bare string for
+> one release and tells you which to write instead:
+>
+> - you meant rate down **1** level (Core GRADE's *serious*) → write
+>   `"some_concerns"`
+> - you meant rate down **2** levels (Core GRADE's *very serious*) → write
+>   `"very_serious"`
+>
+> Both mean exactly what they meant in 0.5.0. The refusal is temporary: a
+> later release will accept a plain `"serious"` again, as −1.
 
 ### Starting and final certainty
 
@@ -387,7 +407,7 @@ not a usable input to a recommendation.
 **Scalar input — flowchart bypassed** (v0.4.0+: requires `rob_rationale`):
 
 ```r
-grade_meta(m, rob = "serious",
+grade_meta(m, rob = "very_serious",
            rob_rationale = "RoB2 consensus: high risk of bias in most domains")
 ```
 
@@ -449,8 +469,8 @@ Then a single MECE 3×3 table determines the downgrade:
 ```
 Rule 1: same trivial zone                                         → no
 Rule 2: same non-trivial zone, inflation ≤ 10%                    → no
-Rule 3: same non-trivial zone, bias-favouring inflation > 10%     → some_concerns (−1)
-Rule 4: zone differs without sign flip                            → some_concerns (−1)
+Rule 3: same non-trivial zone, bias-favouring inflation > 10%     → serious (−1)
+Rule 4: zone differs without sign flip                            → serious (−1)
 Rule 5: zone differs with sign flip (above ↔ below)               → serious       (−2)
 ```
 
@@ -548,9 +568,9 @@ difference too.
 
 **No automatic two-level downgrade.** Every leaf of Fig 2 reads "rate down" /
 "do not rate down", and Core GRADE 4 describes no two-level risk-of-bias
-downgrade. The automated flowchart therefore stops at `some_concerns` (−1),
+downgrade. The automated flowchart therefore stops at `serious` (−1),
 including the sign-flip rule and the all-studies-high-RoB case. Use the scalar
-`rob = "serious"` (with `rob_rationale`) when −2 is genuinely warranted.
+`rob = "very_serious"` (with `rob_rationale`) when −2 is genuinely warranted.
 
 **Study-level overrides.** A single study's classification can be corrected
 without rebuilding the vector. Both arguments are named character vectors
@@ -569,10 +589,10 @@ grade_meta(m,
 
 | Cochrane RoB 2.0 | Internal GRADE level |
 |------------------|---------------------|
-| `"No concerns"` | `"no"` |
-| `"Some concerns"` | `"some_concerns"` |
-| `"Serious concerns"` | `"serious"` |
-| `"Critical concerns"` | `"serious"` |
+| `"No concerns"` | `"not_serious"` |
+| `"Some concerns"` | `"serious"` |
+| `"Serious concerns"` | `"very_serious"` |
+| `"Critical concerns"` | `"very_serious"` |
 
 Plain-English aliases (`"low"`, `"moderate"`, `"high"`) are also accepted.
 
@@ -586,9 +606,9 @@ grade_meta(m, rob = rob_vec, ...)   # works directly
 **Manual override** (v0.4.0+: a scalar override requires `rob_rationale` —
 Core GRADE transparency principle):
 ```r
-grade_meta(m, rob = "no",        # bypass flowchart entirely
+grade_meta(m, rob = "not_serious", # bypass flowchart entirely
            rob_rationale = "RoB2 consensus: all domains low risk")
-grade_meta(m, rob = "serious",   # force rate-down regardless of weights
+grade_meta(m, rob = "very_serious",   # force rate-down regardless of weights
            rob_rationale = "RoB2 consensus: high risk of bias in most domains")
 ```
 
@@ -648,16 +668,20 @@ caller that needs a hard failure should check the result for `"unknown"` itself.
 AUTO Step 1: Is there important heterogeneity?
   surrogate: I² > 30%
 
-  NO  → judgment = "no" (do not rate down)
+  NO  → judgment = "not_serious" (do not rate down)
 
   YES → AUTO Step 2: where do the point estimates fall vs the chosen threshold?
           meta$TE is on null = 0 scale for all measures
           (log OR/RR/HR for relative; raw MD/SMD for absolute)
           three zones around ±threshold; largest single-zone share
-            ≥ 80%                          → "majority_one_side"      → "no"
-          ≥ 20% of studies on each side    → "opposite_substantial"   → "some_concerns"
-          otherwise                        → "heterogeneous"          → "some_concerns"
-          (subgroup credibility cannot be checked automatically)
+            ≥ 80%                          → "majority_one_side"      → "not_serious"
+          ≥ 20% of studies on each side    → "opposite_substantial"   → AUTO Step 3
+          otherwise                        → "heterogeneous"          → "serious"
+
+AUTO Step 3 (opposite_substantial only): is the split explained by a credible
+          subgroup? (inconsistency_subgroup_explained)
+          "yes"                → "not_serious", present the subgroups separately
+          "no" / unanswered    → "very_serious"
 ```
 
 **The numbers in that box are automation surrogates, not Core GRADE rules.**
@@ -711,12 +735,18 @@ little-to-no-difference target, the null for a non-null-effect target. Before
 v0.5 this domain received the raw MID even when Imprecision was rating
 against the null.
 
-**No automated two-level downgrade (v0.5).** Core GRADE 3: "A final issue is
-consideration of rating down twice for inconsistency. Although this is a
-theoretical possibility, we have found compelling reason to rate down twice for
-inconsistency sufficiently unusual that it need not concern users of Core
-GRADE." Every automated and flowchart path now stops at `some_concerns` (−1);
-−2 requires the scalar override below.
+**One branch rates down two levels, and it departs from the source (v0.5.1).**
+Core GRADE 3: "A final issue is consideration of rating down twice for
+inconsistency. Although this is a theoretical possibility, we have found
+compelling reason to rate down twice for inconsistency sufficiently unusual
+that it need not concern users of Core GRADE." v0.5.0 read that as a cap;
+v0.5.1 does not. The opposite-sided branch fires only when a substantial share
+of estimates sits above the chosen threshold, a substantial share sits below
+it, and no credible subgroup explains the split — the direction of effect is
+unresolved, and reporting that as Moderate certainty overstates it. Every other
+path in this domain, and every risk-of-bias path, still stops at `serious`
+(−1). See SPEC.md §5.2 for the full reasoning; the departure is restated in the
+domain notes wherever the branch fires.
 
 **Manual flowchart (for full BMJ Core GRADE 3 compliance):**
 
@@ -724,13 +754,13 @@ GRADE." Every automated and flowchart path now stops at `some_concerns` (−1);
 grade_meta(m,
   inconsistency_ci_diff            = "yes",
   inconsistency_threshold_side     = "majority_one_side")
-# → judgment = "no"
+# → judgment = "not_serious"
 
 grade_meta(m,
   inconsistency_ci_diff            = "yes",
   inconsistency_threshold_side     = "opposite_sides",
   inconsistency_subgroup_explained = "no")
-# → judgment = "some_concerns" (−1; capped, see above)
+# → judgment = "very_serious" (−2; see the departure above)
 ```
 
 **Supplementary statistics** (always computed and noted, never the primary driver):
@@ -738,7 +768,7 @@ I², tau², Q p-value.
 
 **Scalar override** (v0.4.0+: requires `inconsistency_rationale`):
 ```r
-grade_meta(m, inconsistency = "serious",   # overrides flowchart entirely (−2)
+grade_meta(m, inconsistency = "very_serious",   # overrides flowchart entirely (−2)
            inconsistency_rationale = "Clinically divergent effects across settings")
 ```
 
@@ -755,7 +785,7 @@ Cannot be automated — requires domain expertise.
 - **Comparator:** Is the comparator representative of usual care?
 
 ```r
-grade_meta(m, indirectness = "no")                  # scalar
+grade_meta(m, indirectness = "not_serious")          # scalar
 grade_meta(m, indirectness = indirectness_vec)       # per-study vector
 ```
 
@@ -835,13 +865,13 @@ eighteen was indirect, which is the opposite of "all or almost all". A vector
 or column name is now resolved as:
 
 ```
-w_serious >= indirectness_dominant_threshold  → "serious"       (-2)
-w_any     >= indirectness_dominant_threshold  → "some_concerns" (-1)
-otherwise                                     → "no"
+w_serious >= indirectness_dominant_threshold  → "very_serious"       (-2)
+w_any     >= indirectness_dominant_threshold  → "serious"            (-1)
+otherwise                                     → "not_serious"
 ```
 
 where `w_serious` / `w_any` are the inverse-variance weight shares carried by
-the `"serious"` studies and by the `"some_concerns"` + `"serious"` studies (the
+the `"very_serious"` studies and by the `"serious"` + `"very_serious"` studies (the
 count share is used, and flagged, when weights are unavailable — that fallback
 is a pmatools convention too, with no basis in the source).
 
@@ -902,7 +932,7 @@ g_ind <- grade_meta(m_response,
 
 Aliases such as `"Probably No"` are normalized. The **domain judgment defaults to
 the worst case across the four subdomains** — in the example above
-`probably_no` for Comparison drives the whole domain to `some_concerns` (−1),
+`probably_no` for Comparison drives the whole domain to `serious` (−1),
 even though the other three subdomains raise no concern.
 
 > **Attribution — the 4-point scale is ours, not Core GRADE's.** Asking the
@@ -943,12 +973,12 @@ override and needs `indirectness_rationale`.
 
 ```r
 # Aborts: "Overriding the Indirectness judgment requires indirectness_rationale ..."
-grade_meta(m_response, indirectness_subdomains = ind_sub, indirectness = "no",
+grade_meta(m_response, indirectness_subdomains = ind_sub, indirectness = "not_serious",
            threshold = 1.25, threshold_scale = "ratio")
 
 # Correct form of the override
 grade_meta(m_response, indirectness_subdomains = ind_sub,
-           indirectness           = "no",
+           indirectness           = "not_serious",
            indirectness_rationale = "Panel judged the waitlist comparator acceptable",
            threshold = 1.25, threshold_scale = "ratio")
 ```
@@ -1059,12 +1089,12 @@ grade_meta(m, ois_delta = 3, ois_sd = 7)
 
 ```
 Q1: Are most or all studies small AND industry-sponsored?
-  pubias_small_industry = "yes"        → judgment = "some_concerns" (-1; stop)
+  pubias_small_industry = "yes"        → judgment = "serious" (-1; stop)
   pubias_small_industry = "no" / NULL  → continue
 
 [After Q1] pmatools convenience input (NOT a node of Fig 5):
   pubias_registry_complete = "yes"
-    → judgment = "no" (stop; the user asserts complete pre-registration coverage)
+    → judgment = "not_serious" (stop; the user asserts complete pre-registration coverage)
 
 Q2: Is statistical analysis feasible (k ≥ 10)?
   YES → Q3
@@ -1072,14 +1102,14 @@ Q2: Is statistical analysis feasible (k ≥ 10)?
 
 Q3 (k ≥ 10): Visual asymmetry / Egger's test
   pubias_funnel_asymmetry = NULL  → run Egger's test automatically
-    Egger p < 0.05           → judgment = "some_concerns"  (-1)
-    Egger p ≥ 0.05           → judgment = "no"
-  pubias_funnel_asymmetry = "yes"  → judgment = "some_concerns" (-1; visual override)
-  pubias_funnel_asymmetry = "no"   → judgment = "no"             (visual override)
+    Egger p < 0.05           → judgment = "serious"  (-1)
+    Egger p ≥ 0.05           → judgment = "not_serious"
+  pubias_funnel_asymmetry = "yes"  → judgment = "serious" (-1; visual override)
+  pubias_funnel_asymmetry = "no"   → judgment = "not_serious"    (visual override)
 
 Q4 (k < 10): Documentation of unpublished studies
-  pubias_unpublished = "yes"        → judgment = "some_concerns" (-1)
-  pubias_unpublished = "no" / NULL  → judgment = "no" (NULL: assumed "no" with warning)
+  pubias_unpublished = "yes"        → judgment = "serious" (-1)
+  pubias_unpublished = "no" / NULL  → judgment = "not_serious" (NULL: assumed "no" with warning)
 ```
 
 **Registry rule-out is evaluated after Q1 (v0.5).** Core GRADE 4 Fig 5 has
@@ -1151,11 +1181,11 @@ print(g)   # inspect domain_assessments
 # Step 2: override specific domains
 g_override <- grade_meta(m,
   study_design  = "RCT",
-  rob           = "some_concerns",  # override: single overall judgment
+  rob           = "some_concerns",  # override: single overall judgment (= -1)
   rob_rationale = "RoB2 consensus: some concerns from missing outcome data",
-  inconsistency = "serious",        # override: clinical judgment → serious
+  inconsistency = "very_serious",   # override: clinical judgment → very serious
   inconsistency_rationale = "Clinically divergent effects across settings",
-  indirectness  = "no",
+  indirectness  = "not_serious",
   outcome_name  = "Depression response (manual override)")
 ```
 
@@ -1175,12 +1205,12 @@ g_override <- grade_meta(m,
 ```r
 g$domain_assessments
 # # A tibble: 5 × 5
-#   domain           judgment  auto  downgrade notes
-#   Risk of bias     no        FALSE         0 "Not dominated: 38% weight..."
-#   Indirectness     no        FALSE         0 NA
-#   Inconsistency    some_concerns TRUE     -1 "AUTO Step 1: I²=36% > 30%..."
-#   Imprecision      no        TRUE          0 "CI does not cross null; OIS = 311..."
-#   Publication bias no        TRUE          0 "Egger p = 0.93"
+#   domain           judgment    auto  downgrade notes
+#   Risk of bias     not_serious FALSE         0 "Not dominated: 38% weight..."
+#   Indirectness     not_serious FALSE         0 NA
+#   Inconsistency    serious     TRUE         -1 "AUTO Step 1: I²=36% > 30%..."
+#   Imprecision      not_serious TRUE          0 "CI does not cross null; OIS = 311..."
+#   Publication bias not_serious TRUE          0 "Egger p = 0.93"
 ```
 
 `auto = TRUE` = computed by `pmatools`; `auto = FALSE` = supplied by the user.
@@ -1282,7 +1312,7 @@ g_response <- grade_meta(
   rob                    = unname(rob_map[df$rob_d]),
   rob_dominant_threshold = 0.55,
   small_values           = "undesirable",  # large OR = more response = desirable
-  indirectness           = "no",
+  indirectness           = "not_serious",
   ## Core GRADE 2 entry gate (v0.5): threshold_type defaults to "mid", so a
   ## minimal important difference is mandatory. suggest_threshold(m_response)
   ## returns the conventional OR 1.25 for a binary outcome.
@@ -1303,11 +1333,11 @@ g_response <- grade_meta(
 
 | Domain | Judgment | Rationale | Source |
 |--------|----------|-----------|--------|
-| **Risk of Bias** | no | High-RoB weight ≈ 38% < 60% → NOT dominated | auto flowchart |
-| **Indirectness** | no | Directly applicable PICO | manual |
-| **Inconsistency** | some_concerns | I² ≈ 36% > 30%; all 17 estimates favour CBT-I, but no single zone around ±MID holds ≥ 80% → magnitude genuinely heterogeneous | auto |
-| **Imprecision** | no | OR 2.33, CI [1.66, 3.26] lies entirely beyond the MID; OIS met (1,222 / 97 events) | auto |
-| **Publication Bias** | no | Egger p ≈ 0.93; k = 17 ≥ 10 | auto |
+| **Risk of Bias** | not_serious | High-RoB weight ≈ 38% < 60% → NOT dominated | auto flowchart |
+| **Indirectness** | not_serious | Directly applicable PICO | manual |
+| **Inconsistency** | serious | I² ≈ 36% > 30%; all 17 estimates favour CBT-I, but no single zone around ±MID holds ≥ 80% → magnitude genuinely heterogeneous | auto |
+| **Imprecision** | not_serious | OR 2.33, CI [1.66, 3.26] lies entirely beyond the MID; OIS met (1,222 / 97 events) | auto |
+| **Publication Bias** | not_serious | Egger p ≈ 0.93; k = 17 ≥ 10 | auto |
 
 Rating target: **important effect** (Core GRADE 2 Fig 2), derived automatically
 because \|point estimate\| exceeds the MID.
@@ -2179,10 +2209,13 @@ pmatools/
    rarely applicable to be part of Core GRADE" — so non-support there is
    faithfulness, not a gap.
 
-2. **`extremely serious` (−3) is not implemented.** Core GRADE 1 characterises
-   domain limitations as "not serious; serious; very serious; or, rarely,
-   extremely serious". The maximum downgrade from a single domain in pmatools
-   is −2.
+2. **`extremely serious` (−3) is never reached automatically.** The level
+   exists and you can record it by hand — `rob = "extremely_serious"` with a
+   rationale, or the app's override menu — but no assessor produces it. Core
+   GRADE 1 characterises domain limitations as "not serious; serious; very
+   serious; or, **rarely**, extremely serious", and none of the flowcharts in
+   the series describes a three-level downgrade, so there is no rule to
+   implement. The deepest any automated path goes is −2.
 
 3. **The cross-domain gestalt step is not modelled.** Core GRADE 1 asks for
    > stepping back and taking an overall view of the threats to certainty of evidence

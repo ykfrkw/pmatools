@@ -257,12 +257,12 @@ test_that("a reason gets a [n] marker alongside a real analysis-set note", {
 
   # Now a set whose rated outcomes carry their own analysis-set notes, so both
   # kinds of note share one numbered pool.
-  ml   <- quiet_ma(nr_data(c("serious", "no", "no", "no")), sm = "OR")
+  ml   <- quiet_ma(nr_data(c("very_serious", "no", "no", "no")), sm = "OR")
   set2 <- quiet_grade(
     ml,
     common = list(study_design = "RCT", indirectness = "no",
                   small_values = "undesirable",
-                  rob = c("serious", "no", "no", "no"),
+                  rob = c("very_serious", "no", "no", "no"),
                   threshold = 1.05, threshold_scale = "ratio")
   )
   skip_if_not(any(vapply(set2$outcomes, function(g) isTRUE(g$rob_refit),

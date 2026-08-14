@@ -154,7 +154,7 @@ mk_opposite <- function() {
   list(
     rob_dominated = quiet_grade(
       mk_binary(),
-      rob = c("no", "no", "serious", "serious", "serious"),
+      rob = c("no", "no", "very_serious", "very_serious", "very_serious"),
       small_values = "desirable",
       threshold = 1.10, threshold_scale = "ratio"),
     rob_none_high = quiet_grade(
@@ -163,7 +163,7 @@ mk_opposite <- function() {
       threshold = 1.10, threshold_scale = "ratio"),
     rob_not_dominated = quiet_grade(
       mk_binary(),
-      rob = c("serious", "no", "no", "no", "no"),
+      rob = c("very_serious", "no", "no", "no", "no"),
       small_values = "desirable",
       threshold = 1.10, threshold_scale = "ratio"),
     incon_opposite = quiet_grade(
@@ -299,7 +299,7 @@ test_that("publication bias records k, and Egger's p when it ran", {
 test_that("a scalar override records no flow_path: the flowchart did not run", {
   g <- quiet_grade(
     mk_binary(),
-    rob = "serious",
+    rob = "very_serious",
     rob_rationale = "RoB2 consensus across all five trials",
     inconsistency = "some_concerns",
     inconsistency_rationale = "Forest plot shows two clusters",
@@ -339,37 +339,37 @@ test_that("the risk-of-bias vocabulary is fully reachable", {
   seen <- character(0)
 
   # Rule 1: every estimate inside the trivial zone.
-  seen <- union(seen, .rob_flow(c("no", "serious", "serious", "serious"),
+  seen <- union(seen, .rob_flow(c("no", "very_serious", "very_serious", "very_serious"),
                                 c(0.01, 0.02, 0.01, 0.02), threshold = 0.5))
   # Rule 2 / rule 3: same non-trivial zone, small vs large bias-favouring
   # change. small_values = "desirable" makes a LOWER TE_all the inflated one.
-  seen <- union(seen, .rob_flow(c("no", "serious", "serious", "serious"),
+  seen <- union(seen, .rob_flow(c("no", "very_serious", "very_serious", "very_serious"),
                                 c(-1.00, -1.02, -1.01, -1.03),
                                 threshold = 0.5))
-  seen <- union(seen, .rob_flow(c("no", "serious", "serious", "serious"),
+  seen <- union(seen, .rob_flow(c("no", "very_serious", "very_serious", "very_serious"),
                                 c(-0.60, -3.00, -3.10, -2.90),
                                 threshold = 0.5))
   # Rules 4 and 5: the two estimates land in different zones, once on the
   # same side of the null and once across it.
-  seen <- union(seen, .rob_flow(c("no", "serious", "serious", "serious"),
+  seen <- union(seen, .rob_flow(c("no", "very_serious", "very_serious", "very_serious"),
                                 c(-0.20, -3.00, -3.10, -2.90),
                                 threshold = 0.5))
-  seen <- union(seen, .rob_flow(c("no", "serious", "serious", "serious"),
+  seen <- union(seen, .rob_flow(c("no", "very_serious", "very_serious", "very_serious"),
                                 c(2.00, -3.00, -3.10, -2.90),
                                 threshold = 0.5))
   # Direction not assessable: every study is high risk, so there is no
   # comparator estimate to check the direction against.
-  seen <- union(seen, .rob_flow(rep("serious", 4),
+  seen <- union(seen, .rob_flow(rep("very_serious", 4),
                                 c(-1.0, -1.1, -0.9, -1.05), threshold = 0.5))
   # No high-risk study at all.
   seen <- union(seen, .rob_flow(rep("no", 4),
                                 c(-1.0, -1.1, -0.9, -1.05), threshold = 0.5))
   # Not dominated, similar magnitudes -> analyse all studies.
-  seen <- union(seen, .rob_flow(c("serious", "no", "no", "no"),
+  seen <- union(seen, .rob_flow(c("very_serious", "no", "no", "no"),
                                 c(-1.00, -1.01, -0.99, -1.02),
                                 threshold = 0.5))
   # Not dominated, substantially different -> analyse low risk only.
-  seen <- union(seen, .rob_flow(c("serious", "no", "no", "no"),
+  seen <- union(seen, .rob_flow(c("very_serious", "no", "no", "no"),
                                 c(-4.00, -0.10, -0.11, -0.09),
                                 threshold = 0.5))
   # Not dominated and the comparison is not assessable. This one cannot be
@@ -381,7 +381,7 @@ test_that("the risk-of-bias vocabulary is fully reachable", {
     w.random = c(1, 1, 1, 1), random = TRUE,
     TE.random = -1.0, seTE.random = 0.2, sm = "RR")
   fake_row <- pmatools:::.flowchart_rob(
-    c("serious", "no", "no", "no"), fake,
+    c("very_serious", "no", "no", "no"), fake,
     small_values = "desirable", threshold_internal = 0.5)
   fake_f <- attr(fake_row, "facts")
   seen <- union(seen, strsplit(

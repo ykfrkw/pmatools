@@ -38,17 +38,22 @@ table to keep in sync.
 
 Accepted labels, case-insensitively and after trimming whitespace:
 \itemize{
-\item \strong{low}: \code{"no"}, \code{"low"}, \code{"L"},
-\code{"No concerns"}
+\item \strong{low}: \code{"not_serious"}, \code{"no"}, \code{"low"},
+\code{"L"}, \code{"No concerns"}
 \item \strong{some}: \code{"some_concerns"}, \code{"some"},
 \code{"S"}, \code{"M"}, \code{"*"}, \code{"moderate"},
 \code{"unclear"} (RoB 1 wording), \code{"Some concerns"}
-\item \strong{high}: \code{"serious"}, \code{"very_serious"},
+\item \strong{high}: \code{"very_serious"}, \code{"extremely_serious"},
 \code{"high"}, \code{"very high"}, \code{"H"}, \code{"C"},
 \code{"Serious concerns"}, \code{"Critical concerns"}
 \item \strong{unknown}: \code{NA}, \code{""}, \code{"?"},
 \code{"unknown"}, \code{"na"}
 }
+
+A bare \code{"serious"} is \strong{rejected} in this release. It named the
+\code{"high"} stratum up to 0.5.0 and names the \code{"some"} stratum from
+0.5.1; write \code{"some_concerns"} or \code{"very_serious"} instead, both
+of which mean what they always did. See \code{\link{grade_meta}}.
 
 Anything else also becomes \code{"unknown"}, but with a warning naming the
 offending labels. It deliberately does \strong{not} abort: this function
@@ -61,7 +66,7 @@ result for \code{"unknown"} themselves.
 # Single letters, RoB 2 sentences and internal names all map cleanly.
 rob_strata(c("L", "S", "H"))
 rob_strata(c("No concerns", "Some concerns", "Critical concerns"))
-rob_strata(c("no", "some_concerns", "serious"))
+rob_strata(c("not_serious", "some_concerns", "very_serious"))
 
 # Missing and explicitly unknown judgments become "unknown" quietly.
 rob_strata(c("low", NA, "", "?"))

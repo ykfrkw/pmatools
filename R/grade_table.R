@@ -509,15 +509,15 @@ grade_table <- function(outcomes,
   row
 }
 
+# One "!" per level rated down, so the column reads as severity rather than as
+# a lookup the reader has to memorise. Keyed on the downgrade rather than on
+# the level name, which is what keeps legacy spellings and any level added
+# later working without a fifth branch here.
 .domain_symbol <- function(judgment) {
-  switch(judgment,
-    "no"            = "OK",   # no concern
-    "some"          = "!",    # legacy
-    "some_concerns" = "!",    # -1
-    "serious"       = "!!",   # -2
-    "very_serious"  = "!!",   # legacy (collapsed to serious)
-    "?"
-  )
+  lv <- .normalize_grade_level(judgment)
+  if (!lv %in% GRADE_LEVELS) return("?")
+  dg <- .grade_level_downgrade(lv)
+  if (dg == 0L) "OK" else strrep("!", abs(dg))
 }
 
 .col_headers <- function(show_domains, per = 1000,

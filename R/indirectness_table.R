@@ -13,10 +13,13 @@ INDIRECTNESS_ANSWER_COLORS <- list(
 
 # Colours for the "Judgment across subdomains" cell (mirrors the certainty
 # pastel palette: green = no rating down, amber = 1 level, red = 2 levels).
+# "extremely_serious" (-3) is a manual override only, and shares the red of
+# -2 rather than inventing a fifth swatch the palette has no room for.
 INDIRECTNESS_OVERALL_COLORS <- list(
-  "no"            = list(bg = "#d7e8d3", text = "#238b21"),
-  "some_concerns" = list(bg = "#f8edd7", text = "#8a6d1f"),
-  "serious"       = list(bg = "#e8d0d0", text = "#8b0000")
+  "not_serious"       = list(bg = "#d7e8d3", text = "#238b21"),
+  "serious"           = list(bg = "#f8edd7", text = "#8a6d1f"),
+  "very_serious"      = list(bg = "#e8d0d0", text = "#8b0000"),
+  "extremely_serious" = list(bg = "#e8d0d0", text = "#8b0000")
 )
 
 # Checkbox glyphs (U+2611 = checked, U+2610 = empty); \u escapes keep the

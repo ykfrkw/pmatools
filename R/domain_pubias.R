@@ -15,12 +15,12 @@
 # pmatools implementation:
 #
 #   Q1. pubias_small_industry == "yes"
-#         -> "some_concerns" (-1)
+#         -> "serious" (-1)
 #         else -> registry check, then Q2 (default "no" assumption with note)
 #
 #   [After Q1] pubias_registry_complete == "yes"
-#         -> "no" (a pmatools convenience input, NOT a node of Fig 5; see the
-#            note text). It is evaluated AFTER Q1 (v0.5) so that a body of
+#         -> "not_serious" (a pmatools convenience input, NOT a node of Fig 5; see
+#            the note text). It is evaluated AFTER Q1 (v0.5) so that a body of
 #            small industry-sponsored trials still rates down even when the
 #            user asserts complete registry coverage.
 #
@@ -29,11 +29,11 @@
 #         NO  -> Q4 (.pubias_registry)
 #
 #   Q3 (k >= 10): asymmetry detection
-#         pubias_funnel_asymmetry "yes" (manual) -> "some_concerns" (-1)
-#         pubias_funnel_asymmetry "no"  (manual) -> "no"
-#         auto Egger p < 0.05                    -> "some_concerns"  (-1)
-#         auto Egger p >= 0.05                   -> "no"
-#         Egger fails to run                     -> "no" + prominent
+#         pubias_funnel_asymmetry "yes" (manual) -> "serious" (-1)
+#         pubias_funnel_asymmetry "no"  (manual) -> "not_serious"
+#         auto Egger p < 0.05                    -> "serious"  (-1)
+#         auto Egger p >= 0.05                   -> "not_serious"
+#         Egger fails to run                     -> "not_serious" + prominent
 #           "QUALITATIVE ASSESSMENT REQUIRED" note (propagated to SoF /
 #           Evidence Profile / grade_table / grade_report footnotes)
 #
@@ -41,15 +41,15 @@
 #       whether asymmetry "strongly suggests publication bias" -- a qualitative
 #       judgment with no significance threshold. p < 0.05 is a pmatools
 #       operational convention and is labelled as such in the domain notes.
-#       The former p < 0.01 -> "serious" (-2) tier was removed in v0.5: Core
+#       The former p < 0.01 -> "very_serious" (-2) tier was removed in v0.5: Core
 #       GRADE 4 never describes a two-level publication-bias downgrade.
 #
 #   Q4 (k < 10):
-#         pubias_unpublished == "yes" -> "some_concerns" (-1)
-#         pubias_unpublished == "no"  -> "no"
-#         NULL -> assume "no" with warning
+#         pubias_unpublished == "yes" -> "serious" (-1)
+#         pubias_unpublished == "no"  -> "not_serious"
+#         NULL -> assume "no" (the answer) with warning
 #
-# Rate down at most ONE level: "serious" (-2) is reachable only through a
+# Rate down at most ONE level: "very_serious" (-2) is reachable only through a
 # scalar override elsewhere in the package, never from this flowchart.
 #
 # Trim-and-fill is not used to drive the GRADE judgment. The {meta}
@@ -183,11 +183,11 @@ assess_pubias <- function(meta_obj,
     if (pubias_small_industry == "yes") {
       return(make_domain_row(
         domain   = "Publication bias",
-        judgment = "some_concerns",
+        judgment = "serious",
         auto     = FALSE,
         notes    = paste0(
           "Q1: Most/all studies are small AND industry-sponsored ",
-          "-> rate down 1 (some_concerns).",
+          "-> rate down 1 (serious).",
           if (identical(pubias_registry_complete, "yes")) paste0(
             " pubias_registry_complete = 'yes' was also supplied, but it is ",
             "evaluated only after Q1: Core GRADE 4 Fig 5 begins with the ",
@@ -213,7 +213,7 @@ assess_pubias <- function(meta_obj,
   if (identical(pubias_registry_complete, "yes")) {
     return(make_domain_row(
       domain   = "Publication bias",
-      judgment = "no",
+      judgment = "not_serious",
       auto     = FALSE,
       notes    = paste0(
         q1_note,
@@ -283,14 +283,14 @@ assess_pubias <- function(meta_obj,
       rlang::abort("pubias_funnel_asymmetry must be 'yes' or 'no'.")
     }
     if (pubias_funnel_asymmetry == "yes") {
-      judgment <- "some_concerns"
+      judgment <- "serious"
       flow_end <- c("pma-pubias-edge-q3-yes", "pma-pubias-leaf-down1-q3")
       asym_desc <- paste0(
         "Q3 (manual): visual inspection of contour-enhanced funnel plot ",
-        "indicates asymmetry suggestive of publication bias -> rate down 1 (some_concerns)."
+        "indicates asymmetry suggestive of publication bias -> rate down 1 (serious)."
       )
     } else {
-      judgment <- "no"
+      judgment <- "not_serious"
       flow_end <- c("pma-pubias-edge-q3-no", "pma-pubias-leaf-nodown-q3")
       asym_desc <- paste0(
         "Q3 (manual): visual inspection rules out funnel-plot asymmetry ",
@@ -342,7 +342,7 @@ assess_pubias <- function(meta_obj,
     ))
     return(make_domain_row(
       domain   = "Publication bias",
-      judgment = "no",
+      judgment = "not_serious",
       auto     = TRUE,
       notes    = paste0(
         qual_note, " ",
@@ -360,15 +360,15 @@ assess_pubias <- function(meta_obj,
     ))
   } else if (pval < 0.05) {
     egger_note <- sprintf("Egger's test: p = %.4f.", pval)
-    judgment   <- "some_concerns"
+    judgment   <- "serious"
     flow_end   <- c("pma-pubias-edge-q3-yes", "pma-pubias-leaf-down1-q3")
     asym_desc  <- paste0(
       "Q3 (auto): Egger's test p < 0.05 -> evidence of funnel-plot asymmetry ",
-      "-> rate down 1 (some_concerns)."
+      "-> rate down 1 (serious)."
     )
   } else {
     egger_note <- sprintf("Egger's test: p = %.3f.", pval)
-    judgment   <- "no"
+    judgment   <- "not_serious"
     flow_end   <- c("pma-pubias-edge-q3-no", "pma-pubias-leaf-nodown-q3")
     asym_desc  <- "Q3 (auto): Egger's test p >= 0.05 -> no strong evidence of funnel-plot asymmetry -> do not rate down."
   }
@@ -428,14 +428,14 @@ assess_pubias <- function(meta_obj,
   }
 
   if (unpublished == "yes") {
-    judgment   <- "some_concerns"
+    judgment   <- "serious"
     flow_end   <- c("pma-pubias-edge-q4-yes", "pma-pubias-leaf-down1-q4")
     unpub_desc <- paste0(
       "Q4: Documentation of unpublished studies identified (registry/FDA) ",
-      "-> rate down 1 (some_concerns)."
+      "-> rate down 1 (serious)."
     )
   } else {
-    judgment   <- "no"
+    judgment   <- "not_serious"
     # An assumed "no" and an answered "no" reach the same leaf, because they
     # are the same judgment. `auto_flag` still separates them everywhere it
     # matters: src_note carries the qualitative-assessment marker, the caller

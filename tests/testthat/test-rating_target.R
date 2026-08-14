@@ -209,7 +209,7 @@ test_that("(a) CI crosses the threshold -> rate down one level", {
   g <- suppressWarnings(grade_meta(meta_rr(), threshold_type = "null",
                                    ois_events = 1000))
   row <- impre(g)
-  expect_equal(row$judgment, "some_concerns")
+  expect_equal(row$judgment, "serious")
   expect_match(row$notes, "rate down one level (sample size not considered",
                fixed = TRUE)
 })
@@ -225,7 +225,7 @@ test_that("(b) CI crosses both thresholds -> rate down two levels", {
                                    threshold_scale = "ratio",
                                    ois_events = 10))
   row <- impre(g)
-  expect_equal(row$judgment, "serious")
+  expect_equal(row$judgment, "very_serious")
   expect_match(row$notes, "CI crosses TWO thresholds", fixed = TRUE)
 })
 
@@ -236,7 +236,7 @@ test_that("(c) CI does not cross and effect is moderate -> do not rate down", {
                                    threshold_scale = "te_scale",
                                    ois_n = 5000))
   row <- impre(g)
-  expect_equal(row$judgment, "no")
+  expect_equal(row$judgment, "not_serious")
   expect_match(row$notes, "effect moderate", fixed = TRUE)
   expect_match(row$notes, "do not rate down (OIS not applied)", fixed = TRUE)
 })
@@ -248,7 +248,7 @@ test_that("(d) continuous: CI does not cross, effect large, N < OIS -> rate down
                                    threshold_scale = "te_scale",
                                    ois_n = 500))
   row <- impre(g)
-  expect_equal(row$judgment, "some_concerns")
+  expect_equal(row$judgment, "serious")
   expect_match(row$notes, "OIS approach", fixed = TRUE)
   expect_match(row$notes, "N < OIS -> rate down one level", fixed = TRUE)
 })
@@ -258,7 +258,7 @@ test_that("(e) binary: CI ratio >= 3 -> consider rating down two levels", {
                                    threshold_scale = "ratio",
                                    ois_events = 40))
   row <- impre(g)
-  expect_equal(row$judgment, "serious")
+  expect_equal(row$judgment, "very_serious")
   expect_match(row$notes, "consider rating down two levels", fixed = TRUE)
   expect_match(row$notes, "CI ratio", fixed = TRUE)
 })
@@ -276,7 +276,7 @@ test_that("continuous rule of thumb: total N >= 800 does not rate down", {
                                    threshold_scale = "te_scale",
                                    ois_n = 100000))
   row <- impre(g)
-  expect_equal(row$judgment, "no")
+  expect_equal(row$judgment, "not_serious")
   expect_match(row$notes, ">= 800 (rule of thumb)", fixed = TRUE)
 })
 
@@ -285,7 +285,7 @@ test_that("continuous rule of thumb: total N >= 800 does not rate down", {
 # --------------------------------------------------------------------------
 
 test_that("regression: moderate effect, CI inside the thresholds, N far below OIS -> no rate down", {
-  # Old behaviour: total N / OIS <= 30% forced "serious" regardless of where
+  # Old behaviour: total N / OIS <= 30% forced "very_serious" regardless of where
   # the CI sat. Core GRADE 2 Fig 4 only consults the OIS when the CI does not
   # cross the threshold AND the effect is implausibly large.
   g <- suppressWarnings(grade_meta(meta_md_moderate(),
@@ -294,7 +294,7 @@ test_that("regression: moderate effect, CI inside the thresholds, N far below OI
                                    threshold_scale = "te_scale",
                                    ois_n = 5000))
   row <- impre(g)
-  expect_equal(row$judgment, "no")
+  expect_equal(row$judgment, "not_serious")
   expect_equal(row$downgrade, 0L)
   expect_match(row$notes, "OIS not applied on this Fig 4 path", fixed = TRUE)
 })

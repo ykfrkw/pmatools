@@ -34,7 +34,7 @@ mk_binary <- function() {
 
 make_facts <- function() {
   quiet_grade(mk_binary(),
-              rob             = c("no", "no", "serious", "serious", "serious"),
+              rob             = c("no", "no", "very_serious", "very_serious", "very_serious"),
               small_values    = "desirable",
               threshold       = 1.10, threshold_scale = "ratio",
               outcome_name    = "Mortality",
@@ -69,7 +69,7 @@ make_refit <- function() {
   quiet_grade(mk_gen(te = c(1.2, 0.02, 0.02, 0.02),
                      w  = c(400, 400 / 3, 400 / 3, 400 / 3),
                      studlab = c("High-1", "Low-1", "Low-2", "Low-3")),
-              rob             = c("serious", "no", "no", "no"),
+              rob             = c("very_serious", "no", "no", "no"),
               small_values    = "undesirable",
               threshold       = 1.05, threshold_scale = "ratio",
               outcome_name    = "Refitted outcome",
@@ -282,13 +282,13 @@ test_that("evidence_profile() falls back to the notes for a domain without facts
   g <- quiet_grade(mk_binary(),
                    rob            = "no",
                    rob_rationale  = "Consensus RoB2: all domains low risk",
-                   indirectness   = "serious",
+                   indirectness   = "very_serious",
                    indirectness_rationale = "Surrogate outcome only",
                    threshold      = 1.10, threshold_scale = "ratio",
                    outcome_name   = "Mortality",
                    pubias_unpublished = "no")
   txt <- .footer_text(evidence_profile(g))
-  expect_match(txt, "Manual override (serious): Surrogate outcome only",
+  expect_match(txt, "Manual override (very_serious): Surrogate outcome only",
                fixed = TRUE)
 })
 

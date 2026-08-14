@@ -55,7 +55,7 @@ evidence_profile <- function(grade,
   pick <- function(name) {
     r <- d[d$domain == name, , drop = FALSE]
     if (nrow(r) == 0) {
-      list(judgment = "no", notes = NA_character_)
+      list(judgment = "not_serious", notes = NA_character_)
     } else {
       list(judgment = r$judgment[1], notes = r$notes[1])
     }
@@ -73,9 +73,17 @@ evidence_profile <- function(grade,
   # differently.
   fmt_judgment <- function(judgment) .grade_level_wording(judgment)
 
+  # "Did this domain rate down?" asked of the downgrade rather than of the
+  # level name, so a legacy spelling arriving on a stored object answers the
+  # same way the canonical one does.
+  rated_down <- function(judgment) {
+    j <- as.character(judgment)
+    length(j) == 1L && !is.na(j) && nzchar(j) && .grade_level_downgrade(j) < 0L
+  }
+
   fn <- list()
   add_fn <- function(judgment, reason) {
-    if (judgment %in% c("no", "")) return("")
+    if (!rated_down(judgment)) return("")
     if (is.null(reason) || is.na(reason) || !nzchar(reason)) {
       reason <- "no further detail available"
     }
@@ -90,7 +98,7 @@ evidence_profile <- function(grade,
   # already sits in that domain's own column. Domains with no facts (and the
   # ones that did not rate down) keep the first-sentence behaviour.
   dom_reason <- function(name, judgment, notes) {
-    if (!as.character(judgment) %in% c("no", "")) {
+    if (rated_down(judgment)) {
       body <- .domain_fact_body((grade$domain_facts %||% list())[[name]])
       if (!is.null(body)) return(body)
     }
@@ -112,7 +120,7 @@ evidence_profile <- function(grade,
 
   other_parts <- character(0)
   pubias_qual_note <- .pubias_qualitative_note(grade)
-  if (pubi$judgment != "no") {
+  if (rated_down(pubi$judgment)) {
     other_parts <- c(other_parts,
                      paste0("publication bias suspected",
                             add_fn(pubi$judgment, .first_sentence(pubi$notes))))
@@ -130,6 +138,9 @@ evidence_profile <- function(grade,
   if (has_user_other) {
     user_note <- trimws(other_text)
     if (user_dg < 0) {
+      # "Other considerations" is not a Core GRADE domain and carries no level
+      # of its own; the argument here only has to be a rated-down one so that
+      # add_fn() emits the footnote.
       other_parts <- c(other_parts,
                        paste0(user_note, add_fn("serious", user_note)))
     } else {

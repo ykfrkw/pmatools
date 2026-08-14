@@ -54,7 +54,7 @@ test_that("pubias_registry_complete = 'yes' short-circuits the Fig 5 nodes after
   g <- grade_meta(m, pubias_registry_complete = "yes",
                   pubias_small_industry = "no", threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
-  expect_equal(pb$judgment, "no")
+  expect_equal(pb$judgment, "not_serious")
   expect_match(pb$notes, "pubias_registry_complete = 'yes'", fixed = TRUE)
   expect_match(pb$notes, "not a decision node of Core GRADE 4 Fig 5", fixed = TRUE)
 })
@@ -64,7 +64,7 @@ test_that("Q1 rate-down survives pubias_registry_complete = 'yes' (k >= 10)", {
   g <- grade_meta(m, pubias_registry_complete = "yes",
                   pubias_small_industry = "yes", threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
-  expect_equal(pb$judgment, "some_concerns")
+  expect_equal(pb$judgment, "serious")
   expect_match(pb$notes, "Q1:")
   expect_match(pb$notes, "evaluated only after Q1", fixed = TRUE)
 })
@@ -75,7 +75,7 @@ test_that("Q1 rate-down survives pubias_registry_complete = 'yes' when k < 10", 
   g <- grade_meta(m, pubias_small_industry = "yes",
                   pubias_registry_complete = "yes", threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
-  expect_equal(pb$judgment, "some_concerns")
+  expect_equal(pb$judgment, "serious")
   expect_equal(pb$downgrade, -1L)
 })
 
@@ -84,7 +84,7 @@ test_that("Q1: pubias_small_industry = 'yes' -> some_concerns", {
   m <- make_symmetric()
   g <- grade_meta(m, pubias_small_industry = "yes", threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
-  expect_equal(pb$judgment, "some_concerns")
+  expect_equal(pb$judgment, "serious")
   expect_match(pb$notes, "Q1:")
 })
 
@@ -96,7 +96,7 @@ test_that("Q3 auto: very small Egger p still rates down only one level", {
   m <- make_strong_asymmetry()
   g <- grade_meta(m, threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
-  expect_equal(pb$judgment, "some_concerns")
+  expect_equal(pb$judgment, "serious")
   expect_equal(pb$downgrade, -1L)
   expect_match(pb$notes, "p < 0.05")
   expect_match(pb$notes, "pmatools operational convention", fixed = TRUE)
@@ -106,7 +106,7 @@ test_that("Q3 auto: Egger p < 0.05 -> some_concerns (-1)", {
   m <- make_mild_asymmetry()
   g <- grade_meta(m, threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
-  expect_equal(pb$judgment, "some_concerns")
+  expect_equal(pb$judgment, "serious")
   expect_match(pb$notes, "p < 0.05")
 })
 
@@ -114,7 +114,7 @@ test_that("Q3 auto: Egger p >= 0.05 -> no", {
   m <- make_symmetric()
   g <- grade_meta(m, threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
-  expect_equal(pb$judgment, "no")
+  expect_equal(pb$judgment, "not_serious")
   expect_match(pb$notes, "p >= 0.05")
 })
 
@@ -124,7 +124,7 @@ test_that("Q3 manual 'yes' -> some_concerns regardless of Egger", {
   g <- grade_meta(m, pubias_funnel_asymmetry = "yes",
                   pubias_rationale = "Contour-enhanced funnel plot visually asymmetric", threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
-  expect_equal(pb$judgment, "some_concerns")
+  expect_equal(pb$judgment, "serious")
   expect_match(pb$notes, "manual")
 })
 
@@ -133,7 +133,7 @@ test_that("Q3 manual 'no' -> no regardless of Egger", {
   g <- grade_meta(m, pubias_funnel_asymmetry = "no",
                   pubias_rationale = "Asymmetry driven by heterogeneity, not small-study bias", threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
-  expect_equal(pb$judgment, "no")
+  expect_equal(pb$judgment, "not_serious")
   expect_match(pb$notes, "rules out funnel-plot asymmetry")
 })
 
@@ -142,7 +142,7 @@ test_that("Q4: k < 10, pubias_unpublished = 'yes' -> some_concerns", {
   m <- make_small_meta()
   g <- grade_meta(m, pubias_unpublished = "yes", threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
-  expect_equal(pb$judgment, "some_concerns")
+  expect_equal(pb$judgment, "serious")
   expect_match(pb$notes, "Q4:")
 })
 
@@ -150,7 +150,7 @@ test_that("Q4: k < 10, pubias_unpublished = 'no' -> no", {
   m <- make_small_meta()
   g <- grade_meta(m, pubias_unpublished = "no", threshold_type = "null")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
-  expect_equal(pb$judgment, "no")
+  expect_equal(pb$judgment, "not_serious")
 })
 
 # --- Not formally assessed -> qualitative-assessment note -------------------
@@ -164,7 +164,7 @@ test_that("Egger not computable (k >= 10) -> 'no' with prominent qualitative not
                                q1_note = "Q1: test. "),
     regexp = "qualitative assessment is required"
   )
-  expect_equal(row$judgment, "no")
+  expect_equal(row$judgment, "not_serious")
   expect_equal(row$downgrade, 0)
   expect_match(row$notes, "QUALITATIVE ASSESSMENT REQUIRED")
   expect_match(row$notes, "funnel plot")
@@ -176,7 +176,7 @@ test_that("k < 10 with no manual input -> note flags qualitative assessment", {
   g <- NULL
   expect_warning(g <- grade_meta(m, threshold_type = "null"), regexp = "pubias_unpublished")
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
-  expect_equal(pb$judgment, "no")
+  expect_equal(pb$judgment, "not_serious")
   expect_match(pb$notes, "QUALITATIVE ASSESSMENT REQUIRED")
   expect_false(is.null(.pubias_qualitative_note(g)))
 })

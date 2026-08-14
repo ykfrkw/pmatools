@@ -31,14 +31,14 @@ ind_row <- function(g) {
 mk_20 <- function() mk_w(c(5, rep(95 / 19, 19)))
 
 test_that("1 indirect study of 20 carrying 5% of the weight does not rate down", {
-  # Pre-v0.5 this returned "serious" via the worst-case fold.
+  # Pre-v0.5 this returned "very_serious" via the worst-case fold.
   g <- suppressWarnings(grade_meta(
     mk_20(),
-    indirectness   = c("serious", rep("no", 19)),
+    indirectness   = c("very_serious", rep("no", 19)),
     threshold_type = "null"
   ))
   row <- ind_row(g)
-  expect_equal(row$judgment, "no")
+  expect_equal(row$judgment, "not_serious")
   expect_equal(row$downgrade, 0)
   expect_match(row$notes, "carry only 5% of the weight", fixed = TRUE)
   expect_match(row$notes, "pmatools convention", fixed = TRUE)
@@ -53,7 +53,7 @@ test_that("indirect studies carrying >= 55% of the weight do rate down", {
     threshold_type = "null"
   ))
   row <- ind_row(g)
-  expect_equal(row$judgment, "some_concerns")
+  expect_equal(row$judgment, "serious")
   expect_equal(row$downgrade, -1L)
   expect_match(row$notes, "60% of the weight", fixed = TRUE)
 })
@@ -62,11 +62,11 @@ test_that("'serious' studies dominating the weight give -2", {
   m <- mk_w(c(60, rep(40 / 19, 19)))
   g <- suppressWarnings(grade_meta(
     m,
-    indirectness   = c("serious", rep("no", 19)),
+    indirectness   = c("very_serious", rep("no", 19)),
     threshold_type = "null"
   ))
   row <- ind_row(g)
-  expect_equal(row$judgment, "serious")
+  expect_equal(row$judgment, "very_serious")
   expect_equal(row$downgrade, -2L)
 })
 
@@ -75,17 +75,17 @@ test_that("the boundary is inclusive and follows indirectness_dominant_threshold
   m <- mk_w(c(11, 4.5, 4.5))
   at_default <- suppressWarnings(grade_meta(
     m, indirectness = c("some_concerns", "no", "no"), threshold_type = "null"))
-  expect_equal(ind_row(at_default)$judgment, "some_concerns")
+  expect_equal(ind_row(at_default)$judgment, "serious")
 
   raised <- suppressWarnings(grade_meta(
     m, indirectness = c("some_concerns", "no", "no"),
     indirectness_dominant_threshold = 0.60, threshold_type = "null"))
-  expect_equal(ind_row(raised)$judgment, "no")
+  expect_equal(ind_row(raised)$judgment, "not_serious")
 
   lowered <- suppressWarnings(grade_meta(
-    mk_20(), indirectness = c("serious", rep("no", 19)),
+    mk_20(), indirectness = c("very_serious", rep("no", 19)),
     indirectness_dominant_threshold = 0.05, threshold_type = "null"))
-  expect_equal(ind_row(lowered)$judgment, "serious")
+  expect_equal(ind_row(lowered)$judgment, "very_serious")
 })
 
 test_that("indirectness_dominant_threshold is validated", {
@@ -106,12 +106,12 @@ test_that("indirectness_dominant_threshold is validated", {
 
 test_that("column-name input takes the same weight-share route", {
   m <- mk_20()
-  m$data <- data.frame(ind = c("serious", rep("no", 19)),
+  m$data <- data.frame(ind = c("very_serious", rep("no", 19)),
                        stringsAsFactors = FALSE)
   g <- suppressWarnings(grade_meta(m, indirectness = "ind",
                                    threshold_type = "null"))
   row <- ind_row(g)
-  expect_equal(row$judgment, "no")
+  expect_equal(row$judgment, "not_serious")
   expect_match(row$notes, "by weight share", fixed = TRUE)
 })
 
@@ -122,9 +122,9 @@ test_that("the count share is used, and flagged, when weights are unavailable", 
   m$w.fixed  <- NULL
   m$seTE     <- NULL
   row <- pmatools:::assess_indirectness(
-    c("serious", rep("no", 19)), m
+    c("very_serious", rep("no", 19)), m
   )
-  expect_equal(row$judgment, "no")   # 1/20 = 5% by count
+  expect_equal(row$judgment, "not_serious")   # 1/20 = 5% by count
   expect_match(row$notes, "COUNT shares", fixed = TRUE)
 })
 
@@ -141,6 +141,6 @@ test_that("the subdomain table keeps its worst-case fold", {
     threshold_type = "null"
   ))
   row <- ind_row(g)
-  expect_equal(row$judgment, "some_concerns")
+  expect_equal(row$judgment, "serious")
   expect_match(row$notes, "Overall (worst case)", fixed = TRUE)
 })

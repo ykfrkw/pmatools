@@ -106,10 +106,10 @@ meta::forest(m_response, xlim = c(0.1, 50), digits = 2,
 
 ## ── 3. Map Cochrane RoB 2.0 judgments to GRADE levels ────────────────────────
 ##
-##   L = "No concerns"    → internally normalised to "no"
-##   S = "Some concerns"  → internally normalised to "some"
-##   H = "Serious concerns" → internally normalised to "serious"
-##   * = "Some concerns"  → internally normalised to "some"  (conservative)
+##   L = "No concerns"      → internally normalised to "not_serious"
+##   S = "Some concerns"    → internally normalised to "serious"
+##   H = "Serious concerns" → internally normalised to "very_serious"
+##   * = "Some concerns"    → internally normalised to "serious"  (conservative)
 ##
 ##   Cochrane RoB2 labels are accepted directly by assess_rob() — no pre-mapping needed.
 

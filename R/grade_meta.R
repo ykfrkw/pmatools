@@ -14,13 +14,13 @@
 #'   or \code{"obs"} (observational, starts at Low).
 #' @param rob Risk of bias judgment. One of:
 #'   \itemize{
-#'     \item A scalar string: \code{"no"}, \code{"some"}, \code{"serious"}, \code{"very_serious"}
-#'       — used as-is (flowchart not applied).
+#'     \item A scalar GRADE level (see \code{grade_meta}'s "Domain judgment
+#'       levels" section) — used as-is (flowchart not applied).
 #'     \item A character vector of length k (one per study) — BMJ 2025 Core GRADE 4
 #'       Fig 2 flowchart applied: domination check then direction-of-bias check.
 #'     \item A column name in \code{meta_obj$data} containing per-study RoB judgments
 #'       — same flowchart logic applied.
-#'     \item \code{NULL} (default): treated as \code{"no"}.
+#'     \item \code{NULL} (default): treated as \code{"not_serious"}.
 #'   }
 #'   \strong{Breaking change (v0.4.0)}: passing a scalar GRADE level bypasses
 #'   the automated flowchart and therefore requires \code{rob_rationale}.
@@ -109,7 +109,7 @@
 #'   this criterion, even when their magnitude exceeds the threshold; in that
 #'   case the domain note states explicitly why no downgrade was applied.
 #'   When every study is high-RoB, no low/some-RoB comparator pool exists and
-#'   the domain is rated \code{"serious"} (rate down 2 levels) unconditionally.
+#'   the domain is rated \code{"very_serious"} (rate down 2 levels) unconditionally.
 #'   Set to \code{0} to restore v0.1.0 behavior (any bias-favouring change
 #'   rates down). Only used when \code{rob} is a vector or column name.
 #' @param small_values Are small outcome values desirable?
@@ -120,23 +120,23 @@
 #'   when dominated. Only used when \code{rob} is a vector or column name.
 #'   (Consistent with \code{netmetaviz} \code{small_values} parameter.)
 #' @param indirectness Indirectness judgment. Same format as \code{rob} (scalar/vector/column).
-#'   Default \code{NULL}, which is treated as \code{"no"} (no downgrade). Pass
-#'   \code{NULL} — rather than \code{"no"} — whenever no manual judgment is
+#'   Default \code{NULL}, which is treated as \code{"not_serious"} (no
+#'   downgrade). Pass \code{NULL} — rather than \code{"not_serious"} — whenever no manual judgment is
 #'   intended, so that programmatic callers (\code{do.call()}, Shiny UIs) that
 #'   always supply every argument are not mistaken for manual overrides of an
 #'   \code{indirectness_subdomains} table.
 #'   \strong{Breaking change (v0.4.0)}: a scalar value other than
-#'   \code{"no"} is a manual override and requires
-#'   \code{indirectness_rationale}. \code{"no"} (no downgrade) never requires
+#'   \code{"not_serious"} is a manual override and requires
+#'   \code{indirectness_rationale}. \code{"not_serious"} (no downgrade) never requires
 #'   a rationale, so default calls are unaffected.
 #' @param indirectness_dominant_threshold (v0.5) Weight share at or above
 #'   which per-study indirectness dominates the body of evidence. Only used
 #'   when \code{indirectness} is a per-study vector or a column name (the
 #'   \code{indirectness_subdomains} table keeps its worst-case fold). Studies
-#'   rated \code{"serious"} are pooled first: if their share reaches the
-#'   threshold the domain is \code{"serious"}; otherwise, if the combined
-#'   share of \code{"some_concerns"} and \code{"serious"} studies reaches it,
-#'   the domain is \code{"some_concerns"}; otherwise \code{"no"}. Default
+#'   rated \code{"very_serious"} are pooled first: if their share reaches the
+#'   threshold the domain is \code{"very_serious"}; otherwise, if the combined
+#'   share of \code{"serious"} and \code{"very_serious"} studies reaches it,
+#'   the domain is \code{"serious"}; otherwise \code{"not_serious"}. Default
 #'   \code{0.55}.
 #'   \strong{The threshold has no basis in Core GRADE 5}, which operationalizes
 #'   indirectness of the body of evidence only qualitatively ("all or almost
@@ -149,7 +149,7 @@
 #'   body of evidence down.
 #' @param indirectness_rationale Free-text justification, required whenever
 #'   \code{indirectness} is supplied as a scalar GRADE level other than
-#'   \code{"no"}. See \code{rob_rationale} for how it is recorded.
+#'   \code{"not_serious"}. See \code{rob_rationale} for how it is recorded.
 #'   Default \code{NULL}.
 #' @param indirectness_subdomains (v0.5) Optional per-PICO subdomain judgment
 #'   table.
@@ -178,9 +178,9 @@
 #'       sufficiently direct?". Case and separator variants
 #'       (\code{"Probably No"}, \code{"probably-no"}) are accepted.}
 #'   }
-#'   \code{yes} / \code{probably_yes} contribute \code{"no"},
-#'   \code{probably_no} contributes \code{"some_concerns"} and \code{no}
-#'   contributes \code{"serious"}; the domain judgment defaults to the worst
+#'   \code{yes} / \code{probably_yes} contribute \code{"not_serious"},
+#'   \code{probably_no} contributes \code{"serious"} and \code{no}
+#'   contributes \code{"very_serious"}; the domain judgment defaults to the worst
 #'   case across subdomains. Supplying \code{indirectness} as a non-\code{NULL}
 #'   scalar alongside overrides that default and then requires
 #'   \code{indirectness_rationale} (a restatement of the default value needs
@@ -189,8 +189,8 @@
 #'   \code{indirectness} input. The normalised table is returned as
 #'   \code{indirectness_subdomains} on the result object and rendered by
 #'   \code{\link{indirectness_table}}. Default \code{NULL}.
-#' @param inconsistency Overall inconsistency scalar judgment. One of
-#'   \code{"no"}, \code{"some"}, \code{"serious"}, \code{"very_serious"}.
+#' @param inconsistency Overall inconsistency scalar judgment: a GRADE level
+#'   (see the \strong{Domain judgment levels} section).
 #'   If provided, flowchart parameters are ignored.
 #'   \strong{Breaking change (v0.4.0)}: this scalar override requires
 #'   \code{inconsistency_rationale}. The manual flowchart inputs
@@ -213,9 +213,9 @@
 #'   Since 0.5.1 this argument is also read on the \emph{automated} path, on
 #'   its own: when \code{inconsistency_ci_diff} is \code{NULL} and the
 #'   automated zone tally lands on opposite sides of the threshold,
-#'   \code{"yes"} rates the domain \code{"no"} (present the subgroups
-#'   separately) and \code{"no"} keeps \code{"some_concerns"}. Leaving it
-#'   unanswered also keeps \code{"some_concerns"}, which is the conservative
+#'   \code{"yes"} rates the domain \code{"not_serious"} (present the subgroups
+#'   separately) and \code{"no"} keeps \code{"very_serious"}. Leaving it
+#'   unanswered also keeps \code{"serious"}, which is the conservative
 #'   default. Before 0.5.1 the automated note advised supplying it while the
 #'   automated path ignored it.
 #'
@@ -327,9 +327,8 @@
 #'   (\eqn{\sum event_c / \sum n_c}) of \code{meta_obj} is used; if that is
 #'   unavailable too, an informative error is raised. Ignored unless an ARD
 #'   Threshold requires conversion.
-#' @param imprecision Optional overall imprecision scalar judgment. One of
-#'   \code{"no"}, \code{"some_concerns"}, \code{"serious"} (legacy
-#'   \code{"some"} / \code{"very_serious"} accepted). If provided, the
+#' @param imprecision Optional overall imprecision scalar judgment: a GRADE
+#'   level (see the \strong{Domain judgment levels} section). If provided, the
 #'   automated imprecision assessment (CI-vs-null/Threshold and OIS checks)
 #'   is bypassed entirely and \code{imprecision_rationale} is required.
 #'   Default \code{NULL} (automated assessment).
@@ -416,27 +415,38 @@
 #'   trials can be accounted for. \code{"yes"} short-circuits the publication
 #'   bias domain to "no" regardless of Egger's test or k. Default \code{NULL}.
 #'
-#' @section Internal level names vs Core GRADE wording:
-#' The domain judgment vocabulary used by every \code{*} argument and by
-#' \code{$domain_assessments$judgment} does \strong{not} match the Core GRADE
-#' wording, and the mismatch is off by exactly one step. Core GRADE 1,
+#' @section Domain judgment levels:
+#' The vocabulary used by every domain argument and by
+#' \code{$domain_assessments$judgment} is Core GRADE's own. Core GRADE 1,
 #' verbatim: "We characterise limitations in each of these domains involved in
 #' rating down certainty as not serious; serious; very serious; or, rarely,
 #' extremely serious."
 #'
 #' \tabular{lll}{
 #'   \strong{pmatools value} \tab \strong{Core GRADE wording} \tab \strong{levels down} \cr
-#'   \code{"no"}            \tab not serious        \tab  0 \cr
-#'   \code{"some_concerns"} \tab serious            \tab -1 \cr
-#'   \code{"serious"}       \tab very serious       \tab -2 \cr
-#'   (not implemented)      \tab extremely serious  \tab -3 \cr
+#'   \code{"not_serious"}       \tab not serious       \tab  0 \cr
+#'   \code{"serious"}           \tab serious           \tab -1 \cr
+#'   \code{"very_serious"}      \tab very serious      \tab -2 \cr
+#'   \code{"extremely_serious"} \tab extremely serious \tab -3 \cr
 #' }
 #'
-#' So \code{rob = "serious"} means \emph{very serious} risk of bias (\eqn{-2}),
-#' not the source's "serious" (\eqn{-1}). The legacy alias
-#' \code{"very_serious"} is still accepted for that level and is the less
-#' ambiguous spelling. \code{$downgrade} always carries the signed number, so
-#' read that when in doubt.
+#' \code{"extremely_serious"} is \strong{manual only}: no assessor in this
+#' package produces it, because no Core GRADE flowchart describes a three-level
+#' downgrade. Supply it through a scalar domain argument with the rationale
+#' that argument already requires.
+#'
+#' \code{"no"} is a permanent alias for \code{"not_serious"}, and
+#' \code{"some"} / \code{"some_concerns"} for \code{"serious"}; all three have
+#' always meant what they mean now.
+#'
+#' \strong{\code{"serious"} on its own is refused in this release.} Up to 0.5.0
+#' it was this package's internal name for the source's \emph{very serious}
+#' (\eqn{-2}); from 0.5.1 it carries the source's meaning (\eqn{-1}). A script
+#' passing it would keep running and report a different certainty, so pmatools
+#' aborts and asks which was meant: write \code{"some_concerns"} for \eqn{-1}
+#' or \code{"very_serious"} for \eqn{-2}. The refusal is temporary and will be
+#' lifted once one release has passed. \code{$downgrade} always carries the
+#' signed number, so read that when in doubt.
 #'
 #' @section Parts of Core GRADE not implemented:
 #' \itemize{
@@ -449,8 +459,10 @@
 #'     plausible confounding is correctly absent: Core GRADE 1 drops it
 #'     explicitly, saying it "has proved too difficult to apply and too rarely
 #'     applicable to be part of Core GRADE".
-#'   \item \strong{"Extremely serious" (\eqn{-3})} — see the vocabulary table
-#'     above. The maximum downgrade from one domain is \eqn{-2}.
+#'   \item \strong{Automatic "extremely serious" (\eqn{-3})}. The level exists
+#'     and can be recorded by hand (see the vocabulary table above), but no
+#'     assessor reaches it: Core GRADE's flowcharts describe no three-level
+#'     downgrade, so the deepest any automated path goes is \eqn{-2}.
 #'   \item \strong{The cross-domain gestalt step.} Core GRADE 1 asks for
 #'     "stepping back and taking an overall view of the threats to certainty of
 #'     evidence" after the individual domains, precisely so that several
@@ -723,8 +735,8 @@ grade_meta <- function(meta_obj,
   d_impre <- if (!is.null(imprecision)) {
     if (!is.character(imprecision) || length(imprecision) != 1L) {
       rlang::abort(paste0(
-        "imprecision must be a single GRADE level ",
-        "('no', 'some_concerns', 'serious') or NULL."
+        "imprecision must be a single GRADE level (",
+        paste0("'", GRADE_LEVELS, "'", collapse = ", "), ") or NULL."
       ))
     }
     validate_grade_level(imprecision, "imprecision")

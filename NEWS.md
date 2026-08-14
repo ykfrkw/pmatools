@@ -2,6 +2,55 @@
 
 ## Breaking changes
 
+* **The domain judgment values are now Core GRADE's own words, `"serious"` has
+  moved from −2 to −1, and passing a bare `"serious"` is an error for this
+  release.** The stored vocabulary was `"no"` / `"some_concerns"` / `"serious"`,
+  and it disagreed with the source by exactly one step: pmatools' `"serious"`
+  was Core GRADE's *very serious*. A reader with a Core GRADE paper in one hand
+  and this code in the other was one step out on every domain, and the package
+  needed a whole display layer to paper over it. The values are now
+  `"not_serious"` (0), `"serious"` (−1), `"very_serious"` (−2) and
+  `"extremely_serious"` (−3), which is Core GRADE 1's list verbatim.
+
+  The rename moves `"serious"` from −2 to −1 **without changing its spelling**,
+  which is the one change a script cannot notice: it would keep running and
+  report a different certainty rating, and silently fail to reproduce a
+  published analysis. So pmatools refuses the bare string rather than guessing
+  which release you wrote it against, and the error names both readings:
+
+  | you meant | write |
+  |---|---|
+  | rate down 1 level — Core GRADE's *serious* | `"some_concerns"` |
+  | rate down 2 levels — Core GRADE's *very serious* | `"very_serious"` |
+
+  Both spellings mean in 0.5.1 exactly what they meant in 0.5.0, so migrating
+  is a search-and-replace with no judgment calls in it. The refusal covers the
+  scalar domain arguments, per-study `rob` / `indirectness` vectors,
+  `rob_overrides` values and `rob_strata()`. **It is temporary**: one release
+  later it will be deleted and a plain `"serious"` will be accepted as −1 like
+  any other value.
+
+  `"no"`, `"some"` and `"some_concerns"` stay accepted permanently and
+  silently, because their meaning never moved. Everything that *reads* a
+  judgment — `$domain_assessments$judgment`, the domain notes, the Evidence
+  Profile, the Summary of Findings tables, the exported `.docx` — now contains
+  the canonical spelling, so a consumer matching on judgment strings must match
+  the new form. `$downgrade` is unchanged and remains the reliable thing to
+  read.
+
+* **A fourth domain level, `"extremely_serious"` (−3), exists and is manual
+  only.** Core GRADE 1 lists it ("or, rarely, extremely serious") and pmatools
+  had no value for it. It is now reachable through any scalar domain argument,
+  with the written rationale those already require, and through the override
+  menu on all five Step 3 domain tabs in the Shiny app. **No automated path
+  produces it, and none may** — none of the Core GRADE flowcharts describes a
+  three-level downgrade, so there is no rule to implement; `GRADE_LEVEL_AUTO_MAX`
+  records the cap and a test asserts it against every function that can build a
+  domain row. It is deliberately absent from the app's "Other considerations"
+  control, which stays 0 / −1 / −2: that control is not a Core GRADE domain.
+  Certainty still stops at Very Low, so a −3 that takes the total past the
+  floor is reported as Very Low with `certainty_score = 1`.
+
 * **The analysis is no longer filtered to one level of an `outcome` column, and
   the Step 2 "Outcome" selector is gone.** Data carrying an `outcome` column
   with more than one level used to render a selector and pool only the rows

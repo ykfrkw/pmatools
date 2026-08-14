@@ -111,17 +111,12 @@
   paste0(paste(x[-n], collapse = ", "), " and ", x[n])
 }
 
-# Severity adjective, matching the vocabulary of evidence_profile()'s
-# fmt_judgment(): -1 reads "serious", -2 reads "very serious".
+# Severity adjective for the "Due to ..." sentence. This used to be a second
+# hand-written wording map, kept in step with evidence_profile() by hand; the
+# two drifting apart is exactly the failure .grade_level_wording() exists to
+# prevent, so it now defers.
 .fmt_severity <- function(judgment) {
-  switch(
-    as.character(judgment),
-    "some"          = "serious",
-    "some_concerns" = "serious",
-    "serious"       = "very serious",
-    "very_serious"  = "very serious",
-    as.character(judgment)
-  )
+  .grade_level_wording(judgment)
 }
 
 # "Due to serious risk of bias and imprecision" — the second line of the BMJ

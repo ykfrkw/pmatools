@@ -187,7 +187,7 @@ assess_imprecision <- function(meta_obj,
   if (is.null(lower) || is.null(upper) || is.na(lower) || is.na(upper)) {
     return(make_domain_row(
       domain   = "Imprecision",
-      judgment = "no",
+      judgment = "not_serious",
       auto     = TRUE,
       notes    = "CI not available; imprecision not assessed."
     ))
@@ -359,7 +359,7 @@ assess_imprecision <- function(meta_obj,
       # SMD is ALREADY in within-study SD units: n_arm = 2(z_a+z_b)^2 sigma^2 /
       # delta^2 with the standardized delta of 0.20 and a RAW-scale sigma of,
       # say, 8 inflates the OIS by sigma^2 (64x here), which can flip Fig 4's
-      # large-effect path from "no" to serious through the "< 30% of OIS" rule.
+      # large-effect path from "not_serious" to "serious" via the "< 30% of OIS" rule.
       # For the SMD sigma is 1 by construction.
       if (is.null(ois_sd) && !is.null(ois_delta)) {
         if (identical(sm, "SMD")) {
@@ -1049,13 +1049,13 @@ assess_imprecision <- function(meta_obj,
   # --- Yes branch: CI crosses the chosen threshold -------------------------
   if (isTRUE(crosses_threshold)) {
     if (isTRUE(crosses_both_thresholds)) {
-      return(out("serious", sprintf(
+      return(out("very_serious", sprintf(
         "CI crosses %s -> rate down; CI crosses %s -> rate down two levels",
         threshold_label, two_level_label),
         flow = c(.IMPRE_FLOW_CROSSES, "pma-impre-edge-both-yes",
                  "pma-impre-leaf-down2-both")))
     }
-    return(out("some_concerns", sprintf(paste0(
+    return(out("serious", sprintf(paste0(
       "CI crosses %s -> rate down one level (sample size not considered on ",
       "this path)"), threshold_label),
       flow = c(.IMPRE_FLOW_CROSSES, "pma-impre-edge-both-no",
@@ -1064,7 +1064,7 @@ assess_imprecision <- function(meta_obj,
 
   # --- No branch: CI does not cross the threshold --------------------------
   if (!isTRUE(large$large)) {
-    return(out("no", sprintf(paste0(
+    return(out("not_serious", sprintf(paste0(
       "CI does not cross %s -> %s -> do not rate down (OIS not applied)"),
       threshold_label, large$note),
       flow = c(.IMPRE_FLOW_LARGE, "pma-impre-edge-large-no",
@@ -1077,7 +1077,7 @@ assess_imprecision <- function(meta_obj,
 
   if (is_binary) {
     if (!is.na(ci_ratio) && !is.na(ci_ratio_cut) && ci_ratio >= ci_ratio_cut) {
-      return(out("serious", sprintf(paste0(
+      return(out("very_serious", sprintf(paste0(
         "%s (binary): CI ratio %.2f >= %.1f -> consider rating down two ",
         "levels%s"), prefix, ci_ratio, ci_ratio_cut, ci_ratio_src_note),
         ois_used = TRUE,
@@ -1087,7 +1087,7 @@ assess_imprecision <- function(meta_obj,
   } else {
     # Continuous rule of thumb: 400 patients per group (total sample size 800).
     if (!is.na(n_total) && n_total >= 800) {
-      return(out("no", sprintf(paste0(
+      return(out("not_serious", sprintf(paste0(
         "%s (continuous): total N = %.0f >= 800 (rule of thumb) -> do not ",
         "rate down"), prefix, n_total), ois_used = TRUE,
         flow = c(.IMPRE_FLOW_OIS, "pma-impre-edge-ois-nodown",
@@ -1096,7 +1096,7 @@ assess_imprecision <- function(meta_obj,
   }
 
   if (is.na(ois_met)) {
-    return(out("no", sprintf(
+    return(out("not_serious", sprintf(
       "%s: OIS could not be computed (%s) -> do not rate down",
       prefix,
       if (is.null(ois_missing_reason)) "inputs unavailable"
@@ -1106,20 +1106,20 @@ assess_imprecision <- function(meta_obj,
                "pma-impre-leaf-nodown-ois")))
   }
   if (isTRUE(ois_met)) {
-    return(out("no", sprintf("%s: N >= OIS -> do not rate down", prefix),
+    return(out("not_serious", sprintf("%s: N >= OIS -> do not rate down", prefix),
                ois_used = TRUE,
                flow = c(.IMPRE_FLOW_OIS, "pma-impre-edge-ois-nodown",
                         "pma-impre-leaf-nodown-ois")))
   }
   # N < OIS
   if (!is_binary && !is.na(ois_pct) && ois_pct < 0.30) {
-    return(out("serious", sprintf(paste0(
+    return(out("very_serious", sprintf(paste0(
       "%s (continuous): N < 30%% of OIS -> consider rating down two levels"),
       prefix), ois_used = TRUE,
       flow = c(.IMPRE_FLOW_OIS, "pma-impre-edge-ois-down2",
                "pma-impre-leaf-down2-ois")))
   }
-  out("some_concerns", sprintf("%s: N < OIS -> rate down one level", prefix),
+  out("serious", sprintf("%s: N < OIS -> rate down one level", prefix),
       ois_used = TRUE,
       flow = c(.IMPRE_FLOW_OIS, "pma-impre-edge-ois-down1",
                "pma-impre-leaf-down1-ois"))

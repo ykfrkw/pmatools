@@ -114,7 +114,7 @@ test_that("inconsistency domain is auto-computed", {
   g <- suppressWarnings(grade_meta(m, threshold_type = "null"))
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_true(incon_row$auto)
-  expect_true(incon_row$judgment %in% c("no", "some", "serious", "very_serious"))
+  expect_true(incon_row$judgment %in% c("not_serious", "some", "very_serious", "very_serious"))
 })
 
 test_that("high I2 (opposite-sided TEs) rates down two levels (auto)", {
@@ -126,7 +126,7 @@ test_that("high I2 (opposite-sided TEs) rates down two levels (auto)", {
   m <- make_metabin_high_i2()
   g <- grade_meta(m, threshold_type = "null")
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  expect_equal(incon_row$judgment, "serious")
+  expect_equal(incon_row$judgment, "very_serious")
   expect_equal(incon_row$downgrade, -2L)
   expect_match(incon_row$notes, "This departs from Core GRADE 3", fixed = TRUE)
   expect_false(grepl("capped at one level", incon_row$notes, fixed = TRUE))
@@ -169,7 +169,7 @@ test_that("the scalar override still sets inconsistency independently", {
   g <- grade_meta(m, threshold_type = "null", inconsistency = "no",
                   inconsistency_rationale = "Subgroups reported separately")
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  expect_equal(incon_row$judgment, "no")
+  expect_equal(incon_row$judgment, "not_serious")
   expect_equal(incon_row$downgrade, 0)
   expect_false(incon_row$auto)
 })
@@ -178,7 +178,7 @@ test_that("inconsistency flowchart: ci_diff = no → do not rate down", {
   m <- make_metabin()
   g <- grade_meta(m, inconsistency_ci_diff = "no", threshold_type = "null")
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  expect_equal(incon_row$judgment, "no")
+  expect_equal(incon_row$judgment, "not_serious")
   expect_false(incon_row$auto)
 })
 
@@ -191,7 +191,7 @@ test_that("inconsistency flowchart: opposite_sides + no subgroup → rate down 2
     inconsistency_threshold_side     = "opposite_sides",
     inconsistency_subgroup_explained = "no", threshold_type = "null")
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  expect_equal(incon_row$judgment, "serious")
+  expect_equal(incon_row$judgment, "very_serious")
   expect_equal(incon_row$downgrade, -2L)
   expect_match(incon_row$notes, "This departs from Core GRADE 3", fixed = TRUE)
 })
@@ -202,17 +202,17 @@ test_that("inconsistency flowchart: majority_one_side → do not rate down", {
     inconsistency_ci_diff        = "yes",
     inconsistency_threshold_side = "majority_one_side", threshold_type = "null")
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  expect_equal(incon_row$judgment, "no")
+  expect_equal(incon_row$judgment, "not_serious")
 })
 
 test_that("inconsistency scalar overrides flowchart", {
   m <- make_metabin()
-  # Legacy "very_serious" is normalized to canonical "serious" (-2) under the
+  # Legacy "very_serious" is normalized to canonical "very_serious" (-2) under the
   # v0.3+ 3-level system.
   g <- grade_meta(m, inconsistency = "very_serious",
                   inconsistency_rationale = "Clinically divergent effects across settings", threshold_type = "null")
   incon_row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
-  expect_equal(incon_row$judgment, "serious")
+  expect_equal(incon_row$judgment, "very_serious")
   expect_false(incon_row$auto)
 })
 
@@ -231,10 +231,10 @@ test_that("ois_events below total events rates down one level (CI crosses null)"
   # Changed in the Core GRADE 2 Fig 4 rewrite: the CI crosses the chosen
   # (null) threshold, so Fig 4 rates down one level and never consults the
   # sample size; the old code applied the "<= 30% of OIS" rule unconditionally
-  # and returned "serious".
+  # and returned "very_serious".
   g <- suppressWarnings(grade_meta(m, ois_events = 1000, threshold_type = "null"))
   impre_row <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
-  expect_equal(impre_row$judgment, "some_concerns")
+  expect_equal(impre_row$judgment, "serious")
   expect_match(impre_row$notes, "sample size not considered on this path")
 })
 
@@ -253,7 +253,7 @@ test_that("k < 10 gives not assessable publication bias (judgment = 'no')", {
   m <- make_metabin()  # k = 3
   g <- suppressWarnings(grade_meta(m, threshold_type = "null"))
   pb_row <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
-  expect_equal(pb_row$judgment, "no")
+  expect_equal(pb_row$judgment, "not_serious")
   expect_true(grepl("< 10", pb_row$notes))
 })
 
@@ -262,7 +262,7 @@ test_that("pubias_small_industry = 'yes' rates down", {
   g <- suppressWarnings(grade_meta(m, pubias_small_industry = "yes", threshold_type = "null"))
   pb_row <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   # Step 1 of BMJ Core GRADE 4 Fig 5: small + industry-sponsored -> rate down 1.
-  expect_equal(pb_row$judgment, "some_concerns")
+  expect_equal(pb_row$judgment, "serious")
 })
 
 test_that("pubias_unpublished = 'yes' rates down when k < 10", {
@@ -271,7 +271,7 @@ test_that("pubias_unpublished = 'yes' rates down when k < 10", {
   pb_row <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   # Step 2 (k < 10) of BMJ Core GRADE 4 Fig 5: documented unpublished studies
   # -> rate down 1.
-  expect_equal(pb_row$judgment, "some_concerns")
+  expect_equal(pb_row$judgment, "serious")
   expect_false(pb_row$auto)
 })
 
@@ -279,7 +279,7 @@ test_that("pubias_unpublished = 'yes' rates down when k < 10", {
 
 test_that("rob vector: vector mode reports count and weight % (v0.3.1+: dominance gate removed)", {
   m <- make_metabin()
-  g <- grade_meta(m, rob = c("no", "some", "serious"), threshold_type = "null")
+  g <- grade_meta(m, rob = c("no", "some", "very_serious"), threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   # Only one high-RoB study among 3, with similar weights -> direction check
   # runs but inflation typically below threshold.
@@ -290,29 +290,29 @@ test_that("rob vector: vector mode reports count and weight % (v0.3.1+: dominanc
 test_that("rob vector: inflating small_values=undesirable rates down (some_concerns; sign-flip required for serious)", {
   # te_all=1.4 > te_low=0.3, both positive (no flip) -> some_concerns via inflation.
   m <- make_mock_dominated(te_all = 1.4, te_low_only = 0.3)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values           = "undesirable", threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "some_concerns")
+  expect_equal(rob_row$judgment, "serious")
 })
 
 test_that("rob vector: NOT inflating small_values=undesirable does not rate down", {
   # TE_all < TE_low → high-RoB pulls toward null → conservative (doesn't inflate)
   m <- make_mock_dominated(te_all = 0.2, te_low_only = 1.1)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values           = "undesirable", threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "no")
+  expect_equal(rob_row$judgment, "not_serious")
 })
 
 test_that("rob vector: inflating small_values=desirable rates down (some_concerns)", {
   # te_all=-1.5 < te_low=-0.2 (more negative is more "favorable" when small is good).
   # Both negative, no sign flip -> some_concerns.
   m <- make_mock_dominated(te_all = -1.5, te_low_only = -0.2)
-  g <- grade_meta(m, rob = c("serious", "no", "no"),
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values           = "desirable", threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "some_concerns")
+  expect_equal(rob_row$judgment, "serious")
 })
 
 test_that("rob vector of wrong length raises error", {

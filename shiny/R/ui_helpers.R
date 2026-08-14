@@ -1100,13 +1100,14 @@ pma_certainty_badge <- function(label) {
                   htmltools::HTML(paste0(label, " ", as.character(symbol))))
 }
 
-# Downgrade chip - shows -0/-1/-2 next to judgment badge
+# Downgrade chip - shows -0/-1/-2/-3 next to judgment badge.
+#
+# The level -> downgrade table is the vendored .grade_level_downgrade(), not a
+# copy: the app used to carry its own and it had to be edited by hand every
+# time the package gained a level.
 pma_downgrade_chip <- function(judgment) {
-  j  <- judgment %||% "no"
-  # 3-level mapping (v0.3+); legacy "some"/"very_serious" still mapped.
-  dg <- c(no = 0, some = -1, some_concerns = -1,
-          serious = -2, very_serious = -2)[[j]]
-  if (is.null(dg) || is.na(dg)) dg <- 0
+  j  <- judgment %||% "not_serious"
+  dg <- .grade_level_downgrade(j)
   cls <- if (dg == 0) "grade-high"
          else if (dg == -1) "grade-low"
          else "grade-vlow"
@@ -1119,21 +1120,21 @@ pma_downgrade_chip <- function(judgment) {
 # The words are NOT chosen here. .grade_level_wording() (vendored R/utils.R,
 # driven by GRADE_LEVEL_SOURCE_WORDING) is the app's single display
 # vocabulary, shared with the Evidence Profile: "Not serious" / "Serious" /
-# "Very serious", which is Core GRADE's own wording. The badge used to print
-# "No concern" / "Some concerns" / "Serious" from a second hand-written
-# switch, so the same judgment read one way on the tab and another way in the
-# exported table - and "Serious" meant -2 in one place and -1 in the other.
-# Only the CSS class mapping is this function's own.
+# "Very serious" / "Extremely serious", which is Core GRADE's own wording. The
+# badge used to print "No concern" / "Some concerns" / "Serious" from a second
+# hand-written switch, so the same judgment read one way on the tab and another
+# way in the exported table. Only the CSS class mapping is this function's own,
+# and it is keyed on the downgrade so a new level cannot arrive unstyled.
 pma_judgment_badge <- function(judgment) {
-  j <- judgment %||% "no"
-  cls <- switch(j,
-    "no"            = "grade-high",
-    "some"          = "grade-low",
-    "some_concerns" = "grade-low",
-    "serious"       = "grade-vlow",
-    "very_serious"  = "grade-vlow",
-    "grade-low"
-  )
+  j  <- judgment %||% "not_serious"
+  dg <- .grade_level_downgrade(j)
+  # An unrecognised level keeps the neutral-amber class it has always had:
+  # .grade_level_downgrade() reports 0 for it, which would otherwise paint it
+  # green and read as "no concern".
+  cls <- if (!.normalize_grade_level(j) %in% GRADE_LEVELS) "grade-low"
+         else if (dg == 0) "grade-high"
+         else if (dg == -1) "grade-low"
+         else "grade-vlow"
   htmltools::span(class = paste("pma-badge", cls),
                   pma_judgment_label(j))
 }
@@ -1142,26 +1143,30 @@ pma_judgment_badge <- function(judgment) {
 # a single call site to change if the package ever moves it, and so the tests
 # have something app-side to assert against.
 pma_judgment_label <- function(judgment) {
-  .grade_level_wording(judgment %||% "no", sentence = TRUE)
+  .grade_level_wording(judgment %||% "not_serious", sentence = TRUE)
 }
 
 # Choices for every override widget on the Step 3 domain tabs, and for the
 # Indirectness overall radio.
 #
-# The VALUES are the internal levels and do not move: grade_meta() reads
-# "no" / "some_concerns" / "serious" and nothing downstream is aware that the
-# labels changed. The labels are the Core GRADE wording plus the downgrade the
-# level carries, because "Serious" alone is ambiguous between the source's
-# -1 and pmatools' internal name for -2.
+# The values are the stored GRADE levels, which since 0.5.1 are Core GRADE's
+# own words; the labels keep the downgrade in brackets because a reviewer
+# choosing "Serious" wants to see what it costs.
+#
+# "Extremely serious (-3)" is offered here and nowhere automatic. Core GRADE 1
+# calls it rare ("or, rarely, extremely serious") and no flowchart in the
+# package reaches it, so this menu is the only way into the level -- and it
+# lands in the same rationale gate every other override does.
 #
 # `include_blank` is the "(no override)" entry the four selectInputs need and
 # the Indirectness radio does not (there, leaving the group unselected is how
 # the reviewer accepts the automatic worst-case fold).
 pma_judgment_choices <- function(include_blank = TRUE,
                                  blank_label = "(no override)") {
-  out <- c("Not serious (-0)"  = "no",
-           "Serious (-1)"      = "some_concerns",
-           "Very serious (-2)" = "serious")
+  out <- c("Not serious (-0)"       = "not_serious",
+           "Serious (-1)"           = "serious",
+           "Very serious (-2)"      = "very_serious",
+           "Extremely serious (-3)" = "extremely_serious")
   if (isTRUE(include_blank)) out <- c(stats::setNames("", blank_label), out)
   out
 }
@@ -1177,13 +1182,13 @@ pma_judgment_choices <- function(include_blank = TRUE,
 # The headline line: what this domain was rated, in Core GRADE's words, with
 # the downgrade it carries.
 pma_domain_verdict <- function(judgment, downgrade = NULL) {
-  j  <- judgment %||% "no"
+  j  <- judgment %||% "not_serious"
   dg <- downgrade
   if (is.null(dg) || length(dg) != 1L || is.na(dg)) {
-    # Single-bracket: an unknown level must fall back to 0, not abort the
-    # whole tab the way [[ ]] would.
-    dg <- unname(c(no = 0, some = -1, some_concerns = -1,
-                   serious = -2, very_serious = -2)[j])
+    # .grade_level_downgrade() reports 0 for an unrecognised level rather than
+    # aborting, which is what a tab needs: a rendering failure here would take
+    # the whole panel down.
+    dg <- .grade_level_downgrade(j)
   }
   if (is.na(dg)) dg <- 0
   dg <- as.integer(dg)

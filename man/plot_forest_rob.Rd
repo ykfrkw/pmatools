@@ -13,7 +13,7 @@ plot_forest_rob(meta_obj, rob, some_concerns_as = NULL, ...)
 \item{rob}{A character vector of length \code{meta_obj$k}. Accepts the same
 labels as \code{\link{grade_meta}} (case-insensitive): \code{"L"/"S"/"H"},
 \code{"low"/"some"/"high"}, the internal levels
-\code{"no"/"some_concerns"/"serious"}, and the Cochrane RoB2 wording
+\code{"not_serious"/"serious"/"very_serious"}, and the Cochrane RoB2 wording
 \code{"No concerns"}, \code{"Some concerns"}, \code{"Serious concerns"},
 \code{"Critical concerns"}. \code{NA}, \code{""} and \code{"?"} are
 tolerated (kept as their own group labeled \code{"unknown"}); any other

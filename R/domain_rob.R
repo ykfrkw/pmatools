@@ -7,10 +7,10 @@
 # --------------------------------------------------------------------------
 # Step 0. Binary classification of each study
 #
-#   rob_some_concerns = "low"  (default) : {no, some_concerns} -> low
-#                                          {serious}           -> high
-#   rob_some_concerns = "high"           : {no}                -> low
-#                                          {some_concerns, serious} -> high
+#   rob_some_concerns = "low"  (default) : {not_serious, serious} -> low
+#                                          {very_serious}         -> high
+#   rob_some_concerns = "high"           : {not_serious}          -> low
+#                                          {serious, very_serious} -> high
 #
 #   PROVENANCE: the binary verdict is Core GRADE 4's (verbatim: "For
 #   simplicity, however, Core GRADE users can assess the overall risk of bias
@@ -72,18 +72,18 @@
 #     below   : TE < -Threshold
 #
 #   Decision (zone(TE_all) = za, zone(TE_low) = zl):
-#     Rule 1: za == zl == "trivial"                    -> "no"
-#     Rule 2: za == zl, non-trivial, inflation <= 10%  -> "no"
-#     Rule 3: za == zl, non-trivial, inflation > 10%   -> "some_concerns"  (-1)
-#     Rule 4: za != zl, no sign flip across null       -> "some_concerns"  (-1)
-#     Rule 5: za != zl, sign flip (above <-> below)    -> "some_concerns"  (-1)
+#     Rule 1: za == zl == "trivial"                    -> "not_serious"
+#     Rule 2: za == zl, non-trivial, inflation <= 10%  -> "not_serious"
+#     Rule 3: za == zl, non-trivial, inflation > 10%   -> "serious"  (-1)
+#     Rule 4: za != zl, no sign flip across null       -> "serious"  (-1)
+#     Rule 5: za != zl, sign flip (above <-> below)    -> "serious"  (-1)
 #
 #   Rate down at most ONE level (v0.5). Core GRADE 4 describes no two-level
 #   risk-of-bias downgrade: the only "two levels" in the paper is about rating
 #   UP observational evidence, and every leaf of Fig 2 reads "rate down" /
 #   "do not rate down". Rule 5 (sign flip) and the all-studies-high-RoB case
-#   used to return "serious" (-2); both are now capped at "some_concerns".
-#   "serious" stays reachable through the scalar `rob` override, which
+#   used to return "very_serious" (-2); both are now capped at "serious".
+#   "very_serious" stays reachable through the scalar `rob` override, which
 #   requires rob_rationale.
 #
 #   Rules 1-2 are the figure's "bias would under-estimate an existing effect /
@@ -145,10 +145,10 @@
 #
 # Edge case: when every study is high-RoB (n_low == 0) the weight share is
 # 100%, so the dominated branch is taken; there is no low/some-RoB comparator
-# pool, and the domain is rated "some_concerns" (rate down 1 level). Up to
-# v0.4.0 this returned "serious" (-2); Core GRADE 4 supports no automatic
+# pool, and the domain is rated "serious" (rate down 1 level). Up to
+# v0.4.0 this returned "very_serious" (-2); Core GRADE 4 supports no automatic
 # two-level risk-of-bias downgrade, so a reviewer who judges -2 appropriate
-# must say so with rob = "serious" + rob_rationale.
+# must say so with rob = "very_serious" + rob_rationale.
 #
 # small_values:
 #   "undesirable": small values are bad (e.g., response rate, OR for benefit)
@@ -224,7 +224,7 @@
 #'   `meta_obj$data`.
 #' @param meta_obj A `meta::metagen`-like object.
 #' @param rob_some_concerns `"low"` (default) or `"high"`: which side of the
-#'   binary low/high classification `"some_concerns"` studies are folded into.
+#'   binary low/high classification `"serious"` studies are folded into.
 #' @param rob_overrides Named character vector of study-level Risk-of-Bias
 #'   overrides, keyed on `meta_obj$studlab`. Every key needs a matching
 #'   rationale in `rob_override_rationale`.
@@ -254,7 +254,7 @@
 #'   different magnitudes of effect" node is symmetric, so a shift of either
 #'   direction beyond the threshold counts.
 #'   When every study is high-RoB, no low/some-RoB comparator pool exists,
-#'   the check cannot run, and the domain is rated `"some_concerns"` (rate
+#'   the check cannot run, and the domain is rated `"serious"` (rate
 #'   down 1 level).
 #' @param small_values `"desirable"`, `"undesirable"`, or `NULL`. Defines the
 #'   bias-favouring direction; when `NULL`, `|TE_all| > |TE_low|` is used and
@@ -284,7 +284,7 @@ assess_rob <- function(rob, meta_obj,
   if (is.null(rob)) {
     return(.rob_row(make_domain_row(
       domain   = "Risk of bias",
-      judgment = "no",
+      judgment = "not_serious",
       auto     = FALSE,
       notes    = "Not assessed (rob = NULL). Assumed no concern."
     )))
@@ -299,6 +299,17 @@ assess_rob <- function(rob, meta_obj,
     rob <- unlist(rob, use.names = FALSE)
   }
   if (is.factor(rob)) rob <- as.character(rob)
+
+  # Before ANY normalisation: a bare "serious" named the high stratum up to
+  # 0.5.0 and the middle one from 0.5.1, in both the scalar and the per-study
+  # reading, and .normalize_rob_level() would resolve it silently either way.
+  .check_grade_level_input(
+    rob, "rob",
+    extra = paste0(
+      "A risk-of-bias label of \"serious\" no longer means what it meant in ",
+      "pmatools 0.5.0, whether it is a scalar override or one study's rating."
+    )
+  )
 
   # Scalar GRADE level (after normalisation): bypass flowchart.
   # v0.4.0 (breaking): a scalar override replaces the automated flowchart, so
@@ -355,7 +366,9 @@ assess_rob <- function(rob, meta_obj,
     ))
   }
 
-  validate_grade_level(rob, "rob")
+  # Already through .normalize_rob_levels(), so the ambiguity guard has had its
+  # turn on the raw input above and must not fire on a normalised "serious".
+  validate_grade_level(rob, "rob", check_ambiguous = FALSE)
 
   # Study-level overrides (keyed on studlab) are applied on the normalised
   # vector, before the binary low/high fold, and every one is recorded — in
@@ -449,9 +462,9 @@ assess_rob <- function(rob, meta_obj,
 # (which classifies the pooled studies) and assess_rob() (which classifies the
 # studies {meta} dropped, so that "high_idx" is complete in studlab space).
 .rob_high_levels <- function(some_concerns_as = "low") {
-  high_levels <- c("serious", "very_serious")
+  high_levels <- c("very_serious", "extremely_serious")
   if (identical(some_concerns_as, "high")) {
-    high_levels <- c(high_levels, "some_concerns", "some")
+    high_levels <- c(high_levels, "serious")
   }
   high_levels
 }
@@ -563,14 +576,17 @@ assess_rob <- function(rob, meta_obj,
       sprintf("study-level Risk of Bias for %s", shQuote(key))
     )
 
+    .check_grade_level_input(unname(rob_overrides[[key]]),
+                             sprintf("rob_overrides[[%s]]", shQuote(key)))
     to <- .normalize_rob_level(unname(rob_overrides[[key]]))
     if (!to %in% GRADE_LEVELS) {
       rlang::abort(paste0(
         "rob_overrides[[", shQuote(key), "]] = ",
         shQuote(unname(rob_overrides[[key]])),
-        " is not a recognized risk-of-bias level. Accepted values: 'no', ",
-        "'some_concerns', 'serious', or Cochrane RoB2 labels ('No concerns', ",
-        "'Some concerns', 'Serious concerns', 'Critical concerns')."
+        " is not a recognized risk-of-bias level. Accepted values: ",
+        "'not_serious', 'some_concerns', 'very_serious', or Cochrane RoB2 ",
+        "labels ('No concerns', 'Some concerns', 'Serious concerns', ",
+        "'Critical concerns')."
       ))
     }
 
@@ -607,9 +623,10 @@ assess_rob <- function(rob, meta_obj,
                            some_concerns_as = "low",
                            override_notes = NULL) {
 
-  # Binary low/high classification. "serious" is always high (legacy
-  # "very_serious" is still recognized after .normalize_rob_levels);
-  # "some_concerns" goes to whichever side rob_some_concerns selects.
+  # Binary low/high classification, on levels .normalize_rob_levels() has
+  # already canonicalised. "very_serious" and "extremely_serious" are always
+  # high; "serious" (Cochrane's "some concerns") goes to whichever side
+  # rob_some_concerns selects.
   high_levels <- .rob_high_levels(some_concerns_as)
   high_idx <- rob_vec %in% high_levels
   n_high   <- sum(high_idx)
@@ -702,7 +719,7 @@ assess_rob <- function(rob, meta_obj,
   if (n_high == 0) {
     return(.rob_row(make_domain_row(
       domain   = "Risk of bias",
-      judgment = "no",
+      judgment = "not_serious",
       auto     = FALSE,
       notes    = paste0(
         "No high-RoB studies. ", weight_note, "; ", fold_note,
@@ -855,7 +872,7 @@ assess_rob <- function(rob, meta_obj,
       if (!is.na(dir$rule)) {
         sprintf("dominated by high risk of bias studies; direction-of-bias rule %d (%s)",
                 dir$rule,
-                if (identical(dir$judgment, "no")) "do not rate down" else "rate down")
+                if (identical(dir$judgment, "not_serious")) "do not rate down" else "rate down")
       } else {
         paste0("dominated by high risk of bias studies; direction of bias not ",
                "assessable (rate down)")
@@ -961,7 +978,7 @@ assess_rob <- function(rob, meta_obj,
 
   .rob_row(make_domain_row(
     domain   = "Risk of bias",
-    judgment = "no",
+    judgment = "not_serious",
     auto     = FALSE,
     notes    = paste0(
       weight_note, "; ", fold_note, ". ", dom_note, ". ",
@@ -996,15 +1013,15 @@ assess_rob <- function(rob, meta_obj,
 # change.
 #
 # Decision tree (za = zone(TE_all), zl = zone(TE_low)):
-#   za == zl == "trivial"                                     -> "no"            (rule 1)
-#   za == zl, non-trivial, no bias-favouring inflation > 10%  -> "no"            (rule 2)
-#   za == zl, non-trivial, bias-favouring inflation > 10%     -> "some_concerns" (rule 3)
-#   za != zl, no sign flip across null                        -> "some_concerns" (rule 4)
-#   za != zl, sign flip (above <-> below)                     -> "some_concerns" (rule 5)
+#   za == zl == "trivial"                                    -> "not_serious" (rule 1)
+#   za == zl, non-trivial, no bias-favouring inflation > 10% -> "not_serious" (rule 2)
+#   za == zl, non-trivial, bias-favouring inflation > 10%    -> "serious"     (rule 3)
+#   za != zl, no sign flip across null                       -> "serious"     (rule 4)
+#   za != zl, sign flip (above <-> below)                    -> "serious"     (rule 5)
 #
-# Rule 5 returned "serious" (-2) up to v0.4. Since v0.5.0 every automated
+# Rule 5 returned "very_serious" (-2) up to v0.4. Since v0.5.0 every automated
 # risk-of-bias path is capped at one level (see .ROB_CAP_NOTE above): Core
-# GRADE 4 describes no two-level risk-of-bias downgrade. "serious" is reachable
+# GRADE 4 describes no two-level risk-of-bias downgrade. "very_serious" is reachable
 # only through the scalar `rob` override, which requires rob_rationale.
 #
 # CAVEAT — TE_low is ALWAYS a fixed-effect (common-effect) estimate.
@@ -1064,13 +1081,13 @@ assess_rob <- function(rob, meta_obj,
   # All studies are high-RoB (no comparator pool exists) -> rate down 1 level.
   # Core GRADE 4 never describes an automatic two-level risk-of-bias downgrade
   # (every Fig 2 leaf is "rate down" / "do not rate down"), so this is capped
-  # at "some_concerns"; use rob = "serious" + rob_rationale for -2.
+  # at "serious"; use rob = "very_serious" + rob_rationale for -2.
   if (n_low == 0 || is.null(te_vec) || is.null(se_vec)) {
     return(bail(
-      judgment = "some_concerns",
+      judgment = "serious",
       note     = paste0(
         "All studies high-RoB; no low/some-RoB comparator pool. ",
-        "Rate down 1 level (some concerns). ", .ROB_CAP_NOTE, " ",
+        "Rate down 1 level (serious). ", .ROB_CAP_NOTE, " ",
         sm_label, "(all) = ", .disp(te_all), ". ", threshold_note, "."
       )
     ))
@@ -1079,11 +1096,11 @@ assess_rob <- function(rob, meta_obj,
   usable <- is.finite(te_vec) & is.finite(se_vec) & se_vec > 0
   if (length(usable) != length(low_idx) || !any(usable)) {
     return(bail(
-      judgment = "some_concerns",
+      judgment = "serious",
       note     = paste0(
         "Risk-of-bias direction check not assessable because study-level ",
         "effects are sparse or non-finite. Rate down 1 level ",
-        "(some concerns). ", sm_label, "(all) = ", .disp(te_all), ". ",
+        "(serious). ", sm_label, "(all) = ", .disp(te_all), ". ",
         threshold_note, "."
       )
     ))
@@ -1092,11 +1109,11 @@ assess_rob <- function(rob, meta_obj,
   low_usable <- low_idx & usable
   if (!any(low_usable)) {
     return(bail(
-      judgment = "some_concerns",
+      judgment = "serious",
       note     = paste0(
         "Risk-of-bias direction check not assessable because no finite ",
         "low/some-RoB comparator studies remain after sparse-data filtering. ",
-        "Rate down 1 level (some concerns). ", sm_label, "(all) = ",
+        "Rate down 1 level (serious). ", sm_label, "(all) = ",
         .disp(te_all), ". ", threshold_note, "."
       )
     ))
@@ -1110,11 +1127,11 @@ assess_rob <- function(rob, meta_obj,
   te_low <- sum(w_low * te_vec[low_usable]) / sum(w_low)
   if (!is.finite(te_low)) {
     return(bail(
-      judgment = "some_concerns",
+      judgment = "serious",
       note     = paste0(
         "Risk-of-bias direction check not assessable because the finite ",
         "low/some-RoB comparator estimate could not be computed. Rate down ",
-        "1 level (some concerns). ", sm_label, "(all) = ", .disp(te_all),
+        "1 level (serious). ", sm_label, "(all) = ", .disp(te_all),
         ". ", threshold_note, "."
       )
     ))
@@ -1163,10 +1180,10 @@ assess_rob <- function(rob, meta_obj,
   gate_note <- NULL
   if (identical(za, zl)) {
     if (identical(za, "trivial")) {
-      judgment <- "no"; rule <- 1L
+      judgment <- "not_serious"; rule <- 1L
       rule_desc <- "Rule 1: TE_all and TE_low both in trivial zone -> do not rate down"
     } else if (inflates) {
-      judgment <- "some_concerns"; rule <- 3L
+      judgment <- "serious"; rule <- 3L
       rule_desc <- "Rule 3: same non-trivial zone but bias-favouring inflation > threshold -> rate down 1"
       if (is.null(small_values) && isTRUE(warn_direction_assumption)) {
         rlang::warn(paste0(
@@ -1179,7 +1196,7 @@ assess_rob <- function(rob, meta_obj,
         ))
       }
     } else {
-      judgment <- "no"; rule <- 2L
+      judgment <- "not_serious"; rule <- 2L
       rule_desc <- "Rule 2: same non-trivial zone, inflation within threshold (or not bias-favouring) -> do not rate down"
       # Transparency: the magnitude of the shift exceeds the threshold, but the
       # direction gate blocked the downgrade. Say so explicitly so readers do
@@ -1211,14 +1228,14 @@ assess_rob <- function(rob, meta_obj,
     }
   } else {
     if (sign_flips) {
-      judgment <- "some_concerns"; rule <- 5L
+      judgment <- "serious"; rule <- 5L
       rule_desc <- paste0(
         "Rule 5: zone changes across null (benefit <-> harm) -> rate down 1 ",
-        "(some concerns). ", .ROB_CAP_NOTE
+        "(serious). ", .ROB_CAP_NOTE
       )
     } else {
-      judgment <- "some_concerns"; rule <- 4L
-      rule_desc <- "Rule 4: zone changes without sign flip -> rate down 1 (some_concerns)"
+      judgment <- "serious"; rule <- 4L
+      rule_desc <- "Rule 4: zone changes without sign flip -> rate down 1 (serious)"
     }
   }
 
@@ -1285,30 +1302,32 @@ assess_rob <- function(rob, meta_obj,
 # --------------------------------------------------------------------------
 .normalize_rob_level <- function(x) {
   aliases <- c(
-    # Cochrane RoB2 (3-level mapping: critical -> serious in v0.3+)
-    "No concerns"       = "no",
-    "Some concerns"     = "some_concerns",
-    "Serious concerns"  = "serious",
-    "Critical concerns" = "serious",
+    # Cochrane RoB2 (3-level mapping: critical folds into very_serious)
+    "No concerns"       = "not_serious",
+    "Some concerns"     = "serious",
+    "Serious concerns"  = "very_serious",
+    "Critical concerns" = "very_serious",
     # Single-letter shortcuts
-    "L" = "no", "l" = "no",
-    "S" = "some_concerns", "s" = "some_concerns",
-    "M" = "some_concerns", "m" = "some_concerns",
-    "H" = "serious", "h" = "serious",
-    "C" = "serious", "c" = "serious",
-    "*" = "some_concerns",
+    "L" = "not_serious", "l" = "not_serious",
+    "S" = "serious", "s" = "serious",
+    "M" = "serious", "m" = "serious",
+    "H" = "very_serious", "h" = "very_serious",
+    "C" = "very_serious", "c" = "very_serious",
+    "*" = "serious",
     # Plain / alternate capitalisation
-    "low"          = "no",            "Low"          = "no",
-    "moderate"     = "some_concerns", "Moderate"     = "some_concerns",
-    "unclear"      = "some_concerns", "Unclear"      = "some_concerns",  # RoB1 wording
-    "high"         = "serious",       "High"         = "serious",
-    "very high"    = "serious",       "Very high"    = "serious",
+    "low"          = "not_serious",  "Low"          = "not_serious",
+    "moderate"     = "serious",      "Moderate"     = "serious",
+    "unclear"      = "serious",      "Unclear"      = "serious",  # RoB1 wording
+    "high"         = "very_serious", "High"         = "very_serious",
+    "very high"    = "very_serious", "Very high"    = "very_serious",
     # Internal (pass-through + legacy)
-    "no"            = "no",
-    "some"          = "some_concerns",   # legacy alias
-    "some_concerns" = "some_concerns",
-    "serious"       = "serious",
-    "very_serious"  = "serious"           # legacy alias
+    "not_serious"       = "not_serious",
+    "no"                = "not_serious",  # legacy alias
+    "some"              = "serious",      # legacy alias
+    "some_concerns"     = "serious",      # legacy alias
+    "serious"           = "serious",
+    "very_serious"      = "very_serious",
+    "extremely_serious" = "extremely_serious"
   )
   if (is.na(x)) return(NA_character_)
   if (x %in% names(aliases)) return(unname(aliases[[x]]))
@@ -1348,17 +1367,22 @@ assess_rob <- function(rob, meta_obj,
 #'
 #' Accepted labels, case-insensitively and after trimming whitespace:
 #' \itemize{
-#'   \item \strong{low}: \code{"no"}, \code{"low"}, \code{"L"},
-#'     \code{"No concerns"}
+#'   \item \strong{low}: \code{"not_serious"}, \code{"no"}, \code{"low"},
+#'     \code{"L"}, \code{"No concerns"}
 #'   \item \strong{some}: \code{"some_concerns"}, \code{"some"},
 #'     \code{"S"}, \code{"M"}, \code{"*"}, \code{"moderate"},
 #'     \code{"unclear"} (RoB 1 wording), \code{"Some concerns"}
-#'   \item \strong{high}: \code{"serious"}, \code{"very_serious"},
+#'   \item \strong{high}: \code{"very_serious"}, \code{"extremely_serious"},
 #'     \code{"high"}, \code{"very high"}, \code{"H"}, \code{"C"},
 #'     \code{"Serious concerns"}, \code{"Critical concerns"}
 #'   \item \strong{unknown}: \code{NA}, \code{""}, \code{"?"},
 #'     \code{"unknown"}, \code{"na"}
 #' }
+#'
+#' A bare \code{"serious"} is \strong{rejected} in this release. It named the
+#' \code{"high"} stratum up to 0.5.0 and names the \code{"some"} stratum from
+#' 0.5.1; write \code{"some_concerns"} or \code{"very_serious"} instead, both
+#' of which mean what they always did. See \code{\link{grade_meta}}.
 #'
 #' Anything else also becomes \code{"unknown"}, but with a warning naming the
 #' offending labels. It deliberately does \strong{not} abort: this function
@@ -1383,7 +1407,7 @@ assess_rob <- function(rob, meta_obj,
 #' # Single letters, RoB 2 sentences and internal names all map cleanly.
 #' rob_strata(c("L", "S", "H"))
 #' rob_strata(c("No concerns", "Some concerns", "Critical concerns"))
-#' rob_strata(c("no", "some_concerns", "serious"))
+#' rob_strata(c("not_serious", "some_concerns", "very_serious"))
 #'
 #' # Missing and explicitly unknown judgments become "unknown" quietly.
 #' rob_strata(c("low", NA, "", "?"))
@@ -1402,16 +1426,26 @@ rob_strata <- function(x, arg = "rob") {
   out <- rep("unknown", length(v))
   if (!any(!blank)) return(out)
 
+  .check_grade_level_input(
+    v[!blank], arg,
+    extra = paste0(
+      "A study-level risk-of-bias label of \"serious\" no longer means the ",
+      "same stratum it did in pmatools 0.5.0."
+    )
+  )
+
   lvl <- vapply(v[!blank], .normalize_rob_level, character(1), USE.NAMES = FALSE)
-  strata <- unname(c(no = "low", some_concerns = "some", serious = "high")[lvl])
+  strata <- unname(c(not_serious = "low", serious = "some",
+                     very_serious = "high", extremely_serious = "high")[lvl])
 
   bad <- is.na(strata)
   if (any(bad)) {
     rlang::warn(paste0(
       arg, ": unrecognized label(s) -> \"unknown\" stratum: ",
       paste(unique(v[!blank][bad]), collapse = ", "),
-      ". Accepted values: 'no'/'low'/'L', 'some_concerns'/'some'/'S', ",
-      "'serious'/'high'/'H', or Cochrane RoB2 labels ('No concerns', ",
+      ". Accepted values: 'not_serious'/'no'/'low'/'L', ",
+      "'some_concerns'/'some'/'S', 'very_serious'/'high'/'H', ",
+      "or Cochrane RoB2 labels ('No concerns', ",
       "'Some concerns', 'Serious concerns', 'Critical concerns')."
     ))
     strata[bad] <- "unknown"

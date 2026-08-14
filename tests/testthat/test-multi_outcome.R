@@ -163,7 +163,7 @@ test_that("per_outcome arguments override common ones", {
                   indirectness = "no"),
     per_outcome = list(
       "Mortality" = list(study_design = "obs",
-                         indirectness = "serious",
+                         indirectness = "very_serious",
                          indirectness_rationale = "Surrogate population")
     )
   )
@@ -174,8 +174,8 @@ test_that("per_outcome arguments override common ones", {
     d <- g$domain_assessments
     d$judgment[d$domain == "Indirectness"]
   }
-  expect_equal(ind(set$outcomes[["Mortality"]]), "serious")
-  expect_equal(ind(set$outcomes[["Depression severity"]]), "no")
+  expect_equal(ind(set$outcomes[["Mortality"]]), "very_serious")
+  expect_equal(ind(set$outcomes[["Depression severity"]]), "not_serious")
 
   expect_error(grade_meta_multi(ml, per_outcome = list("Nope" = list())),
                regexp = "per_outcome names not found")
@@ -256,7 +256,7 @@ test_that("grade_meta_multi warns and drops an outcome it cannot rate", {
       per_outcome = list(
         # An override without its mandatory rationale: a plain per-outcome
         # failure, so the batch continues.
-        "Mortality" = list(imprecision = "serious")
+        "Mortality" = list(imprecision = "very_serious")
       ))
   )
   expect_true(any(grepl("grade_meta\\(\\) failed for outcome 'Mortality'", warns)))
@@ -405,7 +405,7 @@ test_that("the multi-outcome ZIP has the specified layout", {
 # studies only", one whose does not.
 refit_data <- function() {
   st <- c("High-1", "Low-1", "Low-2", "Low-3")
-  rob <- c("serious", "no", "no", "no")
+  rob <- c("very_serious", "no", "no", "no")
   raw <- rbind(
     bin_rows("Mortality", st,
              c(40, 30, 31, 29), c(100, 100, 100, 100),
@@ -424,7 +424,7 @@ test_that("forest_plot_full is written only for outcomes that were refitted", {
     ml,
     common = list(study_design = "RCT", indirectness = "no",
                   small_values = "undesirable",
-                  rob = c("serious", "no", "no", "no"),
+                  rob = c("very_serious", "no", "no", "no"),
                   threshold = 1.05, threshold_scale = "ratio")
   )
   skip_if_not(isTRUE(set$outcomes[["Mortality"]]$rob_refit),
@@ -511,7 +511,7 @@ test_that("the bundled multi-outcome analysis.R parses and reproduces the set", 
         indirectness_subdomains = sub_tbl,
         rob                     = rep("no", 5),
         rob_rationale           = "Consensus RoB2: all domains low risk",
-        rob_overrides           = c("Adams 2019" = "serious"),
+        rob_overrides           = c("Adams 2019" = "very_serious"),
         rob_override_rationale  = c("Adams 2019" = "Unblinded outcome adjudication")
       )
     ),

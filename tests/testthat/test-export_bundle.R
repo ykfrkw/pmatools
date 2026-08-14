@@ -187,8 +187,8 @@ test_that(".arg_lit round-trips every recognised origin", {
                shQuote("undesirable"))
   expect_equal(.arg_lit(list(origin = "scalar", value = TRUE)), "TRUE")
   expect_equal(.arg_lit(list(origin = "scalar", value = 0.25)), "0.25")
-  expect_equal(.arg_lit(list(origin = "vector", value = c("no", "serious"))),
-               "c('no', 'serious')")
+  expect_equal(.arg_lit(list(origin = "vector", value = c("no", "very_serious"))),
+               "c('no', 'very_serious')")
   # Plain values and absent specs keep their old behaviour
   expect_equal(.arg_lit(NULL, fallback = "0.05"), "0.05")
   expect_equal(.arg_lit("yes"), shQuote("yes"))
@@ -557,7 +557,7 @@ make_refit_grade <- function() {
                       sm = "RR", tau.preset = 0)
   g <- suppressWarnings(grade_meta(
     ma, study_design = "RCT",
-    rob = c("serious", "no", "no", "no"),
+    rob = c("very_serious", "no", "no", "no"),
     rob_rationale = "Consensus RoB2: study 1 high risk",
     indirectness = "no",
     small_values = "undesirable",

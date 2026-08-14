@@ -15,16 +15,16 @@
 #
 # Steps:
 #   Step 1. Are there important differences in point estimates AND limited CI overlap?
-#     NO  -> judgment = "no" (do not rate down)
+#     NO  -> judgment = "not_serious" (do not rate down)
 #     YES -> Step 2
 #
 #   Step 2. Where do point estimates fall vs the chosen threshold?
-#     majority_one_side -> judgment = "no" (manual) or "some" (auto, conservative)
+#     majority_one_side -> judgment = "not_serious" (manual) or "serious" (auto, conservative)
 #     opposite_sides    -> Step 3
 #
 #   Step 3. Is opposite-sided inconsistency explained by credible subgroup?
-#     yes -> judgment = "no" + note
-#     no  -> judgment = "serious" (-2; see the departure below)
+#     yes -> judgment = "not_serious" + note
+#     no  -> judgment = "very_serious" (-2; see the departure below)
 #
 # THE OPPOSITE-SIDED BRANCH RATES DOWN TWO LEVELS, AND THAT DEPARTS FROM THE
 # SOURCE. Core GRADE 3 (p5-6) verbatim:
@@ -32,7 +32,7 @@
 #    Although this is a theoretical possibility, we have found compelling
 #    reason to rate down twice for inconsistency sufficiently unusual that it
 #    need not concern users of Core GRADE."
-# v0.5.0 read that as a cap and stopped every path at "some_concerns" (-1).
+# v0.5.0 read that as a cap and stopped every path at "serious" (-1).
 # v0.5.1 does not, on the following reasoning, which is stated here rather
 # than hidden because the source says otherwise.
 #
@@ -50,7 +50,7 @@
 #
 # .INCONSISTENCY_TWO_LEVEL_NOTE states the departure in the notes wherever
 # the branch fires, so no reader meets the -2 without the reasoning. Every
-# other path in this file still stops at "some_concerns" (-1), and the scalar
+# other path in this file still stops at "serious" (-1), and the scalar
 # `inconsistency` override (with a written rationale) remains the way to
 # record a judgment the flowchart does not reach -- in either direction.
 #
@@ -78,7 +78,7 @@
 # Auto Step 2 proxy:
 #   With threshold_chosen > 0:
 #     classify TE per study into 3 zones around +/-threshold_chosen;
-#     largest single-zone share >= 80% -> majority_one_side -> "no"
+#     largest single-zone share >= 80% -> majority_one_side -> "not_serious"
 #   Without threshold_chosen (null threshold, or none supplied):
 #     the trivial zone collapses to {0} and the same 80% rule is applied
 #     around the null.
@@ -93,9 +93,9 @@
 #
 # Auto Step 3: cannot be auto-detected, so it is ASKED. When the zone tally
 #   lands on opposite sides, `inconsistency_subgroup_explained` is read on the
-#   auto path exactly as it is on the manual one: "yes" -> "no" (do not rate
-#   down, present the subgroups separately), "no" -> "serious" (-2),
-#   unanswered -> "serious" (-2) with a note pointing at the argument.
+#   auto path exactly as it is on the manual one: "yes" -> "not_serious" (do not rate
+#   down, present the subgroups separately), "no" -> "very_serious" (-2),
+#   unanswered -> "very_serious" (-2) with a note pointing at the argument.
 #   Before v0.5.1 the note pointed at an argument the auto path ignored;
 #   answering it switched the domain onto the manual path, which then demanded
 #   inconsistency_threshold_side as well.
@@ -150,7 +150,7 @@
   "it. Core GRADE 3 calls the case unusual rather than wrong, and the 20% ",
   "each-side gate is what keeps it unusual: scattered estimates that do not ",
   "reach it take the heterogeneous branch and rate down one level. Supply the ",
-  "scalar override inconsistency = 'some_concerns' with ",
+  "scalar override inconsistency = 'some_concerns' (= Core GRADE 'serious', rate down 1) with ",
   "inconsistency_rationale to rate down one level instead."
 )
 
@@ -264,7 +264,7 @@ assess_inconsistency <- function(meta_obj,
     if (inconsistency_ci_diff == "no") {
       return(make_domain_row(
         domain   = "Inconsistency",
-        judgment = "no",
+        judgment = "not_serious",
         auto     = FALSE,
         notes    = paste0(
           "FLOWCHART Step 1: No important differences in point estimates / ",
@@ -293,7 +293,7 @@ assess_inconsistency <- function(meta_obj,
     if (inconsistency_threshold_side == "majority_one_side") {
       return(make_domain_row(
         domain   = "Inconsistency",
-        judgment = "no",
+        judgment = "not_serious",
         auto     = FALSE,
         notes    = paste0(
           "FLOWCHART Step 2: Important CI differences exist, but majority of point ",
@@ -323,7 +323,7 @@ assess_inconsistency <- function(meta_obj,
     if (inconsistency_subgroup_explained == "yes") {
       return(make_domain_row(
         domain   = "Inconsistency",
-        judgment = "no",
+        judgment = "not_serious",
         auto     = FALSE,
         notes    = paste0(
           "FLOWCHART Step 3: Opposite-sided estimates explained by credible subgroup ",
@@ -341,7 +341,7 @@ assess_inconsistency <- function(meta_obj,
 
     return(make_domain_row(
       domain   = "Inconsistency",
-      judgment = "serious",
+      judgment = "very_serious",
       auto     = FALSE,
       notes    = paste0(
         "FLOWCHART Step 3: Opposite-sided estimates not explained by subgroup ",
@@ -392,7 +392,7 @@ assess_inconsistency <- function(meta_obj,
   if (!ci_diff_yes) {
     return(make_domain_row(
       domain   = "Inconsistency",
-      judgment = "no",
+      judgment = "not_serious",
       auto     = TRUE,
       notes    = paste0(
         sprintf(paste0("AUTO Step 1: No important heterogeneity (I2 <= %d%%) ",
@@ -412,12 +412,12 @@ assess_inconsistency <- function(meta_obj,
   if (is.null(te_vec) || length(te_vec) < 2) {
     return(make_domain_row(
       domain   = "Inconsistency",
-      judgment = "some_concerns",
+      judgment = "serious",
       auto     = TRUE,
       notes    = paste0(
         sprintf(paste0("AUTO Step 1: I2 > %d%%; AUTO Step 2 not assessable ",
                        "(study-level TEs unavailable); judgment = ",
-                       "'some_concerns' (conservative). "), cut),
+                       "'serious' (conservative). "), cut),
         .INCONSISTENCY_I2_CAVEAT, " | ", stat_note
       ),
       # The path stops at the Step 2 node on purpose: the question was
@@ -433,10 +433,10 @@ assess_inconsistency <- function(meta_obj,
   te_vec <- te_vec[!is.na(te_vec)]
 
   # Zone classification:
-  #   max single-zone share >= 80%               -> "no" (consistent direction)
-  #   both directions have substantial mass      -> "serious" (-2)
+  #   max single-zone share >= 80%               -> "not_serious" (consistent direction)
+  #   both directions have substantial mass      -> "very_serious" (-2)
   #     (n_above/k >= 20% AND n_below/k >= 20%)
-  #   else                                       -> "some_concerns" (-1)
+  #   else                                       -> "serious" (-1)
   #
   # PROVENANCE: neither number is from Core GRADE. 0.80 follows CINeMA
   # (Nikolakopoulou 2020); 0.20 is a pmatools convention. Core GRADE 3 Fig 2
@@ -480,14 +480,14 @@ assess_inconsistency <- function(meta_obj,
 
   if (pct_max_zone >= ZONE_MAJORITY) {
     threshold_side <- "majority_one_side"
-    judgment_auto  <- "no"
+    judgment_auto  <- "not_serious"
     decision_note  <- sprintf(
       "Largest single-zone share %.0f%% >= %.0f%% -> direction consistent, do not rate down.",
       pct_max_zone * 100, ZONE_MAJORITY * 100
     )
   } else if (pct_each_side >= OPPOSITE_EACH) {
     threshold_side <- "opposite_substantial"
-    judgment_auto  <- "serious"
+    judgment_auto  <- "very_serious"
     decision_note  <- sprintf(
       "Both directions have substantial mass: n_above = %d (%.0f%%) AND n_below = %d (%.0f%%) >= %.0f%% each -> rate down 2 (clinically opposite).",
       n_above, n_above / n_total * 100,
@@ -496,7 +496,7 @@ assess_inconsistency <- function(meta_obj,
     )
   } else {
     threshold_side <- "heterogeneous"
-    judgment_auto  <- "some_concerns"
+    judgment_auto  <- "serious"
     decision_note  <- sprintf(
       "Largest single-zone share %.0f%% < %.0f%% but neither direction reaches %.0f%% -> rate down 1 (heterogeneous magnitude).",
       pct_max_zone * 100, ZONE_MAJORITY * 100, OPPOSITE_EACH * 100
@@ -538,10 +538,10 @@ assess_inconsistency <- function(meta_obj,
   flow_to_step2 <- c("pma-incon-node-step1", "pma-incon-edge-step1-yes",
                      "pma-incon-node-step2")
 
-  if (judgment_auto == "no") {
+  if (judgment_auto == "not_serious") {
     return(make_domain_row(
       domain   = "Inconsistency",
-      judgment = "no",
+      judgment = "not_serious",
       auto     = TRUE,
       notes    = paste0(
         step1_note,
@@ -563,7 +563,7 @@ assess_inconsistency <- function(meta_obj,
     if (identical(inconsistency_subgroup_explained, "yes")) {
       return(make_domain_row(
         domain   = "Inconsistency",
-        judgment = "no",
+        judgment = "not_serious",
         auto     = TRUE,
         notes    = paste0(
           step1_note,
@@ -589,7 +589,7 @@ assess_inconsistency <- function(meta_obj,
     }
     return(make_domain_row(
       domain   = "Inconsistency",
-      judgment = "serious",
+      judgment = "very_serious",
       auto     = TRUE,
       notes    = paste0(
         step1_note,
@@ -609,10 +609,10 @@ assess_inconsistency <- function(meta_obj,
     ))
   }
 
-  # some_concerns
+  # serious (rate down 1 level)
   make_domain_row(
     domain   = "Inconsistency",
-    judgment = "some_concerns",
+    judgment = "serious",
     auto     = TRUE,
     notes    = paste0(
       step1_note,

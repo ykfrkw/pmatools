@@ -12,7 +12,7 @@
 #' @param rob A character vector of length \code{meta_obj$k}. Accepts the same
 #'   labels as \code{\link{grade_meta}} (case-insensitive): \code{"L"/"S"/"H"},
 #'   \code{"low"/"some"/"high"}, the internal levels
-#'   \code{"no"/"some_concerns"/"serious"}, and the Cochrane RoB2 wording
+#'   \code{"not_serious"/"serious"/"very_serious"}, and the Cochrane RoB2 wording
 #'   \code{"No concerns"}, \code{"Some concerns"}, \code{"Serious concerns"},
 #'   \code{"Critical concerns"}. \code{NA}, \code{""} and \code{"?"} are
 #'   tolerated (kept as their own group labeled \code{"unknown"}); any other
@@ -98,14 +98,14 @@ plot_forest_rob <- function(meta_obj, rob, some_concerns_as = NULL, ...) {
 # internal assess_rob() consults, so a study on the "high" side of the plot is
 # a study on the "high" side of the rating. The only mapping this function
 # owns is plot strata -> internal levels, which is the inverse of the one
-# rob_strata() applies on the way in ("unknown" -> "some_concerns", because an
+# rob_strata() applies on the way in ("unknown" -> "serious", because an
 # unrated study reaches grade_meta() as "*" and normalises there the same way).
 #
 # The factor carries BOTH levels even when one is empty, so the legend and the
 # subgroup rows are stable as the reviewer moves the boundary.
 .rob_analysis_strata <- function(rob_norm, some_concerns_as) {
-  internal <- c(low = "no", some = "some_concerns", high = "serious",
-                unknown = "some_concerns")[rob_norm]
+  internal <- c(low = "not_serious", some = "serious", high = "very_serious",
+                unknown = "serious")[rob_norm]
   high <- unname(internal) %in% .rob_high_levels(some_concerns_as)
   factor(ifelse(high, "High risk of bias", "Low risk of bias"),
          levels = c("Low risk of bias", "High risk of bias"))

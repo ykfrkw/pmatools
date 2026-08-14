@@ -58,7 +58,7 @@ make_refit <- function() {
   quiet_grade(mk_gen(te = c(1.2, 0.02, 0.02, 0.02),
                      w  = c(400, 400 / 3, 400 / 3, 400 / 3),
                      studlab = c("High-1", "Low-1", "Low-2", "Low-3")),
-              rob = c("serious", "no", "no", "no"),
+              rob = c("very_serious", "no", "no", "no"),
               small_values = "undesirable",
               threshold = 1.05, threshold_scale = "ratio",
               outcome_name = "Refitted outcome")
@@ -66,7 +66,7 @@ make_refit <- function() {
 
 make_no_refit <- function() {
   quiet_grade(mk_gen(c(0.8, 0.02, 0.02), c(3, 1, 1)),
-              rob = c("serious", "no", "no"),
+              rob = c("very_serious", "no", "no"),
               small_values = "undesirable",
               threshold = 1.05, threshold_scale = "ratio",
               outcome_name = "All studies outcome")
@@ -529,7 +529,7 @@ fake_grade <- function(judgments, downgrades, study_design = "RCT",
 
 test_that("a shared severity is stated once across the downgraded domains", {
   g <- fake_grade(
-    judgments  = c("some_concerns", "no", "no", "some_concerns", "no"),
+    judgments  = c("serious", "not_serious", "not_serious", "serious", "not_serious"),
     downgrades = c(-1, 0, 0, -1, 0))
   expect_identical(.certainty_rate_down_reason(g),
                    "Due to serious risk of bias and imprecision")
@@ -537,13 +537,13 @@ test_that("a shared severity is stated once across the downgraded domains", {
 
 test_that("a -2 domain reads 'very serious'", {
   g <- fake_grade(
-    judgments  = c("no", "no", "no", "serious", "no"),
+    judgments  = c("not_serious", "not_serious", "not_serious", "very_serious", "not_serious"),
     downgrades = c(0, 0, 0, -2, 0))
   expect_identical(.certainty_rate_down_reason(g),
                    "Due to very serious imprecision")
 
   g_mixed <- fake_grade(
-    judgments  = c("some_concerns", "no", "no", "serious", "no"),
+    judgments  = c("serious", "not_serious", "not_serious", "very_serious", "not_serious"),
     downgrades = c(-1, 0, 0, -2, 0))
   expect_identical(.certainty_rate_down_reason(g_mixed),
                    "Due to serious risk of bias and very serious imprecision")
@@ -551,7 +551,7 @@ test_that("a -2 domain reads 'very serious'", {
 
 test_that("three downgraded domains are enumerated with commas", {
   g <- fake_grade(
-    judgments  = c("some_concerns", "some_concerns", "some_concerns", "no", "no"),
+    judgments  = c("serious", "serious", "serious", "not_serious", "not_serious"),
     downgrades = c(-1, -1, -1, 0, 0))
   expect_identical(
     .certainty_rate_down_reason(g),
@@ -560,12 +560,12 @@ test_that("three downgraded domains are enumerated with commas", {
 
 test_that("an observational start is named as such", {
   g <- fake_grade(
-    judgments  = rep("no", 5), downgrades = rep(0, 5),
+    judgments  = rep("not_serious", 5), downgrades = rep(0, 5),
     study_design = "obs", starting_quality = "Low")
   expect_identical(.certainty_rate_down_reason(g), "Due to non-randomised studies")
 
   g2 <- fake_grade(
-    judgments  = c("no", "no", "no", "some_concerns", "no"),
+    judgments  = c("not_serious", "not_serious", "not_serious", "serious", "not_serious"),
     downgrades = c(0, 0, 0, -1, 0),
     study_design = "obs", starting_quality = "Low")
   expect_identical(.certainty_rate_down_reason(g2),
@@ -573,7 +573,7 @@ test_that("an observational start is named as such", {
 })
 
 test_that("nothing downgraded means no reason line", {
-  g <- fake_grade(judgments = rep("no", 5), downgrades = rep(0, 5))
+  g <- fake_grade(judgments = rep("not_serious", 5), downgrades = rep(0, 5))
   expect_null(.certainty_rate_down_reason(g))
 
   ft <- sof_table(make_binary(), style = "bmj")

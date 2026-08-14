@@ -209,7 +209,7 @@ test_that("the .format_effect alias still resolves to the public function", {
 
 test_that("rob_strata() maps every accepted vocabulary onto the same strata", {
   expect_identical(rob_strata(c("L", "S", "H")), c("low", "some", "high"))
-  expect_identical(rob_strata(c("no", "some_concerns", "serious")),
+  expect_identical(rob_strata(c("not_serious", "some_concerns", "very_serious")),
                    c("low", "some", "high"))
   expect_identical(rob_strata(c("low", "some", "high")),
                    c("low", "some", "high"))
@@ -251,7 +251,7 @@ test_that("rob_strata() warns rather than aborting on unrecognised labels", {
 })
 
 test_that("rob_strata() only ever returns the four documented strata", {
-  labels <- c("L", "S", "H", "C", "M", "*", "no", "some", "serious",
+  labels <- c("L", "S", "H", "C", "M", "*", "no", "some", "very_serious",
               "low", "moderate", "unclear", "high", "very high",
               "No concerns", "Some concerns", "Serious concerns",
               "Critical concerns", NA, "", "?", "banana")
