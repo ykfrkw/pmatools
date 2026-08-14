@@ -37,7 +37,7 @@ summary(set)
 
 # ----- 4. Summary of findings (all outcomes) -----
 sof <- grade_table(set, style = "{{style}}", per = {{per}},
-                   prediction = {{sof_prediction}})
+                   prediction = {{sof_prediction}}{{sof_label_args}})
 {{sof_notes_block}}print(sof)
 
 # ----- 5. Per-outcome plots and data -----

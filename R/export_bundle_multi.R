@@ -79,7 +79,11 @@
 #'   results (columns `studlab`, `n`, `results_known`), forwarded to
 #'   \code{\link{plot_forest_pubias_subgroup}}.
 #' @param other_text,other_downgrade Passed to \code{\link{evidence_profile}}.
-#' @param label_intervention,label_control Arm labels for the SoF table.
+#' @param label_intervention,label_control Arm labels for the SoF table, used
+#'   for its "With ..." column headers and its plain-language subject. Rendered
+#'   into the bundled `analysis.R` as well, so re-running the script reproduces
+#'   the headers that were exported and not the generic defaults. A label left
+#'   at its default is omitted from the generated call.
 #' @param ... Unused; present for S3 consistency.
 #'
 #' @section Per-outcome display arguments:
@@ -192,6 +196,8 @@ export_bundle.pmatools_set <- function(x,
       .render_analysis_script_multi(set, per = per, prediction = prediction,
                                     style = style, sof_notes = sof_notes,
                                     rare = rare,
+                                    label_intervention = label_intervention,
+                                    label_control      = label_control,
                                     out_path = file.path(work_dir, "analysis.R"))
       TRUE
     }, error = function(e) {
@@ -664,7 +670,9 @@ export_bundle.pmatools_set <- function(x,
 # shipping one that reproduces something else.
 .render_analysis_script_multi <- function(set, per, prediction, style,
                                           out_path, sof_notes = NULL,
-                                          rare = NULL) {
+                                          rare = NULL,
+                                          label_intervention = "intervention",
+                                          label_control      = "control") {
   if (is.null(set$grade_args)) {
     rlang::abort(paste0(
       "This pmatools_set carries no record of the grade_meta() arguments it ",
@@ -722,6 +730,7 @@ export_bundle.pmatools_set <- function(x,
     style            = style,
     per              = format(per),
     sof_prediction   = if (isTRUE(prediction)) "TRUE" else "FALSE",
+    sof_label_args   = .sof_arm_label_args(label_intervention, label_control),
     sof_notes_block  = .sof_notes_block(sof_notes, "sof")
   )
 
@@ -784,6 +793,35 @@ export_bundle.pmatools_set <- function(x,
          "# Pooled with the rare-event method suite, not with run_ma(): the\n",
          "# rating below was made on this fit.\n",
          paste(blocks, collapse = ""))
+}
+
+# Arm labels as trailing grade_table() arguments for the generated analysis.R.
+# They name the review's own arms in the column headers ("With placebo" /
+# "With CBT-I") and in the plain-language subject, so a script that omits them
+# reproduces every number of summary_of_findings.docx under generic headers -
+# the same silent presentation drift the responder block above exists to
+# prevent. Returns "" for the grade_table() defaults, so an ordinary bundle's
+# script is byte-for-byte what it was before.
+.sof_arm_label_args <- function(label_intervention = "intervention",
+                                label_control      = "control") {
+  # deparse(), not shQuote(): the labels are free text and an apostrophe
+  # ("physicians' usual care") would leave a single-quoted literal unparseable.
+  lit <- function(v) paste(deparse(v, width.cutoff = 500L), collapse = "")
+
+  parts <- character(0)
+  ti <- .display_arg(label_intervention)
+  tc <- .display_arg(label_control)
+  if (!is.null(ti) && !identical(ti, "intervention")) {
+    parts <- c(parts, paste0("label_intervention = ", lit(ti)))
+  }
+  if (!is.null(tc) && !identical(tc, "control")) {
+    parts <- c(parts, paste0("label_control      = ", lit(tc)))
+  }
+  if (length(parts) == 0L) return("")
+
+  # Aligned under the template's own grade_table() arguments.
+  arg_sep <- paste0(",\n", strrep(" ", 19L))
+  paste0(arg_sep, paste(parts, collapse = arg_sep))
 }
 
 # Re-stamp the responder presentation onto the rebuilt set, for the generated

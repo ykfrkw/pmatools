@@ -650,6 +650,15 @@
   what a `rob` column name in `meta_obj$data` yields. The length-mismatch error
   names both accepted lengths. A study {meta} could not pool never counts as
   high risk of bias unless the reviewer rated (or overrode) it as such.
+* The multi-outcome bundle's `analysis.R` dropped the arm labels.
+  `export_bundle()` passed `label_intervention` / `label_control` to
+  `grade_table()` for `summary_of_findings.docx` but rendered no such arguments
+  into the script, so a bundle from a review of CBT-I against placebo shipped a
+  table headed "With placebo" / "With CBT-I" alongside a script that rebuilt
+  every number of it under "With control" / "With intervention", with
+  "Treatment" as the plain-language subject. The labels are now rendered onto
+  the script's `grade_table()` call; ones left at their defaults are omitted, so
+  a bundle that named no arms gets the script it always did.
 
 # pmatools 0.5.0
 

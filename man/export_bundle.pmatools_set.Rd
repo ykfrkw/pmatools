@@ -79,7 +79,11 @@ results (columns \code{studlab}, \code{n}, \code{results_known}), forwarded to
 
 \item{other_text, other_downgrade}{Passed to \code{\link{evidence_profile}}.}
 
-\item{label_intervention, label_control}{Arm labels for the SoF table.}
+\item{label_intervention, label_control}{Arm labels for the SoF table, used
+for its "With ..." column headers and its plain-language subject. Rendered
+into the bundled \code{analysis.R} as well, so re-running the script reproduces
+the headers that were exported and not the generic defaults. A label left
+at its default is omitted from the generated call.}
 
 \item{...}{Unused; present for S3 consistency.}
 }
