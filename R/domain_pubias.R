@@ -114,7 +114,7 @@
 
 # The study count the flowchart's Q2 actually branches on. Recorded on every
 # path: k is the one number the reviewer needs to see to check that Q2 was
-# answered the way they expect, and until v0.5.2 this domain recorded nothing
+# answered the way they expect, and until v0.5.1 this domain recorded nothing
 # at all, so it was only available by re-reading the note.
 #
 # The value is the bare count. It used to read "12 (Q2 threshold: 10)", which
