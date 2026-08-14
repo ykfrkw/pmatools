@@ -263,8 +263,47 @@
   — check `domain_assessments` before comparing a rating against an earlier
   run. `.INCONSISTENCY_CAP_NOTE` is replaced by
   `.INCONSISTENCY_TWO_LEVEL_NOTE`, which states the departure in the notes
-  wherever the branch fires; the risk-of-bias one-level cap
-  (`.ROB_CAP_NOTE`) is untouched. See `SPEC.md` §5.2.
+  wherever the branch fires; the risk-of-bias one-level cap (`.ROB_CAP_NOTE`)
+  survives, narrowed, for the reasons in the next entry. See `SPEC.md` §5.2.
+
+* **Risk of bias rates down two levels when excluding the high-RoB studies
+  moves the pooled estimate across the null, and this deliberately departs from
+  Core GRADE 4.** This partly reverts 0.5.0, which capped *every* automated
+  risk-of-bias path at `"some_concerns"` (−1) on the grounds that Core GRADE 4
+  describes no two-level risk-of-bias downgrade — every leaf of its Fig 2 reads
+  "rate down" / "do not rate down", and the paper's only two-level move is
+  rating *up* observational evidence. That reading of the source is unchanged;
+  what changed is the conclusion drawn from it for one rule.
+
+  **Rule 5 of the direction-of-bias check** — the dominated branch, zones
+  differing *across* the null — now returns `"very_serious"` (−2). It is not
+  "the estimate moved when the high-RoB studies were dropped": that is rule 3
+  and rule 4, which still rate down one level and are unchanged. Rule 5 fires
+  only when the pooled estimate sits beyond the chosen threshold on one side of
+  the null and the estimate restricted to the low/some-concerns-RoB studies
+  sits beyond it on the *other*, so the direction of the effect is what the
+  high risk of bias studies produced, and reporting that body of evidence as
+  Moderate overstates it. `.ROB_TWO_LEVEL_NOTE` states the departure in the
+  notes wherever the branch fires.
+
+  **The two levels require a supplied threshold.** With `threshold = NULL` the
+  trivial zone collapses to `{0}`, so "opposite sides of the null" degrades to
+  "opposite signs", which two near-null estimates can satisfy by an arbitrarily
+  small movement. Rule 5 still fires there and still rates down, one level,
+  with `.ROB_SIGN_FLIP_NO_THRESHOLD_NOTE` saying which gate is missing.
+
+  Everything else keeps the 0.5.0 cap, and `.ROB_CAP_NOTE` is narrowed to say
+  so without claiming to cover the whole domain: rules 3 and 4, the
+  all-studies-high-RoB case (there is no restricted estimate there to have
+  landed anywhere, so it cannot borrow rule 5's reasoning), and the
+  not-assessable paths all still stop at −1.
+
+  **What changes in a rating.** An analysis that scored −1 on rule 5 now scores
+  −2, so a review that previously came out **Low** can now come out **Very
+  low**, and one that came out Moderate can come out Low — with no change to
+  the input data. Check `$domain_assessments` before comparing a rating against
+  an earlier run. To keep the old result, pass the scalar override
+  `rob = "some_concerns"` with `rob_rationale`. See `SPEC.md` §5.1.
 
 * **The decision flowcharts drop three things that were not decisions.** The
   Risk-of-Bias chart no longer opens with "Any study at high risk of bias?":

@@ -20,8 +20,9 @@
 # WHAT THESE FIGURES ARE. They are pmatools' operationalisation of the Core
 # GRADE decision described in each cited figure, not a reproduction of the
 # published artwork. They deliberately differ from the source: the risk-of-
-# bias chart enumerates five direction-of-bias rules the source does not, the
-# publication-bias chart carries a registry node that is not in Core GRADE 4
+# bias chart enumerates five direction-of-bias rules the source does not and
+# rates the fifth down TWO levels, which Core GRADE 4 declines to describe at
+# all, the publication-bias chart carries a registry node that is not in Core GRADE 4
 # Fig 5, and the inconsistency chart names the numeric surrogates (I-squared
 # > 30%, the 80% / 20% zone shares) that Core GRADE 3 declines to quantify
 # and rates the opposite-sided branch down TWO levels, which Core GRADE 3
@@ -215,6 +216,10 @@ build_rob <- function() {
   # time, so it cannot read the constant, and it went on saying 10% for a whole
   # release after the constant moved to 0.20. Move the literals here, and the
   # <desc> below, whenever that constant moves.
+  #
+  # Rule 5's two levels are a declared departure from Core GRADE 4, whose Fig 2
+  # leaves all read "rate down" / "do not rate down" -- see the caption and the
+  # <desc> below, both of which have to say so.
   rules <- list(
     fc_box("pma-rob-leaf-rule1", "leaf", 35, 278, 400,
            c("1  both estimates trivial  &#8594;  do not rate down"),
@@ -229,7 +234,7 @@ build_rob <- function() {
            c("4  zones differ, same side of the null  &#8594;  rate down 1"),
            align = "start"),
     fc_box("pma-rob-leaf-rule5", "leaf", 35, 458, 400,
-           c("5  zones differ across the null  &#8594;  rate down 1"),
+           c("5  zones differ across the null  &#8594;  rate down 2"),
            align = "start"),
     fc_box("pma-rob-leaf-rulena", "leaf", 35, 503, 400,
            c("&#8211;  direction not assessable  &#8594;  rate down 1"),
@@ -273,9 +278,15 @@ build_rob <- function() {
     unlist(lapply(e, `[[`, "markup"), use.names = FALSE),
     unlist(lapply(b, `[[`, "markup"), use.names = FALSE),
     fc_caption(563, c(
+      # Two lines, each no longer than the longest line the other captions
+      # already ship (about 150 characters at 12px italic across the 940
+      # usable units); a third would need the SVG height moved with it.
       paste0("After BMJ Core GRADE 4 (Guyatt et al., 2025) Figure 2. ",
-             "pmatools&#8217; operationalisation, not a reproduction:"),
-      "the five direction-of-bias rules are pmatools&#8217; own."))
+             "pmatools&#8217; operationalisation, not a reproduction: the ",
+             "five direction-of-bias rules are"),
+      paste0("pmatools&#8217; own, and rule 5 rates down two levels, which ",
+             "Core GRADE 4 describes nowhere: every leaf of its figure reads ",
+             "rate down or do not rate down.")))
   )
 
   fc_svg(
@@ -288,8 +299,10 @@ build_rob <- function() {
            "mutually exclusive rules: both estimates trivial, or the same ",
            "zone with a change within 20%, do not rate down; the same zone ",
            "with a bias-favouring change over 20%, zones differing on the ",
-           "same side of the null, zones differing across the null, or a ",
-           "direction that cannot be assessed, rate down one level. If the ",
+           "same side of the null, or a direction that cannot be assessed, ",
+           "rate down one level; and zones differing across the null, which ",
+           "means the estimate restricted to the low risk of bias studies ",
+           "falls on the opposite side of it, rate down two levels. If the ",
            "high risk of bias studies do not dominate, pmatools asks whether ",
            "there is appreciable evidence from the low risk of bias studies ",
            "and, if so, whether the two magnitudes of effect are similar or ",
@@ -300,7 +313,10 @@ build_rob <- function() {
            "This is pmatools&#8217; operationalisation of the Core GRADE 4 ",
            "Figure 2 decision, not a reproduction of the published figure: ",
            "the five rules are pmatools&#8217; and are not enumerated in the ",
-           "source."),
+           "source, and Core GRADE 4 describes no two-level risk-of-bias ",
+           "downgrade at all, so the two-level fifth rule is a departure from ",
+           "it. Those two levels also require a threshold to have been ",
+           "supplied; without one the rule rates down one level."),
     "Risk of bias &#8212; Core GRADE 4 Fig 2, as pmatools implements it",
     body
   )

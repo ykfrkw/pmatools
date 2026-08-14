@@ -1523,13 +1523,20 @@ If the weight share cannot be computed the count share is used and the notes say
 | 2 | `za == zl`, non-trivial, inflation ≤ `rob_inflation_threshold` | `"not_serious"` |
 | 3 | `za == zl`, non-trivial, inflation > `rob_inflation_threshold` | `"serious"` (−1) |
 | 4 | `za != zl`, no sign flip across null | `"serious"` (−1) |
-| 5 | `za != zl`, sign flip (`above` ↔ `below`) | `"serious"` (−1) |
+| 5 | `za != zl`, sign flip (`above` ↔ `below`), threshold supplied | `"very_serious"` (−2) |
+| 5 | `za != zl`, sign flip (`above` ↔ `below`), no threshold supplied | `"serious"` (−1) |
 
-Rule 5 rated down **two** levels up to v0.4. Since v0.5.0 every automated risk-of-bias path is capped at one level: Core GRADE 4 describes no two-level risk-of-bias downgrade (every leaf of Fig 2 reads "rate down" / "do not rate down"), and `.ROB_CAP_NOTE` is appended to the judgment note wherever the cap bites. `"very_serious"` stays reachable only through the scalar `rob` override, which requires `rob_rationale`.
+**Rule 5 rates down two levels, and that departs from the source.** Core GRADE 4 describes no two-level risk-of-bias downgrade: every leaf of Fig 2 reads "rate down" / "do not rate down", and the only "two levels" in the paper is about rating *up* observational evidence. Rule 5 rated down two up to v0.4; v0.5.0 capped it at one on exactly that reading; the cap is retracted for this one rule.
+
+The reasoning, stated here rather than hidden because the source says otherwise: rule 5 is not "the estimate moved when the high-RoB studies were dropped" — that is rule 3 and rule 4, which still rate down one level and are unchanged. Rule 5 fires only when the pooled estimate sits beyond the chosen threshold on one side of the null and the estimate restricted to the low/some-concerns-RoB studies sits beyond it on the *other*. The direction of the effect is then something the high-RoB studies produced, and reporting such a body of evidence as moderate certainty overstates it. `.ROB_TWO_LEVEL_NOTE` states the departure in the judgment note wherever the branch fires, so no reader meets the −2 without the reasoning.
+
+**The two-level result requires a supplied threshold.** Without one the trivial zone collapses to `{0}` (below), so "opposite sides of the null" degrades to "opposite signs", which two near-null estimates can satisfy by an arbitrarily small movement — precisely the noise the ±Threshold zones exist to exclude. On that path rule 5 still fires, and still rates down, but one level, with `.ROB_SIGN_FLIP_NO_THRESHOLD_NOTE` saying why and how to reach −2.
+
+Every other automated risk-of-bias path still stops at `"serious"` (−1) — rules 3 and 4, the all-studies-high-RoB case, and the not-assessable bails — and `.ROB_CAP_NOTE` is appended where that cap bites. The scalar `rob` override, which requires `rob_rationale`, remains the way to record a judgment the flowchart does not reach, in either direction.
 
 `inflation_ratio = (|TE_all| - |TE_low|) / |TE_low|` is evaluated **only** when the shift runs in the bias-favouring direction implied by `small_values`; a deflation in that direction never triggers a downgrade. `small_values` is required (§4.5.1a), so the direction is always the reviewer's declared one: the `|TE_all| > |TE_low|` fallback that stood in for it up to v0.5.0 — and the warning saying that the fallback had decided the downgrade — are gone. When the direction gate blocks a downgrade that the inflation threshold would otherwise have caused, the notes say so explicitly, including the direction reasoning, so readers do not conclude the threshold was ignored (v0.4.0).
 
-When `threshold_internal` is NULL/NA/≤ 0 the trivial zone collapses to `{0}`, so only rule 5 can fire.
+When `threshold_internal` is NULL/NA/≤ 0 the trivial zone collapses to `{0}`, so rule 5 is the only zone-change rule that can fire — and, per the paragraph above, it rates down one level rather than two on that path.
 
 **Step 2b — dominated = No.** **This branch never rates the domain down.** It decides which studies the analysis should use:
 

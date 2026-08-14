@@ -122,28 +122,54 @@ test_that("Rule 4: 'trivial' -> 'above' zone change -> some_concerns", {
 })
 
 # --- Rule 5: zone change with sign flip --------------------------------------
-# Updated (v0.5): rule 5 now caps at -1. Core GRADE 4 describes no automatic
-# two-level risk-of-bias downgrade (every Fig 2 leaf is "rate down" / "do not
-# rate down"); -2 requires the scalar rob override.
-test_that("Rule 5: 'above' <-> 'below' sign flip -> some_concerns (capped at -1)", {
+# Rule 5 rates down TWO levels, and that departs from Core GRADE 4, which
+# describes no two-level risk-of-bias downgrade (every Fig 2 leaf is "rate
+# down" / "do not rate down"). v0.5.0 read that as a cap and stopped rule 5 at
+# -1; the cap is retracted for this rule alone, because the restricted estimate
+# landing beyond the threshold on the FAR side of the null means the direction
+# of the effect is what the high-RoB studies produced. The two levels require a
+# supplied threshold -- see the fallback section below for why, and for the
+# assertion that pins it.
+test_that("Rule 5: 'above' <-> 'below' sign flip -> very_serious (-2)", {
   m <- make_mock_dominated(te_all = 0.50, te_low_only = -0.50)
   g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
-  expect_equal(rob_row$judgment, "serious")
-  expect_equal(rob_row$downgrade, -1L)
+  expect_equal(rob_row$judgment, "very_serious")
+  expect_equal(rob_row$downgrade, -2L)
   expect_match(rob_row$notes, "Rule 5")
-  expect_match(rob_row$notes, "capped at one level", fixed = TRUE)
 })
 
-test_that("Rule 5's own wording says one level, not two", {
-  # Three documents claimed "rate down 2" for rule 5 long after the code
-  # stopped doing it (SPEC.md's rule table, the block comment duplicating that
-  # table in R/domain_rob.R, and the Shiny app's "How is this judged?" copy).
-  # This pins the sentence the code itself emits, so a doc that drifts back can
-  # be caught against something executable.
+test_that("Rule 5 records the sign flip as rule 5 and lights its own leaf", {
+  # The judgment alone cannot distinguish rule 5 from a scalar override, and
+  # the SVG leaf is picked from the rule number, so both are pinned here.
+  m <- make_mock_dominated(te_all = 0.50, te_low_only = -0.50)
+  dir <- pmatools:::.assess_bias_direction(
+    te_all = 0.50, se_all = 0.10,
+    te_vec = c(0.50, -0.50, -0.50), se_vec = c(0.10, 0.45, 0.45),
+    low_idx = c(FALSE, TRUE, TRUE), small_values = "undesirable",
+    inflation_threshold = 0.10, sm = "RR", threshold_internal = log(1.20))
+  expect_identical(dir$rule, 5L)
+  expect_identical(dir$judgment, "very_serious")
+  expect_true(dir$sign_flips)
+
+  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+                  small_values = "undesirable",
+                  threshold = 1.20, threshold_scale = "ratio",
+                  rob_inflation_threshold = 0.10)
+  rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
+  facts <- domain_facts(g, "Risk of bias")
+  expect_match(facts$value[facts$key == "flow_path"], "pma-rob-leaf-rule5",
+               fixed = TRUE)
+})
+
+test_that("Rule 5's own wording says two levels, and discloses the departure", {
+  # The register to hold is R/domain_inconsistency.R's: pmatools does not get
+  # to rate down two levels against a cited source without saying so in the
+  # same notes the reviewer reads. Pinned against something executable because
+  # the same sentence lives in four documents.
   m <- make_mock_dominated(te_all = 0.50, te_low_only = -0.50)
   g <- grade_meta(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
@@ -151,10 +177,41 @@ test_that("Rule 5's own wording says one level, not two", {
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   expect_match(rob_row$notes,
-               "Rule 5: zone changes across null (benefit <-> harm) -> rate down 1",
+               "Rule 5: zone changes across null (benefit <-> harm) -> rate down 2",
                fixed = TRUE)
-  expect_false(grepl("rate down 2", rob_row$notes, fixed = TRUE))
-  expect_true(rob_row$downgrade >= -1L)
+  expect_match(rob_row$notes, "Rated down TWO levels (very serious).",
+               fixed = TRUE)
+  expect_match(rob_row$notes, "This departs from Core GRADE 4", fixed = TRUE)
+  expect_match(rob_row$notes,
+               "the direction of the effect is what the high risk of bias studies produced",
+               fixed = TRUE)
+  # The narrowed cap note belongs to the paths that are still capped; it must
+  # not follow rule 5 onto a branch that is not capped at all.
+  expect_false(grepl("capped at one level", rob_row$notes, fixed = TRUE))
+})
+
+test_that("Rules 3 and 4 keep the one-level cap that rule 5 gave up", {
+  # The retraction is for rule 5 only. Rules 3 and 4 are 'the estimate moved',
+  # not 'the direction reversed', and nothing about them departs from Fig 2.
+  rule3 <- grade_meta(make_mock_dominated(te_all = 0.60, te_low_only = 0.40),
+                      rob = c("very_serious", "no", "no"),
+                      small_values = "undesirable",
+                      threshold = 1.20, threshold_scale = "ratio",
+                      rob_inflation_threshold = 0.10)
+  r3 <- rule3$domain_assessments[rule3$domain_assessments$domain == "Risk of bias", ]
+  expect_equal(r3$judgment, "serious")
+  expect_equal(r3$downgrade, -1L)
+  expect_match(r3$notes, "Rule 3")
+
+  rule4 <- grade_meta(make_mock_dominated(te_all = 0.50, te_low_only = 0.10),
+                      rob = c("very_serious", "no", "no"),
+                      small_values = "undesirable",
+                      threshold = 1.20, threshold_scale = "ratio",
+                      rob_inflation_threshold = 0.10)
+  r4 <- rule4$domain_assessments[rule4$domain_assessments$domain == "Risk of bias", ]
+  expect_equal(r4$judgment, "serious")
+  expect_equal(r4$downgrade, -1L)
+  expect_match(r4$notes, "Rule 4")
 })
 
 test_that("Rule 5 can still reach -2 through the scalar rob override", {
@@ -169,8 +226,13 @@ test_that("Rule 5 can still reach -2 through the scalar rob override", {
 })
 
 # --- Fallback: Threshold not supplied ---------------------------------------
-# Updated (v0.5): same -1 cap as above.
-test_that("Fallback: Threshold not supplied + sign flip -> some_concerns (rule 5)", {
+# Rule 5 still fires here and still rates down, but ONE level, not the two it
+# rates down when a threshold was supplied. Without a threshold the trivial
+# zone collapses to {0}, so "opposite sides of the null" means only "opposite
+# signs" -- true of a pair straddling zero by a hair, which is the estimator
+# noise the +/-Threshold zones exist to exclude, not "the high-RoB studies
+# produced the direction of the effect".
+test_that("Fallback: Threshold not supplied + sign flip -> serious, not very_serious", {
   m <- make_mock_dominated(te_all = 1.0, te_low_only = -0.5)
   # The direction gate plays no part in rule 5 (the zones flip across the
   # null), so the declared direction is immaterial here.
@@ -179,7 +241,27 @@ test_that("Fallback: Threshold not supplied + sign flip -> some_concerns (rule 5
                   rob_inflation_threshold = 0.10, threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   expect_equal(rob_row$judgment, "serious")
+  expect_equal(rob_row$downgrade, -1L)
   expect_match(rob_row$notes, "Threshold not supplied")
+  expect_match(rob_row$notes, "Rule 5", fixed = TRUE)
+  expect_match(rob_row$notes, "Rated down ONE level, not two", fixed = TRUE)
+  expect_match(rob_row$notes,
+               "the two-level sign-flip result requires a supplied threshold",
+               fixed = TRUE)
+})
+
+test_that("Fallback: the same sign flip reaches -2 once a threshold is supplied", {
+  # Same estimates, one argument apart: this is the whole of the no-threshold
+  # decision, stated as a pair so a future change to either half is visible.
+  m <- make_mock_dominated(te_all = 1.0, te_low_only = -0.5)
+  with_threshold <- grade_meta(m, rob = c("very_serious", "no", "no"),
+                               small_values = "desirable",
+                               threshold = 1.20, threshold_scale = "ratio",
+                               rob_inflation_threshold = 0.10)
+  rob_row <- with_threshold$domain_assessments[
+    with_threshold$domain_assessments$domain == "Risk of bias", ]
+  expect_equal(rob_row$judgment, "very_serious")
+  expect_equal(rob_row$downgrade, -2L)
 })
 
 test_that("Fallback: Threshold not supplied + same-sign small inflation -> no (rule 2)", {
@@ -305,10 +387,13 @@ test_that("weight_note reports both count % and weight %", {
   expect_match(rob_row$notes, "by weight")
 })
 
-test_that("All studies high-RoB -> some_concerns (1 level down, no comparator pool)", {
-  # Updated (v0.5): this used to rate down 2 levels. Core GRADE 4 supports no
-  # automatic two-level risk-of-bias downgrade, so the automated judgment is
-  # capped at -1; -2 requires rob = "very_serious" + rob_rationale.
+test_that("All studies high-RoB -> serious (1 level down, no comparator pool)", {
+  # This used to rate down 2 levels up to v0.4.0 and was capped at -1 in
+  # v0.5.0. It stays capped even though rule 5 no longer is: rule 5's two
+  # levels rest on the RESTRICTED estimate landing beyond the threshold on the
+  # far side of the null, and here there is no restricted estimate to have
+  # landed anywhere -- no zone comparison happened at all. -2 requires
+  # rob = "very_serious" + rob_rationale.
   m <- make_mock_dominated(te_all = 0.30, te_low_only = 0.30)
   g <- grade_meta(m, rob = c("very_serious", "very_serious", "very_serious"),
                   small_values = "undesirable",

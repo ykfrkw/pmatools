@@ -39,10 +39,30 @@
 #' five-rule direction-of-bias check reached on the dominated branch is
 #' \code{.assess_bias_direction()}, also in \code{R/domain_rob.R}.
 #'
-#' Departs from the source in one visible way: the five rules are pmatools'
-#' own. Core GRADE 4 Fig 2 has a single node reading "check direction of bias"
-#' and does not enumerate how. The dominance threshold shown (55% of the pooled
-#' weight) is the conservative one of the two the figure's footnote offers.
+#' Departs from the source twice.
+#'
+#' First, the five rules are pmatools' own. Core GRADE 4 Fig 2 has a single
+#' node reading "check direction of bias" and does not enumerate how. The
+#' dominance threshold shown (55% of the pooled weight) is the conservative one
+#' of the two the figure's footnote offers.
+#'
+#' Second, and more consequentially, the fifth rule rates down \strong{two}
+#' levels. Core GRADE 4 describes no two-level risk-of-bias downgrade at all:
+#' every leaf of its Fig 2 reads "rate down" or "do not rate down", and the
+#' only two-level move in the paper is rating \emph{up} observational evidence.
+#' pmatools rates down two there because the rule is reached only when the
+#' pooled estimate sits beyond the chosen threshold on one side of the null and
+#' the estimate restricted to the low risk of bias studies sits beyond it on
+#' the other: the direction of the effect is what the high risk of bias studies
+#' produced, and moderate certainty would overstate the evidence. The
+#' neighbouring fourth rule, which is what an ordinary shift in the estimate
+#' reaches, still rates down one level, as do the third rule and the case where
+#' every study is at high risk of bias and no restricted estimate exists to
+#' compare. Every judgment on the two-level branch carries the departure in its
+#' \code{notes}. The two levels also require a threshold to have been supplied;
+#' without one the rule rates down one level, because the zones are then
+#' separated by the null alone and a sign flip no longer implies either
+#' estimate is appreciably away from it.
 #'
 #' The chart opens at the dominance question. A body of evidence with no
 #' high-risk study is not drawn a node of its own, because it does not reach a

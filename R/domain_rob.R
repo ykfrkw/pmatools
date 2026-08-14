@@ -76,15 +76,33 @@
 #     Rule 2: za == zl, non-trivial, inflation <= 20%  -> "not_serious"
 #     Rule 3: za == zl, non-trivial, inflation > 20%   -> "serious"  (-1)
 #     Rule 4: za != zl, no sign flip across null       -> "serious"  (-1)
-#     Rule 5: za != zl, sign flip (above <-> below)    -> "serious"  (-1)
+#     Rule 5: za != zl, sign flip (above <-> below)    -> "very_serious" (-2),
+#             or "serious" (-1) when no threshold was supplied
 #
-#   Rate down at most ONE level (v0.5). Core GRADE 4 describes no two-level
-#   risk-of-bias downgrade: the only "two levels" in the paper is about rating
-#   UP observational evidence, and every leaf of Fig 2 reads "rate down" /
-#   "do not rate down". Rule 5 (sign flip) and the all-studies-high-RoB case
-#   used to return "very_serious" (-2); both are now capped at "serious".
-#   "very_serious" stays reachable through the scalar `rob` override, which
-#   requires rob_rationale.
+#   RULE 5 RATES DOWN TWO LEVELS, AND THAT DEPARTS FROM THE SOURCE. Core
+#   GRADE 4 describes no two-level risk-of-bias downgrade: the only "two
+#   levels" in the paper is about rating UP observational evidence, and every
+#   leaf of Fig 2 reads "rate down" / "do not rate down". Rule 5 returned -2
+#   up to v0.4; v0.5.0 read the source as a cap and stopped every automated
+#   path at "serious"; that cap is retracted for this one rule, on the
+#   reasoning stated here rather than hidden because the source says
+#   otherwise.
+#
+#     Rule 5 is not "the estimate moved when the high-RoB studies were
+#     dropped" -- that is rule 3 and rule 4, which still rate down one level
+#     and are unchanged. Rule 5 fires only when the pooled estimate sits
+#     beyond the chosen threshold on one side of the null and the estimate
+#     restricted to the low/some-concerns-RoB studies sits beyond it on the
+#     OTHER. The direction of the effect is then what the high-RoB studies
+#     produced, and reporting that body of evidence as moderate certainty
+#     overstates it.
+#
+#   .ROB_TWO_LEVEL_NOTE states the departure wherever the branch fires, so no
+#   reader meets the -2 without the reasoning. Every OTHER automated path --
+#   rules 3 and 4, the all-studies-high-RoB case, the not-assessable bails --
+#   still stops at "serious", and .ROB_CAP_NOTE says so where that cap bites.
+#   The scalar `rob` override, which requires rob_rationale, remains the way
+#   to record a judgment the flowchart does not reach, in either direction.
 #
 #   Rules 1-2 are the figure's "bias would under-estimate an existing effect /
 #   over-estimate an absent one" branch (do not rate down); rules 3-5 are its
@@ -97,6 +115,12 @@
 #
 #   Fallback: when `threshold_internal` is NULL/NA/<=0 the trivial zone
 #   collapses to {0}, so only sign-flip (rule 5) can trigger a zone change.
+#   The two-level result is withheld on that path: with no threshold to clear,
+#   "opposite sides of the null" degrades to "opposite signs", which two
+#   near-null estimates can satisfy by an arbitrarily small movement. That is
+#   the noise the +/-Threshold zones exist to exclude, so a downgrade resting
+#   on it should not be the deepest one the package produces automatically.
+#   Rule 5 still fires and still rates down, one level, saying why.
 #
 # --------------------------------------------------------------------------
 # Step 2b. dominated = No -> "Is there appreciable evidence from low RoB
@@ -146,8 +170,10 @@
 # Edge case: when every study is high-RoB (n_low == 0) the weight share is
 # 100%, so the dominated branch is taken; there is no low/some-RoB comparator
 # pool, and the domain is rated "serious" (rate down 1 level). Up to
-# v0.4.0 this returned "very_serious" (-2); Core GRADE 4 supports no automatic
-# two-level risk-of-bias downgrade, so a reviewer who judges -2 appropriate
+# v0.4.0 this returned "very_serious" (-2). It stays at -1 even though rule 5
+# no longer does: rule 5's two levels rest on the restricted estimate landing
+# beyond the threshold on the far side of the null, and here there is no
+# restricted estimate to land anywhere. A reviewer who judges -2 appropriate
 # must say so with rob = "very_serious" + rob_rationale.
 #
 # small_values (required since v0.5.1; see .check_small_values()):
@@ -226,13 +252,63 @@ PMA_ROB_INFLATION_THRESHOLD <- 0.20
         paste(ids, collapse = " "), NA_real_)
 }
 
-# Note appended wherever an automated risk-of-bias path used to rate down two
-# levels. Core GRADE 4 does not describe a two-level risk-of-bias downgrade.
+# Appended where an automated risk-of-bias path stops at one level although a
+# reviewer might have gone deeper: the all-studies-high-RoB case, which reaches
+# no zone comparison at all because there is no comparator pool. Rules 3 and 4
+# are capped by the same reading and carry no note, because nothing about them
+# invites a second level in the first place.
+#
+# The note is NOT the whole story any more, so it no longer claims to be: rule
+# 5 rates down two (see .ROB_TWO_LEVEL_NOTE), and a note saying "every
+# automated path is capped at one level" would now be read as a promise the
+# package breaks two branches away.
 .ROB_CAP_NOTE <- paste0(
   "Core GRADE 4 describes no automatic two-level downgrade for risk of bias ",
-  "(every leaf of Fig 2 is 'rate down' / 'do not rate down'), so this ",
-  "automated judgment is capped at one level. If two levels are genuinely ",
-  "warranted, supply the scalar override rob = 'serious' with rob_rationale."
+  "(every leaf of Fig 2 is 'rate down' / 'do not rate down'), and this path ",
+  "is capped at one level. pmatools rates down two on one branch only -- the ",
+  "sign-flip rule, where the restricted analysis lands beyond the threshold ",
+  "on the opposite side of the null -- and this is not that branch, because ",
+  "no comparison of the two estimates was possible here. If two levels are ",
+  "genuinely warranted, supply the scalar override rob = 'very_serious' with ",
+  "rob_rationale."
+)
+
+# Appended to the sign-flip branch, and to nothing else. That branch is the ONE
+# place in this file that rates down two levels, and it is a declared departure
+# from the source rather than an implementation detail, so the note says so in
+# the same sentence that reports the judgment. The neighbouring zone-change
+# rule (rule 4) still stops at -1 and carries no such note, because nothing
+# about it departs from anything.
+.ROB_TWO_LEVEL_NOTE <- paste0(
+  "Rated down TWO levels (very serious). This departs from Core GRADE 4, ",
+  "which describes no two-level risk-of-bias downgrade at all: every leaf of ",
+  "its Fig 2 reads 'rate down' or 'do not rate down', and the only two-level ",
+  "move in the paper is rating UP observational evidence. pmatools applies ",
+  "one here because this rule is not 'the pooled estimate moved when the high ",
+  "risk of bias studies were dropped' -- that is rules 3 and 4, which still ",
+  "rate down one level. Rule 5 fires only when the pooled estimate sits ",
+  "beyond the chosen threshold on one side of the null and the estimate ",
+  "restricted to the low/some-concerns risk of bias studies sits beyond it on ",
+  "the other, so the direction of the effect is what the high risk of bias ",
+  "studies produced, and reporting the body of evidence as moderate certainty ",
+  "would overstate it. Supply the scalar override rob = 'some_concerns' ",
+  "(= Core GRADE 'serious', rate down 1) with rob_rationale to rate down one ",
+  "level instead."
+)
+
+# Appended to the sign-flip branch when no threshold was supplied, in place of
+# .ROB_TWO_LEVEL_NOTE. Says which gate is missing rather than only that the
+# judgment is one level, because the reviewer can close the gap by supplying
+# the threshold the rest of the rating already wants.
+.ROB_SIGN_FLIP_NO_THRESHOLD_NOTE <- paste0(
+  "Rated down ONE level, not two: the two-level sign-flip result requires a ",
+  "supplied threshold. Without one the trivial zone collapses to {0}, so ",
+  "'opposite sides of the null' means only that the two estimates carry ",
+  "opposite signs, which two near-null estimates can satisfy by an ",
+  "arbitrarily small movement. What makes a sign flip worth two levels is ",
+  "that both estimates clear the threshold, on opposite sides. Supply ",
+  "`threshold` to have this rule judged on that basis, or the scalar override ",
+  "rob = 'very_serious' with rob_rationale to record two levels here."
 )
 
 #' Assess the Risk of Bias domain (Core GRADE series; internal)
@@ -283,7 +359,12 @@ PMA_ROB_INFLATION_THRESHOLD <- 0.20
 #'   entry gate, because an assessor called directly would otherwise re-open the
 #'   guessing hole one call deeper.
 #' @param threshold_internal Clinical decision threshold on the analysis
-#'   scale (defines the trivial zone).
+#'   scale (defines the trivial zone). It also decides how deep rule 5 goes:
+#'   the sign-flip rule rates down two levels only when a threshold was
+#'   supplied, because without one the trivial zone collapses to `{0}` and
+#'   "opposite sides of the null" no longer requires either estimate to be
+#'   appreciably away from it. Unsupplied, rule 5 rates down one level and
+#'   says so.
 #' @return A 1-row tibble with attributes `"analysis_set"` (`"all"` or
 #'   `"low_only"`) and `"high_idx"` (a logical vector aligned to
 #'   `meta_obj$studlab`, so it can be passed straight to
@@ -895,9 +976,15 @@ assess_rob <- function(rob, meta_obj,
     f_branch <- .fact(
       "fig2_branch", "Core GRADE 4 Fig 2",
       if (!is.na(dir$rule)) {
+        # The depth is named rather than left at a bare "rate down", because
+        # rule 5 is the one rule that can reach two levels and a fact that
+        # cannot tell -1 from -2 is the wrong place to hide that.
         sprintf("dominated by high risk of bias studies; direction-of-bias rule %d (%s)",
                 dir$rule,
-                if (identical(dir$judgment, "not_serious")) "do not rate down" else "rate down")
+                switch(dir$judgment,
+                       not_serious  = "do not rate down",
+                       very_serious = "rate down 2 levels",
+                       "rate down 1 level"))
       } else {
         paste0("dominated by high risk of bias studies; direction of bias not ",
                "assessable (rate down)")
@@ -1040,12 +1127,22 @@ assess_rob <- function(rob, meta_obj,
 #   za == zl, non-trivial, no bias-favouring inflation > 20% -> "not_serious" (rule 2)
 #   za == zl, non-trivial, bias-favouring inflation > 20%    -> "serious"     (rule 3)
 #   za != zl, no sign flip across null                       -> "serious"     (rule 4)
-#   za != zl, sign flip (above <-> below)                    -> "serious"     (rule 5)
+#   za != zl, sign flip, threshold supplied              -> "very_serious"    (rule 5)
+#   za != zl, sign flip, no threshold supplied           -> "serious"         (rule 5)
 #
-# Rule 5 returned "very_serious" (-2) up to v0.4. Since v0.5.0 every automated
-# risk-of-bias path is capped at one level (see .ROB_CAP_NOTE above): Core
-# GRADE 4 describes no two-level risk-of-bias downgrade. "very_serious" is reachable
-# only through the scalar `rob` override, which requires rob_rationale.
+# Rule 5 returned "very_serious" (-2) up to v0.4; v0.5.0 capped every automated
+# path at one level; the cap is retracted for this rule alone. It is a declared
+# DEPARTURE from Core GRADE 4, which describes no two-level risk-of-bias
+# downgrade -- the file header sets out the reasoning and .ROB_TWO_LEVEL_NOTE
+# carries it into every judgment that takes the branch.
+#
+# The two-level result is withheld when no threshold was supplied. The zones
+# are then defined by the null alone, so a sign flip is just two estimates with
+# opposite signs -- true of a pair sitting either side of zero by a hair, which
+# is not the finding the two-level judgment is about. That path takes
+# .ROB_SIGN_FLIP_NO_THRESHOLD_NOTE and rates down one. This is the ONLY place
+# in the file where the presence of a threshold changes a judgment rather than
+# only the zone boundaries, so it is spelled out at the branch as well.
 #
 # CAVEAT — TE_low is ALWAYS a fixed-effect (common-effect) estimate.
 #   te_low <- sum(w * TE) / sum(w) with w = 1 / seTE^2, computed over the
@@ -1103,9 +1200,13 @@ assess_rob <- function(rob, meta_obj,
   }
 
   # All studies are high-RoB (no comparator pool exists) -> rate down 1 level.
-  # Core GRADE 4 never describes an automatic two-level risk-of-bias downgrade
-  # (every Fig 2 leaf is "rate down" / "do not rate down"), so this is capped
-  # at "serious"; use rob = "very_serious" + rob_rationale for -2.
+  # This is NOT the sign-flip case and must not borrow its two levels: no zone
+  # comparison happened at all here, so nothing establishes that the direction
+  # of the effect came from the high-RoB studies -- there is no restricted
+  # estimate to have landed anywhere. Core GRADE 4 describes no automatic
+  # two-level risk-of-bias downgrade (every Fig 2 leaf is "rate down" / "do not
+  # rate down"), so this stays at "serious"; use rob = "very_serious" +
+  # rob_rationale for -2.
   if (n_low == 0 || is.null(te_vec) || is.null(se_vec)) {
     return(bail(
       judgment = "serious",
@@ -1235,11 +1336,25 @@ assess_rob <- function(rob, meta_obj,
     }
   } else {
     if (sign_flips) {
-      judgment <- "serious"; rule <- 5L
-      rule_desc <- paste0(
-        "Rule 5: zone changes across null (benefit <-> harm) -> rate down 1 ",
-        "(serious). ", .ROB_CAP_NOTE
-      )
+      rule <- 5L
+      # The threshold decides the DEPTH here, not the zones. See the block
+      # comment above: with M = 0 the two zones are separated by nothing, so
+      # the branch has no evidence that either estimate is far enough from the
+      # null for "the high-RoB studies produced the direction" to be the
+      # reading, and the two-level departure is not earned.
+      if (threshold_supplied) {
+        judgment  <- "very_serious"
+        rule_desc <- paste0(
+          "Rule 5: zone changes across null (benefit <-> harm) -> rate down 2 ",
+          "(very serious). ", .ROB_TWO_LEVEL_NOTE
+        )
+      } else {
+        judgment  <- "serious"
+        rule_desc <- paste0(
+          "Rule 5: zone changes across null (benefit <-> harm) -> rate down 1 ",
+          "(serious). ", .ROB_SIGN_FLIP_NO_THRESHOLD_NOTE
+        )
+      }
     } else {
       judgment <- "serious"; rule <- 4L
       rule_desc <- "Rule 4: zone changes without sign flip -> rate down 1 (serious)"

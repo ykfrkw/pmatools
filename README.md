@@ -487,7 +487,8 @@ Rule 1: same trivial zone                                         → no
 Rule 2: same non-trivial zone, inflation ≤ 20%                    → no
 Rule 3: same non-trivial zone, bias-favouring inflation > 20%     → serious (−1)
 Rule 4: zone differs without sign flip                            → serious (−1)
-Rule 5: zone differs with sign flip (above ↔ below)               → serious       (−2)
+Rule 5: zone differs with sign flip (above ↔ below)               → very_serious (−2)
+        …with no Threshold supplied                               → serious (−1)
 ```
 
 `inflation_ratio = (|TE_all| − |TE_low|) / |TE_low|` is evaluated only when the
@@ -571,7 +572,10 @@ direction.
 **Fallback when Threshold is not supplied** (`threshold = NULL`): the trivial
 zone collapses to `{0}`, so only sign flips can change zones. The algorithm
 reduces to a sign-flip check (rule 5 vs rule 2/3); rule 1 and rule 4 cannot
-fire.
+fire. Rule 5 then rates down **one** level rather than two, and says why —
+without a Threshold to clear, "opposite sides of the null" means only that the
+two estimates carry opposite signs, which two near-null estimates can satisfy
+by an arbitrarily small movement.
 
 **Dominance gate: deprecation retracted.** `rob_dominant_threshold` was
 deprecated in v0.3.1 ("accepted but ignored"), on the reasoning that the
@@ -592,11 +596,24 @@ dominated branch, whose node is explicitly "check direction of bias". A body of
 evidence whose *low*-RoB studies show the larger effect is a substantial
 difference too.
 
-**No automatic two-level downgrade.** Every leaf of Fig 2 reads "rate down" /
-"do not rate down", and Core GRADE 4 describes no two-level risk-of-bias
-downgrade. The automated flowchart therefore stops at `serious` (−1),
-including the sign-flip rule and the all-studies-high-RoB case. Use the scalar
-`rob = "very_serious"` (with `rob_rationale`) when −2 is genuinely warranted.
+**One automatic two-level downgrade, and it is a departure.** Every leaf of
+Fig 2 reads "rate down" / "do not rate down", and Core GRADE 4 describes no
+two-level risk-of-bias downgrade — the only "two levels" in the paper is about
+rating *up* observational evidence. **Rule 5 rates down two anyway.** It fires
+only when the pooled estimate sits beyond the Threshold on one side of the null
+and the estimate restricted to the low-RoB studies sits beyond it on the
+*other*: the direction of the effect is then what the high-RoB studies
+produced, and moderate certainty would overstate the evidence. Every judgment
+on that branch says so in its notes.
+
+Everything else still stops at `serious` (−1): rules 3 and 4, the
+all-studies-high-RoB case (no restricted estimate exists there to have landed
+anywhere), and the not-assessable paths. So does rule 5 itself when no
+Threshold was supplied — the trivial zone then collapses to `{0}`, and
+"opposite sides of the null" no longer requires either estimate to be
+appreciably away from it. Use the scalar `rob = "very_serious"` (with
+`rob_rationale`) to record −2 where the flowchart does not reach it, and
+`rob = "some_concerns"` to record −1 where it does.
 
 **Study-level overrides.** A single study's classification can be corrected
 without rebuilding the vector. Both arguments are named character vectors
