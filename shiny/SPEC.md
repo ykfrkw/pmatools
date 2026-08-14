@@ -1,12 +1,10 @@
 # pmatools wizard — Shiny App Specification
 
-> Authoritative specification for the pmatools wizard, the Shiny app in this repository's `shiny/` directory (v2 — wizard refactor). The package-level R logic (data ingestion, MA pipeline, GRADE assessment, SoF table, export) is provided by [pmatools](../SPEC.md), whose sources live one directory up. This app is a **UI layer** on top of pmatools.
+> Authoritative specification for the pmatools wizard, the Shiny app in this repository's `shiny/` directory. The package-level R logic (data ingestion, MA pipeline, GRADE assessment, SoF table, export) is provided by [pmatools](../SPEC.md), whose sources live one directory up and are **staged into the deploy bundle** rather than installed (§7.1). This app is a **UI layer** on top of pmatools.
 
 **Public URL:** https://yuki-furukawa.shinyapps.io/pmatools/
 **Deployment:** shinyapps.io (account: `yuki-furukawa`, appId: `17697029`)
-**Target version:** 2.0.0 (succeeds the existing single-page app)
-
-> **Stale below this point.** §2.1, §2.2, §7 and §9 still describe the app as a separate repository that installs pmatools from GitHub (`Remotes: github::ykfrkw/pmatools`). It does not, and following §7 will fail on the build server — the bundle vendors the package sources instead. `../CLAUDE.md` §1 and `stage_bundle.R` / `deploy.R` are authoritative for deployment until those sections are rewritten (tracked as item 9 of `../PLAN.md`'s feedback section).
+**App version:** 3.0.0 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9)
 
 ---
 
@@ -29,59 +27,90 @@ The app is also **educational**: every step explains what it does, every input h
 
 ### 2.1 Dependencies
 
-| Package | Source | Role |
+pmatools is **not** a dependency in the install sense. Its sources are staged
+into the bundle by `stage_bundle.R` and `source()`d by `app.R`; §7.1 describes
+the mechanism and why it exists.
+
+| Package | Where it comes from | Role |
 |---|---|---|
-| pmatools | github::ykfrkw/pmatools | All MA + GRADE + SoF + export logic |
+| pmatools | `../R` + `../inst`, staged into `R/_pmatools/` + `_pmatools_inst/` | All MA + GRADE + SoF + export logic |
 | shiny | CRAN | Reactive framework |
 | bslib | CRAN | Bootstrap 5 theming, accordion, cards |
-| htmltools | CRAN | HTML helpers, tooltips |
-| DT | CRAN | Editable data table for Step 1 |
-| flextable | CRAN | SoF preview rendering |
-| meta | CRAN | Required transitively (also direct for any Shiny-only uses) |
+| htmltools | CRAN | HTML helpers |
+| DT | CRAN | Editable grids: Step 1 preview, Step 3 per-study RoB / Indirectness |
+| flextable, officer | CRAN | SoF preview and `.docx` export |
+| meta | CRAN | pmatools' pooling backend |
+| metafor, mmeta, BiasedUrn, brglm2 | CRAN | rare-event backends, named only as strings |
+| tibble, dplyr, rlang, glue, zip, magick, readxl, shinycssloaders | CRAN | staged pmatools code and app chrome |
 
-`pairwise_meta_analysis/DESCRIPTION` is added (lightweight, project-only):
+**`shiny/DESCRIPTION` is a deployment manifest, not a package.** It is
+`Type: Project` and is never installed. It exists for exactly one reason:
+`rsconnect::deployApp()` reads its `Imports` field and installs those packages
+on the shinyapps.io build server. rsconnect ignores its `Version:`, which is
+the app's own (§9).
 
-```dcf
-Type: Project
-Package: pairwise.meta.analysis.app
-Title: pairwise_meta_analysis Shiny app
-Version: 2.0.0
-Imports:
-    shiny,
-    bslib,
-    htmltools,
-    DT,
-    flextable,
-    pmatools,
-    meta
-Remotes:
-    github::ykfrkw/pmatools
-```
+Two consequences, both load-bearing:
 
-This file is consumed by `rsconnect::deployApp()` to resolve `pmatools` from GitHub.
+- **There is no `Remotes:` field, and there must not be one.** A
+  `Remotes: github::ykfrkw/pmatools` entry would put `install_github()` back on
+  the build server, which is the HTTP 401 this whole arrangement exists to
+  avoid (§7.1).
+- **A package added to `../DESCRIPTION` `Imports`/`Suggests` has to be added
+  here too.** rsconnect reads only this file, and its static code scan cannot
+  see a package named as a string — `rare_events.R` names `metafor`, `mmeta`
+  and `BiasedUrn` that way, so this `Imports` field is the only thing that
+  installs them. Omitting one deploys cleanly and fails at runtime, in
+  production. `Rscript shiny/stage_bundle.R --check-only` audits it, and
+  `deploy.R` fails the deploy on it (§7.3).
+
+`../CLAUDE.md` §1 states the four rules of this kind that survived the
+repository merge; read it before changing either `DESCRIPTION`.
 
 ### 2.2 File layout
 
 ```
-pairwise_meta_analysis/
-├── app.R                          # entrypoint: ui + server
-├── DESCRIPTION                    # rsconnect dependency manifest
+shiny/
+├── app.R                          # entrypoint: ui + server; sources R/_pmatools/
+├── DESCRIPTION                    # rsconnect dependency manifest (see §2.1)
+├── deploy.R                       # clean-tree gate → stage → .rscignore → deployApp()
+├── stage_bundle.R                 # stages ../R and ../inst into the bundle
+├── .rscignore                     # committed bundle exclusions, one glob per line
 ├── R/
 │   ├── step1_data.R               # data import module (UI + server)
 │   ├── step2_ma.R                 # MA module
-│   ├── step3_grade.R              # GRADE module (5 accordion sub-modules)
+│   ├── step3_grade.R              # GRADE module (domain tabs)
+│   ├── step3_threshold.R          # decision-threshold + presentation helpers
 │   ├── step4_export.R             # export/download module
 │   ├── ui_helpers.R               # shadcn-style component helpers (card, badge, stepper)
-│   └── educational_copy.R         # American English copy as named-list constants
+│   ├── educational_copy.R         # American English copy as named-list constants
+│   └── _pmatools/                 # GENERATED: staged copy of ../R, plus VERSION
+├── _pmatools_inst/                # GENERATED: staged copy of ../inst
 ├── www/
 │   ├── shadcn.css                 # design tokens + component CSS
-│   └── pmatools_logo.svg          # optional branding
-├── rsconnect/                     # existing (do not touch)
-├── SPEC.md                        # this file
-└── (legacy files kept for history): app_1407.R, app_20250817.R, ...
+│   ├── required-fields.js         # the two-tier required-field marking (§3.3.6)
+│   ├── flowchart.js               # lights up the branch each domain took
+│   └── embed-height.js            # posts document height to the WordPress embed
+├── tests/
+│   ├── testthat.R                 # app suite entrypoint (§8)
+│   └── testthat/
+├── rsconnect/shinyapps.io/yuki-furukawa/
+│   ├── pmatools.dcf               # deployment record for the live app
+│   └── pairwise_meta_analysis.dcf # record for the app this one replaced
+└── SPEC.md                        # this file
 ```
 
-Legacy files are listed in the existing `ignoredFiles` field of `rsconnect/shinyapps.io/yuki-furukawa/pairwise_meta_analysis.dcf` and remain untouched.
+**`R/_pmatools/` and `_pmatools_inst/` are generated and gitignored.** Never
+hand-edit them: the next `stage_bundle.R` run deletes and regenerates both.
+Fix `../R` and re-stage.
+
+The two deployment records coexist deliberately. `pairwise_meta_analysis` was
+the app this wizard replaced, and its record is kept so the old URL stays
+identifiable; `deploy.R` therefore names the full `server` / `account` /
+`appName` triple, leaving rsconnect no room to resolve the wrong one. Nothing
+matching `app_*.R` is tracked any more, but both `.rscignore` and `deploy.R`
+still handle that pattern: the legacy single-page sources carried Latin-1 bytes
+in their filenames, which break rsconnect's path scanner, and an untracked copy
+left in the directory would still reach the bundle (§7.3).
 
 ### 2.3 Reactivity model
 
@@ -1707,35 +1736,139 @@ input$download_zip                         │   pmatools::export_bundle()  │
 
 ## 7. shinyapps.io deployment
 
-### 7.1 Local verification
+### 7.1 How the app gets pmatools
 
-```r
-setwd("~/Developer/pairwise_meta_analysis")
-shiny::runApp(launch.browser = TRUE)
-# → exercise all 4 steps with sample data; confirm Step 1→4 → ZIP download
+**The app sources pmatools; it never installs it.** A stale `GITHUB_PAT` cached
+on the shinyapps.io account makes `install_github(ykfrkw/pmatools)` return
+HTTP 401 on the build server. Shipping the package sources inside the bundle
+removes the install step, and with it the failure.
+
+`Rscript shiny/stage_bundle.R` is what puts them there. It runs from anywhere in
+the repo, reads `..` — the repository it lives in, so there is no second
+checkout and no version skew — and does five things:
+
+1. Wipes `shiny/R/_pmatools/` and copies every `../R/*.R` into it, **except
+   `data.R`**, which is roxygen for the lazy-loaded `data/` that the app must
+   never depend on.
+2. Writes `R/_pmatools/VERSION`. Line 1 is the `Version:` field of
+   `../DESCRIPTION` and nothing else, because `app.R` reads exactly one line.
+   Line 2 is provenance: `source: <branch>@<sha>`, suffixed `-dirty` when
+   staged from uncommitted work, or `source: unknown` when git cannot answer.
+3. Wipes `shiny/_pmatools_inst/` and copies `../inst` into it.
+4. Rewrites every `system.file("templates", <name>, package = "pmatools")` in
+   the staged tree to
+   `file.path(getOption("pmatools.vendored_root", "."), "_pmatools_inst", "templates", <name>)`.
+   The rewrite is driven by a scan for that call *shape*, not a filename list,
+   so a template added upstream is picked up with no edit here.
+5. Runs two checks and **warns** (never stops) on either: the dependency-sync
+   check of §2.1, and a grep of the staged tree for any surviving
+   `system.file(..., package = "pmatools")`, reported with `file:line`. In the
+   app that call can only return `""`, so a survivor is a template that will not
+   be found at runtime.
+
+The dependency-sync check ignores `testthat`, `rmarkdown`, `here`, `knitr`,
+`covr`, `devtools`, `usethis` and `roxygen2` as dev-only; everything else in
+`../DESCRIPTION` `Imports` + `Suggests` is expected in `shiny/DESCRIPTION`
+`Imports`.
+
+Both checks run standalone, touching no staged file:
+
+```bash
+Rscript shiny/stage_bundle.R --check-only
 ```
 
-### 7.2 Deploy
+`app.R` then, at startup: `source()`s every `.R` file in `R/_pmatools/` (order
+does not matter — they define functions only); reads the first line of
+`R/_pmatools/VERSION` into `options(pmatools.version_stamp = )`, leaving the
+option unset if the file is missing, unreadable or blank; and pins
+`options(pmatools.vendored_root = normalizePath(getwd()))` so a later `setwd()`
+cannot move the staged templates and sample data out from under the paths above.
 
-```r
-# Ensure pmatools is on GitHub and devtools::install_github("ykfrkw/pmatools") works locally
-rsconnect::deployApp(
-  appDir   = "~/Developer/pairwise_meta_analysis",
-  appName  = "pairwise_meta_analysis",
-  account  = "yuki-furukawa",
-  forceUpdate = TRUE
-)
+Staging from a dirty tree is normal and deliberate — you stage precisely to try
+out the change you just made in `../R`. The clean-tree requirement lives in
+`deploy.R` instead (§7.3), where it belongs.
+
+`../CLAUDE.md` §1 is the standing statement of the rules this arrangement
+imposes on package-level code. Read it before adding a dependency, a
+`system.file()` call site, or anything that reads
+`utils::packageVersion("pmatools")`.
+
+### 7.2 Local verification
+
+```bash
+Rscript shiny/stage_bundle.R          # needed once per clone, and after any ../R change
+Rscript -e 'shiny::runApp("shiny", launch.browser = TRUE)'
 ```
 
-`rsconnect` reads `DESCRIPTION` and resolves `Remotes: github::ykfrkw/pmatools` automatically. If the deploy fails on the build server, the most likely causes are:
+Exercise all 4 steps with the bundled sample data; confirm Step 1 → 4 → ZIP
+download. The footer reports the staged pmatools version, which should match
+`../DESCRIPTION`.
 
-1. pmatools is private on GitHub → make it public, OR add a deploy token via `rsconnect::setAccountInfo()` with `gitCredentials`.
-2. pmatools system dependencies (e.g., libxml2 for officer) missing on shinyapps.io → declare in pmatools DESCRIPTION's `SystemRequirements`.
-3. App size exceeds shinyapps.io free-tier limit → upgrade plan or reduce bundle.
+### 7.3 Deploy
 
-### 7.3 Post-deploy smoke test
+```bash
+Rscript shiny/deploy.R
+```
 
-Open https://yuki-furukawa.shinyapps.io/pairwise_meta_analysis/ and run through Steps 1–4 with the bundled sample data. Verify ZIP download produces a valid archive containing `analysis.R` that runs with `Rscript`.
+That is the whole procedure. There is no `install_github()` step and no
+`Remotes:` field; adding either restores the HTTP 401 of §7.1. `deploy.R` runs
+five steps:
+
+1. **Refuse a dirty tree.** `git status --porcelain` over the repository root;
+   any output aborts, listing the first ten entries. `deployApp()` ships the
+   working tree as it stands, so a dirty deploy puts bytes in production that
+   no commit describes. It then prints the short HEAD SHA it is shipping — put
+   that SHA in the follow-up commit.
+2. **Stage**, by `source()`ing `stage_bundle.R` **with warnings promoted to
+   errors**. Both of §7.1's checks warn rather than stop, and both describe
+   problems that are invisible locally and fail only in production; the deploy
+   gate is where they have to be fatal.
+3. **Verify `.rscignore` exists.** It is a permanent, committed file — one glob
+   per line, read by rsconnect at deploy time — that keeps `SPEC.md`,
+   `deploy.R`, `stage_bundle.R`, `tests/`, `rsconnect/`, the reference PDFs and
+   the local `.Rproj`/`.claude` metadata out of the bundle. Missing → abort with
+   the `git checkout` that restores it. `deploy.R` does not generate it.
+4. **Deploy.** Anything matching `app_*.R` is first renamed into
+   `.deploy_excluded/` and restored on exit, because non-UTF-8 bytes in a
+   filename break rsconnect's path scanner. Then:
+
+   ```r
+   rsconnect::deployApp(
+     appDir         = APP_DIR,        # this directory, resolved from --file=
+     appName        = "pmatools",
+     account        = "yuki-furukawa",
+     server         = "shinyapps.io",
+     forceUpdate    = TRUE,
+     launch.browser = FALSE,
+     quarto         = FALSE
+   )
+   ```
+
+   The full `server` / `account` / `appName` triple is named on purpose (§2.2).
+5. **Report**, and exit non-zero on failure.
+
+**`APP_NAME` is not a rename.** Changing it in `deploy.R` creates a *new* app at
+a *new* URL; the live app is embedded in WordPress post 1021 at
+https://yukifurukawa.jp/pmatools/, and that iframe keeps pointing at the old
+one. `../CLAUDE.md` §3 lists what has to move with it, and in what order.
+
+If a deploy fails on the build server, the likely causes are:
+
+1. A package used at runtime but absent from `shiny/DESCRIPTION` `Imports` →
+   the build succeeds and the feature fails live. Audit with
+   `stage_bundle.R --check-only` (§2.1).
+2. A system dependency missing on shinyapps.io (e.g. libxml2 for officer) →
+   declare it in `../DESCRIPTION`'s `SystemRequirements`.
+3. Bundle size over the plan limit → widen `.rscignore` or upgrade the plan.
+
+### 7.4 Post-deploy smoke test
+
+Open https://yuki-furukawa.shinyapps.io/pmatools/ and run through Steps 1–4
+with the bundled sample data. Confirm the footer's pmatools version matches
+`../DESCRIPTION` at the SHA that was deployed — the footer carries the version
+string only, so the SHA itself is the one `deploy.R` printed in step 1 — and
+that the ZIP download produces a valid archive whose `analysis.R` runs under
+`Rscript`.
 
 ---
 
@@ -1748,19 +1881,41 @@ Manual smoke test at minimum:
 3. Step 3: open each accordion → algorithm explanation reads naturally → auto judgment matches expected for sample data → set the threshold = 0.20 → see zone counts update → click Indirectness "No" → banner clears
 4. Step 4: bundle name → Download ZIP → unzip → 9 files present → open analysis.R in R → `source("analysis.R")` reproduces same TE.random
 
-Optional automated: `shinytest2::record_test()` for Step 1 → Step 4 happy path.
+Automated, and the one to run before every deploy:
+
+```bash
+Rscript shiny/tests/testthat.R
+```
+
+It is deliberately a separate suite from the package's `devtools::test()`: the
+app loads its code with `source()` and the package loads it as a namespace, and
+the two cannot share a harness.
 
 ---
 
 ## 9. Versioning
 
-This SPEC tracks the pairwise_meta_analysis app version, NOT the pmatools package version. The app declares the minimum compatible pmatools version in its `DESCRIPTION`:
+**Two versions, and they are not the same number.**
 
-```dcf
-Imports: pmatools (>= 0.2.0)
-```
+| file | field | what it versions |
+|---|---|---|
+| `../DESCRIPTION` | `Version:` | the pmatools package. The real one. |
+| `shiny/DESCRIPTION` | `Version:` | this app's wizard/UI work — currently 3.0.0 |
 
-When pmatools API changes, bump the `>=` constraint here.
+The app's version tracks separately because the two artifacts change for
+different reasons, and rsconnect ignores the field entirely (§2.1). It is not
+read at runtime by anything.
+
+**There is no minimum-pmatools constraint, and there cannot be one.** The app
+does not install pmatools, so `Imports: pmatools (>= x.y.z)` would express
+nothing: `stage_bundle.R` stages `../R` from the repository it lives in, so the
+app always runs the sources of the commit being deployed. What the app reports
+at runtime is that exact version, read from `R/_pmatools/VERSION` (§7.1), and
+line 2 of that file names the commit it came from.
+
+A pmatools API change is therefore not a constraint to bump but a change to
+make in the same commit: the app is one directory away and the package `SPEC.md`
+is authoritative for both.
 
 ---
 

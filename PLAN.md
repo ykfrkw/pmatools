@@ -206,20 +206,17 @@ SPEC.md §11「Out of scope」と同期していること。
    [README.md:475](README.md:475)・README.md:1161 の `rob_map` 例、および
    `rob_strata()` の alias 表（R 側実装）も同じ誤りを持っていないか確認する。
 
-9. **`shiny/SPEC.md` がリポジトリ統合前のまま**（2026-08-14 に項目 1 の作業中に
-   発見。項目 1 の残りではなく独立した仕事）。タイトル・冒頭注記の
-   `../pmatools/SPEC.md`（統合後は `../SPEC.md`）・公開 URL
-   （`.../pairwise_meta_analysis/` のまま。実際は `.../pmatools/`）・§2.2 の
-   ファイルレイアウト・§9 の Target version 2.0.0（`shiny/DESCRIPTION` は
-   すでに 3.0.0）が古い。**最も危険なのは §2.1 と §7.2 で、`Remotes:
-   github::ykfrkw/pmatools` + `install_github()` を前提に書かれている** —
-   これは CLAUDE.md §1 の「ベンダリングしてから deploy する」ライフラインと
-   真っ向から矛盾しており、これを読んで deploy するとビルドサーバで 401 に
-   なる。1 行ずつの置換では済まないので、§2 と §7 をまとめて書き直す作業として
-   別に切る。**暫定対応として冒頭ブロックだけ直した**（タイトル・`../SPEC.md`
-   への相対リンク・公開 URL・appId）。加えて「ここから下は古い」旨の警告を
-   冒頭に置き、deploy は CLAUDE.md §1 と `deploy.R` を見るよう明記した。
-   §2.1 / §2.2 / §7 / §9 の本文は未修正。
+9. ~~**`shiny/SPEC.md` がリポジトリ統合前のまま**~~ — 完了（2026-08-14）。
+   §2.1・§2.2・§7・§9 を `stage_bundle.R` / `deploy.R` の実装に突き合わせて
+   書き直した。危険だった `Remotes: github::ykfrkw/pmatools` +
+   `install_github()` の記述は削除し、代わりに「その 2 つを足すと 401 が戻る」
+   と明記。§2.1 はアプリ `DESCRIPTION` が rsconnect 用マニフェストである
+   ことと依存追加ルール、§2.2 は実際のファイルレイアウト（生成物の
+   `R/_pmatools/` / `_pmatools_inst/` と 2 つの deployment record を含む）、
+   §7 は staging 5 ステップ・`--check-only`・`deploy.R` の 5 ステップ・
+   `APP_NAME` を変えても rename にならない件、§9 は 2 つのバージョンと
+   最小 pmatools 制約が存在しない理由。冒頭の「ここから下は古い」警告は
+   撤去した。細目は CLAUDE.md §1 を再掲せずリンクしている。
 
 10. **README のサンプル出力が実装とドリフトしている**（同じく 2026-08-14 に発見。
     コードは動くが、README に貼られた出力例が古い）。
