@@ -174,6 +174,82 @@ test_that("analysis.R reproduces a manual rating-target override", {
   expect_false(is.null(tryCatch(parse(text = txt), error = function(e) NULL)))
 })
 
+# ---- the control-arm risk survives the round trip ---------------------------
+# threshold_baseline, ois_p0 and baseline_risk inherit from one another
+# (v0.5.1), so the bundled analysis.R has to pin all three: emitting only the
+# resolved baseline_risk would let the re-run inherit the SoF baseline into the
+# OIS and the threshold conversion, which is a different number whenever the
+# reviewer asked for a pooling method or a named risk group.
+
+# Re-evaluate the grade_meta() call the bundle wrote, against the same analysis.
+regrade_from_script <- function(script_path, ma) {
+  exprs <- parse(file = script_path)
+  is_grade <- vapply(exprs, function(e) {
+    is.call(e) && identical(as.character(e[[1]]), "<-") &&
+      is.call(e[[3]]) && identical(as.character(e[[3]][[1]]), "grade_meta")
+  }, logical(1))
+  env <- new.env(parent = environment(grade_meta))
+  assign("ma", ma, envir = env)
+  suppressWarnings(eval(exprs[is_grade][[1]][[3]], envir = env))
+}
+
+test_that("the bundled analysis.R reproduces the rating's control-arm risk", {
+  ma <- make_meta_for_bundle()
+  # One value, given to one of the three, plus a SoF baseline that is
+  # deliberately a different population.
+  g <- suppressWarnings(grade_meta(
+    ma, study_design = "RCT", outcome_name = "Test",
+    threshold = 0.05, threshold_scale = "ard", threshold_baseline = 0.25,
+    baseline_risk = 0.40
+  ))
+  out_dir <- tempfile(); dir.create(out_dir)
+  zip_path <- export_bundle(ma, g, output_dir = out_dir,
+                            bundle_name = "control_risk_bundle",
+                            include = c("script"))
+  unz_dir <- tempfile(); dir.create(unz_dir)
+  zip::unzip(zip_path, exdir = unz_dir)
+  script_path <- file.path(unz_dir, "analysis.R")
+
+  again <- regrade_from_script(script_path, ma)
+
+  expect_equal(again$control_risk$used$threshold_baseline,
+               g$control_risk$used$threshold_baseline)
+  expect_equal(again$control_risk$used$ois_p0, g$control_risk$used$ois_p0)
+  expect_equal(again$control_risk$used$baseline_risk,
+               g$control_risk$used$baseline_risk)
+  expect_equal(again$threshold_internal, g$threshold_internal)
+  expect_equal(again$certainty, g$certainty)
+})
+
+test_that("a pooling method for the table does not re-derive the OIS baseline", {
+  skip_if_not_installed("metafor")
+  skip_if_not_installed("lme4")
+
+  ma <- make_meta_for_bundle()
+  # The one case the widened fallback could have broken: baseline_risk resolves
+  # to a GLMM-pooled number, the other two to the crude one. The script emits
+  # three literals, so nothing inherits on the re-run.
+  g <- suppressWarnings(grade_meta(
+    ma, study_design = "RCT", outcome_name = "Test",
+    threshold = 0.05, threshold_scale = "ard", baseline_risk = "metaprop"
+  ))
+  out_dir <- tempfile(); dir.create(out_dir)
+  zip_path <- export_bundle(ma, g, output_dir = out_dir,
+                            bundle_name = "metaprop_bundle",
+                            include = c("script"))
+  unz_dir <- tempfile(); dir.create(unz_dir)
+  zip::unzip(zip_path, exdir = unz_dir)
+
+  again <- regrade_from_script(file.path(unz_dir, "analysis.R"), ma)
+
+  expect_equal(again$control_risk$used$ois_p0, g$control_risk$used$ois_p0)
+  expect_equal(again$control_risk$used$threshold_baseline,
+               g$control_risk$used$threshold_baseline)
+  expect_equal(again$baseline_risk, g$baseline_risk)
+  expect_equal(again$threshold_internal, g$threshold_internal)
+  expect_equal(again$certainty, g$certainty)
+})
+
 # ---- .arg_lit() origin validation ------------------------------------------
 # Regression: an unrecognised origin used to fall through to the plain-value
 # branch, which cannot handle a list, and returned the "NULL" fallback. The

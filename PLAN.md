@@ -168,19 +168,23 @@ SPEC.md §11「Out of scope」と同期していること。
 
 ### B. 設計・仕様に踏み込む項目（要検討）
 
-5. **`threshold_baseline` と `ois_p0` が両方あるのは何故か** — README.md:60-70 の
-   `g_abs` 例で同じ 0.25 を 2 回渡していて冗長に見える。現状の役割:
-   - `threshold_baseline`: `threshold_scale = "ard"` のとき、絶対リスク差の閾値を
-     効果尺度（RR/OR）のスケールへ換算するための対照群リスク。未指定ならプール
-     対照群イベント率（[R/utils.R:552](R/utils.R:552) 付近）。
-   - `ois_p0`: OIS（optimal information size）のサンプルサイズ計算に使う対照群
-     イベント率。
-   - `baseline_risk`（SoF 表用）は「未指定なら `ois_p0` を使う」というフォール
-     バックを既に持つ（README.md:1682）。つまり 3 つの引数が同じ量を指している。
-   - 対応方針の候補: (a) 3 者を単一の `baseline_risk` に集約し、旧引数は
-     deprecate、(b) 少なくとも `ois_p0` / `threshold_baseline` の相互フォール
-     バックを実装し README でそう書く。どちらも API 変更なので `feat!:` 扱い、
-     NEWS.md にエントリが要る。
+5. ~~**`threshold_baseline` と `ois_p0` が両方あるのは何故か**~~ — 2026-08-14 に
+   候補 (b) で完了。3 つの引数（`threshold_baseline` / `ois_p0` /
+   `baseline_risk`）は同じ対照群イベント率を指しているので、どれか 1 つに
+   渡した値が残り 2 つに継承されるようにした（`.resolve_control_risk()`,
+   [R/utils.R](R/utils.R)）。順序は「明示指定が常に勝つ →
+   `threshold_baseline` → `ois_p0` → `baseline_risk` → プール対照群率」。
+   3 者が正当に異なりうる（SoF だけ特定のリスク群で描く等）ので、明示値を
+   継承値で上書きすることはしない。どれが採用されたかは `$control_risk` と
+   Imprecision の domain notes に記録され、`export_bundle()` は 3 つとも
+   `analysis.R` に literal で焼き込む。
+
+   候補 (a)（単一 `baseline_risk` への集約）は**先送り**であって撤回ではない。
+   本リリースは既に judgment 語彙の破壊的改名（項目 6）を含んでおり、公開
+   引数 3 つの改名を同じリリースに重ねると、利用者は 1 リリース分の利益の
+   ために 2 回スクリプトを直すことになる。査読者の指摘は「同じ数字を 2 回
+   渡させるな」という呼び出し側の話なので、相互フォールバックだけで解ける。
+   詳細は SPEC.md §4.5.4。
 
 6. **Downgrade scale を Core GRADE 用語に合わせる** — [README.md:184-209](README.md:184)
    の対応表で pmatools の値が Core GRADE 文言と 1 段ズレている
@@ -241,8 +245,9 @@ SPEC.md §11「Out of scope」と同期していること。
 - ~~**項目 1・3・4**~~ — 2026-08-14 に完了（README の companion repository 記述、
   サンプルデータに無い `Mortality` の例、アプリ説明の追加）。テストは
   パッケージ 2099 pass / アプリ 747 pass のまま、どちらも変化なし
-- **項目 5** — `threshold_baseline` と `ois_p0` の重複。パッケージと README の
-  作業で、UI 側の実装を伴わない
+- ~~**項目 5**~~ — 2026-08-14 に完了。`threshold_baseline` / `ois_p0` /
+  `baseline_risk` の相互フォールバック。UI 側は既に 1 つの対照群リスクを
+  両方へ渡していたので、アプリの出力は不変
 - **項目 6**（downgrade 語彙の Core GRADE 準拠と手動 −3）— UX_REVIEW.md の
   当初見積もりが誤っていた。アプリ側の小さな diff ではなく、パッケージに
   **第 4 の judgment レベルを新設**する必要がある（現状 no / some_concerns /
@@ -253,8 +258,9 @@ SPEC.md §11「Out of scope」と同期していること。
 
 ### 実装順の目安
 
-~~A（1〜4）は独立・低リスクなので先に片付く。~~ A は完了。残りの B は
-6 → 8 → 7 → 5 の順が安全（6 と 8 は語彙の定義そのもの、7 はその上での再構成、
-5 は別軸の API 整理）。9 と 10 は B と独立なのでいつでもよいが、9 は誤った
+~~A（1〜4）は独立・低リスクなので先に片付く。~~ A は完了。~~残りの B は
+6 → 8 → 7 → 5 の順が安全~~ — 5 は別軸の API 整理なので語彙の作業を待たずに
+先に片付けた（2026-08-14）。残りは 8 → 7（8 は語彙の定義そのもの、7 は
+その上での再構成）。9 と 10 は B と独立なのでいつでもよいが、9 は誤った
 deploy 手順を書き残している分だけ急ぐ理由がある。
 どれも CLAUDE.md §5 に従い SPEC.md / NEWS.md を同じ PR で更新する。

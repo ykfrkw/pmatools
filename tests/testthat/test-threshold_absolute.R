@@ -128,7 +128,14 @@ test_that("grade_meta converts ARD threshold and OIS uses p1 = p0 + ARD", {
   # Updated (v0.5): ois_p0 is still anchored to the ARD baseline risk
   # (0.18), but ois_p1 now comes from the modest RRR Core GRADE 2 prescribes
   # for binary outcomes (0.18 * (1 - 0.20) = 0.144), not from the threshold.
-  expect_match(impre_notes, "ois_p0 from threshold baseline risk = 0.1800",
+  #
+  # Updated (v0.5.1): the anchoring is no longer done inside
+  # assess_imprecision() -- grade_meta() shares the one control-arm risk across
+  # all three arguments before any domain runs -- so the sentence that reports
+  # it now names the argument the value came from.
+  expect_match(impre_notes,
+               "supplied as `threshold_baseline`", fixed = TRUE)
+  expect_match(impre_notes, "`ois_p0` (the optimal information size)",
                fixed = TRUE)
   expect_match(impre_notes, "ois_p1 = 0.1440", fixed = TRUE)
   expect_match(impre_notes, "p1=0.144", fixed = TRUE)

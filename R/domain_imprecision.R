@@ -612,13 +612,20 @@ assess_imprecision <- function(meta_obj,
     .flow_path_fact(fig4$flow)
   )
 
-  make_domain_row(
+  row <- make_domain_row(
     domain   = "Imprecision",
     judgment = judgment,
     auto     = TRUE,
     notes    = notes,
     facts    = facts
   )
+  # The control-arm rate the OIS was powered from, after every default above
+  # has run. grade_meta() reads it off the row (an attribute, like
+  # assess_rob()'s analysis-set recommendation) and records it, so
+  # export_bundle() can pin the number into the bundled analysis.R rather than
+  # leaving the re-run to derive one of its own.
+  attr(row, "ois_p0") <- ois_p0
+  row
 }
 
 # --------------------------------------------------------------------------

@@ -809,7 +809,22 @@ export_bundle.meta <- function(x,
     ois_n_arg        = .arg_lit(grade_args[["ois_n", exact = TRUE]],      fallback = "NULL"),
     ois_alpha_arg    = .arg_lit(grade_args[["ois_alpha", exact = TRUE]],  fallback = "0.05"),
     ois_beta_arg     = .arg_lit(grade_args[["ois_beta", exact = TRUE]],   fallback = "0.2"),
-    ois_p0_arg       = .arg_lit(grade_args[["ois_p0", exact = TRUE]],     fallback = "NULL"),
+    # ois_p0: pin the control-arm rate the OIS was actually powered from, for
+    # the same reason threshold_baseline is pinned above. It matters more since
+    # v0.5.1, because the three control-risk arguments now inherit from one
+    # another: leaving ois_p0 blank while baseline_risk is emitted as a literal
+    # would let the re-run inherit the SoF baseline into the OIS, and those two
+    # can legitimately be different numbers (a "metaprop" baseline_risk, or a
+    # SoF drawn against a named risk group). Emitting all three closes it.
+    ois_p0_arg       = .arg_lit(
+      grade_args[["ois_p0", exact = TRUE]],
+      fallback = if (!is.null(grade$control_risk$used$ois_p0) &&
+                     is.numeric(grade$control_risk$used$ois_p0)) {
+        paste(deparse(grade$control_risk$used$ois_p0), collapse = "")
+      } else {
+        "NULL"
+      }
+    ),
     ois_p1_arg       = .arg_lit(grade_args[["ois_p1", exact = TRUE]],     fallback = "NULL"),
     ois_rrr_arg      = .arg_lit(grade_args[["ois_rrr", exact = TRUE]],    fallback = "0.2"),
     ois_delta_arg    = .arg_lit(grade_args[["ois_delta", exact = TRUE]],  fallback = "NULL"),

@@ -323,8 +323,10 @@
 #'   proportion in (0, 1) (e.g., \code{0.18} for 180 per 1,000), used to
 #'   convert an absolute Threshold (\code{threshold_scale = "ard"}) to the
 #'   ratio scale when the effect measure is OR/RR/HR/RoM. If \code{NULL}
-#'   (default), the pooled control event rate
-#'   (\eqn{\sum event_c / \sum n_c}) of \code{meta_obj} is used; if that is
+#'   (default), it is inherited from \code{ois_p0} or \code{baseline_risk}
+#'   when either was supplied (v0.5.1; see \strong{One control-arm risk});
+#'   failing that, the pooled control event rate
+#'   (\eqn{\sum event_c / \sum n_c}) of \code{meta_obj} is used, and if that is
 #'   unavailable too, an informative error is raised. Ignored unless an ARD
 #'   Threshold requires conversion.
 #' @param imprecision Optional overall imprecision scalar judgment: a GRADE
@@ -345,8 +347,12 @@
 #'   Takes precedence over auto-calculated OIS.
 #' @param ois_alpha Type I error rate for OIS calculation (default 0.05, two-sided).
 #' @param ois_beta Type II error rate for OIS calculation (default 0.20, ie 80 percent power).
-#' @param ois_p0 For binary outcomes: baseline (control) event rate for OIS calculation.
-#'   Used with \code{ois_p1} to auto-compute target events.
+#' @param ois_p0 For binary outcomes: baseline (control) event rate for OIS
+#'   calculation. Used with \code{ois_p1} to auto-compute target events. If
+#'   \code{NULL} (default), it is inherited from \code{threshold_baseline} or
+#'   \code{baseline_risk} when either was supplied (v0.5.1; see \strong{One
+#'   control-arm risk}), and otherwise falls back to the pooled control event
+#'   rate of the analysis being rated.
 #' @param ois_p1 For binary outcomes: experimental arm event rate for OIS
 #'   calculation. When supplied it takes precedence over \code{ois_rrr}.
 #' @param ois_rrr (v0.5) For binary outcomes: the "modest relative risk
@@ -385,8 +391,10 @@
 #'     \item \code{"metaprop"}: GLMM-pooled proportion via
 #'       \code{meta::metaprop()} (logit back-transform); falls back to simple
 #'       if convergence fails.
-#'     \item \code{NULL} (default): uses \code{ois_p0} if supplied, otherwise
-#'       auto-computes via \code{"simple"} for binary outcomes.
+#'     \item \code{NULL} (default): inherits \code{threshold_baseline} or
+#'       \code{ois_p0} when either was supplied (v0.5.1; see \strong{One
+#'       control-arm risk}), otherwise auto-computes via \code{"simple"} for
+#'       binary outcomes.
 #'   }
 #'   Only meaningful for binary outcomes with a relative effect measure
 #'   (RR, OR, HR, IRR). Set to \code{NULL} explicitly to suppress ARD display.
@@ -414,6 +422,38 @@
 #'   rule-out for fields where pre-registration is universal and all registered
 #'   trials can be accounted for. \code{"yes"} short-circuits the publication
 #'   bias domain to "no" regardless of Egger's test or k. Default \code{NULL}.
+#'
+#' @section One control-arm risk:
+#' \code{threshold_baseline}, \code{ois_p0} and \code{baseline_risk} are three
+#' names for the control-arm event rate, consumed by three different
+#' calculations: converting an absolute Threshold to the analysis scale,
+#' powering the Optimal Information Size, and printing the absolute-risk
+#' columns of the Summary of Findings table. Since v0.5.1 you supply the number
+#' \strong{once}, to whichever of the three you think of first, and the other
+#' two inherit it:
+#'
+#' \enumerate{
+#'   \item An argument you supplied keeps its own value. Always. The three can
+#'     legitimately differ -- a Summary of Findings table may be drawn against
+#'     a named risk group while the OIS is powered from the trials' own control
+#'     arms -- and an explicit value is never displaced by an inherited one.
+#'   \item An argument left \code{NULL} takes the first value supplied to any
+#'     of the others, in the order \code{threshold_baseline}, \code{ois_p0},
+#'     \code{baseline_risk}.
+#'   \item An argument still \code{NULL} after that falls back to the pooled
+#'     control event rate of the analysis being rated, exactly as before.
+#' }
+#'
+#' Only a number in (0, 1) is inherited. A character \code{baseline_risk}
+#' (\code{"simple"} / \code{"metaprop"}) names a computation rather than a
+#' value and does not donate; each use then computes its own pooled default.
+#'
+#' Which argument the value came from and which ones took it is recorded in
+#' \code{$control_risk} and stated in the Imprecision domain notes, so a reader
+#' of the Evidence Profile or the exported bundle can see it without reading
+#' the call. Consolidating the three onto a single \code{baseline_risk} remains
+#' the eventual destination; see SPEC.md \S4.5.4 for why it is not this
+#' release.
 #'
 #' @section Domain judgment levels:
 #' The vocabulary used by every domain argument and by
@@ -508,6 +548,15 @@
 #'       set BMJ Core GRADE 4 Fig 2 recommends.}
 #'     \item{rob_refit}{\code{TRUE} when the low-RoB refit was actually
 #'       performed.}
+#'     \item{control_risk}{How the one control-arm risk was shared across
+#'       \code{threshold_baseline}, \code{ois_p0} and \code{baseline_risk}
+#'       (see \strong{One control-arm risk}): \code{value} and \code{donor}
+#'       name the number and the argument it came from, \code{inherited} the
+#'       arguments that took it, \code{note} the sentence appended to the
+#'       Imprecision domain notes, and \code{used} the number each of the
+#'       three uses ended up with once its own pooled default had run
+#'       (\code{NULL} for a use that did not need one -- a threshold that was
+#'       never on the absolute scale, or a continuous outcome).}
 #'   }
 #'
 #' @examples
@@ -612,6 +661,17 @@ grade_meta <- function(meta_obj,
   # --- starting certainty ---
   start_score     <- if (study_design == "RCT") 4L else 2L
   starting_quality <- score_to_certainty(start_score)
+
+  # --- one control-arm risk for the three arguments that name it ---
+  # threshold_baseline, ois_p0 and baseline_risk are three names for the
+  # control-arm event rate. Passing it once is enough; see
+  # .resolve_control_risk() for the order and for why the three arguments still
+  # exist separately.
+  control_risk       <- .resolve_control_risk(threshold_baseline, ois_p0,
+                                              baseline_risk)
+  threshold_baseline <- control_risk$threshold_baseline
+  ois_p0             <- control_risk$ois_p0
+  baseline_risk      <- control_risk$baseline_risk
 
   # --- resolve Threshold to TE scale (used by RoB, Inconsistency, Imprecision) ---
   # `meta_full` is the all-studies analysis; `meta_obj` is rebound below to
@@ -780,6 +840,11 @@ grade_meta <- function(meta_obj,
   # The scalar-override branch above records no facts; the domain is then
   # simply absent from `domain_facts`.
   impre_facts <- attr(d_impre, "facts")
+  # The control-arm rate the OIS was actually powered from, which is only known
+  # after assess_imprecision() has applied its own pooled default. Read here
+  # for the same reason as the RoB attributes above -- bind_rows() drops it --
+  # and recorded so export_bundle() can pin it into the bundled analysis.R.
+  ois_p0_used <- attr(d_impre, "ois_p0") %||% ois_p0
 
   # Record how the rating target was chosen in the Imprecision notes: the
   # target decides which threshold Fig 4 evaluates the CI against, so the two
@@ -794,6 +859,15 @@ grade_meta <- function(meta_obj,
   if (!is.null(threshold_note)) {
     d_incon <- .append_domain_note(d_incon, threshold_note)
     d_impre <- .append_domain_note(d_impre, threshold_note)
+  }
+
+  # A shared control-arm risk is only safe if the reader can see which of the
+  # three arguments it came from. Imprecision carries the note because that is
+  # where the number does the most work (it powers the OIS) and where the
+  # neighbouring provenance already lives; from there it reaches summary(),
+  # evidence_profile(), grade_report() and the bundle like any domain note.
+  if (!is.null(control_risk$note)) {
+    d_impre <- .append_domain_note(d_impre, control_risk$note)
   }
 
   d_pubias <- assess_pubias(
@@ -824,6 +898,10 @@ grade_meta <- function(meta_obj,
   final_score     <- max(1L, start_score + total_downgrade)
   certainty       <- score_to_certainty(final_score)
 
+  # Resolved once: "metaprop" fits a GLMM, and the object records this number
+  # in two places.
+  baseline_risk_used <- .resolve_baseline_risk(baseline_risk, meta_obj, ois_p0)
+
   # --- output object ---
   structure(
     list(
@@ -834,7 +912,23 @@ grade_meta <- function(meta_obj,
       study_design       = study_design,
       outcome_name       = if (is.null(outcome_name)) "Outcome" else outcome_name,
       outcome_type       = outcome_type,
-      baseline_risk      = .resolve_baseline_risk(baseline_risk, meta_obj, ois_p0),
+      baseline_risk      = baseline_risk_used,
+      # Provenance for the one number the three arguments share: which argument
+      # supplied it, which ones inherited it, and the value each of the three
+      # uses ended up with once its own pooled default had run. `used` is what
+      # makes the bundled analysis.R reproduce this rating instead of
+      # re-deriving a baseline of its own.
+      control_risk       = list(
+        value     = control_risk$value,
+        donor     = control_risk$donor,
+        inherited = control_risk$inherited,
+        note      = control_risk$note,
+        used      = list(
+          threshold_baseline = threshold_p0,
+          ois_p0             = ois_p0_used,
+          baseline_risk      = baseline_risk_used
+        )
+      ),
       threshold_type     = threshold_type,
       rating_target      = target_info$target,
       rating_target_note = target_info$note,

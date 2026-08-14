@@ -527,6 +527,54 @@
 
 ## Behaviour changes
 
+* **The control-arm risk is supplied once, and `threshold_baseline`, `ois_p0`
+  and `baseline_risk` now inherit it from one another.** All three name the
+  same quantity — the control-arm event rate — and they feed three different
+  calculations: converting an absolute (ARD) threshold to the analysis scale,
+  powering the Optimal Information Size, and printing the Summary of Findings
+  absolute-risk columns. Callers had to pass the same number to two or three of
+  them, and the README's own worked example did exactly that. Now an argument
+  left `NULL` takes the first value supplied to any of the others, in the order
+  `threshold_baseline`, `ois_p0`, `baseline_risk`; an argument still `NULL`
+  after that falls back to the pooled control event rate, as before. **A value
+  you passed explicitly is never displaced by an inherited one**, because the
+  three can legitimately differ — a Summary of Findings table drawn against a
+  named risk group while the OIS is powered from the trials' own control arms.
+
+  **Which calls now compute something different.** Nothing errors, and no call
+  that already passed the same number to every argument it used changes at all.
+  What changes is a call that supplied *one* of the three and let the others
+  default:
+
+  | you passed | what used to happen | what happens now |
+  |---|---|---|
+  | `baseline_risk` only, with `threshold_scale = "ard"` | the threshold was converted at the pooled control rate, and the OIS powered from it | both use your `baseline_risk` |
+  | `threshold_baseline` only | the SoF printed the pooled control rate | the SoF prints your `threshold_baseline` |
+  | `ois_p0` only, with `threshold_scale = "ard"` | the threshold was converted at the pooled control rate | it is converted at your `ois_p0` (the SoF already inherited `ois_p0`, and is unchanged) |
+
+  The old numbers are recoverable by passing the pooled value explicitly to
+  whichever argument should keep it. Two things are deliberately **not**
+  inherited: a value of exactly `0` or `1` (`baseline_risk` accepts the closed
+  interval and the other two do not, so donating one would turn a working call
+  into an abort elsewhere), and a character `baseline_risk` (`"simple"` /
+  `"metaprop"`), which names a computation rather than a value.
+
+  **A silent fallback would be worse than asking twice, so it is not silent.**
+  The new `$control_risk` field records the donor, the arguments that inherited
+  and the number each of the three uses ended up with, and the same sentence is
+  appended to the Imprecision domain notes — reaching `summary()`, the Evidence
+  Profile, `grade_report()` and the exported bundle. `export_bundle()` now pins
+  all three into the bundled `analysis.R`, `ois_p0` included, so a re-run
+  reproduces the rating instead of inheriting a baseline the original never
+  used. Nothing is appended and nothing is pinned differently when all three
+  were supplied.
+
+  The Shiny app already routed one control-group risk into both the threshold
+  conversion and the OIS, so its output is unchanged. Collapsing the three
+  arguments into one `baseline_risk` remains the eventual destination and is
+  deliberately not in this release, which already carries a breaking rename;
+  see `SPEC.md` §4.5.4.
+
 * **A forest plot's title moves out of the column-header row onto its own line
   above it.** `plot_forest(title =)` used to reach `meta::forest()` as `smlab`,
   which `{meta}` draws inside the header row, centred over the forest column. A

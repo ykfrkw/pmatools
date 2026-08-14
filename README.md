@@ -96,6 +96,8 @@ g <- grade_meta(ma,
 
 # 4b. Alternative (v0.4): specify the Threshold on the absolute scale.
 #     50 per 1,000 ARD, converted to the OR scale at a 25% baseline risk.
+#     The control-arm risk is given once and reaches all three places that
+#     need it (see "One control-arm risk, three arguments" below).
 g_abs <- grade_meta(ma,
                     study_design       = "RCT",
                     rob                = data$rob[data$treat == "CBT-I"],
@@ -103,7 +105,6 @@ g_abs <- grade_meta(ma,
                     threshold          = 0.05,   # absolute risk difference
                     threshold_scale    = "ard",
                     threshold_baseline = 0.25,   # control-arm risk (default: pooled)
-                    ois_p0             = 0.25,
                     outcome_name       = "Depression response")
 
 print(g)
@@ -1803,13 +1804,79 @@ For binary outcomes the SoF table shows:
 | `0.25` (numeric 0–1) | Used directly |
 | `"simple"` | Pooled control-arm proportion: Σ events_c / Σ n_c |
 | `"metaprop"` | GLMM-pooled via `meta::metaprop()` (logit back-transform); falls back to `"simple"` if convergence fails |
-| `NULL` (default) | Uses `ois_p0` if supplied; otherwise auto-computes via `"simple"` for `metabin` objects |
+| `NULL` (default) | Inherits `threshold_baseline` or `ois_p0` if either was supplied; otherwise auto-computes via `"simple"` for `metabin` objects |
 
 ```r
 grade_meta(m, baseline_risk = 0.25, ...)          # explicit
 grade_meta(m, baseline_risk = "simple", ...)       # simple pooled
 grade_meta(m, baseline_risk = "metaprop", ...)     # GLMM meta-analysis
 ```
+
+### One control-arm risk, three arguments (v0.5.1)
+
+`grade_meta()` has three arguments that all name the control-arm event rate,
+because three different calculations need it:
+
+| Argument | What it does with the number |
+|---|---|
+| `threshold_baseline` | converts an absolute (ARD) threshold to the analysis scale |
+| `ois_p0` | the control rate the Optimal Information Size is powered from |
+| `baseline_risk` | the control rate the Summary of Findings table prints |
+
+**Give it once, to whichever you think of first.** The other two inherit it:
+
+```r
+# All three of these pass 0.25 to all three uses.
+grade_meta(m, threshold = 0.05, threshold_scale = "ard",
+           threshold_baseline = 0.25, ...)
+grade_meta(m, threshold = 0.05, threshold_scale = "ard", ois_p0 = 0.25, ...)
+grade_meta(m, threshold = 0.05, threshold_scale = "ard", baseline_risk = 0.25, ...)
+```
+
+The rules, in order:
+
+1. **An argument you supplied keeps its own value.** Always — an explicit value
+   is never displaced by an inherited one.
+2. An argument left `NULL` takes the first value supplied to any of the others,
+   in the order `threshold_baseline`, `ois_p0`, `baseline_risk`.
+3. An argument still `NULL` falls back to the pooled control event rate of the
+   analysis being rated, exactly as before.
+
+Rule 1 exists because the three can legitimately differ. A Summary of Findings
+table is often drawn against a named risk group — a high-risk stratum, a
+registry rate for the population a guideline addresses — while the OIS is
+powered from the trials' own control arms:
+
+```r
+# One shared value for the threshold conversion and the OIS; a different,
+# explicit one for the table.
+grade_meta(m, threshold = 0.05, threshold_scale = "ard",
+           threshold_baseline = 0.25,   # trials' control arms
+           baseline_risk      = 0.40,   # the high-risk group the table is for
+           ...)
+```
+
+Only a number in `(0, 1)` is inherited, and a *character* `baseline_risk`
+(`"simple"` / `"metaprop"`) names a computation rather than a value, so it does
+not donate — each use computes its own pooled default instead.
+
+**Whichever one won says so.** `g$control_risk` records `donor`, `inherited`
+and the number each of the three uses ended up with, and the same sentence is
+appended to the Imprecision domain notes, so it reaches `summary()`, the
+Evidence Profile and the exported bundle:
+
+```r
+g <- grade_meta(m, threshold = 0.05, threshold_scale = "ard", ois_p0 = 0.25, ...)
+g$control_risk$note
+#> Control-group risk 0.2500 supplied as `ois_p0`; `threshold_baseline` (the
+#> absolute-threshold conversion) and `baseline_risk` (the Summary of Findings
+#> baseline) inherited it (one value reaches all three; a value passed
+#> explicitly is never displaced).
+```
+
+Collapsing the three onto a single `baseline_risk` is the eventual
+destination, but it is a breaking rename of three public arguments and v0.5.1
+already carries one breaking rename; see `SPEC.md` §4.5.4.
 
 ### Experimental rate formula
 
@@ -2009,7 +2076,8 @@ grade_meta(
                                    #   "auto" reads the scale off meta_obj$sm:
                                    #   ratio for OR/RR/HR/RoM, raw units for MD,
                                    #   standardized units for SMD
-  threshold_baseline = NULL,       # baseline risk when threshold_scale = "ard"
+  threshold_baseline = NULL,       # baseline risk when threshold_scale = "ard";
+                                   #   shared with ois_p0 / baseline_risk (v0.5.1)
   require_threshold = TRUE,        # FALSE restores the pre-0.5 MID-free behaviour
   rating_target     = NULL,        # manual override; needs rating_target_rationale
   rating_target_rationale = NULL,
@@ -2046,14 +2114,15 @@ grade_meta(
   ois_n         = NULL,            # continuous: target N (direct)
   ois_alpha     = 0.05,            # type I error
   ois_beta      = 0.20,            # type II error (1 − power)
-  ois_p0        = NULL,            # control event rate (binary)
+  ois_p0        = NULL,            # control event rate (binary); shared (v0.5.1)
   ois_p1        = NULL,            # experimental event rate (binary); wins over ois_rrr
   ois_rrr       = 0.20,            # binary: modest RRR the OIS is powered for (Core GRADE 2)
   ois_delta     = NULL,            # Threshold (continuous)
   ois_sd        = NULL,            # pooled SD (continuous)
 
   ## Event rate columns
-  baseline_risk = NULL,            # numeric | "simple" | "metaprop" | NULL
+  baseline_risk = NULL,            # numeric | "simple" | "metaprop" | NULL;
+                                   #   shared (v0.5.1)
 
   ## Publication Bias
   pubias_small_industry   = NULL,  # "yes" | "no"
@@ -2079,6 +2148,7 @@ grade_meta(
 | `$outcome_name` | outcome label |
 | `$outcome_type` | "relative" or "absolute" |
 | `$baseline_risk` | resolved baseline risk (numeric or NULL) |
+| `$control_risk` | how the one control-arm risk was shared: `donor`, `inherited`, `note`, and `used` per argument (v0.5.1) |
 | `$meta` | the analysis every domain was assessed on — the **refitted** one after a low-RoB refit |
 | `$meta_full` | the all-studies analysis (v0.5) |
 | `$rob_analysis_set` | `"all"` or `"low_only"` (v0.5) |

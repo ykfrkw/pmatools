@@ -274,6 +274,110 @@ validate_grade_level <- function(x, arg = "argument", check_ambiguous = TRUE) {
   NULL
 }
 
+# The three grade_meta() arguments that all name the control-arm event rate,
+# in the order a value inherits from them (see .resolve_control_risk()).
+CONTROL_RISK_ARGS <- c("threshold_baseline", "ois_p0", "baseline_risk")
+
+# Human labels for the resolution note, so it reads as prose rather than as
+# three argument names in a row.
+CONTROL_RISK_USES <- c(
+  threshold_baseline = "the absolute-threshold conversion",
+  ois_p0             = "the optimal information size",
+  baseline_risk      = "the Summary of Findings baseline"
+)
+
+#' Share one control-arm risk across the three arguments that name it
+#'
+#' \code{threshold_baseline}, \code{ois_p0} and \code{baseline_risk} are three
+#' names for the control-arm event rate, used by three different calculations.
+#' A caller who has one number for all three had to pass it three times. This
+#' resolves the value once: an argument that was supplied keeps its own value,
+#' and one that was left \code{NULL} inherits the first value supplied to any
+#' of the others, in the order given by \code{CONTROL_RISK_ARGS}.
+#'
+#' The order is not arbitrary. \code{threshold_baseline} is the risk of the
+#' population the decision threshold is about, and the Shiny app makes the
+#' reviewer confirm or justify it in writing; \code{ois_p0} is Core GRADE 2's
+#' "control group event rate (chosen from the context)"; \code{baseline_risk}
+#' is presentational, and is the one that can legitimately describe a different
+#' population from the other two (a Summary of Findings table routinely prints
+#' several baseline risks for one effect estimate). So the most deliberate
+#' value donates first and the most presentational donates last -- and none of
+#' them ever displaces a value the caller supplied.
+#'
+#' Nothing is invented here: an argument that is still \code{NULL} afterwards
+#' reaches its own calculation as \code{NULL} and takes that calculation's own
+#' pooled-control-rate default, which is computed on the analysis actually
+#' being rated (the low-RoB refit, when one happened).
+#'
+#' Why not one argument: consolidating the three onto \code{baseline_risk} is
+#' the eventual destination, and it is a breaking rename of three public
+#' arguments. v0.5.1 already carries a breaking rename of the domain judgment
+#' vocabulary, and stacking a second migration on one release costs users two
+#' passes over their scripts for one release's benefit. See SPEC.md §4.5.4.
+#'
+#' @param threshold_baseline,ois_p0,baseline_risk The three arguments as
+#'   \code{grade_meta()} received them.
+#' @return A list with the three resolved arguments under their own names,
+#'   plus \code{donor} (the argument the shared value came from, or
+#'   \code{NULL}), \code{value} (the shared value, or \code{NULL}),
+#'   \code{inherited} (the arguments that took it) and \code{note} (one
+#'   sentence naming both, or \code{NULL}).
+#' @keywords internal
+#' @noRd
+.resolve_control_risk <- function(threshold_baseline = NULL, ois_p0 = NULL,
+                                  baseline_risk = NULL) {
+  supplied <- list(threshold_baseline = threshold_baseline,
+                   ois_p0             = ois_p0,
+                   baseline_risk      = baseline_risk)
+  out <- c(supplied, list(donor = NULL, value = NULL,
+                          inherited = character(0), note = NULL))
+
+  # A donor has to be a number that every one of the three uses would accept.
+  # threshold_baseline rejects 0 and 1 outright, so an exact 0 or 1 supplied to
+  # baseline_risk (which does allow the closed interval) stays where it was put
+  # rather than turning a working call into an error somewhere else. A
+  # character baseline_risk ("simple" / "metaprop") names a computation over
+  # the analysis, not a value, and each use already performs that computation
+  # on the analysis it is judging -- so it does not donate either.
+  .is_donor <- function(x) {
+    is.numeric(x) && length(x) == 1L && is.finite(x) && x > 0 && x < 1
+  }
+  .is_unset <- function(x) {
+    is.null(x) || length(x) == 0L || (is.numeric(x) && is.na(x))
+  }
+
+  donors <- CONTROL_RISK_ARGS[vapply(supplied[CONTROL_RISK_ARGS], .is_donor,
+                                     logical(1))]
+  if (length(donors) == 0L) return(out)
+
+  donor <- donors[1]
+  value <- supplied[[donor]]
+  takers <- CONTROL_RISK_ARGS[vapply(supplied[CONTROL_RISK_ARGS], .is_unset,
+                                     logical(1))]
+  if (length(takers) == 0L) {
+    # All three were supplied. Still worth recording which value each use got,
+    # because they may legitimately differ and the record is what says so.
+    out$donor <- donor
+    out$value <- value
+    return(out)
+  }
+
+  for (nm in takers) out[[nm]] <- value
+  out$donor     <- donor
+  out$value     <- value
+  out$inherited <- takers
+  out$note      <- sprintf(
+    paste0("Control-group risk %.4f supplied as `%s`; %s inherited it ",
+           "(one value reaches all three; a value passed explicitly is never ",
+           "displaced)."),
+    value, donor,
+    paste(sprintf("`%s` (%s)", takers, CONTROL_RISK_USES[takers]),
+          collapse = " and ")
+  )
+  out
+}
+
 #' Compute control-arm event rate from a metabin object
 #' @param meta_obj A meta object (from metabin).
 #' @param method One of "simple" or "metaprop".

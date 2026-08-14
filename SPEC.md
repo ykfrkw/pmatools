@@ -481,6 +481,7 @@ grade_meta(
 | `$rating_target` | `"important_effect"` / `"little_to_no_difference"` / `"non_null_effect"` |
 | `$rating_target_note`, `$rating_target_auto` | derivation note and whether it was derived rather than supplied |
 | `$indirectness_subdomains` | the normalised PICO table, or NULL |
+| `$control_risk` (v0.5.1) | how the one control-arm risk was shared across `threshold_baseline` / `ois_p0` / `baseline_risk`: `value`, `donor`, `inherited`, `note`, and `used` (the number each of the three ended up with). See §4.5.4 |
 
 Downstream consumers MUST read pooled numbers from `$meta`, not `$meta_full`, so a refit propagates.
 
@@ -518,6 +519,34 @@ Supplying `rating_target` manually overrides the derivation and requires `rating
 | `"no"` | 2 |
 
 Aliases such as `"Probably No"` are normalised. The domain judgment defaults to the **worst case across subdomains**; a scalar `indirectness` still overrides it, and then requires `indirectness_rationale`. The normalised table is returned as `$indirectness_subdomains`; `domain_assessments` keeps its one-row-per-domain schema. `indirectness_table()` (§4.13) renders the table. The worst-case fold is symmetric across the four elements and therefore does not reproduce Core GRADE 5 Table 2's asymmetric likelihood gradient (Population lowest, Outcome highest); the rendered footer says so.
+
+#### 4.5.4 One control-arm risk, three arguments [v0.5.1]
+
+`threshold_baseline`, `ois_p0` and `baseline_risk` are three names for the same quantity — the control-arm event rate — consumed by three different calculations:
+
+| Argument | What it does with the number | §|
+|---|---|---|
+| `threshold_baseline` | converts an absolute (ARD) threshold to the analysis scale | §4.5 |
+| `ois_p0` | the control rate the Optimal Information Size is powered from | §5.5 |
+| `baseline_risk` | the control rate the Summary of Findings table prints | §4.6 |
+
+**The number is supplied once.** `grade_meta()` resolves the three before any domain runs, in this order:
+
+1. **An argument that was supplied keeps its own value.** Always. An explicitly passed value is never displaced by an inherited one.
+2. **An argument left `NULL` takes the first value supplied to any of the others**, in the order `threshold_baseline`, `ois_p0`, `baseline_risk`.
+3. **An argument still `NULL` falls back to the pooled control event rate** of the analysis being rated — its own pre-existing default, computed on the low-RoB refit when one happened.
+
+The donation order is not arbitrary. `threshold_baseline` is the risk of the population the decision threshold is about, and the app makes the reviewer confirm it or justify a replacement in writing (`shiny/SPEC.md`, "Control-group risk is a whole number of events"); `ois_p0` is Core GRADE 2's "control group event rate (chosen from the context)"; `baseline_risk` is presentational. So the most deliberate value donates first and the most presentational last.
+
+**The three can legitimately differ, and rule 1 is what protects that.** A Summary of Findings table is routinely drawn against a named risk group — a high-risk stratum, a registry rate for the population the guideline addresses — while the OIS is powered from the trials' own control arms, and an ARD threshold is converted at whichever rate makes the threshold interpretable. Rule 1 means any of the three can be pinned to its own number while the rest share one.
+
+**Only a number in (0, 1) is inherited.** `baseline_risk` accepts the closed interval `[0, 1]`; `threshold_baseline` rejects `0` and `1` outright. Donating an edge value would turn a working call into an abort somewhere else, so it stays where it was put. A **character** `baseline_risk` (`"simple"` / `"metaprop"`) names a computation rather than a value and does not donate at all: each use already performs that computation on the analysis *it* is judging.
+
+**Which one won is recorded, in two places.** `$control_risk` carries `value`, `donor`, `inherited`, `note` and `used` — the number each of the three uses ended up with, after its own pooled default has run, and `NULL` for a use that never needed one (a threshold that was not on the absolute scale, or a continuous outcome); and the sentence in `note` is appended to the **Imprecision** domain notes, so it reaches `summary()`, the Evidence Profile, `grade_report()` and the exported bundle without the reader having to see the call. Nothing is appended when nothing was inherited.
+
+**`export_bundle()` pins all three.** The bundled `analysis.R` emits `threshold_baseline`, `ois_p0` and `baseline_risk` as literals taken from `$control_risk$used`, so the re-run reproduces the rating instead of re-deriving a baseline of its own. Emitting only two of them would let the third inherit on the re-run — visible whenever `baseline_risk` was a pooling method or a named risk group.
+
+**Why three arguments and not one.** Consolidating onto a single `baseline_risk`, with the two calculations that need a *different* number taking an explicit override, remains the destination. It is a breaking rename of three public arguments, and v0.5.1 already carries the breaking rename of the domain judgment vocabulary (`NEWS.md`). Stacking a second migration on one release would cost callers two passes over their scripts for one release's benefit, and the complaint that prompted this — having to pass the same number twice — is a call-site complaint that the mutual fallback answers on its own. The consolidation is deferred, not abandoned; `.resolve_control_risk()` in `R/utils.R` is where it will land.
 
 **`threshold` and `threshold_scale` interaction (auto-detection table):**
 
@@ -687,7 +716,7 @@ AUTO Step 2 ({{threshold_label}}): zone counts (k = {{k}}): above_threshold = {{
 
 In `assess_imprecision()`, when no explicit `ois_*` is provided:
 
-- **Binary (v0.5.0): `ois_p1 = ois_p0 * (1 ∓ ois_rrr)`, default `ois_rrr = 0.20`.** The MID is *not* used. (v0.5.1: the sign follows the outcome direction and the observed effect — §5.5, "OIS inputs".) Core GRADE 2 (p6): "For binary outcomes, these involve specifying the acceptable error rates: α (typically 0.05) and β (typically 0.20), the control group event rate (chosen from the context), and **a modest relative risk reduction, typically 20% or 25%**." `ois_p0` still comes from the ARD baseline risk when `threshold_scale = "ard"`, otherwise from the pooled control-arm rate.
+- **Binary (v0.5.0): `ois_p1 = ois_p0 * (1 ∓ ois_rrr)`, default `ois_rrr = 0.20`.** The MID is *not* used. (v0.5.1: the sign follows the outcome direction and the observed effect — §5.5, "OIS inputs".) Core GRADE 2 (p6): "For binary outcomes, these involve specifying the acceptable error rates: α (typically 0.05) and β (typically 0.20), the control group event rate (chosen from the context), and **a modest relative risk reduction, typically 20% or 25%**." `ois_p0` is resolved before any domain runs: an explicit value, else whatever `threshold_baseline` or `baseline_risk` supplied, else the pooled control-arm rate (§4.5.4).
 - Continuous (MD): `ois_delta = threshold_internal` (raw outcome units) — the same paragraph writes the continuous case out separately and *does* send it to the MID ("by specifying the smallest difference between intervention and control that one would want to avoid missing (ie, the MID)").
 - Continuous (SMD): `ois_delta = threshold_internal` as well — the SMD threshold is *already* in standardized units, so it goes into the formula unchanged and the SD that accompanies it is 1 (below). Multiplying delta by the pooled SD and taking `ois_sd = 1` would give the same `n`; the implemented formulation is delta-unchanged, sigma-one.
 - Continuous (v0.5.1): `ois_sd = compute_pooled_sd(meta_obj)` when the caller supplies none — **except for SMD, where `ois_sd = 1`** *(see §5.4 for pooled_SD computation)*. An explicitly supplied `ois_sd` always wins.
