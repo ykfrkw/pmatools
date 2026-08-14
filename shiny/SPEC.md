@@ -469,6 +469,17 @@ spinners and the per-arm column checkbox.
   Step 3 tabs, and a control that appears and disappears with the outcome type
   is harder to find than one that is inert.
 
+- **The blank-row spinners default to 1 above and 0 below.** Above = 1
+  reproduces the blank row `meta::forest()` draws on its own. Below = 0 is
+  tighter than `plot_forest()`'s own default, which is `NULL` = derive from the
+  drawn content (SPEC.md §4.3): `.auto_addrow_below()` reserves 2–4 rows for the
+  axis band, the Favors labels and the xlab, and that clearance is whitespace
+  most forests do not need. Clearing the field sends `NULL` and restores the
+  derived spacing, which is the fix when the heterogeneity text lands on the
+  x-axis — most likely with the per-arm columns hidden. `pma_addrow_below()`
+  does the coercion; `0` is a real answer to it and only a blank, a negative or
+  a non-number becomes `NULL`.
+
 - **Layout is `.pma-display-grid`**, four columns. A child that needs the whole
   row carries `.pma-span-4` (title, the blank-row hint, the checkbox); a child
   that is one of a **pair** carries `.pma-span-2` (x-min / x-max, and the two

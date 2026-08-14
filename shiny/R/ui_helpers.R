@@ -1905,23 +1905,27 @@ pma_forest_display_panel <- function(prefix = NULL) {
       #    (pma_addrow_above() has always treated blank as 1). Rendered with 0
       #    the pooled "Random effects model" row butts straight up against the
       #    last study row.
-      #  * below is left blank = automatic, because plot_forest()'s
-      #    .auto_addrow_below() is what keeps the heterogeneity line clear of
-      #    the x-axis band and the Favors labels; typing 0 switches that
-      #    heuristic off.
+      #  * below = 0, which is tighter than what plot_forest() derives on its
+      #    own. Blank still means automatic and still reaches
+      #    .auto_addrow_below(), which reserves 2 to 4 rows for the axis band,
+      #    the Favors labels and the xlab; that heuristic buys clearance the
+      #    plot usually does not need, and it bought it by adding whitespace
+      #    to every forest. 0 gives the room back. If the heterogeneity text
+      #    ends up sitting on the x-axis - most likely with the per-arm
+      #    columns hidden - clearing this field restores the old behaviour.
       htmltools::p(class = "pma-card-subtitle pma-span-4",
         paste0("Blank rows around the pooled result. If the ",
                "heterogeneity text overlaps the x-axis - most ",
                "likely once the per-arm columns are hidden - use ",
                "these to move it up or down. Above: 0 removes the ",
-               "blank row before the pooled result. Below: blank ",
-               "= automatic.")),
+               "blank row before the pooled result. Below: clear ",
+               "the field for automatic spacing.")),
       htmltools::div(class = "pma-span-2",
         shiny::numericInput(addrows[["above"]], "Blank rows above pooled result",
                             value = 1, min = 0, step = 1, width = "100%")),
       htmltools::div(class = "pma-span-2",
         shiny::numericInput(addrows[["below"]], "Blank rows below pooled result",
-                            value = NA, min = 0, step = 1, width = "100%")),
+                            value = 0, min = 0, step = 1, width = "100%")),
 
       # Decimal places in the per-arm Mean and SD columns. Both default to 1
       # here and in plot_forest(), rather than to {meta}'s own 2 and 4: an SD
