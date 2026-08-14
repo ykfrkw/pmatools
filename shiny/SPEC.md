@@ -962,8 +962,8 @@ exactly one node. The node is **derived**, never stored as a cursor, by
 !answered(pubias_small_industry)                    -> "q1"
 pubias_small_industry == "yes"                      -> "result"   (terminal)
 !answered(pubias_registry_complete)                 -> "extra"
-pubias_registry_complete %in% c("yes", "no")        -> "result"   (terminal both ways)
-# only the explicit "defer" falls through
+pubias_registry_complete == "yes"                   -> "result"   (terminal)
+# "no" falls through to the Figure 5 nodes
 k >= 10 : !answered(pubias_funnel_asymmetry) ? "q3" : "result"
 k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
 ```
@@ -978,16 +978,30 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
   nor the route the reviewer was walking. The **node keys** (`"q1"`, `"q3"`,
   `"q4"`) and the `"Q1:"`–`"Q4:"` prefixes inside the package's domain notes
   are unchanged: the first are internal, the second are the exported record.
-- **Two nodes carry an explicit deferral VALUE** rather than a blank:
-  `pubias_registry_complete = "defer"` ("leave it to the Figure 5 nodes") and
+- **The overall reporting-bias question has two answers, and only one of them
+  decides anything (0.5.1, breaking).** `pubias_registry_complete = "yes"`
+  ("reporting bias is unlikely; do not rate down") is the pmatools
+  short-circuit and is forwarded to `grade_meta()`. `"no"` ("reporting bias is
+  plausible; go on to the Figure 5 nodes") is sent as `NULL` and decides
+  nothing on its own. Two things went with that:
+  - the app-level post-override that rewrote a `"no"` into a forced rate-down 1
+    **regardless of the remaining nodes** is deleted. Core GRADE 4 Fig 5 has no
+    such rule and the app was the only thing that had one: a reviewer who
+    thought reporting bias plausible and then answered the funnel question
+    found the funnel answer had counted for nothing. A reviewer who wants the
+    rating regardless still has `pubias_override`, which demands a written
+    rationale;
+  - the third `"defer"` option ("leave it to the Figure 5 nodes") is deleted
+    with it, because `"no"` now means exactly that. `STEP3_PUBIAS_DEFER` is
+    gone from `R/step3_threshold.R` rather than left unused.
+- **The Q3 select still carries an explicit VALUE for "no opinion":**
   `pubias_funnel_asymmetry = "egger"` ("accept the automated Egger test").
-  Without them, "the reviewer looked and has no opinion" is indistinguishable
+  Without it, "the reviewer looked and accepts the test" is indistinguishable
   from "the reviewer has not reached this yet" and the wizard can never advance
-  past an optional node. Neither value reaches `grade_meta()`: both are mapped
-  to `NULL`, which is what "let the algorithm decide" means to
-  `assess_pubias()`. In particular `"egger"` must not be routed through
-  `.override_or_ignore()`, which would demand a rationale for declining to
-  override.
+  past an optional node. It does not reach `grade_meta()`: it is mapped to
+  `NULL`, which is what "let the algorithm decide" means to `assess_pubias()`.
+  In particular it must not be routed through `.override_or_ignore()`, which
+  would demand a rationale for declining to override.
 - **Advancing happens on answer.** One `observeEvent` per input clears
   `pubias_reopen`; the derivation moves on by itself. No `updateTabsetPanel`,
   no manual Next.
@@ -1012,12 +1026,16 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
     exists only once `grade_meta()` has rated the domain, which is exactly when
     a progress indicator has stopped being useful. It translates the wizard's
     node keys (`q1` / `extra` / `q3` / `q4`) into the figure's ids, which are
-    a different vocabulary — `extra` is the dashed registry node, and the k
+    a different vocabulary — `extra` is the pmatools registry node, and the k
     gate is the figure's `q2`, which the wizard never asks.
-  - Two answers stop the trail at a node rather than a leaf, because no leaf is
-    decided yet: `"egger"` hands Q3 to a p value the function does not have,
-    and `"no"` on the registry node is the app's own rate-down-1 rule, for
-    which the figure draws no leaf.
+  - One answer stops the trail at a node rather than a leaf, because no leaf is
+    decided yet: `"egger"` hands Q3 to a p value the function does not have.
+  - **`"no"` on the registry node lights the k gate and the edge out of it.**
+    That node is the one the reviewer is never asked about, so lighting the
+    node alone would show the chart stopping at an unanswered question; the
+    edge is what says which branch the study count chose for them. Up to 0.5.0
+    a `"no"` stopped the trail at `pma-pubias-edge-registry-no`, because it
+    ended the wizard.
   - `.domain_evaluation("Publication bias", flowchart = FALSE)` suppresses the
     usual under-the-verdict copy, so the tab draws the figure once.
   - The k gate is printed under the chart by `step3_pubias_k_line()`: the chart
@@ -1039,6 +1057,22 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
   - `output$pubias_show_result` remains, gating `output$pubias_evaluation`
     alone: the verdict is the wizard's conclusion, and printing it before the
     wizard has run reports a rating of nothing.
+  - **`output$pubias_trimfill_summary` states the 20% exaggeration check
+    (0.5.1).** The panel used to print the original and adjusted pooled effects
+    and leave the reviewer to compare them by eye. It now also prints the
+    sentence `.pubias_trimfill_line()` builds from
+    `.pubias_trimfill_inflation()` (`R/pubias_trimfill.R`, SPEC.md §5.5a): the
+    same "is the favourable direction exaggerated by more than a fifth?"
+    question the Risk of bias tab asks of the low-RoB subset, asked here of the
+    trim-and-fill adjustment, sharing `PMA_ROB_INFLATION_THRESHOLD`. **It rates
+    nothing** — Core GRADE 4 Fig 5 has no trim-and-fill node — and is material
+    for the funnel-asymmetry question above it; the sentence says so, and the
+    left border is amber only when the check fires. The arithmetic and the
+    wording are the package's so a test can hold them to that; the app supplies
+    `state$small_values` (normalised to `NULL` when it is not one of the two
+    known values, because an aborting `renderUI` would replace the panel with a
+    stack trace) and its own `fmt()` as `format_te`. The `k >= 10` gate on the
+    whole panel is unchanged.
 
 **Inconsistency asks one question, not three.** `ci_diff` and `threshold_side`
 are gone: `.auto_inconsistency()` derives Core GRADE 3's Steps 1 and 2, and the

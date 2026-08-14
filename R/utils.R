@@ -385,6 +385,47 @@ make_domain_row <- function(domain, judgment, auto, notes = NA_character_,
   row
 }
 
+# The inverse of the composition above: recover the override clause from a
+# domain's `notes`, or NULL when the domain was not overridden.
+#
+# Why parse instead of reading `auto`: `auto = FALSE` does not mean "the
+# reviewer overrode the rating". It also means "the reviewer supplied an input
+# the algorithm cannot compute" -- assess_pubias() records auto = FALSE for an
+# answered pubias_small_industry or pubias_unpublished, where the flowchart
+# still decided the judgment and the facts still explain it. Only the
+# "Manual override (...)" head marks a rating the reviewer SET, and only those
+# need the notes to reach a footnote. `auto` is still checked, as a guard
+# against a domain note that merely quotes the phrase.
+#
+# The rationale runs to the first " | ": make_domain_row() and the Shiny app's
+# app-level overrides both join the override clause to the automatic note with
+# that separator, and the automatic note is the flowchart prose, which is far
+# too long for a table footer and whose numbers the facts already carry.
+.parse_override_note <- function(notes, auto = FALSE) {
+  if (isTRUE(auto)) return(NULL)
+  if (is.null(notes) || length(notes) != 1L || is.na(notes) ||
+      !nzchar(notes)) {
+    return(NULL)
+  }
+  m <- regmatches(notes,
+                  regexec("^Manual override \\(([^)]*)\\): (.*)$", notes))[[1]]
+  if (length(m) < 3L) return(NULL)
+  rationale <- trimws(strsplit(m[3], " | ", fixed = TRUE)[[1]][1])
+  if (is.na(rationale) || !nzchar(rationale)) return(NULL)
+  list(judgment = m[2], rationale = rationale)
+}
+
+# The same, keyed by domain on a pmatools object's domain_assessments.
+.domain_override_note <- function(x, domain) {
+  d <- x$domain_assessments
+  if (!is.data.frame(d) || !all(c("domain", "notes", "auto") %in% names(d))) {
+    return(NULL)
+  }
+  row <- d[d$domain == domain, , drop = FALSE]
+  if (nrow(row) == 0L) return(NULL)
+  .parse_override_note(row$notes[1], auto = row$auto[1])
+}
+
 # --------------------------------------------------------------------------
 # Structured facts behind a domain judgment
 #

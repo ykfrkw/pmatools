@@ -5,7 +5,6 @@
     .pma-fc-node rect, .pma-fc-leaf rect {
       fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2;
     }
-    .pma-fc-pmatools rect { stroke-dasharray: 5 3; }
     .pma-fc-edge path { stroke: #cbd5e1; stroke-width: 1.5; fill: none; }
     .pma-fc-node text, .pma-fc-leaf text, .pma-fc-edge text {
       fill: #475569; font-size: 13px; font-weight: 400;

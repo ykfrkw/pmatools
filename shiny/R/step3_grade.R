@@ -2163,15 +2163,13 @@ step3_server <- function(input, output, session, state) {
                                     "Imprecision")
 
     # --- Publication bias ---
-    # The wizard needs each node to distinguish "not reached yet" from "the
-    # reviewer looked and has no opinion", so the two optional widgets carry
-    # an explicit deferral VALUE rather than the empty string. Neither value
-    # reaches grade_meta(): both mean "let the algorithm decide", which is
-    # what NULL means to assess_pubias().
+    # The Q3 select needs to distinguish "not reached yet" from "the reviewer
+    # looked and accepts the test", so it carries an explicit VALUE rather
+    # than the empty string. That value does not reach grade_meta(): it means
+    # "let the algorithm decide", which is what NULL means to assess_pubias().
     pubias_si <- if (nzchar(input$pubias_small_industry %||% "")) input$pubias_small_industry else NULL
     pubias_un <- if (nzchar(input$pubias_unpublished %||% "")) input$pubias_unpublished else NULL
     pubias_rc <- if (nzchar(input$pubias_registry_complete %||% "")) input$pubias_registry_complete else NULL
-    if (identical(pubias_rc, STEP3_PUBIAS_DEFER)) pubias_rc <- NULL
     # Visual override of Egger's test: v0.4.0 requires pubias_rationale
     # whenever pubias_funnel_asymmetry is supplied. "egger" is the explicit
     # "accept the automated test" answer and is NOT an override, so it must
@@ -2263,9 +2261,11 @@ step3_server <- function(input, output, session, state) {
       pubias_funnel_asymmetry  = pubias_fa,
       pubias_rationale         = pubias_rationale,
       pubias_unpublished       = pubias_un,
-      # Q1: only "yes" (denied) is forwarded to the package short-circuit;
-      # "no" (suspected) is handled by a post-override below so it forces
-      # rate-down regardless of Q2-Q5.
+      # Only "yes" is forwarded, because only "yes" decides anything: it is
+      # the pmatools short-circuit assess_pubias() reads. "no" means "carry on
+      # down Fig 5", which is what NULL already means to the package, and it
+      # is sent as NULL rather than "no" so the domain note does not report an
+      # answered registry question the flowchart then ignored.
       pubias_registry_complete = if (identical(pubias_rc, "yes")) "yes" else NULL,
       outcome_name = state$outcome_name %||% "Outcome"
     )
@@ -2352,21 +2352,16 @@ step3_server <- function(input, output, session, state) {
     }
 
     if (!is.null(g)) {
-      # Q1 = "no" (reporting bias suspected) forces rate-down 1 regardless
-      # of Q2-Q5. Run BEFORE pubias_ov so the manual override below can still
-      # win if the user explicitly sets it.
-      if (identical(pubias_rc, "no")) {
-        idx <- which(g$domain_assessments$domain == "Publication bias")
-        if (length(idx)) {
-          g$domain_assessments$judgment[idx]  <- "serious"
-          g$domain_assessments$auto[idx]      <- FALSE
-          g$domain_assessments$downgrade[idx] <- -1L
-          g$domain_assessments$notes[idx] <- paste0(
-            "Q1: reporting bias suspected based on the overall judgment ",
-            "of the listed conditions; rate down 1 (serious) regardless ",
-            "of Q2-Q5. | ", g$domain_assessments$notes[idx])
-        }
-      }
+      # "Reporting bias is plausible" used to be rewritten here into a forced
+      # rate-down 1, overriding whatever the Fig 5 nodes had just decided.
+      # Deleted in 0.5.1: Core GRADE 4 Fig 5 has no such rule, and the app was
+      # the only thing that had one - a reviewer who thought reporting bias
+      # plausible AND then answered the funnel question found the funnel
+      # answer had counted for nothing. Suspecting reporting bias is now a
+      # reason to go on and look, which is what the remaining nodes are for.
+      # A reviewer who wants the rating regardless still has the scalar
+      # override below, which asks for a written rationale.
+      #
       # Final scalar publication-bias override (app-level; recorded in the
       # notes in the same "Manual override (<judgment>): <rationale>"
       # format the vendored make_domain_row() uses).
@@ -3148,12 +3143,17 @@ step3_server <- function(input, output, session, state) {
           paste0("It is unlikely when unpublished studies were found and ",
                  "agree, or prospective registration is the field standard ",
                  "with no discrepancies.")),
+        # Two answers, and only "Yes" decides anything. "No" used to force
+        # rate down 1 on its own, which is a rule Core GRADE 4 Fig 5 does not
+        # have; it now means what a third "leave it to the Figure 5 nodes"
+        # option used to mean, so that option is gone with the rule.
         shiny::radioButtons("pubias_registry_complete",
           "Overall, does the situation argue against reporting bias?",
           choices = c(
-            "No - reporting bias is plausible (rate down 1)"  = "no",
-            "Yes - reporting bias is unlikely (no rate down)" = "yes",
-            "Leave it to the Figure 5 nodes"                  = STEP3_PUBIAS_DEFER
+            "No - reporting bias is plausible; go on to the Figure 5 nodes"
+              = "no",
+            "Yes - reporting bias is unlikely; do not rate down"
+              = "yes"
           ),
           selected = character(0), inline = FALSE)
       ))
@@ -3380,6 +3380,30 @@ step3_server <- function(input, output, session, state) {
                   (sign(te_orig) != sign(te_adj)) &&
                   (abs(te_orig) > 1e-6) && (abs(te_adj) > 1e-6)
 
+    # The same 20% exaggeration question the Risk of bias tab asks of the low
+    # risk of bias subset, asked here of the trim-and-fill adjustment. It is
+    # material for the funnel-asymmetry question above and NOTHING else: Core
+    # GRADE 4 Fig 5 has no trim-and-fill node, so the arithmetic and the
+    # wording both live in the package (R/pubias_trimfill.R), where a test can
+    # hold them to that.
+    # Step 2 makes small_values required, so it is set by the time a fitted
+    # analysis exists; anything else is normalised to NULL rather than passed
+    # on, because the package function rejects a value it does not know and an
+    # aborting renderUI would replace this panel with a stack trace.
+    sv_direction <- if (identical(state$small_values, "desirable") ||
+                        identical(state$small_values, "undesirable")) {
+      state$small_values
+    } else {
+      NULL
+    }
+    inflation <- .pubias_trimfill_inflation(
+      te_original  = te_orig,
+      te_adjusted  = te_adj,
+      small_values = sv_direction)
+    inflation_line <- .pubias_trimfill_line(
+      inflation, te_original = te_orig, te_adjusted = te_adj,
+      format_te = fmt)
+
     htmltools::div(
       style = paste0(
         "padding: 0.6rem 0.85rem; background: #f9f9f9; ",
@@ -3394,7 +3418,12 @@ step3_server <- function(input, output, session, state) {
         sprintf("Original pooled TE.random  = %s", fmt(te_orig))),
       htmltools::p(style = "margin: 0;",
         sprintf("Adjusted pooled TE.random = %s%s", fmt(te_adj),
-                if (sign_flips) "  [direction flips]" else ""))
+                if (sign_flips) "  [direction flips]" else "")),
+      htmltools::p(
+        style = paste0(
+          "margin: 0.4rem 0 0; padding-left: 0.5rem; border-left: 3px solid ",
+          if (isTRUE(inflation$exaggerated)) "#c07020" else "#208050", ";"),
+        inflation_line)
     )
   })
 

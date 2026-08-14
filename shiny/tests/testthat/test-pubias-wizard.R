@@ -14,38 +14,44 @@ test_that("Q1 is the entry node and is terminal on 'yes'", {
   # Fig 5 node 1: sufficient on its own. Nothing after it can undo it, so the
   # wizard goes straight to the result even with later answers present.
   expect_identical(
-    step3_pubias_node(small_industry = "yes", registry_complete = "defer",
+    step3_pubias_node(small_industry = "yes", registry_complete = "no",
                       funnel_asymmetry = "egger", k = 14),
     "result")
 })
 
-test_that("the overall reporting-bias question is terminal both ways", {
+test_that("the overall reporting-bias question is terminal on 'yes' only", {
   expect_identical(step3_pubias_node(small_industry = "no"), "extra")
 
-  for (ans in c("yes", "no")) {
-    expect_identical(
-      step3_pubias_node(small_industry = "no", registry_complete = ans,
-                        k = 14),
-      "result")
-  }
+  expect_identical(
+    step3_pubias_node(small_industry = "no", registry_complete = "yes",
+                      k = 14),
+    "result")
 })
 
-test_that("only the explicit deferral falls through to the Figure 5 nodes", {
-  # This is why the widget carries a "defer" VALUE rather than a blank: a
-  # blank cannot be told apart from "the reviewer has not got here yet", and
-  # the wizard could then never move past the question.
+test_that("the registry question has no deferral value left to offer", {
+  # Two answers now, and the third is gone rather than hidden: "no" IS the
+  # deferral. A constant left behind would be an invitation to reinstate the
+  # option that made "no" mean something else.
+  expect_false(exists("STEP3_PUBIAS_DEFER"))
+  expect_true(exists("STEP3_PUBIAS_USE_EGGER"))
+})
+
+test_that("'no' on the registry question falls through to the Figure 5 nodes", {
+  # 0.5.1: "reporting bias is plausible" decides nothing on its own. It used
+  # to force rate down 1 and end the wizard, next to a third "leave it to the
+  # Figure 5 nodes" option that did what "no" does now.
   expect_identical(
     step3_pubias_node(small_industry = "no",
-                      registry_complete = STEP3_PUBIAS_DEFER, k = 14),
+                      registry_complete = "no", k = 14),
     "q3")
   expect_identical(
     step3_pubias_node(small_industry = "no",
-                      registry_complete = STEP3_PUBIAS_DEFER, k = 4),
+                      registry_complete = "no", k = 4),
     "q4")
 })
 
 test_that("k routes to Q3 or Q4 and Q2 is never a question", {
-  base <- list(small_industry = "no", registry_complete = STEP3_PUBIAS_DEFER)
+  base <- list(small_industry = "no", registry_complete = "no")
 
   expect_identical(do.call(step3_pubias_node, c(base, list(k = 10))), "q3")
   expect_identical(do.call(step3_pubias_node, c(base, list(k = 9))),  "q4")
@@ -66,30 +72,30 @@ test_that("k routes to Q3 or Q4 and Q2 is never a question", {
 test_that("answering the terminal node reaches the result", {
   expect_identical(
     step3_pubias_node(small_industry = "no",
-                      registry_complete = STEP3_PUBIAS_DEFER,
+                      registry_complete = "no",
                       funnel_asymmetry = STEP3_PUBIAS_USE_EGGER, k = 14),
     "result")
   expect_identical(
     step3_pubias_node(small_industry = "no",
-                      registry_complete = STEP3_PUBIAS_DEFER,
+                      registry_complete = "no",
                       funnel_asymmetry = "yes", k = 14),
     "result")
   expect_identical(
     step3_pubias_node(small_industry = "no",
-                      registry_complete = STEP3_PUBIAS_DEFER,
+                      registry_complete = "no",
                       unpublished = "no", k = 4),
     "result")
   # An answer on the branch that was NOT taken must not advance the wizard.
   expect_identical(
     step3_pubias_node(small_industry = "no",
-                      registry_complete = STEP3_PUBIAS_DEFER,
+                      registry_complete = "no",
                       unpublished = "no", k = 14),
     "q3")
 })
 
 test_that("a breadcrumb re-open wins, but only for a reachable node", {
   answered <- list(small_industry = "no",
-                   registry_complete = STEP3_PUBIAS_DEFER,
+                   registry_complete = "no",
                    funnel_asymmetry = STEP3_PUBIAS_USE_EGGER, k = 14)
 
   expect_identical(do.call(step3_pubias_node,
@@ -105,7 +111,7 @@ test_that("a breadcrumb re-open wins, but only for a reachable node", {
   # Same guard after an answer changes the path: Q1 = "yes" is terminal, so a
   # stale re-open of Q3 is ignored rather than resurrecting it.
   expect_identical(
-    step3_pubias_node(small_industry = "yes", registry_complete = "defer",
+    step3_pubias_node(small_industry = "yes", registry_complete = "no",
                       k = 14, reopen = "q3"),
     "result")
 
@@ -125,11 +131,11 @@ test_that("the reachable path is what the breadcrumb may link to", {
     c("q1", "extra", "result"))
   expect_identical(
     step3_pubias_reachable(small_industry = "no",
-                           registry_complete = STEP3_PUBIAS_DEFER, k = 14),
+                           registry_complete = "no", k = 14),
     c("q1", "extra", "q3", "result"))
   expect_identical(
     step3_pubias_reachable(small_industry = "no",
-                           registry_complete = STEP3_PUBIAS_DEFER, k = 3),
+                           registry_complete = "no", k = 3),
     c("q1", "extra", "q4", "result"))
 })
 
@@ -181,7 +187,7 @@ test_that("each answer lights its node, its edge and any leaf it reaches", {
 
 test_that("the k gate lights the branch it computed, on either side", {
   base <- list(small_industry = "no",
-               registry_complete = STEP3_PUBIAS_DEFER)
+               registry_complete = "no")
 
   expect_identical(
     do.call(step3_pubias_flow_ids, c(base, list(k = 14))),
@@ -204,7 +210,7 @@ test_that("the k gate lights the branch it computed, on either side", {
 
 test_that("the terminal answers light their leaves", {
   base <- list(small_industry = "no",
-               registry_complete = STEP3_PUBIAS_DEFER)
+               registry_complete = "no")
 
   for (case in list(
     list(args = list(funnel_asymmetry = "yes", k = 14),
@@ -224,16 +230,25 @@ test_that("an answer that decides no leaf stops the trail at a node", {
   # Accepting the automated Egger test hands Q3 to a p value this function
   # does not have, so the chart lights the node and waits.
   ids <- step3_pubias_flow_ids(small_industry = "no",
-                               registry_complete = STEP3_PUBIAS_DEFER,
+                               registry_complete = "no",
                                funnel_asymmetry = STEP3_PUBIAS_USE_EGGER,
                                k = 14)
   expect_identical(ids[length(ids)], "pma-pubias-node-q3")
+})
 
-  # "reporting bias is plausible" is the app's own rate-down-1 rule, and the
-  # figure draws no leaf for a rule that is not in the figure.
+test_that("the computed k gate lights its node AND the edge it chose", {
+  # The one node the reviewer is never asked about. Lighting the node alone
+  # would show the chart stopping at a question nobody answered; the edge is
+  # what says which way the study count sent them.
   ids <- step3_pubias_flow_ids(small_industry = "no",
                                registry_complete = "no", k = 14)
-  expect_identical(ids[length(ids)], "pma-pubias-edge-registry-no")
+  expect_true(all(c("pma-pubias-node-q2", "pma-pubias-edge-q2-yes") %in% ids))
+  expect_identical(ids[length(ids)], "pma-pubias-node-q3")
+
+  ids <- step3_pubias_flow_ids(small_industry = "no",
+                               registry_complete = "no", k = 4)
+  expect_true(all(c("pma-pubias-node-q2", "pma-pubias-edge-q2-no") %in% ids))
+  expect_identical(ids[length(ids)], "pma-pubias-node-q4")
 })
 
 test_that("every id the chart lights is an id the figure draws", {
@@ -252,7 +267,7 @@ test_that("every id the chart lights is an id the figure draws", {
   # input space is five small factors.
   grid <- expand.grid(
     small_industry    = c("", "no", "yes"),
-    registry_complete = c("", "no", "yes", STEP3_PUBIAS_DEFER),
+    registry_complete = c("", "no", "yes"),
     funnel_asymmetry  = c("", "no", "yes", STEP3_PUBIAS_USE_EGGER),
     unpublished       = c("", "no", "yes"),
     k                 = c(0, 4, 10, 14),
@@ -263,4 +278,27 @@ test_that("every id the chart lights is an id the figure draws", {
 
   expect_true(length(lit) > 0L)
   expect_identical(setdiff(lit, drawn), character(0))
+})
+
+# --------------------------------------------------------------------------
+# The trim-and-fill exaggeration diagnostic under the funnel
+# --------------------------------------------------------------------------
+# The arithmetic and the wording are the package's (R/pubias_trimfill.R) and
+# are tested there. What only the app can go wrong about is the vendoring:
+# step3_grade.R calls those two functions by name, and a staged bundle that
+# does not carry the file fails at runtime, in production, on a tab nobody
+# opens until a reviewer needs it.
+test_that("the staged bundle carries the trim-and-fill diagnostic", {
+  cands <- c(file.path(PMA_APP_ROOT, "R", "_pmatools", "pubias_trimfill.R"),
+             file.path(dirname(PMA_APP_ROOT), "R", "pubias_trimfill.R"))
+  hit <- Filter(file.exists, cands)
+  skip_if(!length(hit), "no pmatools sources in this checkout")
+
+  defined <- ls(envir = local({
+    e <- new.env(parent = globalenv())
+    sys.source(hit[[1L]], envir = e)
+    e
+  }), all.names = TRUE)
+  expect_true(all(c(".pubias_trimfill_inflation", ".pubias_trimfill_line")
+                  %in% defined))
 })

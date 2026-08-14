@@ -54,14 +54,20 @@
 #
 # Trim-and-fill is not used to drive the GRADE judgment. The {meta}
 # trim-and-fill computation remains available via plot_trimfill_forest() for
-# the Reporting bias tab in the companion Shiny app.
+# the Reporting bias tab in the companion Shiny app, and R/pubias_trimfill.R
+# turns it into a stated diagnostic -- still a display, still not a decision.
+# See the block comment there.
 
 # --------------------------------------------------------------------------
 # Flowchart node vocabulary (inst/figures/pubias.svg)
 #
-# See the note on .ROB_FIG2_NODE_IDS in domain_rob.R. The registry node is
-# drawn dashed and named "pmatools input" because it is NOT a node of Core
-# GRADE 4 Fig 5; the figure's only registry node is Q4, reached when k < 10.
+# See the note on .ROB_FIG2_NODE_IDS in domain_rob.R. The registry node is NOT
+# a node of Core GRADE 4 Fig 5 -- the figure's only registry node is Q4,
+# reached when k < 10 -- and the figure's caption and long description say so
+# in words. They used to say it by drawing that one box with a dashed outline
+# as well, which reads as "provisional" or "not yet reached" to anyone who has
+# not read the caption, on a chart whose whole job is to show which boxes the
+# analysis went through.
 #
 # The ids keep their q1..q4 slugs, but the FIGURE no longer prints those
 # numbers: it interleaves the registry node between Q1 and Q2, so numbering on
@@ -110,9 +116,16 @@
 # path: k is the one number the reviewer needs to see to check that Q2 was
 # answered the way they expect, and until v0.5.2 this domain recorded nothing
 # at all, so it was only available by re-reading the note.
+#
+# The value is the bare count. It used to read "12 (Q2 threshold: 10)", which
+# is the one place in the package that still printed a Fig 5 question number on
+# a surface the reviewer reads -- a SoF footnote, where nothing else names a
+# "Q2" and the flowchart is not on the page to say what one is. The threshold
+# is still stated in the prose note ("k = 12 >= 10"), where the sentence around
+# it makes it mean something.
 .pubias_k_fact <- function(k) {
   .fact("k", "Studies contributing a usable estimate",
-        sprintf("%d (Q2 threshold: 10)", as.integer(k)), as.numeric(k))
+        sprintf("%d", as.integer(k)), as.numeric(k))
 }
 
 # Marker prepended to the publication-bias note whenever no statistical test
