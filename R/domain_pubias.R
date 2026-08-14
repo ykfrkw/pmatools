@@ -108,7 +108,7 @@
 
 # The study count the flowchart's Q2 actually branches on. Recorded on every
 # path: k is the one number the reviewer needs to see to check that Q2 was
-# answered the way they expect, and until v0.5.2 this domain recorded nothing
+# answered the way they expect, and until v0.5.1 this domain recorded nothing
 # at all, so it was only available by re-reading the note.
 .pubias_k_fact <- function(k) {
   .fact("k", "Studies contributing a usable estimate",

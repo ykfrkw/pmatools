@@ -904,7 +904,7 @@ grade_meta <- function(meta_obj,
   )
   # bind_rows() below drops attributes, so every domain's facts have to be
   # lifted off its row BEFORE the bind. Publication bias was the one assessor
-  # that recorded nothing at all until v0.5.2; forgetting this line is what
+  # that recorded nothing at all until v0.5.1; forgetting this line is what
   # would make it silently record nothing again.
   pubias_facts <- attr(d_pubias, "facts")
 
