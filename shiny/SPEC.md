@@ -321,13 +321,21 @@ Not a screen. The Step 1 "why this matters" copy is §3.1.1's once-per-session m
 
 Two columns in one flex row: left sidebar with model controls, right pane with tabbed plots and result text.
 
-Both columns must be able to shrink. The sidebar is `flex: 1 1 320px` and the
-right pane `flex: 1; min-width: min(480px, 100%)`. A fixed `flex: 0 0 320px`
-basis and a flat `min-width: 480px` floor were what made a 375px viewport
-render a 492px document and scroll the whole page sideways; the rule the app
-has to satisfy is `document.scrollWidth <= document.clientWidth` at 375px.
-`tests/testthat/test-step2-layout.R` pins both declarations — there is no
-browser driver here, so what is asserted is the CSS, not the measurement.
+The sidebar is `flex: 0 1 300px` and the right pane
+`flex: 1; min-width: min(480px, 100%)`. Two independent rules meet here:
+
+- **Both columns must be able to shrink.** A fixed `flex: 0 0` basis and a flat
+  `min-width: 480px` floor were what made a 375px viewport render a 492px
+  document and scroll the whole page sideways; the rule the app has to satisfy
+  is `document.scrollWidth <= document.clientWidth` at 375px. The sidebar's
+  shrink factor therefore stays `1` at any basis.
+- **Only the right pane grows.** With the sidebar on `flex: 1 1 320px` it took
+  its share of every spare pixel, so on a wide screen a column of short selects
+  grew past 500px while the forest plot beside it stayed small. Grow factor `0`
+  sends the spare width to the pane that holds the plots.
+
+`tests/testthat/test-step2-layout.R` pins both — there is no browser driver
+here, so what is asserted is the CSS, not the measurement.
 
 #### 3.3.2 Step header
 
@@ -357,6 +365,16 @@ One `pma_card("Model configuration")` holding a `bslib::accordion(multiple = TRU
   case that cannot pool — one study under two outcomes — is `run_ma()`'s to
   reject, and its message reaches the reviewer through the existing
   `tryCatch()` around the run.
+- **Every abbreviation in this panel is spelled out on sight** — `OR (odds
+  ratio)`, `RoM (ratio of means)`, `MH (Mantel-Haenszel)`, `REML (restricted
+  maximum likelihood, default)`. Only the **label** carries the expansion; the
+  input **value** stays the bare code (`"OR"`, `"REML"`), which is what every
+  branch and every saved outcome compares against. Labels are built from
+  `PMA_ABBREVIATION_EXPANSIONS` in `R/step2_ma.R` via `pma_spell_out()` /
+  `pma_spelled_choices()`, never typed beside the value, so the control and
+  `step2_model_summary_line()` (§3.3.4) cannot word the same code differently.
+  A code the table does not carry is shown unchanged — `Inverse` and `Peto` are
+  names, not abbreviations, and must not gain an empty bracket.
 - **`method_tau` offers six estimators** — `REML` (default), `PM`, `DL`, `SJ`,
   `ML`, `EB` — labelled with their names in the select. **`random_ci`** sits
   beside it in the same `input.model == 'random' && input.use_rare_workflow
@@ -383,9 +401,13 @@ One `pma_card("Model configuration")` holding a `bslib::accordion(multiple = TRU
 #### 3.3.4 Outputs (right pane)
 
 Above the tabs, `uiOutput("ma_model_summary")`: one line naming the model that
-produced the numbers, e.g. `Random effects (REML), Hartung-Knapp CI, k = 12`
-(`classic (Wald) CI` when Hartung-Knapp is off, `Common (fixed) effect, k = 12`
-for a common-effect fit). Built by the pure `step2_model_summary_line()`, which
+produced the numbers, e.g. `Random effects, REML (restricted maximum
+likelihood), Hartung-Knapp CI, k = 12` (`classic (Wald) CI` when Hartung-Knapp
+is off, `Common (fixed) effect, k = 12` for a common-effect fit). The estimator
+is its own comma-separated part rather than `Random effects (REML)` because it
+is spelled out from the same table the control uses (§3.3.3), and a nested
+bracket reads worse than a fourth item. Built by the pure
+`step2_model_summary_line()`, which
 reads `random` / `method.tau` / `method.random.ci` / `k` **off the fitted
 object** rather than off the controls, so it cannot drift from what actually
 ran, and reports the rare-events primary fit correctly when that is what is on
@@ -399,7 +421,36 @@ Tabset with 3 tabs:
 - **Funnel plot** — `plotOutput("funnel")` via `pmatools::plot_funnel(state$ma, show_egger = TRUE)`.
 - **Text results** — `verbatimTextOutput("ma_summary")` showing `summary(state$ma)`.
 
-Below the tabset: collapsible "Forest plot adjustments" with title, label_e, label_c, xlim min/max overrides.
+Below the tabset: the collapsible **"Forest plot display"** panel, built by the
+single `pma_forest_display_panel(prefix)` in `R/ui_helpers.R` and shared with
+each of the four Step 3 domain tabs (`prefix = NULL` gives Step 2's unprefixed
+ids). It holds the title, the two arm labels, the two "Favors …" labels, the
+x-min / x-max overrides, the two blank-row spinners and the per-arm column
+checkbox.
+
+- **Layout is `.pma-display-grid`**, four columns. A child that needs the whole
+  row carries `.pma-span-4` (title, the blank-row hint, the checkbox); a child
+  that is one of a **pair** carries `.pma-span-2` (x-min / x-max, and the two
+  blank-row spinners). Without the pair class those two rows filled columns 1–2
+  and left 3–4 empty, so they read as a misaligned rung between the four-column
+  rows around them. The grid folds to two columns under 760px, because
+  `minmax(160px, 1fr)` is a hard floor and four such tracks cannot fit a phone.
+- **The title is a `textAreaInput`, not a `textInput`.** `plot_forest()` honours
+  a newline in the title as an explicit line break (SPEC.md §4.3), and
+  `<input type="text">` cannot carry one — the HTML value sanitisation
+  algorithm strips CR/LF, so the break would be lost both when the user typed
+  it and when the Step 3 autofill pushed a stratified default in.
+  `updateTextInput()` and `updateTextAreaInput()` send the same message, so
+  `pma_autofill_text()` drives the field unchanged.
+- **The Step 3 copies prefill a stratification suffix** onto the outcome name
+  (`.forest_title_suffix` in `R/step3_grade.R`, applied by
+  `pma_autofill_forest_panel()` and only to a title the user has not edited).
+  Risk of Bias appends `"\n(stratified by Risk of Bias)"` — on its **own line**,
+  because on one line the wrapped title reached down into the
+  `Events / N / OR (95% CI) / Weight` headings. Indirectness still appends on
+  the same line. Inconsistency and **publication bias append nothing**: the
+  publication-bias figure's own subgroup heading already says "available" vs
+  "missing results", so the suffix repeated it at the cost of a title line.
 
 Before the first run the tabset would be three empty tabs, so the card is
 **hidden** and one line shows in its place: "Press **Run analysis** to pool the
