@@ -3841,12 +3841,15 @@ step3_server <- function(input, output, session, state) {
   # subgroup heading already reads "available" / "missing results", so the
   # suffix said the same thing a second time while costing a title line.
   #
-  # Indirectness still appends on the same line: it has not been reported as
-  # overlapping, and its heading is shorter. Move it to "\n(" as well if it is.
+  # Indirectness breaks the same way. Only Risk of Bias was reported as
+  # overlapping, but the two plots are built by the same call with suffixes of
+  # the same order of length, so the one that was not reported yet is the one
+  # whose outcome name happened to be short enough. Both break; a stratified
+  # title reading alike on both tabs is also one less thing to explain.
   .forest_title_suffix <- c(
     rob    = "\n(stratified by Risk of Bias)",
     incon  = "",
-    indir  = " (stratified by Indirectness)",
+    indir  = "\n(stratified by Indirectness)",
     pubias = ""
   )
   for (.pfx in names(.forest_title_suffix)) {

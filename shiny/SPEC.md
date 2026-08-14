@@ -445,10 +445,10 @@ checkbox.
 - **The Step 3 copies prefill a stratification suffix** onto the outcome name
   (`.forest_title_suffix` in `R/step3_grade.R`, applied by
   `pma_autofill_forest_panel()` and only to a title the user has not edited).
-  Risk of Bias appends `"\n(stratified by Risk of Bias)"` — on its **own line**,
-  because on one line the wrapped title reached down into the
-  `Events / N / OR (95% CI) / Weight` headings. Indirectness still appends on
-  the same line. Inconsistency and **publication bias append nothing**: the
+  Risk of Bias and Indirectness append `"\n(stratified by <domain>)"` — on its
+  **own line**, because on one line the wrapped title reached down into the
+  `Events / N / OR (95% CI) / Weight` headings. Inconsistency and
+  **publication bias append nothing**: the
   publication-bias figure's own subgroup heading already says "available" vs
   "missing results", so the suffix repeated it at the cost of a title line.
 
