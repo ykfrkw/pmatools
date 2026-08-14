@@ -328,6 +328,10 @@ pma_outcome_display <- function(display = list(), pubias_missing = NULL,
   if (!isTRUE(display$convert)) return(out)
   c(out, list(
     convert_smd_to_or = TRUE,
+    # Banked alongside the conversion, never instead of it: grade_table() reads
+    # it only on a row that converts, and a row banked without it renders as
+    # responder proportions alone - which is what the reviewer chose.
+    keep_effect_scale = isTRUE(display$keep_effect_scale),
     baseline_risk     = display$baseline_risk,
     threshold_label   = display$threshold_label,
     chinn_invert      = isTRUE(display$chinn_invert)

@@ -876,17 +876,19 @@ RESPONDER_P0_DEFAULT <- 0.20
 # ----- Configuration tab: responder conversion block (continuous) ------
 # Core GRADE 6 ranks three presentations of a continuous outcome and
 # recommends the mean difference and the responder proportion together.
-# This app implements the responder proportion only, through Chinn's formula
-# rather than Core GRADE 6's own procedure. Both departures are still stated
-# on screen; the recitation of what Core GRADE 6 ranks
+# The responder proportion is still derived through Chinn's formula rather than
+# Core GRADE 6's own procedure, and that departure is stated on screen; the
+# recitation of what Core GRADE 6 ranks
 # (EDU_COPY$config_tab$continuous_intro) is not, because a reviewer answered
 # nothing with it.
 #
-# The two presentations are offered as an either/or (input$sof_presentation),
-# defaulting to the effect itself. NEITHER changes the certainty rating: the
-# conversion reaches sof_table() and nothing else, while Imprecision is rated
-# on the SMD/MD against the threshold set in the section rendered just above
-# this block.
+# The presentations are offered as a three-way choice (input$sof_presentation),
+# defaulting to the effect itself: the effect, the responder proportion, or
+# both together, which is the pairing Core GRADE 6 recommends and which used to
+# be unavailable here - the block offered an either/or and said so. NONE of the
+# three changes the certainty rating: the conversion reaches sof_table() and
+# nothing else, while Imprecision is rated on the SMD/MD against the threshold
+# set in the section rendered just above this block.
 #
 # `p0` is the seed for the proportion box, passed in by the caller from the
 # reactiveVal that owns it - the widget must not re-assert the constant on
@@ -922,22 +924,35 @@ RESPONDER_P0_DEFAULT <- 0.20
       shiny::uiOutput("responder_p0_badge", inline = TRUE)),
     .config_note(EDU_COPY$config_tab$continuous_departure),
     .config_note(EDU_COPY$config_tab$chinn_caveat),
-    # A two-way radio rather than a tick-box, and defaulting to the effect
-    # itself. The conversion used to be on by default, which read as though
-    # the rating REQUIRED a binary presentation. It does not: grade_meta()
-    # never sees the conversion, Imprecision is rated on the SMD/MD against
-    # the threshold below either way, and this choice only reaches
-    # sof_table(). Presenting the two as an explicit either/or says so.
+    # A radio rather than a tick-box, and defaulting to the effect itself. The
+    # conversion used to be on by default, which read as though the rating
+    # REQUIRED a binary presentation. It does not: grade_meta() never sees the
+    # conversion, Imprecision is rated on the SMD/MD against the threshold
+    # below either way, and this choice only reaches sof_table(). Presenting
+    # the options as an explicit choice says so.
+    #
+    # The third option is the one Core GRADE 6 actually recommends. It is not
+    # the default, because it costs the reviewer a responder proportion they
+    # have to justify, and defaulting to a presentation that demands an
+    # assumption is how the assumption stops being examined.
     shiny::radioButtons("sof_presentation",
       "How should the Summary of Findings table present this outcome?",
       choices = stats::setNames(
-        c("effect", "responder"),
+        c("effect", "responder", "both"),
         c(sprintf("The %s itself, on its own scale", sm),
           paste0("The proportion of responders, converted with Chinn's ",
-                 "formula (Core GRADE 6 option 2)"))),
+                 "formula (Core GRADE 6 option 2)"),
+          sprintf(paste0("Both, in one row: the %s on its own scale and the ",
+                         "proportion of responders (what Core GRADE 6 ",
+                         "recommends)"), sm))),
       selected = "effect"),
+    # Every input below belongs to the responder conversion, which both
+    # 'responder' and 'both' run. Testing only 'responder' would leave a
+    # reviewer on 'both' with no way to enter the proportion the conversion
+    # cannot proceed without.
     shiny::conditionalPanel(
-      "input.sof_presentation == 'responder'",
+      paste0("input.sof_presentation == 'responder' || ",
+             "input.sof_presentation == 'both'"),
       shiny::numericInput("baseline_risk_chinn",
         paste0("Proportion of control patients meeting the threshold of ",
                "clinical interest"),

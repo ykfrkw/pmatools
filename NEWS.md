@@ -392,6 +392,40 @@
 
 ## New features
 
+* **`sof_table()` gains `keep_effect_scale`, so a continuous outcome can be
+  shown as its own effect AND as a proportion of responders in one row.** Core
+  GRADE 6 recommends presenting the two together; pmatools offered them as an
+  either/or, and the Shiny app's own on-screen note conceded that the agreement
+  check Core GRADE 6 asks for was therefore out of reach. Passing
+  `convert_smd_to_or = TRUE, keep_effect_scale = TRUE` now puts both in **one
+  row** — no extra rows, no extra columns. Each arm cell holds the mean-scale
+  value on its first line(s) and the responder proportion on the last; the
+  Difference cell holds the standardised mean difference first and the
+  per-1000 risk difference second; and the arm headers become the
+  measure-neutral "With control" / "With intervention", since "Risk with
+  control (per 1,000)" would head a cell whose first line is a mean and whose
+  denominator applies to only half of it.
+
+  When the mean-scale half cannot be computed honestly — no usable control-arm
+  summaries, or an SMD with no reference SD to re-express it with — the row
+  **degrades to the responder-only presentation** rather than printing an empty
+  line or failing, and a footnote names the reason.
+
+  In the Shiny app this is the third option of the Configuration tab's
+  presentation radio ("Both, in one row … (what Core GRADE 6 recommends)"). The
+  default stays "The <sm> itself, on its own scale": "both" also demands a
+  control responder proportion the reviewer has to justify, and defaulting to a
+  presentation that demands an assumption is how the assumption stops being
+  examined. In a multi-outcome table the choice rides per row on
+  `"pmatools_display"` (`keep_effect_scale` joins `PMATOOLS_RESPONDER_FIELDS`),
+  so one outcome can show both scales beside another that shows only its
+  effect. `export_bundle()` takes the argument too, and the generated
+  `analysis.R` emits it.
+
+  **Both new arguments are back-compatible; this is not a `feat!:`.**
+  `keep_effect_scale` defaults to `FALSE`, `convert_smd_to_or` is unchanged,
+  and a call that does not name the new argument keeps the presentation it had.
+
 * **The Shiny app can put an outcome nobody reported into the Summary of
   Findings table.** `not_reported_outcome()` and `add_not_reported()` have been
   package API since earlier in this cycle, and the tables, the exported `.docx`
@@ -744,6 +778,37 @@
   measure it was pooled with. Also fixes the neighbouring bug where changing
   the mean column rebuilt that radio from bare codes, silently collapsing
   `SMD (standardised mean difference)` back to `SMD`.
+
+* **A Summary of Findings row converted with Chinn's formula now reports an
+  absolute risk difference and a derived risk ratio.** This changes what two
+  columns say for anyone using `convert_smd_to_or = TRUE`; no argument changed,
+  so it is a behaviour change and not a breaking one.
+
+  The **Difference** column used to keep the pooled estimate in standard
+  deviation units — "0.49 fewer standard deviations (0.70 fewer to 0.27 fewer)"
+  — on the reasoning that the risk difference the two rates imply is not the
+  pooled continuous difference. It is not; but the column is headed "Absolute
+  effects (95% CI) — Difference" and sat between two cells reading "300 per
+  1000" and "772 per 1000", so an SD-unit string there was not an absolute
+  effect at all and did not subtract to the two numbers beside it. It now reads
+  "472 more per 1000 (393 more to 536 more)", built by the same formatter the
+  binary rows use, so the direction words, the CI ordering and the "per 1000"
+  label are identical for a converted row and a binary one.
+
+  The **Effect** column gains a second line, "Derived risk ratio 2.57 (2.31 to
+  2.79)" — the intervention proportion over the assumed control proportion. A
+  second line and not a second column: it is the same pooled estimate read on
+  another scale, and a column would present it as an independent result.
+
+  Both are DERIVED, not fitted, and the Chinn footnote now says so and names
+  the assumed control proportion they were computed against. A footnote is the
+  right place for that caveat; printing a different quantity in the column was
+  not.
+
+  Internally the three proportions the conversion produces are computed once by
+  a new internal `.chinn_rates()` rather than re-derived per cell, so the arm
+  cells, the difference and the risk ratio cannot drift apart.
+  `.format_ier_chinn()`'s output is byte-for-byte unchanged.
 
 * **The control-arm risk is supplied once, and `threshold_baseline`, `ois_p0`
   and `baseline_risk` now inherit it from one another.** All three name the

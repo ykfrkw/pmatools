@@ -50,6 +50,10 @@
 #' @param prediction Show 95 percent prediction interval in SoF Effect column.
 #' @param convert_smd_to_or Logical. Passed to \code{\link{sof_table}} for
 #'   continuous-outcome dichotomisation.
+#' @param keep_effect_scale Logical (default \code{FALSE}). Passed to
+#'   \code{\link{sof_table}}: shows the outcome on its own scale AND as a
+#'   proportion of responders in one row. Only relevant when
+#'   \code{convert_smd_to_or = TRUE}.
 #' @param baseline_risk Numeric in (0,1). Passed to \code{\link{sof_table}}
 #'   when \code{convert_smd_to_or = TRUE}.
 #' @param threshold_label Optional free-text label describing the
@@ -184,6 +188,7 @@ export_bundle.meta <- function(x,
                           unit         = NULL,
                           sof_notes    = NULL,
                           convert_smd_to_or = FALSE,
+                          keep_effect_scale = FALSE,
                           baseline_risk     = NULL,
                           threshold_label   = NULL,
                           chinn_invert      = FALSE,
@@ -243,6 +248,7 @@ export_bundle.meta <- function(x,
                             per, prediction,
                             convert_smd_to_or, baseline_risk, threshold_label,
                             script_path,
+                            keep_effect_scale = isTRUE(keep_effect_scale),
                             rare = rare,
                             style = style, follow_up = follow_up, unit = unit,
                             sof_notes = sof_notes)
@@ -342,6 +348,7 @@ export_bundle.meta <- function(x,
                         follow_up         = follow_up,
                         unit              = unit,
                         convert_smd_to_or = convert_smd_to_or,
+                        keep_effect_scale = isTRUE(keep_effect_scale),
                         baseline_risk     = baseline_risk,
                         threshold_label   = threshold_label,
                         chinn_invert      = isTRUE(chinn_invert))
@@ -667,6 +674,7 @@ export_bundle.meta <- function(x,
                                     per, prediction,
                                     convert_smd_to_or, baseline_risk, threshold_label,
                                     out_path,
+                                    keep_effect_scale = FALSE,
                                     rare = NULL,
                                     style = "bmj",
                                     follow_up = NULL, unit = NULL,
@@ -863,7 +871,8 @@ export_bundle.meta <- function(x,
     sof_prediction   = if (isTRUE(prediction)) "TRUE" else "FALSE",
     display_args     = .display_args_str(follow_up, unit),
     sof_notes_block  = .sof_notes_block(sof_notes, "sof"),
-    convert_args     = .convert_args_str(convert_smd_to_or, baseline_risk, threshold_label),
+    convert_args     = .convert_args_str(convert_smd_to_or, baseline_risk,
+                                         threshold_label, keep_effect_scale),
     rare_block       = .rare_script_block(rare)
   )
 
@@ -1194,9 +1203,15 @@ ARG_LIT_ORIGINS <- c("null", "column", "scalar", "vector")
          paste(lits, collapse = ",\n  "), "\n))\n")
 }
 
-.convert_args_str <- function(convert_smd_to_or, baseline_risk, threshold_label) {
+.convert_args_str <- function(convert_smd_to_or, baseline_risk,
+                              threshold_label, keep_effect_scale = FALSE) {
   if (!isTRUE(convert_smd_to_or)) return("")
   parts <- ", convert_smd_to_or = TRUE"
+  # Emitted only when TRUE: FALSE is the default, and a script that spells out
+  # every default reads as though each one were a decision the review took.
+  if (isTRUE(keep_effect_scale)) {
+    parts <- paste0(parts, ", keep_effect_scale = TRUE")
+  }
   if (!is.null(baseline_risk)) {
     parts <- paste0(parts, ", baseline_risk = ", format(baseline_risk))
   }

@@ -1672,10 +1672,33 @@ is that value plus the pooled difference, its interval coming from the pooled
 difference alone; an SMD is multiplied by the pooled within-arm SD of the
 control arms (Cochrane Handbook 15.5.3.2) first, since SD units cannot be added
 to a mean on the original scale. Both derivations are footnoted, the Difference
-column keeps the SMD in SD units, and binary tables are unchanged. In the
-GRADEpro layout the arm headers fall back to "With control" / "With
+column keeps the SMD in SD units on this path, and binary tables are unchanged.
+In the GRADEpro layout the arm headers fall back to "With control" / "With
 intervention" when the cells hold means, because the rate wording and the `per`
 denominator would misdescribe them.
+
+**Absolute effects on the responder path** (v0.6). When
+`convert_smd_to_or = TRUE` fills the arm columns with responder proportions,
+the two cells beside them follow onto the same scale. The Difference column
+reports the absolute risk difference between the proportions — "472 more per
+1000 (393 more to 536 more)", in the same wording as every other absolute
+difference in the table — instead of the pooled estimate in SD units, which sat
+in a column headed "Absolute effects" without being one and did not subtract to
+the two numbers beside it. The Effect column gains a second line, "Derived risk
+ratio 2.57 (2.31 to 2.79)". Both are **derived**, not fitted: they carry
+Chinn's logistic latent-variable assumption and move with the assumed control
+proportion, and the footnote says so and names the proportion.
+
+**Both presentations in one row** (v0.6). Core GRADE 6 recommends showing the
+effect and the responder proportion together. `keep_effect_scale = TRUE`
+alongside `convert_smd_to_or = TRUE` does that in **one row** — no extra rows,
+no extra columns: each arm cell holds the mean-scale value on its first line(s)
+and the responder proportion on the last, the Difference cell holds the SMD
+first and the per-1000 risk difference second, and the arm headers become the
+measure-neutral "With control" / "With intervention". When the mean-scale half
+cannot be computed honestly (an SMD with no usable reference SD, say), the row
+degrades to the responder-only presentation and a footnote names the reason.
+In a multi-outcome table the choice is read per row off `"pmatools_display"`.
 
 **Per-domain rate-down footnotes** (v0.5.1) come from `domain_facts()`: the
 domains that pulled the rating down carry a numbered marker on the certainty

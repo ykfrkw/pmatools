@@ -247,15 +247,55 @@
   "-"
 }
 
+# The Difference cell of a row presented as responder proportions: the absolute
+# risk difference between the two proportions, per `per` patients.
+#
+# This column used to keep the pooled SMD in standard deviation units on the
+# Chinn path, on the reasoning that the implied risk difference is not the
+# pooled continuous difference. It is not, and that is not the objection it
+# looked like: the column is headed "Absolute effects (95% CI) -- Difference"
+# and sits between two cells reading "200 per 1000" and "377 per 1000", so an
+# SD-unit string there is not an absolute effect and does not subtract to the
+# two numbers beside it. What the two arm cells differ BY is the honest content
+# of this cell; that it is derived rather than fitted is a footnote's job
+# (.chinn_derived_sentence()), not a reason to print a different quantity.
+#
+# Built from .difference_string() with the same arguments the binary branch of
+# .format_difference() uses, so the direction words, the CI ordering and the
+# "per 1000" label come out identical for a converted row and a binary one.
+.format_difference_chinn <- function(meta_obj, baseline_risk, per = 1000,
+                                     invert = FALSE) {
+  rates <- .chinn_rates(meta_obj, baseline_risk, invert = invert)
+  if (is.null(rates)) return("-")
+  per_str <- .per_label(per, big_mark = FALSE)
+  .difference_string(
+    (rates$p1    - baseline_risk) * per,
+    (rates$p1_lo - baseline_risk) * per,
+    (rates$p1_hi - baseline_risk) * per,
+    unit = paste0("per ", per_str), digits = 0L
+  )
+}
+
 # --- Table assembly --------------------------------------------------------
 
 # One BMJ row's worth of cell text. `cer_str` / `ier_str` may be supplied by
 # the caller when a Chinn dichotomisation already computed them.
+#
+# `chinn` is that same dichotomisation's arguments (.responder_args()), or NULL
+# when the row is not converted. It is passed rather than re-derived because
+# three cells depend on it and only one of them is the pair of arm cells the
+# caller hands down: the Difference cell moves onto the responder scale, and the
+# Effect cell gains the derived risk ratio. A converted row whose `chinn` is
+# missing would show responder rates in its arm columns and a standard-deviation
+# difference beside them, which is exactly the mismatch this argument exists to
+# prevent. `arm_note` is the caller's, for the same reason: with `cer_str`
+# supplied the row cannot look the note up itself.
 .bmj_row_values <- function(nm, g, per = 1000, prediction = FALSE,
                             follow_up = NULL, unit = NULL,
                             cer_str = NULL, ier_str = NULL,
                             label_intervention = "intervention",
-                            markers = NULL) {
+                            markers = NULL,
+                            chinn = NULL, arm_note = NULL) {
   if (.is_not_reported(g)) {
     return(.bmj_row_values_not_reported(nm, g, follow_up))
   }
@@ -293,19 +333,40 @@
                         unit = unit)
   caller_cells <- !is.null(cer_str) || !is.null(ier_str)
 
+  effect_cell <- .format_effect_bmj(meta_obj, g$outcome_type,
+                                    prediction = prediction)
+  diff_cell   <- .format_difference(meta_obj, g$baseline_risk, per, unit,
+                                    g$outcome_type)
+
+  if (!is.null(chinn)) {
+    invert <- isTRUE(chinn$chinn_invert)
+    p0     <- chinn$baseline_risk
+    rr_line <- .chinn_rr_line(meta_obj, p0, invert = invert,
+                              ci_sep = nf$ci_sep)
+    if (!is.null(rr_line)) effect_cell <- paste0(effect_cell, "\n", rr_line)
+
+    rd_cell <- .format_difference_chinn(meta_obj, p0, per, invert = invert)
+    # Both scales in one cell keeps the two lines in the same order the arm
+    # cells use -- own scale first, responder scale second -- so a reader
+    # reading across the row does not have to change which line they are on.
+    diff_cell <- if (isTRUE(chinn$keep_effect_scale) && !identical(rd_cell, "-")) {
+      paste0(diff_cell, "\n", rd_cell)
+    } else {
+      rd_cell
+    }
+  }
+
   list(
     outcome   = outcome_cell,
     n         = .n_participants_studies_bmj(meta_obj$k, .total_n(meta_obj),
                                             g$study_design),
-    effect    = .format_effect_bmj(meta_obj, g$outcome_type,
-                                   prediction = prediction),
+    effect    = effect_cell,
     cer       = cer_str %||% arm$cer,
     ier       = ier_str %||% arm$ier,
-    diff      = .format_difference(meta_obj, g$baseline_risk, per, unit,
-                                   g$outcome_type),
+    diff      = diff_cell,
     certainty = cert_cell,
     plain     = .plain_language_for(g, intervention_label = pl_tx),
-    arm_note  = if (caller_cells) NULL else arm$note
+    arm_note  = if (caller_cells) arm_note else arm$note
   )
 }
 
@@ -439,6 +500,7 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
                            follow_up = NULL, unit = NULL,
                            chinn_active = FALSE, chinn_invert = FALSE,
                            threshold_label = NULL,
+                           chinn_arm = NULL,
                            label_intervention = "intervention",
                            label_control      = "control") {
   meta_obj <- x$meta
@@ -457,20 +519,24 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
     fact_markers[[dm]] <- length(fact_notes)
   }
 
+  # `keep_effect_scale` here is what the row ACHIEVED, not what it asked for: a
+  # both-scales row whose arm cells fell back to responder proportions must not
+  # keep a standard-deviation line in its Difference cell, or half the row would
+  # show one presentation and half the other.
+  chinn <- if (chinn_active) {
+    list(baseline_risk     = baseline_for_display,
+         chinn_invert      = isTRUE(chinn_invert),
+         keep_effect_scale = isTRUE(chinn_arm$both))
+  } else NULL
+
   vals <- .bmj_row_values(
     x$outcome_name, x, per = per, prediction = prediction,
     follow_up = follow_up, unit = unit,
     cer_str = cer_str, ier_str = ier_str,
     label_intervention = label_intervention,
-    markers = fact_markers
+    markers = fact_markers,
+    chinn = chinn, arm_note = chinn_arm$note
   )
-  # Chinn dichotomisation replaces the arm rates with derived ones; the risk
-  # difference implied by them is not the pooled continuous difference, so the
-  # Difference column keeps the continuous estimate.
-  if (chinn_active) {
-    vals$diff <- .format_difference(meta_obj, baseline_for_display, per, unit,
-                                    x$outcome_type)
-  }
 
   has_plain <- !is.null(vals$plain)
   hdrs <- .bmj_headers(meta_obj$sm, has_plain,
@@ -490,9 +556,12 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
   ft <- flextable::bold(ft,  j = 7, part = "body")
   ft <- flextable::align(ft, j = 7, align = "center", part = "body")
 
+  # A both-scales row carries an arm note AND event rates, so the rate sentence
+  # stays: it is the only thing explaining the second line of each arm cell.
   ft <- flextable::add_footer_lines(
     ft, values = .bmj_base_note(label_intervention, prediction,
-                                rate_arms = is.null(vals$arm_note)))
+                                rate_arms = is.null(vals$arm_note) ||
+                                  chinn_active))
 
   # How the two arm columns were derived when they hold arm-level means rather
   # than event rates (see .cont_arm_note()).
@@ -522,7 +591,14 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
   if (chinn_active) {
     ft <- flextable::add_footer_lines(
       ft, values = .chinn_note(invert = isTRUE(chinn_invert),
-                               threshold_label = threshold_label))
+                               threshold_label = threshold_label,
+                               baseline_risk = baseline_for_display))
+  }
+
+  # Both scales were asked for and only one could be given.
+  if (!is.null(chinn_arm$degraded_reason)) {
+    ft <- flextable::add_footer_lines(
+      ft, values = .responder_scale_degraded_note(chinn_arm$degraded_reason))
   }
 
   if (has_plain) {
@@ -560,13 +636,23 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
     # for a single-outcome Chinn table; every other row lets .bmj_row_values()
     # derive them.
     arm <- responder[[nm]]$arm
+    # Only a row that HAS converted cells hands its conversion down: a row that
+    # asked and was refused (responder[[nm]]$reason) keeps its unconverted
+    # Effect and Difference, which is the whole point of the fallback.
+    chinn <- if (is.null(arm)) NULL else {
+      args <- responder[[nm]]$args
+      list(baseline_risk     = args$baseline_risk,
+           chinn_invert      = isTRUE(args$chinn_invert),
+           keep_effect_scale = isTRUE(arm$both))
+    }
     .bmj_row_values(disp(nm), outcomes[[nm]], per = per,
                     prediction = prediction,
                     follow_up = .per_outcome_arg(follow_up, nm),
                     unit      = .per_outcome_arg(unit, nm),
                     cer_str   = arm$cer, ier_str = arm$ier,
                     label_intervention = label_intervention,
-                    markers   = fact_markers[[nm]])
+                    markers   = fact_markers[[nm]],
+                    chinn     = chinn, arm_note = arm$note)
   })
   names(row_vals) <- nms
 
@@ -667,8 +753,13 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
   # stand in for a rate-reporting row would keep a sentence describing columns
   # that no row fills.
   rated_vals <- row_vals[names(.rated_outcomes(outcomes[nms]))]
-  n_cont     <- sum(vapply(rated_vals, function(v) !is.null(v$arm_note),
-                           logical(1)))
+  # A converted row carries an arm note only when it shows both scales, and its
+  # cells hold event rates either way, so it must not be counted as a row that
+  # reports no rates -- otherwise a table of nothing but both-scales rows would
+  # drop the sentence that explains their second line.
+  n_cont     <- sum(vapply(names(rated_vals), function(nm) {
+    !is.null(rated_vals[[nm]]$arm_note) && !(nm %in% converted_nms)
+  }, logical(1)))
   arm_notes  <- unique(unlist(lapply(rated_vals, function(v) v$arm_note),
                               use.names = FALSE))
   ft <- flextable::add_footer_lines(

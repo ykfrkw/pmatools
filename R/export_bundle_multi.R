@@ -99,12 +99,13 @@
 #' name in the attribute aborts rather than being ignored.
 #'
 #' The same attribute carries how a continuous outcome is presented in
-#' `summary_of_findings.docx` / `.csv`: `convert_smd_to_or`, `baseline_risk`,
-#' `threshold_label` and `chinn_invert`, each the \code{\link{sof_table}}
-#' argument of the same name. \code{\link{grade_table}} reads them per row, so
-#' one outcome can be shown as a proportion of responders while another is
-#' shown as its effect, and the generated `analysis.R` re-stamps them onto the
-#' set it rebuilds.
+#' `summary_of_findings.docx` / `.csv`: `convert_smd_to_or`,
+#' `keep_effect_scale`, `baseline_risk`, `threshold_label` and `chinn_invert`,
+#' each the \code{\link{sof_table}} argument of the same name.
+#' \code{\link{grade_table}} reads them per row, so one outcome can be shown as
+#' a proportion of responders, another as both that and its own scale, and a
+#' third as its effect alone; the generated `analysis.R` re-stamps them onto
+#' the set it rebuilds.
 #'
 #' @return Character. Absolute path to the created ZIP file.
 #'
@@ -490,8 +491,12 @@ export_bundle.pmatools_set <- function(x,
   # The .docx is drawn in the BMJ layout, so the plain-text mirror resolves the
   # responder presentation with the same number formatting.
   nf <- .bmj_number_format("bmj")
+  # The unit each row would be rendered with, so a row showing both scales
+  # labels its mean-scale line here exactly as the .docx does.
   responder <- .resolve_responder(outcomes, set$order, per,
-                                  big_mark = nf$big_mark, ci_sep = nf$ci_sep)
+                                  big_mark = nf$big_mark, ci_sep = nf$ci_sep,
+                                  unit = .display_arg_from_outcomes(outcomes,
+                                                                    "unit"))
   rows <- lapply(set$order, function(nm) {
     g <- outcomes[[nm]]
 
@@ -519,11 +524,18 @@ export_bundle.pmatools_set <- function(x,
       ))
     }
 
-    arm <- responder[[nm]]$arm
+    arm   <- responder[[nm]]$arm
+    chinn <- if (is.null(arm)) NULL else {
+      args <- responder[[nm]]$args
+      list(baseline_risk     = args$baseline_risk,
+           chinn_invert      = isTRUE(args$chinn_invert),
+           keep_effect_scale = isTRUE(arm$both))
+    }
     v <- .bmj_row_values(nm, g, per = per, prediction = prediction,
                          follow_up = g$follow_up, unit = g$unit,
                          cer_str = arm$cer, ier_str = arm$ier,
-                         label_intervention = label_intervention)
+                         label_intervention = label_intervention,
+                         chinn = chinn, arm_note = arm$note)
     data.frame(
       order            = which(set$order == nm),
       outcome          = nm,
@@ -851,6 +863,7 @@ export_bundle.pmatools_set <- function(x,
       "attr(set$outcomes[[", lit(nm), "]], ", lit(PMATOOLS_DISPLAY_ATTR),
       ") <- list(\n",
       "  convert_smd_to_or = TRUE,\n",
+      "  keep_effect_scale = ", lit(isTRUE(args$keep_effect_scale)), ",\n",
       "  baseline_risk     = ", lit(args$baseline_risk), ",\n",
       "  threshold_label   = ", lit(args$threshold_label), ",\n",
       "  chinn_invert      = ", lit(isTRUE(args$chinn_invert)), "\n",

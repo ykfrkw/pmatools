@@ -131,7 +131,8 @@ grade_table <- function(outcomes,
   # reason has to reach the footnote register below.
   responder     <- .resolve_responder(outcomes, nms, per,
                                       big_mark = nf$big_mark,
-                                      ci_sep   = nf$ci_sep)
+                                      ci_sep   = nf$ci_sep,
+                                      unit     = unit)
   converted_nms <- .converted_outcomes(responder)
 
   # One numbered footnote pool for every note that belongs to a single row
@@ -265,7 +266,9 @@ grade_table <- function(outcomes,
   add_outcome <- function(nm) {
     row_idx <<- row_idx + 1L
     r <- .build_row(disp(nm), outcomes[[nm]], show_domains, per, prediction,
-                    arm = arms[[nm]], markers = fact_markers[[nm]])
+                    arm = arms[[nm]], markers = fact_markers[[nm]],
+                    chinn = if (is.null(responder[[nm]]$arm)) NULL else
+                      responder[[nm]]$args)
     names(r) <- hdrs
     all_rows[[length(all_rows) + 1L]] <<- r
     outcome_map[[as.character(row_idx)]] <<- nm
@@ -412,6 +415,15 @@ grade_table <- function(outcomes,
   for (nm in converted_nms) {
     ft <- flextable::add_footer_lines(
       ft, values = .responder_row_note(nm, responder[[nm]]$args))
+    # A row that asked for both scales and could only be given one says so
+    # against its own name, since the table's other converted rows may have
+    # managed both.
+    reason <- responder[[nm]]$arm$degraded_reason
+    if (!is.null(reason)) {
+      ft <- flextable::add_footer_lines(
+        ft, values = paste0("[", nm, "] ",
+                            .responder_scale_degraded_note(reason)))
+    }
   }
   ft
 }
@@ -438,7 +450,7 @@ grade_table <- function(outcomes,
 }
 
 .build_row <- function(nm, g, show_domains, per = 1000, prediction = FALSE,
-                       arm = NULL, markers = NULL) {
+                       arm = NULL, markers = NULL, chinn = NULL) {
   if (.is_not_reported(g)) return(.build_row_not_reported(nm, g, show_domains))
 
 
@@ -449,6 +461,14 @@ grade_table <- function(outcomes,
   cer_str  <- arm$cer
   ier_str  <- arm$ier
   eff      <- .format_effect(meta_obj, g$outcome_type, prediction = prediction)
+  # The derived risk ratio, on the second line of the Effect cell. This layout
+  # has no Difference column, so it is the only thing here relating the two
+  # responder proportions to each other.
+  if (!is.null(chinn)) {
+    rr_line <- .chinn_rr_line(meta_obj, chinn$baseline_risk,
+                              invert = isTRUE(chinn$chinn_invert))
+    if (!is.null(rr_line)) eff <- paste0(eff, "\n", rr_line)
+  }
   # Domain-fact markers sit after the certainty symbol; unchanged when NULL.
   cert_str <- paste0(g$certainty, "\n", CERTAINTY_SYMBOLS[[g$certainty]],
                      .fact_marker_suffix(markers))

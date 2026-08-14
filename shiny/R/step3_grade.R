@@ -1363,8 +1363,23 @@ step3_server <- function(input, output, session, state) {
   # radio's encoding lives in exactly one place. NULL (before the radio reports
   # in, and on every outcome whose sm is not SMD/MD) means the effect itself,
   # which is also the widget's default.
+  #
+  # "both" runs the conversion too: it shows the responder proportion beside
+  # the effect, so it needs the same responder proportion, the same rationale
+  # gate and the same direction as "responder" does. Everything that asks
+  # "is the conversion on?" must therefore see both values, and only the one
+  # question of whether the effect's own scale is kept is decided separately.
   responder_mode <- shiny::reactive({
-    identical(input$sof_presentation, "responder")
+    identical(input$sof_presentation, "responder") ||
+      identical(input$sof_presentation, "both")
+  })
+
+  # The second half of the presentation choice: whether the row also keeps the
+  # outcome on its own scale. Separate from responder_mode() because they are
+  # different questions - one gates the responder proportion's inputs, the
+  # other only changes what sof_table() prints once it has them.
+  keep_effect_scale_mode <- shiny::reactive({
+    identical(input$sof_presentation, "both")
   })
 
   # chinn_invert is DERIVED from the Step 2 direction answer rather than
@@ -3772,6 +3787,10 @@ step3_server <- function(input, output, session, state) {
     if (!responder_p0_valid()) return(NULL)
     list(
       convert_smd_to_or = TRUE,
+      # sof_table() reads this only when convert_smd_to_or is TRUE, and it is
+      # only ever TRUE here, so the "both" state cannot leak out of this guard
+      # and reach a table that never ran the conversion.
+      keep_effect_scale = keep_effect_scale_mode(),
       baseline_risk     = p0,
       threshold_label   = input$threshold_label,
       chinn_invert      = chinn_invert_derived()
@@ -3852,6 +3871,10 @@ step3_server <- function(input, output, session, state) {
     state$display$convert       <- !is.null(ca)
     state$display$baseline_risk <- ca$baseline_risk
     state$display$chinn_invert  <- isTRUE(ca$chinn_invert)
+    # Mirrored from the guarded reactive, not from the input: an outcome whose
+    # conversion was refused must not carry a "both" that Step 4 would then
+    # hand to a table showing one presentation.
+    state$display$keep_effect_scale <- isTRUE(ca$keep_effect_scale)
     # threshold_label is NOT written here. app.R's display observer already
     # mirrors input$threshold_label into the same field, and two observers
     # writing one key with different answers (NULL off the responder route,

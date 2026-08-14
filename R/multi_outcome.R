@@ -40,7 +40,8 @@ PMATOOLS_EXPORT_DISPLAY_FIELDS <- c("forest_display", "forest_display_rob",
                                     "pubias_missing_df")
 
 # How ONE row of the Summary of Findings presents a continuous outcome: as the
-# effect itself, or as a proportion of responders derived with Chinn's formula.
+# effect itself, as a proportion of responders derived with Chinn's formula, or
+# as both together (convert_smd_to_or plus keep_effect_scale).
 # Each name is the sof_table() argument of the same name, because that is what
 # the values are - sof_table() takes the choice as arguments, which is right for
 # a table of one row, and grade_table() has to read it per row instead
@@ -48,8 +49,9 @@ PMATOOLS_EXPORT_DISPLAY_FIELDS <- c("forest_display", "forest_display_rob",
 # `common` / `per_outcome` because grade_meta() takes none of them, and its own
 # `baseline_risk` means the control-arm event rate, not the proportion of
 # control patients who respond.
-PMATOOLS_RESPONDER_FIELDS <- c("convert_smd_to_or", "baseline_risk",
-                               "threshold_label", "chinn_invert")
+PMATOOLS_RESPONDER_FIELDS <- c("convert_smd_to_or", "keep_effect_scale",
+                               "baseline_risk", "threshold_label",
+                               "chinn_invert")
 
 PMATOOLS_DISPLAY_ATTR_FIELDS <- c(PMATOOLS_EXPORT_DISPLAY_FIELDS,
                                   PMATOOLS_RESPONDER_FIELDS)
