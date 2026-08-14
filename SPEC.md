@@ -333,6 +333,16 @@ dropping the title.
 This covers `plot_forest_rob()` and `plot_forest_indirectness()` too — both
 delegate — so the suffix a stratified plot appends needs no length budget.
 
+**A newline in `title` is an explicit line break.** The wrap tokenises on
+`[[:space:]]+`, which counts `\n` as ordinary white space, so a break the
+caller typed used to be eaten and the title came back on one line. It is split
+on `[\r\n]+` **first** and each resulting segment is word-wrapped on its own;
+empty segments (a leading, trailing or doubled break) contribute no line, so a
+title never opens with a blank line and `"a\n\nb"` reads as two lines. A title
+without breaks wraps exactly as it did before. The drawn block is anchored by
+its bottom, so extra lines grow upward into the margin and the last line keeps
+its distance above the column headers.
+
 ### 4.3a `plot_forest_rob()` — stratified by risk of bias
 
 ```r

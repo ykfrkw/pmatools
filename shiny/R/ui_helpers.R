@@ -1699,17 +1699,31 @@ pma_forest_display_panel <- function(prefix = NULL) {
     htmltools::tags$summary("Forest plot display"),
     htmltools::div(
       class = "pma-display-grid",
+      # A textarea, not a textInput. plot_forest() honours a newline in the
+      # title as an explicit line break (SPEC.md 4.3), and <input type="text">
+      # cannot carry one: the HTML value sanitisation algorithm strips CR/LF,
+      # so a break would be swallowed both when the user typed it and when the
+      # autofill below pushed the stratified default in - joining the suffix
+      # onto the outcome name with no separator at all. updateTextInput() and
+      # updateTextAreaInput() send the same message, so pma_autofill_text()
+      # drives this field unchanged.
       htmltools::div(
         class = "pma-span-4",
-        shiny::textInput(labels[["title"]], "Title", value = "", width = "100%")),
+        shiny::textAreaInput(labels[["title"]], "Title (line breaks honoured)",
+                             value = "", rows = 2, width = "100%")),
 
       shiny::textInput(labels[["label_e"]], "Intervention label", value = "", width = "100%"),
       shiny::textInput(labels[["label_c"]], "Control label",      value = "", width = "100%"),
       shiny::textInput(labels[["favors_left"]],  "Favors (left)",  placeholder = "e.g., Favors Control", width = "100%"),
       shiny::textInput(labels[["favors_right"]], "Favors (right)", placeholder = "e.g., Favors CBT-I",   width = "100%"),
 
-      shiny::numericInput(.id("xlim_lo"), "x-min", value = NA, width = "100%"),
-      shiny::numericInput(.id("xlim_hi"), "x-max", value = NA, width = "100%"),
+      # Two per row rather than four: a row holding only x-min and x-max left
+      # the third and fourth columns empty, so the fields below it sat a column
+      # out of step with the ones above. .pma-span-2 fills the row instead.
+      htmltools::div(class = "pma-span-2",
+        shiny::numericInput(.id("xlim_lo"), "x-min", value = NA, width = "100%")),
+      htmltools::div(class = "pma-span-2",
+        shiny::numericInput(.id("xlim_hi"), "x-max", value = NA, width = "100%")),
 
       # Blank rows around the pooled result. Always visible: they matter most
       # once the per-arm columns are hidden (that is when the heterogeneity
@@ -1733,10 +1747,12 @@ pma_forest_display_panel <- function(prefix = NULL) {
                "these to move it up or down. Above: 0 removes the ",
                "blank row before the pooled result. Below: blank ",
                "= automatic.")),
-      shiny::numericInput(addrows[["above"]], "Blank rows above pooled result",
-                          value = 1, min = 0, step = 1, width = "100%"),
-      shiny::numericInput(addrows[["below"]], "Blank rows below pooled result",
-                          value = NA, min = 0, step = 1, width = "100%"),
+      htmltools::div(class = "pma-span-2",
+        shiny::numericInput(addrows[["above"]], "Blank rows above pooled result",
+                            value = 1, min = 0, step = 1, width = "100%")),
+      htmltools::div(class = "pma-span-2",
+        shiny::numericInput(addrows[["below"]], "Blank rows below pooled result",
+                            value = NA, min = 0, step = 1, width = "100%")),
 
       # One checkbox, not two: plot_forest() keeps show_n and show_events as
       # separate arguments (correct for a library), but there is no case where

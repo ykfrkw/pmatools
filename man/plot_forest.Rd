@@ -29,7 +29,9 @@ plot_forest(
 \item{title}{Optional plot title. Drawn on its own line(s) above the
 column headers, word-wrapped to the device width, so a long title
 cannot collide with the \code{Events / N} and \code{OR (95\% CI)}
-headings. Not passed to \code{\link[meta]{forest}} as \code{smlab};
+headings. A newline in the title is honoured as an explicit line break
+and each resulting line is wrapped on its own; empty lines are dropped.
+Not passed to \code{\link[meta]{forest}} as \code{smlab};
 see \code{.draw_forest_title()}.}
 
 \item{label_e}{Label for the experimental arm.}

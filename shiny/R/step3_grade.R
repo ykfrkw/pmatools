@@ -3829,8 +3829,9 @@ step3_server <- function(input, output, session, state) {
   # read: while the user is on Step 3, the Step 2 body (and therefore
   # input$experimental_label / input$control_label) does not exist.
   #
-  # The title suffix mirrors what export_bundle.R writes for each stratified
-  # plot, so the on-screen title and the exported one agree.
+  # The title these prefill is what the export carries too: the app hands the
+  # panel's values to export_bundle(), whose own "(stratified by RoB)" default
+  # only fires when a title reaches it blank.
   .forest_label_defaults <- shiny::reactive({
     iv  <- state$arm_e %||% ""
     ct  <- state$arm_c %||% ""
@@ -3838,11 +3839,23 @@ step3_server <- function(input, output, session, state) {
     list(title = state$outcome_name %||% "", label_e = iv, label_c = ct,
          favors_left = fav$left, favors_right = fav$right)
   })
+  # The suffix starts on its OWN LINE, not after a space: the outcome name plus
+  # the stratification ran wide enough that the wrapped title reached down into
+  # the column headers (Events / N / OR (95% CI) / Weight). plot_forest()
+  # honours "\n" as an explicit break (SPEC.md 4.3), and the Title field is a
+  # textarea for the same reason - an <input type="text"> would strip it.
+  #
+  # Publication bias gets NO suffix. Its plot is a two-group figure whose
+  # subgroup heading already reads "available" / "missing results", so the
+  # suffix said the same thing a second time while costing a title line.
+  #
+  # Indirectness still appends on the same line: it has not been reported as
+  # overlapping, and its heading is shorter. Move it to "\n(" as well if it is.
   .forest_title_suffix <- c(
-    rob    = " (stratified by Risk of Bias)",
+    rob    = "\n(stratified by Risk of Bias)",
     incon  = "",
     indir  = " (stratified by Indirectness)",
-    pubias = " (available vs missing results)"
+    pubias = ""
   )
   for (.pfx in names(.forest_title_suffix)) {
     # local() binds the prefix per iteration; without it all four panels would
