@@ -6,7 +6,47 @@
 
 > **Disclaimer**: `pmatools` implements the Core GRADE series (Guyatt et al., BMJ 2025), which summarizes GRADE guidance; it is not an official GRADE Working Group tool.
 
-A wizard-style Shiny front-end lives in the companion repository [pairwise_meta_analysis](https://yuki-furukawa.shinyapps.io/pairwise_meta_analysis/) (deployed on shinyapps.io).
+---
+
+## The Shiny app — how most people use pmatools
+
+Most reviewers never call these functions directly. They use the **wizard**, a
+Shiny front-end that walks a comparison from a spreadsheet to a finished
+Summary of Findings without writing R — one outcome at a time, saving each as
+it goes, so a review with several outcomes lands in one combined table. It is
+for systematic reviewers and guideline panellists who have extracted their data
+and now have to rate it; the R API below is for people who want the same
+pipeline inside a script.
+
+- **Live:** <https://yuki-furukawa.shinyapps.io/pmatools/>
+- **Embedded** in the page at <https://yukifurukawa.jp/pmatools/>
+
+The app lives in `shiny/` **in this repository** — it is not a separate
+project. It does not install pmatools; the bundle carries the package sources
+and `source()`s them, so a local run stages them first:
+
+```bash
+Rscript shiny/stage_bundle.R          # vendor R/ and inst/ into shiny/
+Rscript -e 'shiny::runApp("shiny")'   # or shiny::runApp("shiny") in RStudio
+```
+
+Four steps, in order:
+
+| Step | What you do |
+|---|---|
+| **1. Data** | load a file, paste a table, or take a bundled sample; map the columns; check the parsed rows |
+| **2. Meta-analysis** | pick the effect measure and labels, pool, read the forest and funnel plots |
+| **3. GRADE** | work through the five domains, each with its algorithm explained and every automatic judgment overridable; save the outcome and go back for the next one |
+| **4. Export** | preview the Summary of Findings across every saved outcome, then download the reproducible ZIP — data, `analysis.R`, plots, SoF and evidence profile |
+
+The app has **its own version** (`shiny/DESCRIPTION`, currently 3.0.0), which
+tracks separately from the package version (0.5.1) in the root `DESCRIPTION`.
+They count different things: the package version counts changes to the
+analysis and rating API, the app version counts changes to the wizard's UI, and
+a release of one usually is not a release of the other. `shiny/DESCRIPTION` is
+an rsconnect dependency manifest, never an installed package.
+
+[shiny/SPEC.md](shiny/SPEC.md) is the app's authoritative specification.
 
 ---
 
@@ -76,8 +116,11 @@ export_bundle(ma, g, output_dir = "outputs", bundle_name = "cbti_depression")
 ```
 
 `outputs/cbti_depression.zip` contains: `data_long.csv`, `analysis.R` (re-runs the
-analysis with `library(pmatools)`), `results.txt`, forest/funnel PDF+PNG, the SoF
-docx, and the certainty Appendix docx (Core GRADE series).
+analysis with `library(pmatools)`), `results.txt`, the forest and funnel plots as
+PDFs (`forest_plot.pdf`, `funnel_plot.pdf`, `funnel_trimfill.pdf`,
+`pubias_missing_forest.pdf`), and the two tables as Word documents
+(`sof_table.docx`, `grade_table.docx`). The certainty Appendix is a separate
+call — `grade_report()`.
 
 ### Several outcomes in one session (v0.5)
 
@@ -85,34 +128,96 @@ Give the long-format data an `outcome` column and the whole pipeline runs once
 per outcome. `run_ma()` still takes a single outcome; `run_ma_multi()` is the
 orchestrator above it.
 
+The bundled sample carries several outcomes in one wide file, so the first step is
+to stack the ones you want into a long table with an `outcome` column. Three of
+them — two binary, one continuous — are enough to show the shape:
+
 ```r
-data <- ingest_data("outcomes_long.csv", format = "long")   # has an `outcome` column
+raw  <- read.csv(system.file("extdata/cbti_depression.csv", package = "pmatools"))
+arms <- data.frame(studlab = raw$study, treat = raw$treatment, rob = raw$rob_d)
+
+long <- rbind(
+  cbind(arms, outcome = "Depression response",
+        n = raw$n_randomized, event = raw$d_r,
+        mean = NA_real_, sd = NA_real_),
+  cbind(arms, outcome = "Depression remission",
+        n = raw$n_randomized, event = raw$n_remission,
+        mean = NA_real_, sd = NA_real_),
+  cbind(arms, outcome = "Depression severity",
+        n = raw$d_ep_n, event = NA_integer_,
+        mean = raw$d_ep_m, sd = raw$d_ep_sd)
+)
+
+# A study that did not measure an outcome simply has no row for it.
+long <- subset(long, !is.na(n) & (!is.na(event) | !is.na(mean)))
+
+data <- ingest_data(long, format = "long",
+                    experimental_label = "CBT-I", control_label = "Control")
 
 ma_list <- run_ma_multi(
   data,
-  sm = list("Mortality" = "RR", "Depression severity" = "SMD")  # or one value for all
+  sm           = list("Depression response"  = "OR",     # or one value for all
+                      "Depression remission" = "OR",
+                      "Depression severity"  = "SMD"),
+  outcome_type = list("Depression response"  = "binary",
+                      "Depression remission" = "binary",
+                      "Depression severity"  = "continuous")
 )
+
+# Each outcome keeps only the studies that reported it, so the risk-of-bias
+# vector is read back per outcome rather than shared.
+rob_of <- function(outcome) {
+  data$rob[data$outcome == outcome & data$treat == "experimental"]
+}
 
 set <- grade_meta_multi(
   ma_list,
-  common = list(study_design = "RCT", threshold_type = "mid",
-                threshold = 1.25, threshold_scale = "ratio",
-                small_values = "undesirable", follow_up = "12 weeks"),
+  common = list(study_design    = "RCT",
+                threshold_type  = "mid",
+                threshold       = 1.25,
+                threshold_scale = "ratio",
+                small_values    = "undesirable",
+                follow_up       = "8-12 weeks"),
   per_outcome = list(
-    "Depression severity" = list(threshold = 0.2, threshold_scale = "auto",
-                                 outcome_type = "absolute", unit = "points")
+    "Depression response"  = list(rob = rob_of("Depression response"),
+                                  ois_p0 = 0.25, ois_p1 = 0.40),
+    "Depression remission" = list(rob = rob_of("Depression remission"),
+                                  ois_p0 = 0.18, ois_p1 = 0.30),
+    "Depression severity"  = list(rob             = rob_of("Depression severity"),
+                                  threshold       = 0.2,
+                                  threshold_scale = "auto",
+                                  outcome_type    = "absolute",
+                                  small_values    = "desirable",
+                                  unit            = "SD units")
   ),
-  primary = "Mortality"
+  primary = "Depression response"
 )
 
 # An outcome the review prespecified that no included study reported (v0.5.1).
 # It gets a row of the summary table, but no effect estimate and no rating.
 set <- add_not_reported(set, "Quality of life",
-                        follow_up = "12 weeks",
+                        follow_up = "8-12 weeks",
                         reason    = "Prespecified; no included trial measured it.")
 
 print(set)                                   # certainty / rating target / analysis set
-set <- reorder_outcomes(set, c("Mortality", "Depression severity", "Quality of life"))
+#> -- Multi-outcome Certainty Set (Core GRADE series) -------
+#>  Outcomes : 4
+#>  Primary  : Depression response
+#>  Data     : 100 rows of long-format data
+#>
+#>   #  Outcome / certainty / rating target / analysis set
+#>   1  Depression response  [primary]
+#>      Moderate   | Important effect         | all studies
+#>   2  Depression remission
+#>      High       | Important effect         | all studies
+#>   3  Depression severity
+#>      Moderate   | Important effect         | all studies
+#>   4  Quality of life
+#>      <not reported> | -                        | -
+#> ----------------------------------------------------------
+
+set <- reorder_outcomes(set, c("Depression response", "Depression remission",
+                               "Depression severity", "Quality of life"))
 grade_table(set, style = "bmj")              # rows follow set$order
 export_bundle(set, output_dir = "outputs", bundle_name = "all_outcomes")
 ```
@@ -380,7 +485,7 @@ suggest_threshold(ma)              # binary outcome
 #> $threshold_scale  "ard"
 #> $source           "package_convention"
 #> $threshold_absolute  list(0.05, "ard", "package_convention")
-#> $threshold_ratio     list(1.20, "ratio", "package_convention")
+#> $threshold_ratio     list(1.25, "ratio", "package_convention")
 ```
 
 **Why the absolute candidate leads (v0.5).** Core GRADE 1, 6 and 7 contain
@@ -1091,17 +1196,19 @@ numbers or branch on them; read `notes` when you need the reasoning.
 
 ```r
 names(domain_facts(g))          # every domain that recorded something
-#> [1] "Risk of bias"  "Inconsistency" "Imprecision"
+#> [1] "Risk of bias"  "Inconsistency" "Imprecision"  "Publication bias"
 
 domain_facts(g, "Imprecision")
-#> # A tibble: 6 x 4
+#> # A tibble: 8 x 4
 #>   key                 label                              value           numeric
-#> 1 confidence_interval 95% confidence interval            OR [1.62, 3.34]   NA
-#> 2 crosses_null        Crosses the null                   no                NA
-#> 3 threshold_position  Position relative to the threshold beyond Thresho~   NA
-#> 4 ois                 Optimal information size           observed 4808 ~  2.20
-#> 5 fig4_path           Core GRADE 2 Fig 4 path            CI does not cr~   NA
-#> 6 ois_used            OIS approach applied               yes               NA
+#> 1 confidence_interval 95% confidence interval            OR [1.62, 3.34]  NA
+#> 2 crosses_null        Crosses the null                   no               NA
+#> 3 threshold_position  Position relative to the threshold beyond Thresho~  NA
+#> 4 ois                 Optimal information size           observed 4808 ~   1.21
+#> 5 ois_target_rate     OIS alternative event rate         0.2107 (an inc~   0.211
+#> 6 fig4_path           Core GRADE 2 Fig 4 path            CI does not cr~  NA
+#> 7 ois_used            OIS approach applied               yes              NA
+#> 8 flow_path           Flowchart path                     pma-impre-node~  NA
 
 # The raw numbers are there to compute with, and the keys to branch on.
 f <- domain_facts(g, "Inconsistency")
@@ -1119,8 +1226,13 @@ Which facts each domain records:
 |---|---|
 | Risk of bias | `high_rob_studies`, `high_rob_weight_share`, `estimate_shift`, `fig2_branch` |
 | Inconsistency | `i2`, `tau2`, `q_pvalue`, `zone_counts`, `zone_decision` |
-| Imprecision | `confidence_interval`, `crosses_null`, `threshold_position`, `ois`, `fig4_path`, `ois_used` |
-| Indirectness, Publication bias | none yet — `domain_facts(g, "Indirectness")` returns `NULL`, which is a valid domain name with nothing recorded, not an error |
+| Imprecision | `confidence_interval`, `crosses_null`, `threshold_position`, `ois`, `ois_target_rate`, `fig4_path`, `ois_used` |
+| Publication bias | `k`, `egger_p` where the test ran |
+| Indirectness | none — `domain_facts(g, "Indirectness")` returns `NULL`, which is a valid domain name with nothing recorded, not an error. Core GRADE 5 grades it on a gradient rather than a branch, so there is no path to record |
+
+Every flowcharted domain also records `flow_path`, the node ids of the route
+its assessment took through the figure. It is machine-only: the renderers
+filter it out before facts become prose, so it never appears in a footnote.
 
 `domain` must match `$domain_assessments$domain` exactly (`"Risk of bias"`,
 `"Indirectness"`, `"Inconsistency"`, `"Imprecision"`, `"Publication bias"`); a
@@ -1147,6 +1259,10 @@ Full runnable code in [sample.R](sample.R). Sample data is bundled in `inst/extd
 > **Note on sample data:** `cbti_depression.csv` is a synthetic dataset that reproduces the structure of the original data. All study names, effect sizes, and sample sizes are fictional.
 
 ### Certainty assessment code (Core GRADE series)
+
+`df` below is the study-level table `sample.R` §1 builds from
+`cbti_depression.csv` — one row per trial, with `study`, `event_e`, `n_e`,
+`event_c`, `n_c` and `rob_d`. `metabin()` comes from `library(meta)`.
 
 ```r
 m_response <- metabin(
@@ -1519,67 +1635,17 @@ outcome — `run_ma_multi()` is the only supported way to batch.
 ### Worked example
 
 Runs end to end on the bundled sample data (see also `sample.R`, section 9).
-`df`, `rob_vec` and the CBT-I data frame come from the
-[worked example](#worked-example-cbt-i-for-depression-response) above.
+`data`, `ma_list` and `set` are the ones built in
+[Several outcomes in one session](#several-outcomes-in-one-session-v05) above —
+run that block first, then continue here.
 
 ```r
-## One long table holding both outcomes ------------------------------------
-long_response <- rbind(
-  data.frame(studlab = df$study, outcome = "Depression response",
-             treat = "experimental", n = df$n_e, event = df$event_e,
-             rob = rob_vec, stringsAsFactors = FALSE),
-  data.frame(studlab = df$study, outcome = "Depression response",
-             treat = "control", n = df$n_c, event = df$event_c,
-             rob = rob_vec, stringsAsFactors = FALSE)
-)
-long_remission <- long_response
-long_remission$outcome <- "Insomnia remission"
-long_remission$event   <- pmax(0, round(long_remission$event * 0.7))  # placeholder
-
-data_multi <- ingest_data(rbind(long_response, long_remission), format = "long")
-
-## One meta-analysis per outcome -------------------------------------------
-ma_list <- run_ma_multi(data_multi, sm = "OR", method.tau = "REML", incr = 0.1)
 names(ma_list)
-#> [1] "Depression response" "Insomnia remission"
-
-## One certainty rating per outcome ----------------------------------------
-set <- grade_meta_multi(
-  ma_list,
-  ## arguments shared by every outcome
-  common = list(
-    study_design          = "RCT",
-    threshold_type        = "mid",
-    threshold             = 1.25,
-    threshold_scale       = "ratio",
-    small_values          = "undesirable",
-    rob                   = rob_vec,
-    pubias_small_industry = "no",
-    follow_up             = "8-12 weeks"   # BMJ "Outcome and follow-up" column
-  ),
-  ## arguments for one outcome only; these override `common`
-  per_outcome = list(
-    "Depression response" = list(ois_p0 = 0.25, ois_p1 = 0.40),
-    "Insomnia remission"  = list(ois_p0 = 0.18, ois_p1 = 0.30)
-  ),
-  primary = "Depression response"
-)
-
-print(set)
-#> -- Multi-outcome Certainty Set (Core GRADE series) -------
-#>  Outcomes : 2
-#>  Primary  : Depression response
-#>  Data     : 68 rows of long-format data
-#>
-#>   #  Outcome / certainty / rating target / analysis set
-#>   1  Depression response  [primary]
-#>      Moderate   | Important effect         | all studies
-#>   2  Insomnia remission
-#>      High       | Important effect         | all studies
-#> ----------------------------------------------------------
+#> [1] "Depression response"  "Depression remission" "Depression severity"
 
 ## Order and grouping ------------------------------------------------------
-set <- reorder_outcomes(set, c("Insomnia remission", "Depression response"))
+set <- reorder_outcomes(set, c("Depression severity", "Depression response",
+                               "Depression remission", "Quality of life"))
 set <- set_primary(set, "Depression response")
 
 ## Outputs -----------------------------------------------------------------
@@ -1588,14 +1654,19 @@ grade_report(set, format = "docx", output_dir = "outputs")
 export_bundle(set, output_dir = "outputs", bundle_name = "cbti_multi")
 ```
 
+`run_ma_multi()` passes its extra arguments (`method.tau`, `incr`, …) straight
+through to `run_ma()`, where they apply to every outcome alike.
+
 `sm` and `outcome_type` may be a single value (applied to every outcome) or a
-list named by outcome, so **binary and continuous outcomes can share one
-session**:
+list named by outcome, which is what lets **binary and continuous outcomes
+share one session** — `"Depression severity"` above is pooled as an SMD while
+the other two are odds ratios:
 
 ```r
-run_ma_multi(data_multi,
-             sm           = list("Mortality" = "RR", "Depression severity" = "SMD"),
-             outcome_type = list("Mortality" = "binary",
+run_ma_multi(data,
+             sm           = list("Depression response" = "OR",
+                                 "Depression severity" = "SMD"),
+             outcome_type = list("Depression response" = "binary",
                                  "Depression severity" = "continuous"))
 ```
 
@@ -1640,11 +1711,13 @@ cbti_multi.zip
 ├── data_long.csv                 every outcome
 ├── README.txt                    outcome order and per-outcome analysis sets
 └── outcomes/
-    ├── 01_insomnia_remission/
-    │   ├── forest_plot.pdf / .png          the analysis actually rated
-    │   ├── forest_plot_full.pdf / .png     only after a low-RoB refit
-    │   ├── forest_plot_rob.pdf / .png      only when RoB labels are known
-    │   ├── funnel_plot.pdf / .png
+    ├── 01_depression_severity/
+    │   ├── forest_plot.pdf                 the analysis actually rated
+    │   ├── forest_plot_full.pdf            only after a low-RoB refit
+    │   ├── forest_plot_rob.pdf             only when RoB labels are known
+    │   ├── funnel_plot.pdf
+    │   ├── funnel_trimfill.pdf
+    │   ├── pubias_missing_forest.pdf
     │   ├── results.txt
     │   ├── data_long.csv                   this outcome only
     │   ├── evidence_profile.docx
@@ -1731,7 +1804,9 @@ methods (per Efthimiou 2018, Evid Based Ment Health; Tsujimoto 2024, Res
 Synth Methods) and reports them side by side for sensitivity analysis.
 
 ```r
-d    <- ingest_data("events_long.csv", format = "long")
+# A second sample dataset ships for this flow: 10 trials, single-digit events.
+d    <- ingest_data(system.file("extdata/rare_events_mock.csv", package = "pmatools"),
+                    format = "long")
 diag <- rare_event_diagnostics(d)    # $rare_flow, event rates, zero-cell counts
 
 rare <- run_rare_ma(d, effect_scale = "OR")
@@ -1977,12 +2052,13 @@ format. `outcomes` accepts a `pmatools_set` too.
 
 ### Exported functions at a glance
 
-All 32 exports of `NAMESPACE`, one line each. Details are in `?function_name`
+All 33 exports of `NAMESPACE`, one line each. Details are in `?function_name`
 and in [SPEC.md §4](SPEC.md).
 
 | Function | What it does |
 |---|---|
 | `ingest_data()` | Read long or wide study data (file, data frame or clipboard), auto-detect the format, apply column-name mapping, return the canonical long tibble |
+| `detect_column_roles()` | Report which column fills each of `ingest_data()`'s long-format roles, and by which alias — without ingesting anything |
 | `combine_arms()` | Collapse the rows sharing a study unit into one, pooling multi-arm trials per Cochrane Handbook 6.5.2.10 (`ingest_data()` applies it automatically) |
 | `run_ma()` | Fit one pairwise meta-analysis via `{meta}` (binary or continuous); aborts on data holding more than one outcome |
 | `run_ma_multi()` | Split long data on its `outcome` column and run one `run_ma()` per outcome |

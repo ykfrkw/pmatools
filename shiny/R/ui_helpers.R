@@ -1747,11 +1747,197 @@ pma_autofill_forest_panel <- function(input, session, prefix = NULL,
   invisible(NULL)
 }
 
-# Banner (used for the Indirectness review reminder and the risk-of-bias
-# analysis-set notice). Takes any number of children so callers can pass a
-# single string (the original signature) or structured tags.
-pma_banner <- function(...) {
-  htmltools::div(class = "pma-banner", ...)
+# Banner (used for the Indirectness review reminder, the risk-of-bias
+# analysis-set notice and the Step 1 load confirmation). Takes any number of
+# children so callers can pass a single string (the original signature) or
+# structured tags.
+#
+# `tone = "success"` recolours it green while keeping the shape: Step 1's
+# "your data loaded, here is what that means" message has to read as the same
+# kind of object as the warnings sharing that screen, not as a console line.
+pma_banner <- function(..., tone = c("warning", "success")) {
+  tone <- match.arg(tone)
+  htmltools::div(
+    class = paste0("pma-banner", if (tone == "success") " pma-banner-success"),
+    ...)
+}
+
+# --------------------------------------------------------------------------
+# Detected-columns strip (Step 1)
+# --------------------------------------------------------------------------
+# Step 1's job is to answer "did my data load correctly?", and a 39-column
+# table answers "here is your data" instead. The strip states, per role, which
+# column filled it -- which is precisely what an upload gets wrong, and what
+# nothing on the screen used to say.
+#
+# The roles and their order come from detect_column_roles(), which resolves
+# them exactly as ingest_data() does. Only the human labels and the traffic
+# light live here.
+PMA_ROLE_LABELS <- c(
+  studlab      = "Study",
+  treat        = "Arm",
+  n            = "Sample size",
+  event        = "Events",
+  mean         = "Mean",
+  sd           = "SD",
+  outcome      = "Outcome",
+  rob          = "Risk of bias",
+  indirectness = "Indirectness",
+  subgroup     = "Subgroup"
+)
+
+# Roles whose absence is ordinary rather than a problem: an analysis of one
+# outcome with no strata is the common case, so flagging them amber would
+# make the strip noise.
+PMA_ROLE_OPTIONAL <- c("outcome", "subgroup")
+
+# The measure columns. A binary outcome needs `event`; a continuous one needs
+# `mean` and `sd`. Whichever branch the data did not take is not missing, so
+# the unused half is reported as optional rather than amber.
+PMA_ROLE_MEASURE_BINARY     <- "event"
+PMA_ROLE_MEASURE_CONTINUOUS <- c("mean", "sd")
+
+# Per-role status for the strip. Pure: same inputs, same rows, no reactives.
+#
+# `detected` is a detect_column_roles() frame. `judgments` is the per-study
+# Risk of Bias / Indirectness table (state$rob_table) or NULL -- those two
+# roles report how much of the review has been RATED, not what the file
+# happened to carry, because a reviewer can fill them here with the bulk
+# buttons and the chip has to follow.
+#
+# Returns a data.frame of role, label, column, status ("found" / "missing" /
+# "optional") and hint.
+pma_column_role_status <- function(detected, judgments = NULL) {
+  has_binary     <- .role_found(detected, PMA_ROLE_MEASURE_BINARY)
+  has_continuous <- all(vapply(PMA_ROLE_MEASURE_CONTINUOUS,
+                               function(r) .role_found(detected, r), logical(1)))
+
+  rows <- lapply(seq_len(nrow(detected)), function(i) {
+    role   <- detected$role[i]
+    column <- detected$column[i]
+    found  <- isTRUE(detected$found[i])
+
+    if (role %in% c("rob", "indirectness")) {
+      return(.judgment_role_row(role, column, judgments))
+    }
+
+    is_unused_measure <-
+      (role == PMA_ROLE_MEASURE_BINARY && has_continuous && !has_binary) ||
+      (role %in% PMA_ROLE_MEASURE_CONTINUOUS && has_binary && !has_continuous)
+
+    # With neither measure branch satisfied nothing is "unused", so all three
+    # measure roles fall through to missing -- which is the right answer: the
+    # analysis has no numbers to pool.
+    status <- if (found) {
+      "found"
+    } else if (role %in% PMA_ROLE_OPTIONAL || is_unused_measure) {
+      "optional"
+    } else {
+      "missing"
+    }
+
+    data.frame(role = role, label = unname(PMA_ROLE_LABELS[role]),
+               column = column, status = status,
+               hint = .role_hint(role, status),
+               stringsAsFactors = FALSE)
+  })
+
+  do.call(rbind, rows)
+}
+
+.role_found <- function(detected, role) {
+  isTRUE(detected$found[match(role, detected$role)])
+}
+
+# Risk of Bias / Indirectness are judgments, not data. The chip counts rated
+# studies so that assigning them here turns the chip green, and so that a file
+# carrying an unreadable label cannot show green on the strength of the column
+# existing.
+.judgment_role_row <- function(role, column, judgments) {
+  values <- if (is.data.frame(judgments) && role %in% names(judgments)) {
+    as.character(judgments[[role]])
+  } else {
+    character(0)
+  }
+  total <- length(values)
+  rated <- sum(!is.na(values) & nzchar(trimws(values)))
+
+  status <- if (total > 0 && rated == total) "found" else "missing"
+  hint <- if (status == "found") {
+    ""
+  } else if (total == 0) {
+    "not rated yet"
+  } else {
+    sprintf("%d of %d studies rated", rated, total)
+  }
+
+  data.frame(role = role, label = unname(PMA_ROLE_LABELS[role]),
+             column = column, status = status, hint = hint,
+             stringsAsFactors = FALSE)
+}
+
+.role_hint <- function(role, status) {
+  if (status == "found") return("")
+  if (status == "optional") return("not in your data")
+  switch(
+    role,
+    studlab = "no study column",
+    treat   = "no arm column",
+    n       = "no sample-size column",
+    event   = "no events column",
+    mean    = "no mean column",
+    sd      = "no SD column",
+    "not in your data"
+  )
+}
+
+# The columns the analysis actually reads, in role order, restricted to those
+# the data carries. Everything else is context the reviewer brought along.
+pma_analysis_columns <- function(data) {
+  intersect(names(PMA_ROLE_LABELS), names(data))
+}
+
+# What was loaded, as a sentence. Replaces the monospace "Status: 36 rows, 18
+# studies (long format)." line -- same facts, in the banner that says them.
+pma_load_summary <- function(data) {
+  rows    <- nrow(data)
+  studies <- length(unique(as.character(data$studlab)))
+  if (!"outcome" %in% names(data)) {
+    return(sprintf("%d rows, %d studies, long format.", rows, studies))
+  }
+  units <- length(unique(paste(data$studlab, data$outcome, sep = "\r")))
+  sprintf("%d rows, %d studies, %d study-outcomes, long format.",
+          rows, studies, units)
+}
+
+# One chip per role. The source column is named only when it differs from the
+# role, so a canonical table reads as a row of plain green names rather than
+# ten copies of "studlab from studlab".
+pma_column_roles_strip <- function(detected, judgments = NULL) {
+  status <- pma_column_role_status(detected, judgments)
+
+  chips <- lapply(seq_len(nrow(status)), function(i) {
+    row <- status[i, ]
+    detail <- if (nzchar(row$hint)) {
+      row$hint
+    } else if (!is.na(row$column) && !identical(row$column, row$role)) {
+      row$column
+    } else {
+      NULL
+    }
+    htmltools::div(
+      class = paste0("pma-role-chip pma-role-", row$status),
+      htmltools::span(class = "pma-role-chip-label", row$label),
+      if (!is.null(detail)) {
+        htmltools::span(class = "pma-role-chip-detail", detail)
+      }
+    )
+  })
+
+  htmltools::div(
+    htmltools::div(class = "pma-role-strip-title", "Detected columns"),
+    htmltools::div(class = "pma-role-strip", chips)
+  )
 }
 
 # --------------------------------------------------------------------------

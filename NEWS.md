@@ -194,6 +194,31 @@
 
 ## New features
 
+* **New `detect_column_roles()` reports which column filled each
+  `ingest_data()` role.** Given a data frame or a vector of column names, it
+  returns one row per canonical long-format role (`studlab`, `treat`, `n`,
+  `event`, `mean`, `sd`, `outcome`, `rob`, `indirectness`, `subgroup`) naming
+  the source column that fills it, whether the match was canonical or by
+  alias, and whether `ingest_data()` aborts without it. The alias list it reads
+  is the one ingest itself renames by — extracted to `PMA_INGEST_ROLE_ALIASES`
+  and shared — so a role reported as filled is a role `ingest_data()` fills,
+  including the order rules (canonical beats alias; the first alias listed
+  wins; `group` goes to `treat`, leaving `subgroup` empty). Nothing about the
+  `ingest_data()` contract changes.
+
+* **Step 1 of the Shiny app says which column was recognised as what.** The
+  preview card opens with a green load banner ("36 rows, 18 studies, long
+  format.", replacing a monospace `Status:` line) and a detected-columns strip
+  built from `detect_column_roles()`: one chip per role, green with the source
+  column when filled, amber with a hint when a role the analysis needs is not,
+  muted when its absence is ordinary. `rob` and `indirectness` report how many
+  studies are rated rather than whether a column exists. The preview itself now
+  defaults to the analysis columns — the bundled sample is 39 columns wide and
+  five of them are the analysis — with an **All columns** toggle beside it, and
+  the bulk risk-of-bias buttons that previously existed only inside Step 3's
+  Risk of Bias tab are repeated below the table, where the data-entry pass
+  happens. Both sets write the same `state$rob_table`; the Step 3 copies stay.
+
 * **`grade_table()` presents a continuous outcome as a proportion of
   responders, row by row.** `sof_table()` has taken `convert_smd_to_or` /
   `baseline_risk` / `threshold_label` / `chinn_invert` since v0.2, which is the
@@ -420,6 +445,19 @@
   the bundler. `sof_notes` does not reach the certainty appendix.
 
 ## Behaviour changes
+
+* **A forest plot's title moves out of the column-header row onto its own line
+  above it.** `plot_forest(title =)` used to reach `meta::forest()` as `smlab`,
+  which `{meta}` draws inside the header row, centred over the forest column. A
+  title wider than that column overran its neighbours and rendered as
+  `EvenDepression response (stratified by Risk of Bias)GR (95% CI)` — reported
+  on the risk-of-bias stratified plot, where the outcome name is already a
+  sentence before the plot appends its suffix, and reproducible from any long
+  `forest_display$title`. The title is now word-wrapped to the device width and
+  drawn above the headers, anchored to the top of the block `meta::forest()`
+  reports, so it stays with the plot on any canvas. `plot_forest_rob()` and
+  `plot_forest_indirectness()` inherit the fix; no suffix was shortened, and
+  titles that already fitted are unmoved apart from sitting one line higher.
 
 * **Every reference is written the same way, and none of them is a link.** The
   house style is now first author, `et al.`, journal abbreviation, year —

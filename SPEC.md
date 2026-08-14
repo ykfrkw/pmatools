@@ -1,6 +1,6 @@
 # pmatools — Package Specification
 
-> Authoritative specification for the pmatools R package. Implementation MUST conform to this document. UI-side concerns (Shiny wizard, educational copy, accordion layout) are specified separately in `~/Developer/pairwise_meta_analysis/SPEC.md`.
+> Authoritative specification for the pmatools R package. Implementation MUST conform to this document. UI-side concerns (Shiny wizard, educational copy, accordion layout) are specified separately in [`shiny/SPEC.md`](shiny/SPEC.md), which governs the app in this repository's `shiny/` directory.
 
 **Version target:** 0.5.1
 **Document history:** this file was written for v0.2.0 and has been updated in place for v0.5.0 and v0.5.1; section numbering is preserved so the diff stays readable. Sections that still describe v0.2 behaviour verbatim are marked **[v0.2 — superseded]** with a pointer to the section that governs.
@@ -22,7 +22,7 @@ pmatools is the **single source of truth** for:
 3. Summary of Findings (SoF) flextable + Appendix report
 4. Reproducible export bundle (CSV + R script + plots + tables → ZIP)
 
-It is **Shiny-agnostic**. All functions return plain R objects (tibbles, base graphics, flextables, file paths). The Shiny wizard at `pairwise_meta_analysis` consumes pmatools functions only.
+It is **Shiny-agnostic**. All functions return plain R objects (tibbles, base graphics, flextables, file paths). The Shiny wizard under `shiny/` is a consumer like any other: it calls pmatools functions and nothing here may depend on it.
 
 ---
 
@@ -188,6 +188,45 @@ ingest_data(
 - Non-numeric values where numeric expected
 - A `studlab` that appears !=2 times in long output (after wide→long conversion)
 
+#### 4.1a `detect_column_roles()` [v0.5.1]
+
+```r
+detect_column_roles(data) -> data.frame   # data: a data.frame, or column names
+```
+
+Reports which column filled each of `ingest_data()`'s long-format roles,
+without ingesting anything. One row per role, in role order, with columns
+`role`, `column` (the source column, `NA` when unfilled), `matched_by`
+(`"canonical"` / `"alias"` / `NA`), `found` and `required`.
+
+The roles, and the aliases accepted for each, are `PMA_INGEST_ROLE_ALIASES` —
+the **single** definition. `.resolve_role_names()` renames by it during ingest
+and `detect_column_roles()` reports by it, so a role reported as filled is a
+role `ingest_data()` fills. Resolution order matters and is shared: a canonical
+name beats an alias, the first alias listed wins among several present, and a
+column claimed by one role is invisible to later ones (`group` is an alias of
+both `treat` and `subgroup`; `treat` claims it).
+
+| role | required | aliases |
+|---|---|---|
+| `studlab` | yes | `study`, `id`, `study_name`, `study_id`, `trial`, `trial_id` |
+| `treat` | yes | `treatment`, `arm`, `t`, `intervention`, `group`, `condition` |
+| `n` | yes | `n_randomized`, `n_total`, `sample_size`, `N` |
+| `event` | no | `events`, `d_r`, `responders`, `n_events` |
+| `mean` | no | `means` |
+| `sd` | no | `stdev`, `stddev` |
+| `outcome` | no | — (recognised, never renamed into) |
+| `rob` | no | `risk_of_bias`, `rob_d`, `rob_overall`, `rob_judgment`, `rob_judgement` |
+| `indirectness` | no | `indir` |
+| `subgroup` | no | `group`, `stratum` |
+
+`required` is what `.validate_long()` aborts without. Long format only: wide
+input has fixed canonical pair names and no alias mechanism to report on.
+
+Exists for host applications: the Shiny app's Step 1 states which column was
+recognised as what (`shiny/SPEC.md` §3.2.3), which is the check an upload most
+often fails.
+
 ### 4.2 `run_ma()` [new]
 
 ```r
@@ -273,6 +312,26 @@ plot_forest(
 `auto_layout = FALSE` behaves like a thin wrapper around `meta::forest()` with no overrides.
 
 Since v0.4 the signature also carries display arguments used by the export bundle: `threshold_lines`, `show_n`, `show_events`, `favors_left`, `favors_right`, `addrow_above`, `addrow_below`. `addrow_below = NULL` (the default) derives the bottom spacing from the drawn content so the heterogeneity text cannot overlap the x-axis band.
+
+**`title` placement (v0.5.1).** The title is drawn on its own line(s) above the
+column headers, word-wrapped to the device width. It is **not** passed to
+`meta::forest()` as `smlab`: `{meta}` draws `smlab` inside the header row,
+centred over the forest column, so a title wider than that column overruns the
+neighbouring header cells and renders as `EvenDepression response…GR (95% CI)`.
+Titles are outcome names chosen by the caller, so no length bound holds;
+`{meta}` also refuses an `smlab` of more than two lines, so wrapping it in
+place does not generalise either.
+
+`plot_forest()` therefore passes `smlab = ""` and draws the title **after**
+`meta::forest()` returns, anchored to the top of the block that call reports as
+`figheight$total_height`. `{meta}` sizes its block to the device and centres it
+vertically, so reserving a band up front instead would shrink the region it
+centres in without shrinking the block, stranding the title above a large gap
+on a tall canvas. Failing to measure degrades to the device top rather than
+dropping the title.
+
+This covers `plot_forest_rob()` and `plot_forest_indirectness()` too — both
+delegate — so the suffix a stratified plot appends needs no length budget.
 
 ### 4.3a `plot_forest_rob()` — stratified by risk of bias
 
@@ -1912,7 +1971,7 @@ instead.
 
 - GRADE upgrade domains (large effect, dose-response, plausible confounding)
 - GRADEpro JSON export/import
-- shinyapps.io deployment automation in pmatools (kept in pairwise_meta_analysis)
+- shinyapps.io deployment automation in the package (it lives with the app, in `shiny/deploy.R`)
 - Internationalization
 - CRAN submission
 

@@ -1,10 +1,12 @@
-# pairwise_meta_analysis — Shiny App Specification
+# pmatools wizard — Shiny App Specification
 
-> Authoritative specification for the pairwise_meta_analysis Shiny app (v2 — wizard refactor). The package-level R logic (data ingestion, MA pipeline, GRADE assessment, SoF table, export) is provided by [pmatools](../pmatools/SPEC.md). This app is a **UI layer** on top of pmatools.
+> Authoritative specification for the pmatools wizard, the Shiny app in this repository's `shiny/` directory (v2 — wizard refactor). The package-level R logic (data ingestion, MA pipeline, GRADE assessment, SoF table, export) is provided by [pmatools](../SPEC.md), whose sources live one directory up. This app is a **UI layer** on top of pmatools.
 
-**Public URL:** https://yuki-furukawa.shinyapps.io/pairwise_meta_analysis/
-**Deployment:** shinyapps.io (account: `yuki-furukawa`, appId: `15217423`)
+**Public URL:** https://yuki-furukawa.shinyapps.io/pmatools/
+**Deployment:** shinyapps.io (account: `yuki-furukawa`, appId: `17697029`)
 **Target version:** 2.0.0 (succeeds the existing single-page app)
+
+> **Stale below this point.** §2.1, §2.2, §7 and §9 still describe the app as a separate repository that installs pmatools from GitHub (`Remotes: github::ykfrkw/pmatools`). It does not, and following §7 will fail on the build server — the bundle vendors the package sources instead. `../CLAUDE.md` §1 and `stage_bundle.R` / `deploy.R` are authoritative for deployment until those sections are rewritten (tracked as item 9 of `../PLAN.md`'s feedback section).
 
 ---
 
@@ -221,6 +223,56 @@ For wide format, mapping prompts for `studlab, n_e, n_c, event_e, event_c` (bina
 **Card "Preview & edit":**
 
 `DT::DTOutput("data_preview")` rendered from the post-mapping long tibble. Cells are editable (so RoB / Indirectness columns can be added or corrected). Edits write back to `state$data`.
+
+The card opens with two pieces of feedback, because the step's job is to answer
+"is my data right?", not to display it:
+
+1. **A load banner** — `pma_banner(tone = "success")` carrying
+   `pma_load_summary()` ("36 rows, 18 studies, long format."). It replaces a
+   `verbatimTextOutput` reading `Status: ...`; a read failure renders the same
+   banner in its warning tone instead.
+2. **A detected-columns strip** — `pma_column_roles_strip()`, one chip per
+   `pmatools::detect_column_roles()` role, above the table. The strip is built
+   from the column names **as they arrived**, captured into `loaded_raw_names`
+   at ingest: `ingest_data()` renames source columns onto their role names, so
+   the ingested tibble alone can no longer say that `studlab` came from
+   `study`.
+
+Chip states, from `pma_column_role_status()`:
+
+| state | meaning | shown |
+|---|---|---|
+| `found` | a column filled the role | green, naming the source column when it differs from the role |
+| `missing` | nothing filled a role the analysis needs | amber, with a short hint |
+| `optional` | absence is ordinary | muted, "not in your data" |
+
+`outcome` and `subgroup` are always `optional` when absent. The measure roles
+are an either-or family: with `event` present, `mean`/`sd` are `optional`, and
+vice versa; with neither branch satisfied all three are `missing`. `rob` and
+`indirectness` report **how much of the review is rated** (from
+`state$rob_table`), not whether a column exists, so assigning them here turns
+the chip green and a file carrying unreadable labels cannot show green on the
+strength of the column existing.
+
+**Column toggle.** `radioButtons("preview_columns", …)` switches the preview
+between **Analysis columns** (default) and **All columns**. The analysis set is
+`pma_analysis_columns()` — the `detect_column_roles()` roles the data carries.
+The bundled sample is 39 columns wide and five of them are the analysis; the
+full table stays one click away.
+
+The toggle **hides** columns (`columnDefs`, `visible = FALSE`); it never
+subsets the frame handed to `DT::datatable()`. DT reports a cell edit as
+`col`, the DataTables column index, which counts hidden columns, and
+`input$data_preview_cell_edit` is applied as `res[[info$col + 1]]` against the
+full frame. A subset would leave that index pointing at a different column and
+write the edit into the wrong one.
+
+**Bulk risk of bias.** `step1_rob_set_low` / `_some` / `_high` / `step1_rob_clear`,
+below the table. Assigning risk of bias across every study is data-entry work.
+They write `state$rob_table` — the same object Step 3's editor and the rating
+read — and the preview's `rob` column, so the table reflects the press. The
+Step 3 copies (§3.4) stay: correcting one study while looking at the certainty
+verdict is a real workflow, and both sets edit the same state.
 
 #### 3.2.4 Validation
 
