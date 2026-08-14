@@ -157,12 +157,18 @@ step2_ui <- function(state = NULL) {
               # No preselected direction: the user must actively choose. The
               # values "desirable" / "undesirable" are the vocabulary the
               # vendored pmatools validates, so only the labels are re-worded.
+              #
+              # The question is asked once, in the label, and the options are
+              # the two answers to it. They used to restate it ("Favorable -
+              # smaller is better (e.g., mortality, symptom score)"), which put
+              # the same sentence on screen three times and wrapped each option
+              # onto four lines in a 300px sidebar. One word each fits inline,
+              # beside the Outcome type radio it now matches.
               shiny::radioButtons("small_values",
-                "Direction (required): is a SMALLER value of this outcome favorable?",
-                choices = c(
-                  "Favorable - smaller is better (e.g., mortality, symptom score)" = "desirable",
-                  "Unfavorable - smaller is worse (e.g., response, remission)"     = "undesirable"),
-                selected = small_values_default, inline = FALSE),
+                "A SMALLER value of this outcome is... (required)",
+                choices = c("Favorable" = "desirable",
+                            "Unfavorable" = "undesirable"),
+                selected = small_values_default, inline = TRUE),
               # Binary / continuous sits with the outcome's identity rather
               # than with the column mapping: it is a property of the outcome,
               # and it decides which of the optional fields below applies.
