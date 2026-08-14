@@ -13,7 +13,11 @@
 #'
 #' @param meta_obj A `meta` object (from \code{\link{run_ma}} or
 #'   \code{\link[meta]{metabin}}/\code{\link[meta]{metacont}}).
-#' @param title Optional plot title (passed as `smlab`).
+#' @param title Optional plot title. Drawn on its own line(s) above the
+#'   column headers, word-wrapped to the device width, so a long title
+#'   cannot collide with the \code{Events / N} and \code{OR (95\% CI)}
+#'   headings. Not passed to \code{\link[meta]{forest}} as \code{smlab};
+#'   see \code{.draw_forest_title()}.
 #' @param label_e Label for the experimental arm.
 #' @param label_c Label for the control arm.
 #' @param xlim Optional numeric vector of length 2; if NULL and
@@ -169,9 +173,17 @@ plot_forest <- function(meta_obj,
     paste0(sm, " (95% CI)")
   } else "Effect (95% CI)"
 
+  # The title is NOT smlab. {meta} draws smlab inside the header row, centred
+  # over the forest column, so a title wider than that column overruns the
+  # neighbouring header cells and renders as "EvenDepression response ...
+  # GR (95% CI)" (reviewer report I-7). Titles here are outcome names chosen
+  # by the caller, so no length bound holds -- shortening what callers append
+  # only moves the threshold, and {meta} refuses an smlab of more than two
+  # lines, so wrapping it in place does not generalise either. The title is
+  # drawn afterwards instead, above the header; see .draw_forest_title().
   args <- list(
     x          = meta_obj,
-    smlab      = if (is.null(title)) "" else title,
+    smlab      = "",
     prediction = prediction,
     fs.study   = 9,
     fs.heading = 11,
@@ -233,6 +245,10 @@ plot_forest <- function(meta_obj,
     }
   )
 
+  # Drawn after the forest so the block it must clear has already reported its
+  # own height; see .draw_forest_title().
+  .draw_forest_title(title, res)
+
   # Fallback: draw Threshold lines via abline if xline was not honored
   if (!is.null(threshold_lines) && is.numeric(threshold_lines) &&
       length(threshold_lines) == 1 && is.finite(threshold_lines) &&
@@ -244,6 +260,102 @@ plot_forest <- function(meta_obj,
   }
 
   invisible(NULL)
+}
+
+# --------------------------------------------------------------------------
+# Title, drawn above the column headers
+# --------------------------------------------------------------------------
+# Point size of the title, the fraction of the device width one line may
+# occupy, and the clearance between the title and the top of the forest block.
+# The width margin keeps a wrapped line off the device edge; the clearance is
+# roughly half a line at PMA_FOREST_TITLE_FONTSIZE.
+PMA_FOREST_TITLE_FONTSIZE <- 12
+PMA_FOREST_TITLE_MAX_WIDTH <- 0.94
+PMA_FOREST_TITLE_CLEARANCE_IN <- 0.10
+
+# Draw the (wrapped) title above the forest, hugging it.
+#
+# `forest_result` is what meta::forest() returned, so this runs AFTER the
+# forest is drawn -- deliberately. {meta} sizes its block to the device and
+# centres it vertically, leaving equal margins top and bottom, and it reports
+# the block's height as figheight$total_height. Reserving a band up front
+# instead (grid layout + new = FALSE) shrinks the region {meta} centres in
+# without shrinking the block, which strands the title above a large gap on
+# the tall canvas the Shiny app renders to. Reading the height back and
+# anchoring the title to the block's own top keeps the two together at every
+# device size.
+#
+# Returns invisible(NULL); a failure to measure degrades to the device top
+# rather than dropping the title.
+.draw_forest_title <- function(title, forest_result = NULL) {
+  lines <- .wrap_forest_title(title)
+  if (is.null(lines)) return(invisible(NULL))
+
+  tryCatch({
+    gp <- grid::gpar(fontsize = PMA_FOREST_TITLE_FONTSIZE, fontface = "bold")
+    device_height <- grDevices::dev.size("in")[2]
+    title_height  <- grid::convertHeight(
+      grid::grobHeight(grid::textGrob(paste(lines, collapse = "\n"), gp = gp)),
+      "in", valueOnly = TRUE)
+
+    block_height <- suppressWarnings(
+      as.numeric(forest_result$figheight$total_height %||% NA_real_))[1]
+    block_top <- if (is.na(block_height) || block_height <= 0 ||
+                     block_height >= device_height) {
+      device_height
+    } else {
+      (device_height - block_height) / 2
+    }
+
+    # grid measures y from the bottom. Sit the title on top of the block, then
+    # clamp so a title taller than the margin runs off nothing but its own
+    # clearance.
+    baseline <- device_height - block_top + PMA_FOREST_TITLE_CLEARANCE_IN
+    baseline <- min(baseline, device_height - title_height)
+    baseline <- max(baseline, 0)
+
+    grid::grid.text(
+      paste(lines, collapse = "\n"),
+      y    = grid::unit(baseline, "in"),
+      just = c("centre", "bottom"),
+      gp   = gp)
+  }, error = function(e) NULL)
+
+  invisible(NULL)
+}
+
+# Greedy word wrap measured against the real device, not a character count:
+# the title is proportional-font text, so "Illness" and "WWWWWWW" do not cost
+# the same. Returns NULL for an absent or blank title. A single word wider
+# than the device is left on its own line -- there is nothing to break it on,
+# and it is still the only thing on that line.
+.wrap_forest_title <- function(title) {
+  if (!.nzchar1(title)) return(NULL)
+  words <- strsplit(trimws(as.character(title)[1]), "[[:space:]]+")[[1]]
+  words <- words[nzchar(words)]
+  if (!length(words)) return(NULL)
+
+  gp <- grid::gpar(fontsize = PMA_FOREST_TITLE_FONTSIZE, fontface = "bold")
+  fits <- function(txt) {
+    width <- tryCatch(
+      grid::convertWidth(
+        grid::grobWidth(grid::textGrob(txt, gp = gp)), "npc", valueOnly = TRUE),
+      error = function(e) 0)
+    width <= PMA_FOREST_TITLE_MAX_WIDTH
+  }
+
+  lines   <- character(0)
+  current <- words[1]
+  for (word in words[-1]) {
+    candidate <- paste(current, word)
+    if (fits(candidate)) {
+      current <- candidate
+    } else {
+      lines   <- c(lines, current)
+      current <- word
+    }
+  }
+  c(lines, current)
 }
 
 # --------------------------------------------------------------------------

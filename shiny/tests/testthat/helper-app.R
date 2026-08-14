@@ -40,7 +40,12 @@ PMA_APP_ROOT <- local({
 # constructor: the app's export helpers write that attribute and build a
 # pmatools_set out of the banked outcomes, so without it their tests would
 # fail on a missing object rather than on a wrong bundle.
-for (.stem in c("utils.R", "multi_outcome.R")) {
+#
+# R/data_ingest.R rides along for detect_column_roles(): Step 1's
+# detected-columns strip is a presentation of that function's output, and a
+# test that hand-built the frame instead would keep passing after the two
+# drifted apart.
+for (.stem in c("utils.R", "multi_outcome.R", "data_ingest.R")) {
   for (.f in c(file.path(PMA_APP_ROOT, "R", "_pmatools", .stem),
                file.path(dirname(PMA_APP_ROOT), "R", .stem))) {
     if (file.exists(.f)) {

@@ -232,6 +232,66 @@ a.pma-domain-jump { font-weight: 600; text-decoration: underline; }
   font-size: 0.9rem;
 }
 
+/* Success variant of .pma-banner: same shape and weight, green accent. Step 1
+   confirms a load in the same visual language as the warnings beside it. */
+.pma-banner-success {
+  background: var(--grade-high-bg);
+  border-left-color: var(--grade-high-fg);
+  color: var(--grade-high-fg);
+}
+
+/* Detected-columns strip (Step 1). One chip per ingest_data() role: green
+   when a column filled it, amber when nothing did, muted when its absence is
+   ordinary (no outcome column, no subgroup, the unused half of the
+   event / mean+SD pair). */
+.pma-role-strip-title {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.35rem;
+}
+.pma-role-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.85rem;
+}
+.pma-role-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+.pma-role-chip-label { font-weight: 600; }
+.pma-role-chip-detail {
+  font-size: 0.75rem;
+  opacity: 0.85;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.pma-role-found {
+  background: var(--grade-high-bg);
+  color: var(--grade-high-fg);
+  border-color: var(--grade-high-fg);
+}
+.pma-role-missing {
+  background: var(--grade-low-bg);
+  color: var(--grade-low-fg);
+  border-color: var(--grade-low-fg);
+}
+.pma-role-optional {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  border-color: hsl(var(--border));
+}
+/* The hint on an amber chip is prose, not a column name. */
+.pma-role-missing .pma-role-chip-detail,
+.pma-role-optional .pma-role-chip-detail { font-family: inherit; }
+
 /* Risk-of-bias analysis set (Core GRADE 4 Fig 2).
    A state notice, not an error: muted surface, neutral text, and the same
    amber accent the .pma-banner uses so the two read as one family. */

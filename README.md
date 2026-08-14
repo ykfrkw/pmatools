@@ -2052,12 +2052,13 @@ format. `outcomes` accepts a `pmatools_set` too.
 
 ### Exported functions at a glance
 
-All 32 exports of `NAMESPACE`, one line each. Details are in `?function_name`
+All 33 exports of `NAMESPACE`, one line each. Details are in `?function_name`
 and in [SPEC.md §4](SPEC.md).
 
 | Function | What it does |
 |---|---|
 | `ingest_data()` | Read long or wide study data (file, data frame or clipboard), auto-detect the format, apply column-name mapping, return the canonical long tibble |
+| `detect_column_roles()` | Report which column fills each of `ingest_data()`'s long-format roles, and by which alias — without ingesting anything |
 | `combine_arms()` | Collapse the rows sharing a study unit into one, pooling multi-arm trials per Cochrane Handbook 6.5.2.10 (`ingest_data()` applies it automatically) |
 | `run_ma()` | Fit one pairwise meta-analysis via `{meta}` (binary or continuous); aborts on data holding more than one outcome |
 | `run_ma_multi()` | Split long data on its `outcome` column and run one `run_ma()` per outcome |

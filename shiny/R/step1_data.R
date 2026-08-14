@@ -157,6 +157,13 @@ step1_server <- function(input, output, session, state) {
 
   loaded_signature <- shiny::reactiveVal(NULL)
 
+  # The column names as they arrived, captured at ingest so the detected-
+  # columns strip describes the data that was loaded rather than whatever the
+  # file input currently points at. ingest_data() renames source columns onto
+  # their role names, so the ingested tibble alone can no longer say "studlab
+  # came from `study`".
+  loaded_raw_names <- shiny::reactiveVal(NULL)
+
   # ----- Example templates (Upload / Paste branches) -----
   # Generated from PMA_TEMPLATE_CSV, never read off disk, so the download
   # cannot pick up a changed sample dataset. Read-path untouched.
@@ -372,6 +379,7 @@ step1_server <- function(input, output, session, state) {
     df <- raw()
     loaded_signature(current_signature())
     state$data_edits <- NULL
+    loaded_raw_names(NULL)
     if (is.null(df)) {
       return(list(error = "No data source selected, or the selected source is empty."))
     }
@@ -379,6 +387,7 @@ step1_server <- function(input, output, session, state) {
     if (!is.data.frame(df) && pma_is_error_result(df)) {
       return(df)
     }
+    loaded_raw_names(names(df))
     tryCatch(
       withCallingHandlers(
         ingest_data(df, format = "long"),
@@ -468,6 +477,8 @@ step1_server <- function(input, output, session, state) {
     if (!isTRUE(loaded_current())) return(NULL)
     pma_card(
       title = "Preview & edit",
+      shiny::uiOutput("data_load_banner"),
+      shiny::uiOutput("data_roles_strip"),
       htmltools::p(class = "pma-card-subtitle",
                    paste0(
                      "Long-format view (one row per study x arm, or study x ",
@@ -477,10 +488,60 @@ step1_server <- function(input, output, session, state) {
                      "its own does not). The table is automatically ",
                      "re-validated."
                    )),
+      # Defaults to the analysis columns: the bundled sample is 39 columns
+      # wide and the ten the analysis reads are the ones worth checking. The
+      # full table is one click away -- it is the default that was wrong,
+      # not its existence.
+      shiny::radioButtons(
+        "preview_columns", NULL,
+        choices  = c("Analysis columns" = "analysis", "All columns" = "all"),
+        selected = "analysis",
+        inline   = TRUE
+      ),
       DT::DTOutput("data_preview"),
-      htmltools::br(),
-      shiny::verbatimTextOutput("data_status")
+      htmltools::tags$hr(),
+      # Assigning Risk of Bias across every study is data-entry work, so it
+      # belongs on the data-entry step. The Step 3 copies stay: correcting one
+      # study while looking at the certainty verdict is a real workflow, and
+      # both write the same state$rob_table.
+      htmltools::div(
+        class = "pma-card-subtitle",
+        htmltools::strong("Risk of bias for every study. "),
+        "Set them all here, then override individual studies in Step 3."
+      ),
+      htmltools::div(
+        style = "display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;",
+        shiny::actionButton("step1_rob_set_low",  "Set all to Low",  class = "btn-sm"),
+        shiny::actionButton("step1_rob_set_some", "Set all to Some", class = "btn-sm"),
+        shiny::actionButton("step1_rob_set_high", "Set all to High", class = "btn-sm"),
+        shiny::actionButton("step1_rob_clear",    "Clear all",       class = "btn-sm")
+      )
     )
+  })
+
+  detected_roles <- shiny::reactive({
+    cols <- loaded_raw_names()
+    if (is.null(cols)) return(NULL)
+    detect_column_roles(cols)
+  })
+
+  output$data_roles_strip <- shiny::renderUI({
+    detected <- detected_roles()
+    if (!isTRUE(loaded_current()) || is.null(detected)) return(NULL)
+    pma_column_roles_strip(detected, state$rob_table)
+  })
+
+  output$data_load_banner <- shiny::renderUI({
+    res <- ingested()
+    if (!isTRUE(loaded_current())) return(NULL)
+    if (is.null(res)) return(NULL)
+    if (pma_is_error_result(res)) {
+      return(pma_banner(htmltools::strong("Could not read this data. "),
+                        res$error))
+    }
+    pma_banner(tone = "success",
+               htmltools::strong("Data loaded. "),
+               pma_load_summary(res))
   })
 
   # ----- Initialize state$rob_table from ingested data -----
@@ -529,29 +590,27 @@ step1_server <- function(input, output, session, state) {
     if (pma_is_error_result(res)) {
       return(DT::datatable(data.frame(error = res$error)))
     }
+    # HIDE the extra columns; do not subset the frame. DT reports a cell edit
+    # as `col`, the DataTables column index, which counts hidden columns --
+    # and input$data_preview_cell_edit is applied below as res[[info$col + 1]]
+    # against the FULL frame. Passing a subset here would silently write the
+    # edit into whichever column happened to sit at that index in the subset.
+    hidden <- which(!names(res) %in% pma_analysis_columns(res)) - 1L
     DT::datatable(
       res,
       editable = list(target = "cell"),
-      options = list(pageLength = 10, scrollX = TRUE),
+      options = list(
+        pageLength = 10,
+        scrollX    = TRUE,
+        columnDefs = if (identical(input$preview_columns %||% "analysis",
+                                   "analysis") && length(hidden)) {
+          list(list(visible = FALSE, targets = hidden))
+        } else {
+          list()
+        }
+      ),
       rownames = FALSE
     )
-  })
-
-  output$data_status <- shiny::renderText({
-    res <- ingested()
-    if (!isTRUE(loaded_current())) return("Status: click Load data to preview.")
-    if (is.null(res)) return("Status: no data loaded.")
-    if (pma_is_error_result(res)) {
-      return(paste0("ERROR: ", res$error))
-    }
-    if ("outcome" %in% names(res)) {
-      study_outcomes <- unique(paste(res$studlab, res$outcome, sep = "\r"))
-      sprintf("Status: %d rows, %d studies, %d study-outcomes (long format).",
-              nrow(res), length(unique(res$studlab)), length(study_outcomes))
-    } else {
-      sprintf("Status: %d rows, %d studies (long format).",
-              nrow(res), length(unique(res$studlab)))
-    }
   })
 
   # commit_loaded_data() reads state$rob_table, so this observer re-runs on
@@ -615,4 +674,35 @@ step1_server <- function(input, output, session, state) {
     state$data_edits <- res
     commit_loaded_data(res)
   })
+
+  # ----- Bulk Risk of Bias (the Step 3 buttons, on the data-entry step) -----
+  # state$rob_table is the single source of truth that Step 3's editor and the
+  # rating read, so writing it is what makes these buttons work at all. The
+  # preview is written too: it reads state$data_edits, and a reviewer who
+  # presses "Set all to Low" and sees the `rob` column unchanged has been told
+  # the button did nothing.
+  #
+  # commit_loaded_data() re-overlays state$rob_table on top, which agrees with
+  # what we just wrote -- except for "Clear all", where its
+  # any(!is.na(rt$rob)) guard declines to overwrite. That is why the preview
+  # is set here rather than left to the overlay.
+  .step1_bulk_rob <- function(value) {
+    rob_table <- state$rob_table
+    if (is.null(rob_table)) return(invisible(NULL))
+    rob_table$rob <- value
+    state$rob_table <- rob_table
+
+    res <- state$data_edits %||% ingested()
+    if (!isTRUE(loaded_current()) ||
+        is.null(res) || pma_is_error_result(res)) return(invisible(NULL))
+    res$rob <- value
+    state$data_edits <- res
+    commit_loaded_data(res)
+    invisible(NULL)
+  }
+
+  shiny::observeEvent(input$step1_rob_set_low,  { .step1_bulk_rob("low")  })
+  shiny::observeEvent(input$step1_rob_set_some, { .step1_bulk_rob("some") })
+  shiny::observeEvent(input$step1_rob_set_high, { .step1_bulk_rob("high") })
+  shiny::observeEvent(input$step1_rob_clear,    { .step1_bulk_rob(NA_character_) })
 }

@@ -241,32 +241,125 @@ ingest_data <- function(data,
 }
 
 # --------------------------------------------------------------------------
+# Long-format column roles
+# --------------------------------------------------------------------------
+# THE list of roles ingest_data() recognises in long format, and the source
+# column names it accepts for each. .resolve_role_names() renames by it and
+# detect_column_roles() reports by it, so what the app tells a reviewer was
+# recognised cannot drift from what was actually recognised.
+#
+# Order is load-bearing: "group" is an alias of both `treat` and `subgroup`,
+# and the first role to claim a column keeps it. `treat` is listed first
+# because a two-arm long table far more often names its arm column "group"
+# than it names a stratum that.
+#
+# `outcome` carries no aliases. Nothing is renamed into it, but .validate_long()
+# and .combine_arms() key the study unit on it when it is present, which is
+# what makes it a role rather than an unrecognised extra column.
+PMA_INGEST_ROLE_ALIASES <- list(
+  studlab      = c("study", "id", "study_name", "study_id",
+                   "trial", "trial_id"),
+  treat        = c("treatment", "arm", "t", "intervention", "group",
+                   "condition"),
+  n            = c("n_randomized", "n_total", "sample_size", "N"),
+  event        = c("events", "d_r", "responders", "n_events"),
+  mean         = c("means"),
+  sd           = c("stdev", "stddev"),
+  outcome      = character(0),
+  rob          = c("risk_of_bias", "rob_d", "rob_overall", "rob_judgment",
+                   "rob_judgement"),
+  indirectness = c("indir"),
+  subgroup     = c("group", "stratum")
+)
+
+# The roles .validate_long() refuses to proceed without.
+PMA_INGEST_REQUIRED_ROLES <- c("studlab", "treat", "n")
+
+# Rename source columns to their canonical role names, in place, one role at a
+# time. A role already present under its canonical name is left alone, and a
+# column claimed by an earlier role is no longer visible to a later one --
+# which is why this walks the list rather than resolving all roles against the
+# original names.
+.resolve_role_names <- function(cols) {
+  for (role in names(PMA_INGEST_ROLE_ALIASES)) {
+    if (role %in% cols) next
+    hit <- intersect(PMA_INGEST_ROLE_ALIASES[[role]], cols)
+    if (length(hit) >= 1) cols[cols == hit[1]] <- role
+  }
+  cols
+}
+
+#' Report which column filled each ingest_data() role
+#'
+#' @description
+#' Answers "did my data load correctly?" without loading it: given the columns
+#' of a long-format table, says which of \code{\link{ingest_data}}'s canonical
+#' roles were filled and by which source column. It resolves roles exactly as
+#' `ingest_data(format = "long")` does -- same alias list, same order, same
+#' first-role-wins rule -- so a role reported here as filled is a role
+#' `ingest_data()` will fill.
+#'
+#' Long format only. Wide input has fixed canonical pair names
+#' (`event_e`/`event_c` and friends) and no alias mechanism to report on.
+#'
+#' @param data A data.frame, or a character vector of column names.
+#'
+#' @return A data.frame with one row per role, in role order, and columns:
+#'   \describe{
+#'     \item{role}{the canonical name (`studlab`, `treat`, `n`, `event`,
+#'       `mean`, `sd`, `outcome`, `rob`, `indirectness`, `subgroup`).}
+#'     \item{column}{the source column that fills it, or `NA` when none does.}
+#'     \item{matched_by}{`"canonical"` when the column already carried the
+#'       role's own name, `"alias"` when it was renamed, `NA` when unfilled.}
+#'     \item{found}{whether the role is filled.}
+#'     \item{required}{whether `ingest_data()` aborts without it.}
+#'   }
+#'
+#' @examples
+#' detect_column_roles(c("study", "arm", "n_randomized", "d_r"))
+#'
+#' @export
+detect_column_roles <- function(data) {
+  cols <- if (is.data.frame(data)) names(data) else as.character(data)
+  cols <- cols[!is.na(cols)]
+
+  roles      <- names(PMA_INGEST_ROLE_ALIASES)
+  column     <- rep(NA_character_, length(roles))
+  matched_by <- rep(NA_character_, length(roles))
+
+  remaining <- cols
+  for (i in seq_along(roles)) {
+    role <- roles[i]
+    if (role %in% remaining) {
+      column[i]     <- role
+      matched_by[i] <- "canonical"
+      next
+    }
+    hit <- intersect(PMA_INGEST_ROLE_ALIASES[[role]], remaining)
+    if (length(hit) >= 1) {
+      column[i]     <- hit[1]
+      matched_by[i] <- "alias"
+      # Claimed: a later role must not report the same source column.
+      remaining[remaining == hit[1]] <- role
+    }
+  }
+
+  data.frame(
+    role       = roles,
+    column     = column,
+    matched_by = matched_by,
+    found      = !is.na(column),
+    required   = roles %in% PMA_INGEST_REQUIRED_ROLES,
+    stringsAsFactors = FALSE,
+    row.names  = NULL
+  )
+}
+
+# --------------------------------------------------------------------------
 # Long-format normalisation
 # --------------------------------------------------------------------------
 .normalise_long <- function(df, experimental_label = NULL, control_label = NULL) {
-  cols <- names(df)
-
-  # Auto-rename common aliases to canonical names
-  aliases <- list(
-    studlab = c("study", "id", "study_name", "study_id",
-                "trial", "trial_id"),
-    treat   = c("treatment", "arm", "t", "intervention", "group", "condition"),
-    n       = c("n_randomized", "n_total", "sample_size", "N"),
-    event   = c("events", "d_r", "responders", "n_events"),
-    mean    = c("means"),
-    sd      = c("stdev", "stddev"),
-    rob     = c("risk_of_bias", "rob_d", "rob_overall", "rob_judgment", "rob_judgement"),
-    indirectness = c("indir"),
-    subgroup = c("group", "stratum")
-  )
-  for (canonical in names(aliases)) {
-    if (!canonical %in% names(df)) {
-      hit <- intersect(aliases[[canonical]], names(df))
-      if (length(hit) >= 1) {
-        names(df)[names(df) == hit[1]] <- canonical
-      }
-    }
-  }
+  names(df) <- .resolve_role_names(names(df))
 
   if (!"studlab" %in% names(df) || !"treat" %in% names(df)) {
     rlang::abort(
