@@ -585,20 +585,35 @@ grade_meta(m,
   ...)
 ```
 
-**Cochrane RoB 2.0 labels accepted directly** — no pre-mapping needed:
+**Cochrane RoB 2 judgments accepted directly** — no pre-mapping needed. RoB 2
+has **three** levels, and these are its own words:
 
-| Cochrane RoB 2.0 | Internal GRADE level |
+| Cochrane RoB 2 | Internal GRADE level |
 |------------------|---------------------|
-| `"No concerns"` | `"not_serious"` |
+| `"Low risk of bias"` | `"not_serious"` |
 | `"Some concerns"` | `"serious"` |
-| `"Serious concerns"` | `"very_serious"` |
-| `"Critical concerns"` | `"very_serious"` |
+| `"High risk of bias"` | `"very_serious"` |
 
-Plain-English aliases (`"low"`, `"moderate"`, `"high"`) are also accepted.
+**ROBINS-I judgments** — for non-randomised studies — are accepted too. It has
+four levels, and the top two fold together because Core GRADE describes no
+three-level risk-of-bias downgrade:
+
+| ROBINS-I | Internal GRADE level |
+|------------------|---------------------|
+| `"Low risk of bias"` | `"not_serious"` |
+| `"Moderate risk of bias"` | `"serious"` |
+| `"Serious risk of bias"` | `"very_serious"` |
+| `"Critical risk of bias"` | `"very_serious"` |
+
+Plain-English aliases (`"low"`, `"moderate"`, `"high"`) are also accepted, as
+are pmatools' own older phrasings `"No concerns"` / `"Serious concerns"` /
+`"Critical concerns"`. Those three were labelled "Cochrane RoB 2.0" here up to
+v0.5.1 and are nobody's published vocabulary; they still work so that stored
+extraction sheets keep loading.
 
 ```r
-rob_map <- c(L = "No concerns", S = "Some concerns",
-             H = "Serious concerns", `*` = "Some concerns")
+rob_map <- c(L = "Low risk of bias", S = "Some concerns",
+             H = "High risk of bias", `*` = "Some concerns")
 rob_vec <- unname(rob_map[df$rob_d])
 grade_meta(m, rob = rob_vec, ...)   # works directly
 ```
@@ -616,12 +631,13 @@ grade_meta(m, rob = "very_serious",   # force rate-down regardless of weights
 Risk-of-Bias subgroup (low / some / high / unknown) and draws a forest plot
 with per-stratum pooled estimates next to the overall diamond — useful to see
 whether high-RoB studies inflate the apparent effect. Accepts the same label
-aliases as `grade_meta()` (`"L"/"S"/"H"`, `"Some concerns"`, ..., matched
-case-insensitively); `NA` / `""` / `"?"` are kept as their own "unknown"
-stratum, and any other unrecognized label is bucketed into "unknown" **with a
-warning** (so a mistyped vocabulary can no longer collapse every trial into a
-single meaningless stratum). `plot_forest_indirectness()` uses the same
-vocabulary.
+aliases as `grade_meta()` (`"L"/"S"/"H"`, the RoB 2 and ROBINS-I judgments,
+..., matched case-insensitively); `NA` / `""` / `"?"` are kept as their own
+"unknown" stratum, and any other unrecognized label is bucketed into "unknown"
+**with a warning** (so a mistyped vocabulary can no longer collapse every trial
+into a single meaningless stratum). `plot_forest_indirectness()` shares the
+alias table, but indirectness is not risk of bias and has no RoB 2 of its own —
+write `"low"` / `"some"` / `"high"` there.
 
 ```r
 plot_forest_rob(ma, rob = rob_vec)   # rob_vec: character, length k
@@ -638,8 +654,14 @@ instead of keeping a second copy of the alias table.
 rob_strata(c("L", "S", "H"))
 #> [1] "low"  "some" "high"
 
-rob_strata(c("No concerns", "Some concerns", "Critical concerns"))
+# RoB 2's three judgments, verbatim.
+rob_strata(c("Low risk of bias", "Some concerns", "High risk of bias"))
 #> [1] "low"  "some" "high"
+
+# ROBINS-I's four, verbatim; the top two share the "high" stratum.
+rob_strata(c("Low risk of bias", "Moderate risk of bias",
+             "Serious risk of bias", "Critical risk of bias"))
+#> [1] "low"  "some" "high" "high"
 
 # NA / "" / "?" / "unknown" become the "unknown" stratum quietly.
 rob_strata(c("low", NA, "", "?"))
@@ -1303,8 +1325,8 @@ m_response <- metabin(
   prediction = TRUE              # compute 95% prediction interval
 )
 
-rob_map <- c(L = "No concerns", S = "Some concerns",
-             H = "Serious concerns", `*` = "Some concerns")
+rob_map <- c(L = "Low risk of bias", S = "Some concerns",
+             H = "High risk of bias", `*` = "Some concerns")
 
 g_response <- grade_meta(
   meta_obj               = m_response,

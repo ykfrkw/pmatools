@@ -492,6 +492,52 @@ Confirm or override (defaults to No):
   <PICO sub-questions>
 ```
 
+#### 3.4.3a Per-study Risk of Bias and Indirectness editors (v0.5.1)
+
+Both tabs carry a collapsed `<details>` holding a `DT` grid over
+`state$rob_table`, one row per study, plus four bulk buttons. The cell used to
+be free text with a caption telling the reviewer to type `low` / `some` /
+`high`. **It is a dropdown**, and a reviewer cannot enter anything else.
+
+| Tab | Column | Offered |
+|---|---|---|
+| Risk of Bias | RoB 2 judgment | (not set) · Low risk of bias · Some concerns · High risk of bias |
+| Indirectness | Indirectness | (not set) · Low indirectness · Some indirectness · High indirectness |
+
+**The two label sets are not the same vocabulary and must never be worded
+alike.** Cochrane RoB 2 defines exactly three judgments and the Risk of Bias
+column shows its words verbatim; the app can offer them unconditionally
+because `study_design` is hardcoded to `"RCT"`, so ROBINS-I evidence never
+reaches it. Indirectness has no such instrument — those three are pmatools'
+own forest-plot strata (`rob_strata()`), worded so that nothing on the tab
+reads as a published judgment. Both store `"low"` / `"some"` / `"high"` in
+`state$rob_table`, which is what the bulk buttons, Step 1 and `grade_meta()`
+already exchange.
+
+**Why a rendered `<select>` and not DT's own editor.** DT 0.34's `editable=`
+injects an `<input type="text">` — or `number` / `textarea` / `date` — and has
+no dropdown type; its factor/selectize support belongs to column *filters*.
+The Publication bias tab reaches its vocabulary with a `<datalist>` bolted to
+that injected input (§3.4.8), but a datalist is autocomplete and still accepts
+anything typed, which is the failure this control exists to remove. So the
+column is built by `pma_study_level_select()` (`R/ui_helpers.R`), rendered with
+`escape =` naming every *other* column, and left out of `editable`. One
+delegated `change` handler, emitted once per Step 3 body by
+`pma_study_level_script()`, calls `Shiny.setInputValue()` with the row index
+the cell was **rendered** with — never DT's `col`, which counts hidden columns
+and has already cost this app a bug (§3.2.3). The handler binds under the
+`.pmaLevel` namespace and `off()`s itself first: `app.R` rebuilds this whole
+body on every step change and Shiny re-executes the inline script inside it,
+so a plain `on()` would stack a handler per Step 3 → 2 → 3 round trip and
+report each change once per rebuild.
+
+The server observers (`input$step3_rob_choice`, `input$step3_indir_choice`)
+still validate the value against the offered set before writing. The dropdown
+cannot produce anything else; the check is against a hand-crafted message, and
+an unrecognised value is dropped rather than written, because a value that
+reached `state$rob_table` unrecognised would land the study in the `"unknown"`
+stratum where the app shows no warning.
+
 #### 3.4.4 Educational copy (final, American English) — RoB
 
 Stored in `R/educational_copy.R` as `EDU_COPY$rob$how_judged`:

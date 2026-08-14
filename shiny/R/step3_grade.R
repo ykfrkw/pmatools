@@ -258,6 +258,12 @@ step3_ui <- function(state = NULL) {
     # repaints the highlight after the DOM is thrown away.
     htmltools::tags$script(src = "flowchart.js"),
 
+    # One delegated handler for every per-study level dropdown on this step
+    # (Risk of Bias and Indirectness). Registered here rather than beside each
+    # table so a re-rendered DT needs no re-binding and no change is reported
+    # twice.
+    pma_study_level_script(),
+
     pma_step_header(s$title),
 
     # Which studies the numbers on this step came from. Renders nothing when
@@ -352,14 +358,15 @@ step3_ui <- function(state = NULL) {
             htmltools::div(
               class = "pma-edit-body",
               htmltools::p(class = "pma-card-subtitle",
-                           "Click a cell to type low / some / high, or set ",
-                           "them all at once. Synced with Step 1."),
+                           "Pick one of Cochrane RoB 2's three judgments per ",
+                           "study, or set them all at once. Synced with ",
+                           "Step 1."),
               htmltools::div(
                 style = "display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem;",
-                shiny::actionButton("step3_rob_set_low",  "Set all to Low",  class = "btn-sm"),
-                shiny::actionButton("step3_rob_set_some", "Set all to Some", class = "btn-sm"),
-                shiny::actionButton("step3_rob_set_high", "Set all to High", class = "btn-sm"),
-                shiny::actionButton("step3_rob_clear",    "Clear all",       class = "btn-sm")
+                shiny::actionButton("step3_rob_set_low",  "Set all to Low risk of bias",  class = "btn-sm"),
+                shiny::actionButton("step3_rob_set_some", "Set all to Some concerns",     class = "btn-sm"),
+                shiny::actionButton("step3_rob_set_high", "Set all to High risk of bias", class = "btn-sm"),
+                shiny::actionButton("step3_rob_clear",    "Clear all",                    class = "btn-sm")
               ),
               DT::DTOutput("step3_rob_editor")
             )
@@ -520,9 +527,14 @@ step3_ui <- function(state = NULL) {
             ),
             htmltools::div(
               class = "pma-edit-body",
+              # pmatools' own three strata, not RoB 2's judgments: there is no
+              # RoB 2 for indirectness, and wording them alike would invite the
+              # reader to think one existed.
               htmltools::p(class = "pma-card-subtitle",
-                           "Click a cell to type low / some / high, or set ",
-                           "them all at once. Synced with Step 1."),
+                           "Pick a per-study indirectness level, or set them ",
+                           "all at once. These are pmatools' own three strata ",
+                           "for the forest plot, not a published instrument's ",
+                           "judgments. Synced with Step 1."),
               htmltools::div(
                 style = "display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem;",
                 shiny::actionButton("step3_indir_set_low",  "Set all to Low",  class = "btn-sm"),
@@ -4117,12 +4129,17 @@ step3_server <- function(input, output, session, state) {
                            options = list(dom = "t"), rownames = FALSE))
     }
     some_as <- .rob_some_concerns_setting()
-    tbl <- d[, c("studlab", "rob"), drop = FALSE]
+    tbl <- d[, "studlab", drop = FALSE]
+    tbl[["RoB 2 judgment"]] <- pma_study_level_column(
+      d$rob, "step3_rob_choice", PMA_ROB2_CHOICES)
     tbl[["Risk group"]] <- .rob_risk_group(d$rob, some_as)
     dt <- DT::datatable(
       tbl,
-      # Only the rating is editable; "Risk group" is derived from it.
-      editable = list(target = "cell", disable = list(columns = c(0, 2))),
+      # Nothing here is DT-editable any more: the judgment is a <select> the
+      # reviewer picks from (see pma_study_level_select()), and "Risk group"
+      # is derived from it. Everything but the select column stays escaped --
+      # a study label is user data and arrives from an uploaded file.
+      escape   = c("studlab", "Risk group"),
       options  = list(pageLength = 25, dom = "tip", scrollX = TRUE),
       rownames = FALSE
     )
@@ -4144,47 +4161,47 @@ step3_server <- function(input, output, session, state) {
       return(DT::datatable(data.frame(message = "Load data in Step 1 first."),
                            options = list(dom = "t"), rownames = FALSE))
     }
+    tbl <- d[, "studlab", drop = FALSE]
+    tbl[["Indirectness"]] <- pma_study_level_column(
+      d$indirectness, "step3_indir_choice", PMA_INDIRECTNESS_CHOICES)
     DT::datatable(
-      d[, c("studlab", "indirectness"), drop = FALSE],
-      editable = list(target = "cell", disable = list(columns = 0)),
+      tbl,
+      escape   = "studlab",
       options  = list(pageLength = 25, dom = "tip", scrollX = TRUE),
       rownames = FALSE
     )
   })
 
-  .step3_validate_value <- function(val) {
-    if (is.na(val) || !nzchar(val)) return(NA_character_)
-    val <- tolower(trimws(val))
-    if (!val %in% c("low", "some", "high")) {
-      shiny::showNotification(
-        "Value must be 'low', 'some', or 'high' (case-insensitive).",
-        type = "warning"
-      )
-      return(NULL)
-    }
-    val
+  # The dropdown offers nothing else, so this guards against a hand-crafted
+  # message rather than against a typo -- which is the point of replacing the
+  # free-text cell: a reviewer can no longer land a study in the "unknown"
+  # stratum by mistyping, silently, where the app showed no warning.
+  .step3_level_choice <- function(info, choices) {
+    if (is.null(info)) return(NULL)
+    row <- suppressWarnings(as.integer(info$row))
+    if (length(row) != 1L || is.na(row)) return(NULL)
+    val <- as.character(info$value %||% "")[1]
+    if (!nzchar(val)) return(list(row = row, value = NA_character_))
+    if (!val %in% choices) return(NULL)
+    list(row = row, value = val)
   }
 
-  shiny::observeEvent(input$step3_rob_editor_cell_edit, {
-    info <- input$step3_rob_editor_cell_edit
-    if (is.null(info)) return()
+  .step3_apply_choice <- function(info, col, choices) {
     d <- state$rob_table
     if (is.null(d)) return()
-    val <- .step3_validate_value(as.character(info$value))
-    if (is.null(val)) return()
-    d$rob[info$row] <- val
+    hit <- .step3_level_choice(info, choices)
+    if (is.null(hit) || hit$row < 1L || hit$row > nrow(d)) return()
+    d[[col]][hit$row] <- hit$value
     state$rob_table <- d
+  }
+
+  shiny::observeEvent(input$step3_rob_choice, {
+    .step3_apply_choice(input$step3_rob_choice, "rob", PMA_ROB2_CHOICES)
   })
 
-  shiny::observeEvent(input$step3_indir_editor_cell_edit, {
-    info <- input$step3_indir_editor_cell_edit
-    if (is.null(info)) return()
-    d <- state$rob_table
-    if (is.null(d)) return()
-    val <- .step3_validate_value(as.character(info$value))
-    if (is.null(val)) return()
-    d$indirectness[info$row] <- val
-    state$rob_table <- d
+  shiny::observeEvent(input$step3_indir_choice, {
+    .step3_apply_choice(input$step3_indir_choice, "indirectness",
+                        PMA_INDIRECTNESS_CHOICES)
   })
 
   # Sync state$rob_table back into state$data so grade_meta picks up edits

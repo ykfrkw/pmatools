@@ -15,8 +15,9 @@ variables is bundled as \code{inst/extdata/cbti_depression.csv}):
 \item{treatment}{\code{"CBT-I"} or \code{"Control"}.}
 \item{n_randomized}{Number of participants randomized to this arm.}
 \item{d_r}{Number of depression responders (binary outcome).}
-\item{rob_d}{Cochrane RoB 2.0 judgment for the depression outcome:
-\code{"L"} low, \code{"S"} some concerns, \code{"H"} serious concerns.}
+\item{rob_d}{Cochrane RoB 2 judgment for the depression outcome:
+\code{"L"} low risk of bias, \code{"S"} some concerns, \code{"H"} high
+risk of bias -- the three levels RoB 2 defines.}
 }
 }
 \source{

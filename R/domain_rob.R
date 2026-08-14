@@ -584,9 +584,11 @@ assess_rob <- function(rob, meta_obj,
         "rob_overrides[[", shQuote(key), "]] = ",
         shQuote(unname(rob_overrides[[key]])),
         " is not a recognized risk-of-bias level. Accepted values: ",
-        "'not_serious', 'some_concerns', 'very_serious', or Cochrane RoB2 ",
-        "labels ('No concerns', 'Some concerns', 'Serious concerns', ",
-        "'Critical concerns')."
+        "'not_serious', 'some_concerns', 'very_serious', the Cochrane RoB 2 ",
+        "judgments ('Low risk of bias', 'Some concerns', ",
+        "'High risk of bias') or the ROBINS-I ones ('Low risk of bias', ",
+        "'Moderate risk of bias', 'Serious risk of bias', ",
+        "'Critical risk of bias')."
       ))
     }
 
@@ -1298,13 +1300,33 @@ assess_rob <- function(rob, meta_obj,
 
 # --------------------------------------------------------------------------
 # RoB level normalisation
-# Cochrane RoB2 / plain English -> internal GRADE level
+# Per-study risk-of-bias label -> internal GRADE level
+#
+# Three vocabularies, deliberately kept apart. RoB 2 (randomised trials) has
+# exactly THREE judgments; ROBINS-I (non-randomised studies) has four, and its
+# extra severity is what folds onto very_serious. Conflating them is how this
+# table came to advertise a four-level "RoB 2" that RoB 2 never defined.
+#
+# Note this is not the Core GRADE domain vocabulary the values map ONTO: a
+# per-study label describes one study, a GRADE level describes the body of
+# evidence. GRADE_LEVELS in R/utils.R owns that second vocabulary.
 # --------------------------------------------------------------------------
 .normalize_rob_level <- function(x) {
   aliases <- c(
-    # Cochrane RoB2 (3-level mapping: critical folds into very_serious)
-    "No concerns"       = "not_serious",
+    # Cochrane RoB 2, verbatim (Sterne JAC, et al. BMJ 2019;366:l4898).
+    "Low risk of bias"  = "not_serious",
     "Some concerns"     = "serious",
+    "High risk of bias" = "very_serious",
+    # ROBINS-I, verbatim (Sterne JAC, et al. BMJ 2016;355:i4919). Four levels;
+    # both of the top two rate down 2, because Core GRADE describes no
+    # three-level risk-of-bias downgrade for the flowchart to reach.
+    "Moderate risk of bias" = "serious",
+    "Serious risk of bias"  = "very_serious",
+    "Critical risk of bias" = "very_serious",
+    # pmatools' own "... concerns" phrasings, kept because scripts and
+    # extraction sheets written against releases up to 0.5.1 store them. Only
+    # "Some concerns" is anyone else's wording; the other three are ours.
+    "No concerns"       = "not_serious",
     "Serious concerns"  = "very_serious",
     "Critical concerns" = "very_serious",
     # Single-letter shortcuts
@@ -1342,7 +1364,7 @@ assess_rob <- function(rob, meta_obj,
 #
 # Shares the alias vocabulary of .normalize_rob_level() so that grade_meta()
 # and the stratified forest plots accept exactly the same labels — including
-# the Cochrane RoB2 wording documented in README ("Some concerns", ...).
+# the Cochrane RoB 2 and ROBINS-I judgments documented in README.
 # Unlike .normalize_rob_levels(), unrecognised labels warn instead of
 # aborting: a plot should still be drawn, but never silently.
 # --------------------------------------------------------------------------
@@ -1354,30 +1376,52 @@ assess_rob <- function(rob, meta_obj,
 #'
 #' @section Why this is exported:
 #' Risk of bias is the one input where pmatools accepts a wide vocabulary --
-#' single letters, plain words, the Cochrane RoB 2 sentences, and the package's
-#' own internal level names all mean something. That vocabulary is defined
-#' inside pmatools, so any caller that stores or edits RoB judgments of its own
-#' (a data-entry grid with a RoB dropdown, an import step reading someone
-#' else's extraction sheet) has to agree with pmatools about what a label means
+#' single letters, plain words, the Cochrane RoB 2 and ROBINS-I judgments, and
+#' the package's own internal level names all mean something. That vocabulary
+#' is defined inside pmatools, so any caller that stores or edits RoB judgments
+#' of its own (a data-entry grid with a RoB dropdown, an import step reading
+#' someone else's extraction sheet) has to agree about what a label means
 #' or the two will silently disagree about which studies are at high risk.
 #' \code{rob_strata()} is that agreement made callable: run the labels through
 #' it and you get back exactly the strata \code{\link{grade_meta}} and
 #' \code{\link{plot_forest_rob}} will use, with no second copy of the alias
 #' table to keep in sync.
 #'
-#' Accepted labels, case-insensitively and after trimming whitespace:
+#' \strong{Cochrane RoB 2} (randomised trials) has three judgments, and they
+#' are accepted verbatim:
+#' \tabular{ll}{
+#'   \code{"Low risk of bias"}  \tab -> \code{"low"}  \cr
+#'   \code{"Some concerns"}     \tab -> \code{"some"} \cr
+#'   \code{"High risk of bias"} \tab -> \code{"high"}
+#' }
+#'
+#' \strong{ROBINS-I} (non-randomised studies) has four, also accepted
+#' verbatim: \code{"Low risk of bias"} -> \code{"low"},
+#' \code{"Moderate risk of bias"} -> \code{"some"},
+#' \code{"Serious risk of bias"} and \code{"Critical risk of bias"} ->
+#' \code{"high"}. Its extra severity folds because Core GRADE describes no
+#' three-level risk-of-bias downgrade.
+#'
+#' Every other accepted label, case-insensitively and after trimming
+#' whitespace:
 #' \itemize{
 #'   \item \strong{low}: \code{"not_serious"}, \code{"no"}, \code{"low"},
 #'     \code{"L"}, \code{"No concerns"}
 #'   \item \strong{some}: \code{"some_concerns"}, \code{"some"},
 #'     \code{"S"}, \code{"M"}, \code{"*"}, \code{"moderate"},
-#'     \code{"unclear"} (RoB 1 wording), \code{"Some concerns"}
+#'     \code{"unclear"} (RoB 1 wording)
 #'   \item \strong{high}: \code{"very_serious"}, \code{"extremely_serious"},
 #'     \code{"high"}, \code{"very high"}, \code{"H"}, \code{"C"},
 #'     \code{"Serious concerns"}, \code{"Critical concerns"}
 #'   \item \strong{unknown}: \code{NA}, \code{""}, \code{"?"},
 #'     \code{"unknown"}, \code{"na"}
 #' }
+#'
+#' \code{"No concerns"}, \code{"Serious concerns"} and
+#' \code{"Critical concerns"} are pmatools' own phrasings, not RoB 2's -- the
+#' package advertised them as RoB 2 up to 0.5.1 and did not. They keep
+#' working, so no stored extraction sheet breaks; write the RoB 2 or ROBINS-I
+#' judgments in new work.
 #'
 #' A bare \code{"serious"} is \strong{rejected} in this release. It named the
 #' \code{"high"} stratum up to 0.5.0 and names the \code{"some"} stratum from
@@ -1404,9 +1448,10 @@ assess_rob <- function(rob, meta_obj,
 #'   vocabulary.
 #'
 #' @examples
-#' # Single letters, RoB 2 sentences and internal names all map cleanly.
+#' # Single letters, published judgments and internal names all map cleanly.
 #' rob_strata(c("L", "S", "H"))
-#' rob_strata(c("No concerns", "Some concerns", "Critical concerns"))
+#' rob_strata(c("Low risk of bias", "Some concerns", "High risk of bias"))
+#' rob_strata(c("Moderate risk of bias", "Critical risk of bias"))
 #' rob_strata(c("not_serious", "some_concerns", "very_serious"))
 #'
 #' # Missing and explicitly unknown judgments become "unknown" quietly.
@@ -1445,8 +1490,10 @@ rob_strata <- function(x, arg = "rob") {
       paste(unique(v[!blank][bad]), collapse = ", "),
       ". Accepted values: 'not_serious'/'no'/'low'/'L', ",
       "'some_concerns'/'some'/'S', 'very_serious'/'high'/'H', ",
-      "or Cochrane RoB2 labels ('No concerns', ",
-      "'Some concerns', 'Serious concerns', 'Critical concerns')."
+      "the Cochrane RoB 2 judgments ('Low risk of bias', 'Some concerns', ",
+      "'High risk of bias') or the ROBINS-I ones ('Low risk of bias', ",
+      "'Moderate risk of bias', 'Serious risk of bias', ",
+      "'Critical risk of bias')."
     ))
     strata[bad] <- "unknown"
   }
@@ -1542,8 +1589,11 @@ rob_strata <- function(x, arg = "rob") {
   if (any(unknown)) {
     rlang::abort(paste0(
       "Unrecognized RoB level(s): ", paste(unique(rob_vec[unknown]), collapse = ", "),
-      ". Accepted values: 'no', 'some', 'serious', 'very_serious', or Cochrane RoB2 labels ",
-      "('No concerns', 'Some concerns', 'Serious concerns', 'Critical concerns')."
+      ". Accepted values: 'no', 'some_concerns', 'very_serious', the Cochrane ",
+      "RoB 2 judgments ('Low risk of bias', 'Some concerns', ",
+      "'High risk of bias') or the ROBINS-I ones ('Low risk of bias', ",
+      "'Moderate risk of bias', 'Serious risk of bias', ",
+      "'Critical risk of bias')."
     ))
   }
   unname(result)
