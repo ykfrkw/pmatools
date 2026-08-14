@@ -485,7 +485,7 @@ suggest_threshold(ma)              # binary outcome
 #> $threshold_scale  "ard"
 #> $source           "package_convention"
 #> $threshold_absolute  list(0.05, "ard", "package_convention")
-#> $threshold_ratio     list(1.20, "ratio", "package_convention")
+#> $threshold_ratio     list(1.25, "ratio", "package_convention")
 ```
 
 **Why the absolute candidate leads (v0.5).** Core GRADE 1, 6 and 7 contain
@@ -1196,17 +1196,19 @@ numbers or branch on them; read `notes` when you need the reasoning.
 
 ```r
 names(domain_facts(g))          # every domain that recorded something
-#> [1] "Risk of bias"  "Inconsistency" "Imprecision"
+#> [1] "Risk of bias"  "Inconsistency" "Imprecision"  "Publication bias"
 
 domain_facts(g, "Imprecision")
-#> # A tibble: 6 x 4
+#> # A tibble: 8 x 4
 #>   key                 label                              value           numeric
-#> 1 confidence_interval 95% confidence interval            OR [1.62, 3.34]   NA
-#> 2 crosses_null        Crosses the null                   no                NA
-#> 3 threshold_position  Position relative to the threshold beyond Thresho~   NA
-#> 4 ois                 Optimal information size           observed 4808 ~  2.20
-#> 5 fig4_path           Core GRADE 2 Fig 4 path            CI does not cr~   NA
-#> 6 ois_used            OIS approach applied               yes               NA
+#> 1 confidence_interval 95% confidence interval            OR [1.62, 3.34]  NA
+#> 2 crosses_null        Crosses the null                   no               NA
+#> 3 threshold_position  Position relative to the threshold beyond Thresho~  NA
+#> 4 ois                 Optimal information size           observed 4808 ~   1.21
+#> 5 ois_target_rate     OIS alternative event rate         0.2107 (an inc~   0.211
+#> 6 fig4_path           Core GRADE 2 Fig 4 path            CI does not cr~  NA
+#> 7 ois_used            OIS approach applied               yes              NA
+#> 8 flow_path           Flowchart path                     pma-impre-node~  NA
 
 # The raw numbers are there to compute with, and the keys to branch on.
 f <- domain_facts(g, "Inconsistency")
@@ -1224,8 +1226,13 @@ Which facts each domain records:
 |---|---|
 | Risk of bias | `high_rob_studies`, `high_rob_weight_share`, `estimate_shift`, `fig2_branch` |
 | Inconsistency | `i2`, `tau2`, `q_pvalue`, `zone_counts`, `zone_decision` |
-| Imprecision | `confidence_interval`, `crosses_null`, `threshold_position`, `ois`, `fig4_path`, `ois_used` |
-| Indirectness, Publication bias | none yet — `domain_facts(g, "Indirectness")` returns `NULL`, which is a valid domain name with nothing recorded, not an error |
+| Imprecision | `confidence_interval`, `crosses_null`, `threshold_position`, `ois`, `ois_target_rate`, `fig4_path`, `ois_used` |
+| Publication bias | `k`, `egger_p` where the test ran |
+| Indirectness | none — `domain_facts(g, "Indirectness")` returns `NULL`, which is a valid domain name with nothing recorded, not an error. Core GRADE 5 grades it on a gradient rather than a branch, so there is no path to record |
+
+Every flowcharted domain also records `flow_path`, the node ids of the route
+its assessment took through the figure. It is machine-only: the renderers
+filter it out before facts become prose, so it never appears in a footnote.
 
 `domain` must match `$domain_assessments$domain` exactly (`"Risk of bias"`,
 `"Indirectness"`, `"Inconsistency"`, `"Imprecision"`, `"Publication bias"`); a
