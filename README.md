@@ -484,8 +484,8 @@ Then a single MECE 3×3 table determines the downgrade:
 
 ```
 Rule 1: same trivial zone                                         → no
-Rule 2: same non-trivial zone, inflation ≤ 10%                    → no
-Rule 3: same non-trivial zone, bias-favouring inflation > 10%     → serious (−1)
+Rule 2: same non-trivial zone, inflation ≤ 20%                    → no
+Rule 3: same non-trivial zone, bias-favouring inflation > 20%     → serious (−1)
 Rule 4: zone differs without sign flip                            → serious (−1)
 Rule 5: zone differs with sign flip (above ↔ below)               → serious       (−2)
 ```
@@ -500,7 +500,7 @@ grade_meta(m,
   threshold               = 1.20,           # Threshold on natural scale
   threshold_scale         = "ratio",        # OR/RR/HR/RoM: ratio; MD/SMD: te_scale
   small_values            = "undesirable",  # large OR = good (eg, response)
-  rob_inflation_threshold = 0.10)           # rule 3 trigger; default 10%
+  rob_inflation_threshold = 0.20)           # rule 3 trigger; default 20%
 ```
 
 **Threshold placeholder: `suggest_threshold()`.** Returns a value to pre-fill an
@@ -1190,7 +1190,11 @@ the auto Egger judgment from visual inspection can pass
 judgment (the Egger asymmetry check supersedes the previous sign-flip escalation),
 but the imputed studies and adjusted random-effects summary are still
 informative. They are available through `plot_trimfill_forest(g)` for display
-in the Reporting bias tab of the companion Shiny app.
+in the Reporting bias tab of the Shiny app in `shiny/`, which as of 0.5.1 also
+prints whether the original pooled effect sits more than 20% further than the
+adjusted one in the direction that favours the intervention — the same question
+the risk-of-bias check asks of the low-RoB subset. That line is material for the
+funnel-asymmetry judgment and rates nothing on its own.
 
 **Available vs missing results: `plot_forest_pubias_subgroup()`.** Draws the
 RoB-ME-style two-subgroup forest (Page et al., BMJ 2023): "Available results"
@@ -2119,7 +2123,7 @@ grade_meta(
   rob_override_rationale = NULL,   # named chr, same keys
   rob_dominant_threshold = 0.55,   # weight share at/above which evidence is "dominated"
   rob_refit              = TRUE,   # refit on low-RoB studies when Fig 2 says so
-  rob_inflation_threshold = 0.10,  # relative inflation feeding the direction check
+  rob_inflation_threshold = 0.20,  # relative inflation feeding the direction check
   small_values  = NULL,            # REQUIRED: "undesirable" | "desirable"
 
   ## Indirectness

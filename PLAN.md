@@ -129,6 +129,34 @@
 - [x] Risk of bias の k-space / studlab-space マッピングを明示化。refit と `rob_overrides` が {meta} の drop 発生時にも動く。v0.5.1 中に `.rob_alignment()` / `.rob_expand()` / `.rob_contract()` へ切り出し（純粋なリファクタ、外部挙動は不変）（SPEC §5.1）
 - [x] `results.txt` の pooled 推定値の見出しが解析セット名を含むように（low-RoB refit 時）。呼び出し側が all-studies オブジェクトを渡した場合は rated 側を第 2 ブロックとして併記（SPEC §4.8.2）
 
+**UI フィードバック 25 件（2026-08-14 受領、同日 4 フェーズで実装・deploy）**
+
+典拠は NEWS.md 0.5.1 節と PR #8〜#11。アプリのみの変更も多いので詳細は
+[shiny/SPEC.md](shiny/SPEC.md)。
+
+- [x] Phase A: フォレストタイトルが `"\n"` を明示改行として扱う（Title 欄は
+  textarea。`<input type="text">` は CR/LF を落とす）。RoB と Indirectness の
+  層別接尾辞は自前の行に、publication bias の接尾辞は削除。Step 2 の左カラムが
+  伸びなくなり（`flex: 0 1 300px`）、表示パネルの 2 個しかない行が 2 列ずつ占有。
+  モデル系の略語をスペルアウト
+- [x] Phase B: `rob_inflation_threshold` の既定を 0.10 → **0.20**（破壊的。
+  `PMA_ROB_INFLATION_THRESHOLD` に集約）。Indirectness/Population の注釈追加、
+  surrogate の "Never pool the two" 撤回、Core GRADE の Reference を DOI リンク化、
+  Imprecision の threshold ボックス簡略化と Fig 4 branch セクション削除、
+  ユーザー可視の "MID" を "threshold" に、How to cite を Vancouver 形式に
+- [x] Phase C: Q1「reporting bias is plausible」が Fig 5 の判定を上書きして
+  強制 rate-down していたのを削除（Core GRADE 4 にその規則は無い）。第 3 の
+  選択肢 "Leave it to the Figure 5 nodes" もその規則ごと廃止。**reviewer の
+  override が SoF 脚注に届いていなかったバグを修正**（脚注は `domain_facts` から
+  組まれ、facts は override で書き換わらないため）。フローチャートの点線を
+  実線化、k ゲートのノードとエッジを点灯、trim-and-fill の 20% 誇張チェックを
+  表示専用で追加（`R/pubias_trimfill.R`）
+- [x] Phase D: **アプリから "Outcome not reported" 行を作れるようになった**
+  （パッケージ API は 0.5.0 から在ったが配線が無く、`pma_outcomes_list()` の
+  `inherits(x, "pmatools")` フィルタが宣言直後に行を落としていた）。SoF ヘッダの
+  非 absolute-effect 列を上下結合、ダウンロード開始時の busy 表示、Step 3 の
+  自動保存セクション削除
+
 **ドキュメント / 運用**
 
 - [x] `CLAUDE.md` 新設（ベンダリングのライフライン + docs は変更と同じ PR で更新するルール）
@@ -144,7 +172,7 @@ SPEC.md §11「Out of scope」と同期していること。
 - GRADEpro GDT 連携（JSON インポート・エクスポート）
 - 多言語対応（日本語ラベル）— 現状 `sof_table()` などに言語切替引数は無い
 - CRAN 提出
-- Shiny 側（`shiny/`）へ複数アウトカムワークフローを配線する UI 作業 — パッケージ側は完了済み、追従は [shiny/SPEC.md](shiny/SPEC.md) で管理
+- Shiny 側（`shiny/`）へ複数アウトカムワークフローを配線する UI 作業 — パッケージ側は完了済み、追従は [shiny/SPEC.md](shiny/SPEC.md) で管理。2026-08-14 に "Outcome not reported" 行の配線まで到達した
 - shinyapps.io 公開ガイド（`shiny/deploy.R` と CLAUDE.md §3 の運用を文書化する）
 
 ---
@@ -198,29 +226,22 @@ SPEC.md §11「Out of scope」と同期していること。
    渡させるな」という呼び出し側の話なので、相互フォールバックだけで解ける。
    詳細は SPEC.md §4.5.4。
 
-6. **Downgrade scale を Core GRADE 用語に合わせる** — [README.md:184-209](README.md:184)
-   の対応表で pmatools の値が Core GRADE 文言と 1 段ズレている
-   （`"some_concerns"` = serious、`"serious"` = very serious）。
-   - Core GRADE の語彙（not serious / serious / very serious / extremely
-     serious）に合わせて値そのものを改名する。
-   - **−3（extremely serious）は自動判定はしないが、手動指定は可能にする。**
-     現状「単一ドメインの最大 downgrade は −2」とハードコードされているので、
-     手動 `rob = "extremely_serious"` 等の経路を通す必要がある。
-   - 破壊的変更。既存値は legacy alias として受け付けて正規化する（既に
-     `"some"` → `"some_concerns"` の前例あり）。SPEC.md を先に直す。
+6. ~~**Downgrade scale を Core GRADE 用語に合わせる**~~ — 完了（2026-08-14、
+   `9a9787f`）。判定語彙は `not_serious` / `serious` / `very_serious` /
+   `extremely_serious` の 4 値になり、`GRADE_DOWNGRADE`（[R/utils.R](R/utils.R)）が
+   0 / −1 / −2 / −3 を与える。−3 は手動専用で、自動経路が出せる上限は
+   `GRADE_LEVEL_AUTO_MAX <- "very_serious"` としてコード上の性質にしてあり、
+   テストが全アセッサに対して検証する。旧値は legacy alias として正規化。
 
 7. **RoB のルールが分かりづらい** — README.md:440-530 のフローチャート説明・
    overrides・alias 表・`rob_strata()` が一続きで読みづらい。判定ルールを
    1 枚の表か図に集約して整理し直す。
 
-8. **RoB2 のマッピング表が誤り** — [README.md:463-472](README.md:463) の
-   「Cochrane RoB 2.0 → Internal GRADE level」表が 4 段階
-   （No concerns / Some concerns / Serious concerns / Critical concerns）に
-   なっているが、**RoB 2 の判定は 3 段階**: low risk of bias / some concerns /
-   high risk of bias。"Serious concerns" / "Critical concerns" は ROBINS-I の
-   語彙。表を RoB 2 の 3 段階に直し、ROBINS-I を併記するなら別表に分ける。
-   [README.md:475](README.md:475)・README.md:1161 の `rob_map` 例、および
-   `rob_strata()` の alias 表（R 側実装）も同じ誤りを持っていないか確認する。
+8. ~~**RoB2 のマッピング表が誤り**~~ — 完了（2026-08-14、`98d335b`）。README の
+   表は RoB 2 の 3 段階（Low risk of bias / Some concerns / High risk of bias）
+   になり、ROBINS-I の 4 段階は別表に分かれた。旧「Cochrane RoB 2.0」表にあった
+   3 語は「誰の公開語彙でもない」と明記したうえで、保存済み抽出シートが読めなく
+   ならないよう受理は続けている。アプリの per-study 編集はドロップダウン。
 
 9. ~~**`shiny/SPEC.md` がリポジトリ統合前のまま**~~ — 完了（2026-08-14）。
    §2.1・§2.2・§7・§9 を `stage_bundle.R` / `deploy.R` の実装に突き合わせて
@@ -260,19 +281,29 @@ SPEC.md §11「Out of scope」と同期していること。
 - ~~**項目 5**~~ — 2026-08-14 に完了。`threshold_baseline` / `ois_p0` /
   `baseline_risk` の相互フォールバック。UI 側は既に 1 つの対照群リスクを
   両方へ渡していたので、アプリの出力は不変
-- **項目 6**（downgrade 語彙の Core GRADE 準拠と手動 −3）— UX_REVIEW.md の
-  当初見積もりが誤っていた。アプリ側の小さな diff ではなく、パッケージに
-  **第 4 の judgment レベルを新設**する必要がある（現状 no / some_concerns /
-  serious の 3 値のみ）。この節の改名作業と同時にやるのが自然
-- **項目 8**（RoB2 の 3 段階）— 表の誤りは未修正。ただし調査の結果、アプリは
-  `study_design = "RCT"` をハードコードしていて観察研究の経路が無いので、
-  ROBINS-I との併記は不要で RoB 2 の 3 値だけで足りる
+- ~~**項目 6**~~（downgrade 語彙の Core GRADE 準拠と手動 −3）— 2026-08-14 に完了。
+  見積もりどおりパッケージに第 4 の judgment レベルを新設する作業になった
+- ~~**項目 8**~~（RoB2 の 3 段階）— 2026-08-14 に完了。ROBINS-I は別表として
+  併記した（アプリは `study_design = "RCT"` 固定だが、パッケージは観察研究の
+  語彙も受ける）
 
 ### 実装順の目安
 
 ~~A（1〜4）は独立・低リスクなので先に片付く。~~ A は完了。~~残りの B は
-6 → 8 → 7 → 5 の順が安全~~ — 5 は別軸の API 整理なので語彙の作業を待たずに
-先に片付けた（2026-08-14）。残りは 8 → 7（8 は語彙の定義そのもの、7 は
-その上での再構成）。9 と 10 は B と独立なのでいつでもよいが、9 は誤った
-deploy 手順を書き残している分だけ急ぐ理由がある。
-どれも CLAUDE.md §5 に従い SPEC.md / NEWS.md を同じ PR で更新する。
+6 → 8 → 7 → 5 の順が安全~~ — 5・6・8・9 も 2026-08-14 に完了した。
+
+**残っているのは 7 と 10 の 2 つだけ。**
+
+- **項目 7**（RoB のルールが読みづらい）は状態が食い違っている。上の
+  「関連: Shiny アプリの UI/UX レビュー」節は 2026-08-13 時点で実装済みと
+  書いているが、§B の項目 7 は README の再構成として未着手のまま残っている。
+  UI 側（フローチャート表示）は入っており、README の該当節を 1 枚の表か図に
+  まとめ直す作業が残っている、というのが実態に近い。着手前に README の
+  当該範囲を読んで判断すること。
+- **項目 10**（README のサンプル出力のドリフト）は未着手で、しかも
+  2026-08-14 の変更で**ずれが増えた**。`domain_facts()` の例は Publication
+  bias の `k` の `value` が `"12 (Q2 threshold: 10)"` から素の count に
+  変わっており、行数も再確認が要る。ドキュメントを実測に合わせるだけで
+  よいか（実装側の追加が意図どおりか）の判断は依然として必要。
+
+どちらも CLAUDE.md §5 に従い SPEC.md / NEWS.md を同じ PR で更新する。
