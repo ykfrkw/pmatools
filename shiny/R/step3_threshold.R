@@ -924,17 +924,22 @@ RESPONDER_P0_DEFAULT <- 0.20
       shiny::uiOutput("responder_p0_badge", inline = TRUE)),
     .config_note(EDU_COPY$config_tab$continuous_departure),
     .config_note(EDU_COPY$config_tab$chinn_caveat),
-    # A radio rather than a tick-box, and defaulting to the effect itself. The
-    # conversion used to be on by default, which read as though the rating
-    # REQUIRED a binary presentation. It does not: grade_meta() never sees the
-    # conversion, Imprecision is rated on the SMD/MD against the threshold
-    # below either way, and this choice only reaches sof_table(). Presenting
-    # the options as an explicit choice says so.
+    # A radio rather than a tick-box. The conversion used to be a checkbox that
+    # was on by default, which read as though the rating REQUIRED a binary
+    # presentation. It does not: grade_meta() never sees the conversion,
+    # Imprecision is rated on the SMD/MD against the threshold below either
+    # way, and this choice only reaches sof_table(). Presenting the options as
+    # an explicit choice says so, and the choice is still on screen either way.
     #
-    # The third option is the one Core GRADE 6 actually recommends. It is not
-    # the default, because it costs the reviewer a responder proportion they
-    # have to justify, and defaulting to a presentation that demands an
-    # assumption is how the assumption stops being examined.
+    # 'both' is the default because it is what Core GRADE 6 recommends. It does
+    # cost the reviewer a responder proportion they have to stand behind, and
+    # that is the argument the other way -- a default that demands an
+    # assumption is how the assumption stops being examined. What answers it is
+    # that the demand is not silent: the proportion defaults to the app
+    # convention and the Configuration tab's Next stays shut until the reviewer
+    # either confirms that figure or replaces it with a reason, in a box that
+    # says REQUIRED until it is ticked (pma_confirm_checkbox()). The assumption
+    # is examined once per outcome, by construction.
     shiny::radioButtons("sof_presentation",
       "How should the Summary of Findings table present this outcome?",
       choices = stats::setNames(
@@ -945,7 +950,7 @@ RESPONDER_P0_DEFAULT <- 0.20
           sprintf(paste0("Both, in one row: the %s on its own scale and the ",
                          "proportion of responders (what Core GRADE 6 ",
                          "recommends)"), sm))),
-      selected = "effect"),
+      selected = "both"),
     # Every input below belongs to the responder conversion, which both
     # 'responder' and 'both' run. Testing only 'responder' would leave a
     # reviewer on 'both' with no way to enter the proportion the conversion
