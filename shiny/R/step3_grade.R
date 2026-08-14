@@ -4215,7 +4215,8 @@ step3_server <- function(input, output, session, state) {
       changed <- FALSE
       if (any(!is.na(rt$rob))) {
         new_rob <- rt$rob[idx]
-        cur_rob <- d$rob %||% rep(NA_character_, nrow(d))
+        # tibble's `$` warns on an absent column, so ask names() instead.
+        cur_rob <- if ("rob" %in% names(d)) d$rob else rep(NA_character_, nrow(d))
         if (!identical(as.character(cur_rob), new_rob)) {
           d$rob <- new_rob
           changed <- TRUE
@@ -4223,7 +4224,11 @@ step3_server <- function(input, output, session, state) {
       }
       if (any(!is.na(rt$indirectness))) {
         new_indir <- rt$indirectness[idx]
-        cur_indir <- d$indirectness %||% rep(NA_character_, nrow(d))
+        cur_indir <- if ("indirectness" %in% names(d)) {
+          d$indirectness
+        } else {
+          rep(NA_character_, nrow(d))
+        }
         if (!identical(as.character(cur_indir), new_indir)) {
           d$indirectness <- new_indir
           changed <- TRUE
