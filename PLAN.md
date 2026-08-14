@@ -2,7 +2,7 @@
 
 ## 概要
 
-データ取込 → メタアナリシス（{meta}）→ GRADE 確実性評価（BMJ 2025 Core GRADE 準拠）→ SoF/Appendix → 再現性 ZIP までを一気通貫で行う R パッケージ。Shiny UI は別リポジトリ `pairwise_meta_analysis`（shinyapps.io 公開済み）。
+データ取込 → メタアナリシス（{meta}）→ GRADE 確実性評価（BMJ 2025 Core GRADE 準拠）→ SoF/Appendix → 再現性 ZIP までを一気通貫で行う R パッケージ。Shiny UI は同一リポジトリの `shiny/` にあり、shinyapps.io に公開済み（https://yuki-furukawa.shinyapps.io/pmatools/）。
 
 **バージョン**: 0.5.1
 **仕様書**: [SPEC.md](SPEC.md)
@@ -132,8 +132,8 @@ SPEC.md §11「Out of scope」と同期していること。
 - GRADEpro GDT 連携（JSON インポート・エクスポート）
 - 多言語対応（日本語ラベル）— 現状 `sof_table()` などに言語切替引数は無い
 - CRAN 提出
-- Shiny 側（`pairwise_meta_analysis`）へ複数アウトカムワークフローを配線する UI 作業 — パッケージ側は完了済み、追従はアプリ側の SPEC で管理
-- shinyapps.io 公開ガイド（`pairwise_meta_analysis` 側）
+- Shiny 側（`shiny/`）へ複数アウトカムワークフローを配線する UI 作業 — パッケージ側は完了済み、追従は [shiny/SPEC.md](shiny/SPEC.md) で管理
+- shinyapps.io 公開ガイド（`shiny/deploy.R` と CLAUDE.md §3 の運用を文書化する）
 
 ---
 
@@ -144,27 +144,27 @@ SPEC.md §11「Out of scope」と同期していること。
 
 ### A. ドキュメント表記（低リスク・すぐ直せる）
 
-1. **companion repository の記述を削除** — [README.md:9](README.md:9) の
-   "A wizard-style Shiny front-end lives in the companion repository
-   pairwise_meta_analysis (deployed on shinyapps.io)." は不要。リポジトリ統合済みで
-   Shiny は `shiny/` にある。[SPEC.md:3](SPEC.md:3)・[SPEC.md:25](SPEC.md:25)・
-   [SPEC.md:1686](SPEC.md:1686)・PLAN.md:5 の `~/Developer/pairwise_meta_analysis`
-   参照、および上の「今後の拡張」2 行も同時に直す（同じ古い前提）。
+1. ~~**companion repository の記述を削除**~~ — 完了。README.md 冒頭の
+   companion repository 行を削除し、SPEC.md 冒頭注記・「Shiny-agnostic」段落・
+   §11 の out-of-scope 行、PLAN.md:5 と「今後の拡張」2 行を `shiny/` 前提に
+   書き換えた。`shiny/SPEC.md` に残る `pairwise_meta_analysis` 参照は別件
+   （下記 9 を見よ）。
 
-2. **"MIC" 表記をやめ `threshold` に統一** — 残っているのは
-   [shiny/R/step3_threshold.R:410](shiny/R/step3_threshold.R:410) の教育コピー
-   （"Minimal Important Change (MIC)"）。パッケージ側 API はすでに `threshold` /
-   `threshold_type` / `threshold_scale`。UI 文言だけがズレている。
+2. ~~**"MIC" 表記をやめ `threshold` に統一**~~ — 実装済み（下の「関連」節を見よ）。
 
-3. **`Mortality` はサンプルデータに無い** — README:82「Several outcomes in one
-   session (v0.5)」の例（README.md:91-106）が `"Mortality"` を使っているが、
-   `inst/extdata/cbti_depression.csv` の outcome は remission / severity /
-   response / dropout 系のみ。実データで動く例に差し替える（コピペで動かない例は
-   README の信頼を落とす）。
+3. ~~**`Mortality` はサンプルデータに無い**~~ — 完了。README の
+   「Several outcomes in one session」を `inst/extdata/cbti_depression.csv` から
+   Depression response / remission / severity の 3 アウトカムを組み立てる例に
+   差し替え、実行して出力を確認した（binary 2 + continuous 1 の混在例を兼ねる）。
+   「Multi-outcome workflow」節の worked example も同じデータに統一し、捏造の
+   `* 0.7` プレースホルダを撤去。ついでに存在しないファイルを指していた
+   `events_long.csv` を同梱の `rare_events_mock.csv` に、ZIP 内容の記述
+   （PNG は生成されない・Appendix docx は入らない）を実測に合わせた。
 
-4. **Shiny アプリ側の説明を README に入れる** — pmatools は主に Shiny 上での
-   利用を想定している。README にアプリの位置づけ・起動方法・公開 URL
-   （https://yuki-furukawa.shinyapps.io/pmatools/）の節を追加する。
+4. ~~**Shiny アプリ側の説明を README に入れる**~~ — 完了。README の Installation
+   直前に「The Shiny app — how most people use pmatools」節を追加（位置づけ・
+   公開 URL・埋め込み先・ローカル起動手順・4 ステップ・アプリ版と
+   パッケージ版が別管理である理由・`shiny/SPEC.md` へのリンク）。
 
 ### B. 設計・仕様に踏み込む項目（要検討）
 
@@ -206,6 +206,32 @@ SPEC.md §11「Out of scope」と同期していること。
    [README.md:475](README.md:475)・README.md:1161 の `rob_map` 例、および
    `rob_strata()` の alias 表（R 側実装）も同じ誤りを持っていないか確認する。
 
+9. **`shiny/SPEC.md` がリポジトリ統合前のまま**（2026-08-14 に項目 1 の作業中に
+   発見。項目 1 の残りではなく独立した仕事）。タイトル・冒頭注記の
+   `../pmatools/SPEC.md`（統合後は `../SPEC.md`）・公開 URL
+   （`.../pairwise_meta_analysis/` のまま。実際は `.../pmatools/`）・§2.2 の
+   ファイルレイアウト・§9 の Target version 2.0.0（`shiny/DESCRIPTION` は
+   すでに 3.0.0）が古い。**最も危険なのは §2.1 と §7.2 で、`Remotes:
+   github::ykfrkw/pmatools` + `install_github()` を前提に書かれている** —
+   これは CLAUDE.md §1 の「ベンダリングしてから deploy する」ライフラインと
+   真っ向から矛盾しており、これを読んで deploy するとビルドサーバで 401 に
+   なる。1 行ずつの置換では済まないので、§2 と §7 をまとめて書き直す作業として
+   別に切る。**暫定対応として冒頭ブロックだけ直した**（タイトル・`../SPEC.md`
+   への相対リンク・公開 URL・appId）。加えて「ここから下は古い」旨の警告を
+   冒頭に置き、deploy は CLAUDE.md §1 と `deploy.R` を見るよう明記した。
+   §2.1 / §2.2 / §7 / §9 の本文は未修正。
+
+10. **README のサンプル出力が実装とドリフトしている**（同じく 2026-08-14 に発見。
+    コードは動くが、README に貼られた出力例が古い）。
+    - `suggest_threshold(ma)` の出力例が `$threshold_ratio 1.20` になっているが、
+      `sm = "OR"` の実測は 1.25（直前の表の記載 OR → 1.25 とも矛盾）。
+    - `domain_facts()` の例が `# A tibble: 6 x 4` かつ 3 ドメインだが、実測は
+      Imprecision が 8 行（`ois_target_rate` / `flow_path` が増えている）、
+      ドメインは 4 つ（Publication bias も記録するようになっている）。
+      その直後の「Indirectness, Publication bias | none yet」表も同様に古い。
+    ドキュメントを実装に合わせるのか実装側の追加が意図せぬものだったのかの
+    判断が要るので、確認せずに書き換えていない。
+
 ### 関連: Shiny アプリの UI/UX レビュー
 
 上記フィードバックのうち UI に現れる分は、アプリ実機を通したレビューと
@@ -215,9 +241,11 @@ SPEC.md §11「Out of scope」と同期していること。
 入っている。** この節の項目 2（MIC 表記）と項目 7（RoB のルールが分かりづらい）は
 実装済み。残っているのは:
 
-- **項目 1・3・4・5** — README の companion repository 記述、サンプルデータに
-  無い `Mortality` の例、アプリ説明の追加、`threshold_baseline` と `ois_p0` の
-  重複。いずれもパッケージと README の作業で、UI 側の実装を伴わない
+- ~~**項目 1・3・4**~~ — 2026-08-14 に完了（README の companion repository 記述、
+  サンプルデータに無い `Mortality` の例、アプリ説明の追加）。テストは
+  パッケージ 2099 pass / アプリ 747 pass のまま、どちらも変化なし
+- **項目 5** — `threshold_baseline` と `ois_p0` の重複。パッケージと README の
+  作業で、UI 側の実装を伴わない
 - **項目 6**（downgrade 語彙の Core GRADE 準拠と手動 −3）— UX_REVIEW.md の
   当初見積もりが誤っていた。アプリ側の小さな diff ではなく、パッケージに
   **第 4 の judgment レベルを新設**する必要がある（現状 no / some_concerns /
@@ -228,6 +256,8 @@ SPEC.md §11「Out of scope」と同期していること。
 
 ### 実装順の目安
 
-A（1〜4）は独立・低リスクなので先に片付く。B は 6 → 8 → 7 → 5 の順が安全
-（6 と 8 は語彙の定義そのもの、7 はその上での再構成、5 は別軸の API 整理）。
+~~A（1〜4）は独立・低リスクなので先に片付く。~~ A は完了。残りの B は
+6 → 8 → 7 → 5 の順が安全（6 と 8 は語彙の定義そのもの、7 はその上での再構成、
+5 は別軸の API 整理）。9 と 10 は B と独立なのでいつでもよいが、9 は誤った
+deploy 手順を書き残している分だけ急ぐ理由がある。
 どれも CLAUDE.md §5 に従い SPEC.md / NEWS.md を同じ PR で更新する。

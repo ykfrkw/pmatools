@@ -1,10 +1,12 @@
-# pairwise_meta_analysis — Shiny App Specification
+# pmatools wizard — Shiny App Specification
 
-> Authoritative specification for the pairwise_meta_analysis Shiny app (v2 — wizard refactor). The package-level R logic (data ingestion, MA pipeline, GRADE assessment, SoF table, export) is provided by [pmatools](../pmatools/SPEC.md). This app is a **UI layer** on top of pmatools.
+> Authoritative specification for the pmatools wizard, the Shiny app in this repository's `shiny/` directory (v2 — wizard refactor). The package-level R logic (data ingestion, MA pipeline, GRADE assessment, SoF table, export) is provided by [pmatools](../SPEC.md), whose sources live one directory up. This app is a **UI layer** on top of pmatools.
 
-**Public URL:** https://yuki-furukawa.shinyapps.io/pairwise_meta_analysis/
-**Deployment:** shinyapps.io (account: `yuki-furukawa`, appId: `15217423`)
+**Public URL:** https://yuki-furukawa.shinyapps.io/pmatools/
+**Deployment:** shinyapps.io (account: `yuki-furukawa`, appId: `17697029`)
 **Target version:** 2.0.0 (succeeds the existing single-page app)
+
+> **Stale below this point.** §2.1, §2.2, §7 and §9 still describe the app as a separate repository that installs pmatools from GitHub (`Remotes: github::ykfrkw/pmatools`). It does not, and following §7 will fail on the build server — the bundle vendors the package sources instead. `../CLAUDE.md` §1 and `stage_bundle.R` / `deploy.R` are authoritative for deployment until those sections are rewritten (tracked as item 9 of `../PLAN.md`'s feedback section).
 
 ---
 

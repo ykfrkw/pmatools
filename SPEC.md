@@ -1,6 +1,6 @@
 # pmatools — Package Specification
 
-> Authoritative specification for the pmatools R package. Implementation MUST conform to this document. UI-side concerns (Shiny wizard, educational copy, accordion layout) are specified separately in `~/Developer/pairwise_meta_analysis/SPEC.md`.
+> Authoritative specification for the pmatools R package. Implementation MUST conform to this document. UI-side concerns (Shiny wizard, educational copy, accordion layout) are specified separately in [`shiny/SPEC.md`](shiny/SPEC.md), which governs the app in this repository's `shiny/` directory.
 
 **Version target:** 0.5.1
 **Document history:** this file was written for v0.2.0 and has been updated in place for v0.5.0 and v0.5.1; section numbering is preserved so the diff stays readable. Sections that still describe v0.2 behaviour verbatim are marked **[v0.2 — superseded]** with a pointer to the section that governs.
@@ -22,7 +22,7 @@ pmatools is the **single source of truth** for:
 3. Summary of Findings (SoF) flextable + Appendix report
 4. Reproducible export bundle (CSV + R script + plots + tables → ZIP)
 
-It is **Shiny-agnostic**. All functions return plain R objects (tibbles, base graphics, flextables, file paths). The Shiny wizard at `pairwise_meta_analysis` consumes pmatools functions only.
+It is **Shiny-agnostic**. All functions return plain R objects (tibbles, base graphics, flextables, file paths). The Shiny wizard under `shiny/` is a consumer like any other: it calls pmatools functions and nothing here may depend on it.
 
 ---
 
@@ -1910,7 +1910,7 @@ instead.
 
 - GRADE upgrade domains (large effect, dose-response, plausible confounding)
 - GRADEpro JSON export/import
-- shinyapps.io deployment automation in pmatools (kept in pairwise_meta_analysis)
+- shinyapps.io deployment automation in the package (it lives with the app, in `shiny/deploy.R`)
 - Internationalization
 - CRAN submission
 
