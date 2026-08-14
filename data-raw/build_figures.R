@@ -245,7 +245,7 @@ build_rob <- function() {
                    "the low risk of bias studies?"))
   magn <- fc_box("pma-rob-node-magnitude", "node", 620, 275, 320,
                  c("Similar or substantially different",
-                   "magnitudes of effect?"))
+                   "magnitudes? Decided by the five rules"))
   lall <- fc_box("pma-rob-leaf-all", "leaf", 505, 383, 200,
                  c("Do not rate down", "Analyse all studies"))
   llow <- fc_box("pma-rob-leaf-lowonly", "leaf", 725, 383, 215,
@@ -283,10 +283,10 @@ build_rob <- function() {
       # usable units); a third would need the SVG height moved with it.
       paste0("After BMJ Core GRADE 4 (Guyatt et al., 2025) Figure 2. ",
              "pmatools&#8217; operationalisation, not a reproduction: the ",
-             "five direction-of-bias rules are"),
-      paste0("pmatools&#8217; own, and rule 5 rates down two levels, which ",
-             "Core GRADE 4 describes nowhere: every leaf of its figure reads ",
-             "rate down or do not rate down.")))
+             "five direction-of-bias"),
+      paste0("rules are pmatools&#8217; own, they answer the symmetrically ",
+             "worded magnitude question, and rule 5 rates down two levels, ",
+             "which Core GRADE 4 never does.")))
   )
 
   fc_svg(
@@ -306,17 +306,21 @@ build_rob <- function() {
            "high risk of bias studies do not dominate, pmatools asks whether ",
            "there is appreciable evidence from the low risk of bias studies ",
            "and, if so, whether the two magnitudes of effect are similar or ",
-           "substantially different; neither answer rates down, but a ",
-           "substantial difference restricts the analysis to the low risk of ",
-           "bias studies. A body of evidence with no high risk of bias study ",
-           "at all takes that same undominated route and does not rate down. ",
-           "This is pmatools&#8217; operationalisation of the Core GRADE 4 ",
-           "Figure 2 decision, not a reproduction of the published figure: ",
-           "the five rules are pmatools&#8217; and are not enumerated in the ",
-           "source, and Core GRADE 4 describes no two-level risk-of-bias ",
-           "downgrade at all, so the two-level fifth rule is a departure from ",
-           "it. Those two levels also require a threshold to have been ",
-           "supplied; without one the rule rates down one level."),
+           "substantially different. That second question is decided by the ",
+           "same five rules: a rule that would rate down means substantially ",
+           "different, one that would not means similar. Neither answer rates ",
+           "down, but a substantial difference restricts the analysis to the ",
+           "low risk of bias studies. A body of evidence with no high risk of ",
+           "bias study at all takes that same undominated route and does not ",
+           "rate down. This is pmatools&#8217; operationalisation of the Core ",
+           "GRADE 4 Figure 2 decision, not a reproduction of the published ",
+           "figure: the five rules are pmatools&#8217; and are not enumerated ",
+           "in the source; Core GRADE 4 words the magnitude question ",
+           "symmetrically where the rules are directional; and it describes ",
+           "no two-level risk-of-bias downgrade at all, so the two-level ",
+           "fifth rule is a departure from it, which also requires a ",
+           "threshold to have been supplied &#8212; without one that rule ",
+           "rates down one level."),
     "Risk of bias &#8212; Core GRADE 4 Fig 2, as pmatools implements it",
     body
   )

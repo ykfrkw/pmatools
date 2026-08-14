@@ -810,6 +810,58 @@
   cells, the difference and the risk ratio cannot drift apart.
   `.format_ier_chinn()`'s output is byte-for-byte unchanged.
 
+* **Core GRADE 4 Fig 2's undominated branch now answers "similar or
+  substantially different magnitudes of effect?" with the same five-rule check
+  as the dominated one, which changes *which studies an analysis is run on*.**
+  This is the largest-consequence change in this release. When the branch
+  answers "substantially different", `grade_meta()` refits the meta-analysis on
+  the low risk of bias subset (`rob_refit = TRUE`, the default), so the answer
+  decides the pooled effect estimate, the rating target, the baseline risk,
+  every other domain's judgment and the Summary of Findings table. **A stored
+  analysis re-run under this release can therefore report a different pooled
+  effect, a different certainty rating and a different set of included studies,
+  with no change to the input data.** Compare `$rob_analysis_set` and
+  `$meta$studlab` against an earlier run before comparing anything downstream
+  of them.
+
+  What moved: the branch used to judge **magnitude alone** — a zone change, or
+  a relative change beyond `rob_inflation_threshold` in *either* direction,
+  with rule 1's trivial-zone exemption. It now reads the five-rule verdict:
+  rules 3, 4 and 5 (rate down) mean substantially different, rules 1 and 2 (do
+  not rate down) mean similar. Rule 3 is gated on `small_values`, so **the
+  direction gate now gates this branch too**: a shift past the inflation
+  threshold that runs *away* from the bias-favouring direction reaches rule 2
+  and is read as "similar". Fewer analyses are restricted to the low risk of
+  bias studies than in 0.5.0, and the analyses that stop being restricted are
+  exactly those whose *low*-RoB studies showed the larger effect.
+
+  **This departs from the source, and pmatools says so on every judgment that
+  answers the node.** Core GRADE 4 words that node symmetrically — "whether low
+  and high risk of bias studies suggest similar or substantially different
+  magnitudes of effect" — and names no direction, which is why 0.5.0 read it
+  symmetrically. The symmetric reading turns out to be worse rather than merely
+  different: under it one and the same pair of estimates is "substantially
+  different" on this branch of Fig 2 and "not substantially different" one node
+  away on the dominated branch, and nothing in the output says which answer the
+  body of evidence has. `.ROB_DIRECTIONAL_NODE_NOTE` carries the reasoning into
+  the domain `notes` on **both** leaves of the node, next to
+  `.ROB_CAP_NOTE`'s and `.INCONSISTENCY_TWO_LEVEL_NOTE`'s disclosures. A
+  reviewer who wants the symmetric reading can restrict the meta-analysis to
+  the low risk of bias studies by hand and rate the restricted analysis.
+
+  Rule 5's depth does not cross with its verdict: this branch rates down
+  nothing, so a rating rule of any depth reaches the same leaf. The code tests
+  the rule verdict against `"not_serious"` rather than enumerating rating
+  levels, so a level added to the check later cannot leak a −2 into a branch
+  whose leaves are "use all studies" and "use the low risk of bias studies".
+  The internal `magnitude_substantial` field of `.assess_bias_direction()`,
+  which existed only to hold the symmetric answer, is gone; `gate_note` is now
+  returned separately, because the two branches draw a different consequence
+  from a blocked direction gate. The `flow_path` vocabulary, the
+  `pma-rob-edge-magnitude-similar` / `-different` edges and the two leaves are
+  unchanged — the same picture, answered differently. See `SPEC.md` §5.1 Step
+  2b.
+
 * **The control-arm risk is supplied once, and `threshold_baseline`, `ois_p0`
   and `baseline_risk` now inherit it from one another.** All three name the
   same quantity — the control-arm event rate — and they feed three different

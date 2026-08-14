@@ -1556,16 +1556,23 @@ The reasoning, stated here rather than hidden because the source says otherwise:
 
 Every other automated risk-of-bias path still stops at `"serious"` (−1) — rules 3 and 4, the all-studies-high-RoB case, and the not-assessable bails — and `.ROB_CAP_NOTE` is appended where that cap bites. The scalar `rob` override, which requires `rob_rationale`, remains the way to record a judgment the flowchart does not reach, in either direction.
 
-`inflation_ratio = (|TE_all| - |TE_low|) / |TE_low|` is evaluated **only** when the shift runs in the bias-favouring direction implied by `small_values`; a deflation in that direction never triggers a downgrade. `small_values` is required (§4.5.1a), so the direction is always the reviewer's declared one: the `|TE_all| > |TE_low|` fallback that stood in for it up to v0.5.0 — and the warning saying that the fallback had decided the downgrade — are gone. When the direction gate blocks a downgrade that the inflation threshold would otherwise have caused, the notes say so explicitly, including the direction reasoning, so readers do not conclude the threshold was ignored (v0.4.0).
+`inflation_ratio = (|TE_all| - |TE_low|) / |TE_low|` is evaluated **only** when the shift runs in the bias-favouring direction implied by `small_values`; a deflation in that direction never triggers a downgrade. `small_values` is required (§4.5.1a), so the direction is always the reviewer's declared one: the `|TE_all| > |TE_low|` fallback that stood in for it up to v0.5.0 — and the warning saying that the fallback had decided the downgrade — are gone. When the direction gate blocks a downgrade that the inflation threshold would otherwise have caused, the notes say so explicitly, including the direction reasoning, so readers do not conclude the threshold was ignored (v0.4.0). The gate applies to **both** branches of Fig 2, because Step 2b reads this same rule verdict — see below.
 
 When `threshold_internal` is NULL/NA/≤ 0 the trivial zone collapses to `{0}`, so rule 5 is the only zone-change rule that can fire — and, per the paragraph above, it rates down one level rather than two on that path.
 
-**Step 2b — dominated = No.** **This branch never rates the domain down.** It decides which studies the analysis should use:
+**Step 2b — dominated = No.** **This branch never rates the domain down.** It decides which studies the analysis should use, and it decides it with **the same five-rule check as Step 2a** — the verdict is read as a leaf rather than as a downgrade:
 
-| "Substantial difference between high- and low-RoB estimates?" | `analysis_set` |
-|---|---|
-| Yes (a zone change, i.e. rule 4/5, or a bias-favouring inflation beyond `rob_inflation_threshold`) | `"low_only"` |
-| No | `"all"` |
+| Rule reached by the Step 2a check | "Similar or substantially different magnitudes of effect?" | `analysis_set` |
+|---|---|---|
+| 3, 4, 5 (rate down) | substantially different | `"low_only"` |
+| 1, 2 (do not rate down) | similar | `"all"` |
+| none — the check bailed out (`rule` is `NA`) | never asked; the route takes the *appreciable evidence = no* edge | `"all"` |
+
+Two consequences follow from reading the rule verdict and both are load-bearing.
+
+**The `small_values` direction gate gates this branch too (current development version).** A shift beyond `rob_inflation_threshold` that does not run in the bias-favouring direction reaches rule 2, so it is now **similar** where it used to be substantially different, and the analysis keeps every study where it used to be restricted to the low-RoB ones. **This departs from the source, deliberately.** Core GRADE 4 words the node symmetrically — "whether low and high risk of bias studies suggest similar or substantially different magnitudes of effect" — and names no direction; pmatools answers it directionally because the symmetric reading makes one and the same pair of estimates "substantially different" on this branch of Fig 2 and "not substantially different" one node away on the dominated branch, with nothing in the output to say which answer the body of evidence has. `.ROB_DIRECTIONAL_NODE_NOTE` states the departure in the notes on **both** leaves of the node, so no reader meets the verdict without the reasoning. Up to and including v0.5.0 the branch judged magnitude alone (a zone change, or `|relative change| > rob_inflation_threshold` in either direction, with rule 1's trivial-zone exemption).
+
+**Rule 5's depth does not cross with its verdict.** The branch has no levels to rate down, only a leaf to pick, so every rating rule collapses onto `"low_only"`. The code tests the rule verdict against `"not_serious"` rather than enumerating the rating levels, which is what keeps a level added to the check later from leaking a `-2` into a branch whose leaves are "use all studies" / "use the low risk of bias studies".
 
 Consequence (breaking in v0.5.0): a body of evidence in which a *minority* of the weight is at high risk of bias can no longer be downgraded for risk of bias.
 
@@ -2041,7 +2048,7 @@ instead.
 |---|---|
 | test-rating_target.R | Core GRADE 2 Fig 2 target derivation, manual override + mandatory rationale, `threshold_type` entry gate |
 | test-imprecision.R | Fig 4 paths (§5.5), CI-ratio rules, OIS branch reachability |
-| test-rob_flowchart.R | Core GRADE 4 Fig 2 (§5.1): dominance gate, the 5 zone rules, `analysis_set`, refit propagation |
+| test-rob_flowchart.R | Core GRADE 4 Fig 2 (§5.1): dominance gate, the 5 zone rules, `analysis_set`, refit propagation, and Step 2b's rule → leaf mapping (each rule's leaf and `flow_path`, the direction gate reading a shift as "similar", rule 5 leaking no depth, the departure disclosure on both leaves) |
 | test-domain_rob.R | inflation threshold boundaries, `rob_some_concerns`, `rob_overrides`, the `small_values` direction gate deciding rule 2 vs rule 3 (§4.5.1a) |
 | test-indirectness_subdomains.R | PICO table normalisation, worst-case rollup, scalar override |
 | test-sof_bmj.R | BMJ SoF layout, Difference column, plain language summaries |

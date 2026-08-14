@@ -36,10 +36,10 @@
 #' @section Risk of bias - Core GRADE 4 Fig 2:
 #' Implemented by \code{assess_rob()} in \code{R/domain_rob.R}, which delegates
 #' the flowchart itself to \code{.flowchart_rob()} in the same file; the
-#' five-rule direction-of-bias check reached on the dominated branch is
-#' \code{.assess_bias_direction()}, also in \code{R/domain_rob.R}.
+#' five-rule direction-of-bias check is \code{.assess_bias_direction()}, also
+#' in \code{R/domain_rob.R}, and both branches of the figure read its verdict.
 #'
-#' Departs from the source twice.
+#' Departs from the source three times.
 #'
 #' First, the five rules are pmatools' own. Core GRADE 4 Fig 2 has a single
 #' node reading "check direction of bias" and does not enumerate how. The
@@ -63,6 +63,22 @@
 #' without one the rule rates down one level, because the zones are then
 #' separated by the null alone and a sign flip no longer implies either
 #' estimate is appreciably away from it.
+#'
+#' Third, the undominated branch's node - "whether low and high risk of bias
+#' studies suggest similar or substantially different magnitudes of effect" -
+#' is worded symmetrically in the source and names no direction, whereas
+#' pmatools answers it with those same directional rules: a rule that rates
+#' down means substantially different, a rule that does not means similar. A
+#' shift past the inflation threshold that does not run in the bias-favouring
+#' direction implied by \code{small_values} is therefore read as "similar", and
+#' the analysis is not restricted to the low risk of bias studies. The
+#' symmetric reading was in force up to and including 0.5.0 and was worse
+#' rather than merely different: under it one and the same pair of estimates is
+#' "substantially different" on this branch and "not substantially different"
+#' one node away on the dominated branch. Rule 5's depth does not cross with
+#' its verdict - this branch rates down nothing, so every rating rule reaches
+#' the same leaf. Every judgment that answers the node carries the departure in
+#' its \code{notes}.
 #'
 #' The chart opens at the dominance question. A body of evidence with no
 #' high-risk study is not drawn a node of its own, because it does not reach a

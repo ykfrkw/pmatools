@@ -444,9 +444,12 @@ w_high >= rob_dominant_threshold ?
 │           bias could account for the effect / its absence → rate down
 │           bias would under-estimate the effect             → do not rate down
 └── no  → appreciable evidence from low-RoB studies?
-          substantial difference between the high- and low-RoB estimates?
-            ├── yes → do not rate down; use low risk of bias studies only
-            └── no  → do not rate down; use all studies
+          similar or substantially different magnitudes of effect?
+          (the same 5-rule decision, read as a leaf instead of a downgrade)
+            ├── rule 3/4/5 → substantially different
+            │                do not rate down; use low risk of bias studies only
+            └── rule 1/2   → similar
+                             do not rate down; use all studies
 ```
 
 The non-dominated branch **never rates the domain down**. When it lands on
@@ -588,13 +591,26 @@ names (the earlier `0.60` matched neither). (The CI-overlap and CI-significance
 branches removed in v0.3.1 stay removed; they really are subsumed by the
 zone comparison.)
 
-**Substantial difference is judged on magnitude alone.** On the non-dominated
+**Both branches are decided by the same five rules.** On the non-dominated
 branch the figure asks "whether low and high risk of bias studies suggest
-similar or **substantially different magnitudes of effect**" — a symmetric
-question. The `small_values` direction gate therefore applies only to the
-dominated branch, whose node is explicitly "check direction of bias". A body of
-evidence whose *low*-RoB studies show the larger effect is a substantial
-difference too.
+similar or **substantially different magnitudes of effect**", and pmatools
+answers it with the rule verdict it already has: rules 3, 4 and 5 mean
+substantially different (restrict the analysis to the low-RoB studies), rules 1
+and 2 mean similar (keep every study). Nothing on that branch rates down, so
+rule 5's depth plays no part there.
+
+That means the `small_values` direction gate applies to both branches: a shift
+past `rob_inflation_threshold` that does not run in the bias-favouring
+direction reaches rule 2 and is read as *similar*. **This departs from the
+source deliberately.** The node is worded symmetrically and names no direction,
+but under the symmetric reading one and the same pair of estimates is
+"substantially different" on this branch of Fig 2 and "not substantially
+different" one node away on the dominated branch, and nothing in the output
+says which answer the body of evidence has. The departure is stated in the
+domain `notes` on both leaves of the node. Up to and including v0.5.0 pmatools
+did read the node symmetrically; a reviewer who wants that reading can restrict
+the meta-analysis to the low-RoB studies by hand and rate the restricted
+analysis.
 
 **One automatic two-level downgrade, and it is a departure.** Every leaf of
 Fig 2 reads "rate down" / "do not rate down", and Core GRADE 4 describes no
