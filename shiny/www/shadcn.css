@@ -160,6 +160,10 @@ h5 { font-size: 0.95rem; margin-top: 0.75rem; margin-bottom: 0.4rem; }
 .pma-badge.grade-moderate { background: var(--grade-moderate-bg); color: var(--grade-moderate-fg); }
 .pma-badge.grade-low      { background: var(--grade-low-bg);      color: var(--grade-low-fg); }
 .pma-badge.grade-vlow     { background: var(--grade-vlow-bg);     color: var(--grade-vlow-fg); }
+/* "Not rated": an outcome no study reported. Grey on purpose -- it is not a
+   fifth rung under Very low, it is the absence of a rating, and borrowing any
+   of the four GRADE colours would put it on that scale. */
+.pma-badge.grade-unrated  { background: hsl(var(--muted));        color: hsl(var(--muted-foreground)); }
 
 /* Stepper */
 .pma-stepper { display: flex; gap: 0.4rem; margin-bottom: 1.5rem; align-items: center;
@@ -989,4 +993,41 @@ details > summary {
   border: 0;
   margin-top: -0.5rem;
   transform: rotate(180deg);
+}
+
+/* ----- Busy state for the Step 4 Download ZIP button ---------------------
+   Building the bundle renders every plot and writes a docx report, which
+   takes seconds, and until the first shiny::incProgress() lands the page
+   looked exactly as it did before the click. shinycssloaders cannot cover
+   this: it wraps a Shiny OUTPUT, and downloadButton is a link, not an output.
+   So the button spins on its own. The class is added on click (app.R) and
+   removed when the download handler returns, over a custom message. */
+.pma-download-busy {
+  pointer-events: none;
+  opacity: 0.75;
+}
+.pma-download-busy::before {
+  content: "";
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-right: 0.5rem;
+  vertical-align: -0.1em;
+  border: 2px solid currentColor;
+  /* One transparent side is what makes the ring read as rotating. */
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: pma-spin 0.7s linear infinite;
+}
+@keyframes pma-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* Respect the OS setting: a reduced-motion reader still needs to know the
+   button is working, so the ring stays and only stops turning. */
+@media (prefers-reduced-motion: reduce) {
+  .pma-download-busy::before {
+    animation: none;
+  }
 }

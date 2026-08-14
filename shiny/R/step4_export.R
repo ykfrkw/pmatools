@@ -8,6 +8,11 @@ PMA_EXPORT_INCLUDE_DEFAULT <- c(
   "funnel", "funnel_trimfill", "pubias_missing_forest", "sof",
   "evidence_profile", "indirectness", "readme")
 
+# Id of the "preparing the download" toast, so the on.exit() that removes it
+# names the same notification the handler put up rather than clearing whatever
+# happens to be on screen.
+PMA_DOWNLOAD_BUSY_ID <- "pma_download_busy"
+
 step4_ui <- function() {
   s <- EDU_COPY$steps$step4
 
@@ -34,8 +39,8 @@ step4_ui <- function() {
       htmltools::p(
         class = "pma-card-subtitle",
         style = "margin-top: 0.4rem;",
-        "Returns to Step 2 with the outcome name, direction, follow-up and ",
-        "every Step 3 answer cleared, ready for the next outcome. The saved ",
+        "Asks whether the next outcome is one to analyse from the data or one ",
+        "no included study reported (Core GRADE 6). Either way the saved ",
         "outcomes above, the loaded data and the per-study risk-of-bias and ",
         "indirectness ratings are kept.")
     ),
@@ -164,10 +169,15 @@ step4_server <- function(input, output, session, state) {
 
   # ----- Multi-outcome Summary of Findings --------------------------------
   # state$outcomes is a named list of pmatools objects, banked automatically
-  # once every certainty domain of an outcome is confirmed (see
+  # once every certainty domain of an outcome is confirmed, plus any
+  # pmatools_not_reported rows the reviewer declared by hand (see
   # pma_outcomes_list()). It is exactly what the vendored grade_table()
   # consumes, so no reshaping is needed here.
   saved_outcomes <- shiny::reactive(pma_outcomes_list(state$outcomes))
+  # Everything downstream of this that needs an ANALYSIS - the rare-event
+  # scan, the risk-of-bias labels for the stratified forests - reads this
+  # instead. A not-reported row has no $meta to interrogate.
+  rated_outcomes <- shiny::reactive(pma_rated_outcomes(state$outcomes))
 
   # Signature of the dataset currently loaded in Step 1; saved outcomes whose
   # own signature differs were rated on other data (pma_outcomes_stale()).
@@ -193,7 +203,7 @@ step4_server <- function(input, output, session, state) {
   # One rare-event alert per saved outcome (Core GRADE 6). NULL entries are
   # dropped, so an empty list means nothing in the table is rare.
   combined_rare_alerts <- shiny::reactive({
-    outs <- saved_outcomes()
+    outs <- rated_outcomes()
     if (length(outs) == 0) return(list())
     alerts <- lapply(names(outs), function(nm) {
       pma_rare_event_alert(outs[[nm]], label = nm)
@@ -300,9 +310,14 @@ step4_server <- function(input, output, session, state) {
   # alone, so an unnamed outcome can reach this button with nothing banked.
   .export_outcomes <- function() {
     outs <- saved_outcomes()
-    if (length(outs) > 0) return(outs)
+    # RATED rows, not rows: a bundle needs one analysis to build from, and a
+    # session can reach this button with nothing banked but a not-reported row
+    # (the reviewer declared one, then rated an outcome without naming it).
+    # Those rows stay in the table either way - they are appended to, not
+    # replaced by, the rating on screen.
+    if (length(pma_rated_outcomes(outs)) > 0) return(outs)
     g <- state$grade
-    if (is.null(g)) return(list())
+    if (is.null(g)) return(outs)
     g$follow_up <- state$display$follow_up
     g$unit      <- state$display$unit
     g <- pma_bank_export_material(
@@ -317,7 +332,9 @@ step4_server <- function(input, output, session, state) {
           # and every message about this outcome is keyed on. It cannot be
           # blank, and this is the one path that can reach here without one.
           else "Outcome"
-    stats::setNames(list(g), nm)
+    # c(), not setNames() alone: any not-reported rows the reviewer declared
+    # belong in the same table as the rating on screen.
+    c(outs[setdiff(names(outs), nm)], stats::setNames(list(g), nm))
   }
 
   output$rare_export_note <- shiny::renderUI({
@@ -338,6 +355,10 @@ step4_server <- function(input, output, session, state) {
   # only be right for one of them. A study with no label is drawn as "*"
   # rather than dropping the whole plot.
   .export_rob <- function(outs) {
+    # Rated only: the lookup below reads g$meta$studlab, and there is no $meta
+    # on a not-reported row - it would come back as a zero-length vector and
+    # hand export_bundle() an `rob` entry for an outcome it never plots.
+    outs   <- pma_rated_outcomes(outs)
     labels <- lapply(names(outs), function(nm) {
       g   <- outs[[nm]]
       src <- attr(g, PMA_OUTCOME_SOURCE_ATTR, exact = TRUE)
@@ -361,6 +382,7 @@ step4_server <- function(input, output, session, state) {
   # outcomes being exported rather than from combined_rare_alerts(), so the
   # single rating on screen gets its alert too.
   .export_sof_notes <- function(outs) {
+    outs   <- pma_rated_outcomes(outs)
     alerts <- lapply(names(outs), function(nm) {
       pma_rare_event_alert(outs[[nm]], label = nm)
     })
@@ -447,6 +469,25 @@ step4_server <- function(input, output, session, state) {
       paste0(input$bundle_name %||% "pmatools_results", ".zip")
     },
     content = function(file) {
+      # Nothing on screen changed between the click and the first
+      # incProgress() below, and everything before it - the guards, then
+      # collecting the settings - happens before withProgress() paints. The
+      # complaint was "the download takes ages to start", which is what an
+      # unacknowledged click looks like.
+      #
+      # on.exit(), not a call at the end: three of the paths out of this
+      # handler are early returns from the guards below, and a fourth is an
+      # error inside the tryCatch. A notification with duration = NULL that
+      # nothing takes down stays on screen for the rest of the session.
+      shiny::showNotification(
+        "Preparing the download - building the export bundle...",
+        id = PMA_DOWNLOAD_BUSY_ID, duration = NULL, type = "message")
+      on.exit({
+        shiny::removeNotification(PMA_DOWNLOAD_BUSY_ID)
+        # Stops the spinner the click started on the button itself (app.R).
+        session$sendCustomMessage("download_done", list())
+      }, add = TRUE)
+
       if (is.null(state$ma)) {
         shiny::showNotification(
           "Cannot export: Step 2 (run analysis) must be completed first.",

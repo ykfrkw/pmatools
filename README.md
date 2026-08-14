@@ -36,8 +36,16 @@ Four steps, in order:
 |---|---|
 | **1. Data** | load a file, paste a table, or take a bundled sample; map the columns; check the parsed rows |
 | **2. Meta-analysis** | pick the effect measure and labels, pool, read the forest and funnel plots |
-| **3. GRADE** | work through the five domains, each with its algorithm explained and every automatic judgment overridable; save the outcome and go back for the next one |
-| **4. Export** | preview the Summary of Findings across every saved outcome, then download the reproducible ZIP — data, `analysis.R`, plots, SoF and evidence profile |
+| **3. GRADE** | work through the five domains, each with its algorithm explained and every automatic judgment overridable |
+| **4. Export** | preview the Summary of Findings across every saved outcome, add the next one, then download the reproducible ZIP — data, `analysis.R`, plots, SoF and evidence profile |
+
+Outcomes are banked automatically the moment every certainty domain of one is
+confirmed; Step 4 lists them beside the table they build. **+ Add next
+outcome** there asks which kind is next: one to analyse from the data, or one
+**no included study reported** — the row Core GRADE 6 wants for a prespecified
+outcome the evidence base turns out to be silent on
+([`not_reported_outcome()`](#outcomes-no-included-study-reported-v051),
+without writing R).
 
 The app has **its own version** (`shiny/DESCRIPTION`, currently 3.0.0), which
 tracks separately from the package version (0.5.1) in the root `DESCRIPTION`.
@@ -1494,6 +1502,10 @@ producing a table of blank cells.
 In a `pmatools_set` bundle the outcome keeps its numbered `outcomes/NN_name/`
 directory, holding a `results.txt` that says it was not reported, and the
 generated `analysis.R` re-issues the `add_not_reported()` call.
+
+The Shiny app builds these without R: Step 4's **+ Add next outcome** asks
+whether the next outcome is one to analyse or one to record as not reported,
+and the second route collects the same three fields.
 
 ### `grade_report()` — Appendix report (docx / html / pdf / md)
 

@@ -308,6 +308,30 @@
 
 ## New features
 
+* **The Shiny app can put an outcome nobody reported into the Summary of
+  Findings table.** `not_reported_outcome()` and `add_not_reported()` have been
+  package API since earlier in this cycle, and the tables, the exported `.docx`
+  and the generated `analysis.R` all handled such a row — but nothing in the
+  app could create one, so the only way to satisfy Core GRADE 6's "cover every
+  patient-important outcome, including the ones the evidence base is silent on"
+  was to write R by hand. Step 4's **+ Add next outcome** now asks which kind of
+  outcome is being added: one to analyse from the data (the previous
+  behaviour), or one to record as not reported. The second route collects an
+  outcome name, an optional follow-up and an optional reason — the reason
+  becomes a numbered footnote on the row — and the row then travels through the
+  combined table, the ZIP's `outcomes/NN_name/results.txt`, and an
+  `add_not_reported()` call in the bundle's `analysis.R`, exactly as a
+  hand-built set's would. The app's footnote claiming such rows were absent
+  from its tables is gone with it.
+
+  A `pmatools_not_reported` deliberately does not inherit `"pmatools"`, so
+  everything in the app that filters saved outcomes now says which classes it
+  wants: rows with no analysis stay out of `run_ma_multi(outcomes = )`,
+  `data_long.csv`, `grade_meta_multi(per_outcome = )` and the risk-of-bias
+  labels, and stay in the table's row order and the ZIP's directory numbering.
+  A bundle whose outcomes are *all* not reported is refused: it has no analysis
+  to build from.
+
 * **Trim-and-fill is stated as a 20% exaggeration check, next to the funnel it
   belongs to.** The Reporting bias tab printed the original and the
   trim-and-fill adjusted pooled effects and left the reviewer to compare them
@@ -606,6 +630,19 @@
   the bundler. `sof_notes` does not reach the certainty appendix.
 
 ## Behaviour changes
+
+* **The BMJ Summary of Findings header merges every column that is not an
+  absolute effect.** The layout has two header rows, and only the three
+  absolute-effect columns ever used both: the other five — outcome,
+  participants, relative effect, certainty, plain language summary — left an
+  empty cell above their label. The header background is one solid navy, so
+  those blanks read as a full-width band with "Absolute effects (95% CI)"
+  floating on it rather than as a heading over three columns. Each of the five
+  is now merged vertically across both rows, with its label in the top row (a
+  flextable span renders its top-left cell, so a blank top cell would have
+  erased the label), and the header is bottom-aligned so all seven labels share
+  a baseline. The merge reaches the exported `.docx` as `w:vMerge`. Cell
+  contents are unchanged, in both the single- and multi-outcome tables.
 
 * **An overridden domain's Summary of Findings footnote states the reviewer's
   reason.** The per-domain rate-down footnotes are built from `domain_facts`,

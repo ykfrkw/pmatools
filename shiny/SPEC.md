@@ -832,9 +832,10 @@ line it stops being read. `EDU_COPY_SUBTITLE_FIELDS` /
 `EDU_COPY_SUBTITLE_WORD_CAP` (`R/educational_copy.R`) name the copy-deck strings
 that render as one and pin the cap; `test-edu-copy.R` asserts it. Step headers
 and the intro modal are deliberately outside the registry, and the comment
-there says why. The four `multi_outcome` strings joined it in 0.5.1, when the
+there says why. The `multi_outcome` strings joined it in 0.5.1, when the
 press-to-save model they described was deleted (§3.4.14) — they were exempted
-as "a later phase owns them", and that phase has now happened.
+as "a later phase owns them", and that phase has now happened. There were four;
+`save_intro` went with the Step 3 section it introduced (§3.4.14).
 
 **There are no tooltips, and there will not be.** `pma_help()` — a `(?)` span
 with a Bootstrap tooltip — had no call site and nothing ever initialised
@@ -1351,10 +1352,29 @@ outcomes:
 - **`common`** is empty: two outcomes rated in separate passes share no
   argument by construction.
 
-With **no** banked outcomes the set holds the rating currently on screen. Step 3
-banks an outcome once every domain is confirmed *and* it has a name, while the
-download unlocks on the domains alone, so an unnamed outcome can reach the
-button with nothing banked.
+With no banked **rated** outcome the set holds the rating currently on screen,
+with any not-reported rows kept alongside it. Step 3 banks an outcome once
+every domain is confirmed *and* it has a name, while the download unlocks on
+the domains alone, so an unnamed outcome can reach the button with nothing
+banked.
+
+**The click is acknowledged before the bundle is built.** Building it renders
+every plot and writes a docx report, and nothing on screen changed between the
+press and the first `incProgress()` — which is what "the download takes ages to
+start" looks like. Two signals, because neither covers the other's window:
+
+- **client-side, instantly**: a delegated `click` listener on `#download_zip`
+  adds `.pma-download-busy`, a CSS ring that spins in the button
+  (`www/shadcn.css`; `prefers-reduced-motion` stops the spin, not the ring).
+  It is removed by the `download_done` custom message the handler sends on its
+  way out. `shinycssloaders` cannot do this — it wraps a Shiny *output*, and a
+  `downloadButton` is a link;
+- **server-side**: `showNotification(id = PMA_DOWNLOAD_BUSY_ID, duration =
+  NULL)` as the **first** statement of `content`, taken down by `on.exit()`.
+  `on.exit()`, not a call at the end: three of the paths out of the handler are
+  early returns from the Steps 2–3 guards and a fourth is an error inside the
+  `tryCatch`, and a `duration = NULL` notification nothing removes stays on
+  screen for the rest of the session.
 
 #### 3.5.4 "How to cite" card
 
@@ -1426,6 +1446,61 @@ Two consequences for the block itself:
   *"N outcomes saved — add another, or download below."* The reviewer's
   question at this point is "did the thing I just confirmed land here?", and
   before this the only answer was to count rows.
+
+#### 3.5.6 "+ Add next outcome" asks which kind (v0.5.1)
+
+Core GRADE 6 asks the table to cover **every** patient-important outcome the
+review prespecified, including the ones no included study reported. Those have
+no data to map and no analysis to run, so the button no longer walks straight
+back to Step 2: `input$add_next_outcome` opens
+`pma_add_outcome_choice_modal()` with two routes.
+
+| route | input id | what happens |
+|---|---|---|
+| *Analyse it from the data* | `add_outcome_analyse` | the previous behaviour: `begin_new_outcome(identity = TRUE)`, then `state$step <- 2L` |
+| *Record it as not reported* | `add_outcome_not_reported` | opens `pma_not_reported_modal()` — outcome name, follow-up, reason |
+
+Submitting the second modal (`not_reported_save`) runs
+`pma_not_reported_entry()` (`R/ui_helpers.R`, pure and unit tested), which
+trims the name, refuses a blank one and refuses one already in
+`names(state$outcomes)` — *an outcome is either rated or not reported, not
+both*, the same rule `add_not_reported()` enforces, reached before the reviewer
+loses the form. On failure the modal **stays open** with what was typed in it
+and the reason arrives as an error notification. On success the resulting
+`pmatools_not_reported` goes into `state$outcomes` under its name.
+
+`begin_new_outcome()` is deliberately **not** called on this route: a
+not-reported row is a finished row, not an outcome the reviewer is about to
+work on, so a rating half-answered in Step 3 survives adding one.
+
+All three ids are written from hand-written JavaScript
+(`Shiny.setInputValue(..., {priority: "event"})`) rather than being
+`actionButton`s, because a modal is rebuilt on every showing and a rebuilt
+`actionButton` reports 0 before it reports 1. They are named constants
+(`PMA_ADD_OUTCOME_ANALYSE_ID`, `PMA_ADD_OUTCOME_NOT_REPORTED_ID`,
+`PMA_NOT_REPORTED_SAVE_ID`) because a typo on either side is silent.
+
+**`state$outcomes` now holds two classes**, and `pmatools_not_reported`
+deliberately does not inherit `"pmatools"` (SPEC.md §4.14), so every filter it
+meets has to name it:
+
+| helper | behaviour |
+|---|---|
+| `pma_outcomes_list()` | keeps **both** classes. Before this a declared row vanished the next time anything read the list back |
+| `pma_rated_outcomes()` | the rated subset — everything that can be pooled, plotted or re-run |
+| `pma_outcome_summary_df()` | a `not_reported` column; `k = "0"`, effect `"Not reported"`, certainty `"Not rated"` in a grey `grade-unrated` badge, which is not a fifth rung under Very low |
+| `pma_export_data()`, `pma_set_ma_args()`, `pma_export_set()`'s `grade_args` | **rated only**. These become `run_ma_multi(outcomes = )`, `data_long.csv`'s `outcome` column and `grade_meta_multi(per_outcome = )` in the generated `analysis.R`, and there is nothing there to run or rate |
+| `pma_export_set()`'s `outcomes` / `order` | **both**. The row is a row of the table and gets its own numbered `outcomes/NN_name/` directory |
+| `pma_export_set()` overall | **aborts** when no *rated* outcome is left: such a bundle has no analysis to build from and no effect measure to head the table's columns |
+| `combined_rare_alerts()`, `.export_sof_notes()`, `.export_rob()` | rated only — each reads `g$meta` |
+
+The bundled `analysis.R` needs no extra work: `export_bundle_multi()` already
+emits one `add_not_reported()` call per not-reported outcome, after
+`grade_meta_multi()` and before `reorder_outcomes()` (SPEC.md §4.14).
+
+`PMA_SOF_LIMITATIONS_NOTE` lost its first sentence with this change. It said
+*"'Not reported' rows: outcomes the evidence base did not measure are absent
+from this table"*, which is no longer true.
 
 ### 3.4.12 Domain flowcharts (v0.5.1)
 
@@ -1580,12 +1655,16 @@ way the dataset signature does.
 under auto-save it means *last recomputed at*, so the row label reads
 **"last updated"**.
 
-**What stays on Final certainty** is `pma_add_next_outcome_button()`, the end
-of the step, and one line beside it naming what happened: *"Saved automatically
-as **&lt;name&gt;**."* while it is saved, and while it is not, the domains still
-outstanding as `pma_domain_jump_links()` — the same links as
-`cert_incomplete_banner`, under their own id prefix (`autosave_jump_`) because
-both are in the DOM at once and Shiny input ids must be unique.
+**Nothing about the banking is on Final certainty.** A "Saved for the Summary
+of Findings table" section used to end that tab — a heading, the
+`multi_outcome$save_intro` copy, `output$autosave_status` ("Saved automatically
+as **&lt;name&gt;**", or the outstanding domains as `pma_domain_jump_links()`)
+and a second `pma_add_next_outcome_button()`. All four are **deleted**, along
+with the `autosave_jump_` id prefix that existed only because that line and
+`cert_incomplete_banner` named the same domains in the DOM at once. The section
+described the saved rows a step away from the rows themselves; Step 4 shows the
+list, the count and the button beside the table they build (§3.5.5). **The
+auto-save observer is unchanged** — it never depended on this UI.
 
 **The saved-outcome list moved to Step 4** (§3.5.5). The per-row observers
 (`outcome_delete`, `outcome_move`, `outcome_primary`) did **not**: they read

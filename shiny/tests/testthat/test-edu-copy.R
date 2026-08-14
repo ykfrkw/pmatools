@@ -41,10 +41,12 @@ test_that("every EDU_COPY subtitle fits one desktop line", {
 
 test_that("the saved-outcome copy no longer describes a Save button", {
   # There is none as of 0.5.1 (shiny/SPEC.md 3.4.14). `save_locked` was the
-  # "saving is locked until..." note and was already dead code; the other four
-  # strings told the reviewer to press something.
+  # "saving is locked until..." note and was already dead code; the remaining
+  # strings told the reviewer to press something. `save_intro` went with the
+  # Step 3 section it introduced (shiny/SPEC.md 3.4.14).
   expect_null(EDU_COPY$multi_outcome$save_locked)
-  for (field in c("save_intro", "list_empty", "step4_intro", "step4_empty")) {
+  expect_null(EDU_COPY$multi_outcome$save_intro)
+  for (field in c("list_empty", "step4_intro", "step4_empty")) {
     text <- EDU_COPY$multi_outcome[[field]]
     expect_true(nzchar(text), info = field)
     expect_false(grepl("save it|Save a|press|button", text), info = field)

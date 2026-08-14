@@ -169,12 +169,13 @@ EDU_COPY <- list(
   # A systematic review normally reports every patient-important outcome in
   # a single SoF table. This app rates one outcome at a time (Steps 2-3), and
   # banks each rating the moment its last certainty domain is confirmed. All
-  # four strings said "press Save" until 0.5.1; there is no Save button.
+  # of these said "press Save" until 0.5.1; there is no Save button.
+  #
+  # `save_intro` was a fourth string, explaining the automatic save at the end
+  # of Step 3's Final certainty tab. That whole section is gone: the saved rows
+  # are listed on Step 4, beside the table they build, and the explanation
+  # belongs where the rows are.
   multi_outcome = list(
-    save_intro = paste0(
-      "Each outcome is banked automatically once every domain is confirmed. ",
-      "Step 4 assembles the saved outcomes into one Summary of Findings table."
-    ),
     list_empty = paste0(
       "No outcomes saved yet. An outcome is saved once every certainty ",
       "domain is confirmed in Step 3."
@@ -209,7 +210,7 @@ EDU_COPY_SUBTITLE_WORD_CAP <- 25L
 #
 # `multi_outcome$*` was a third exemption, granted because a later phase owned
 # the saved-outcome UI. That phase has happened (the Save button is gone), so
-# the four strings are capped like everything else.
+# the strings are capped like everything else.
 #
 # A new subtitle string belongs in this vector. Leaving it out is a decision,
 # not an oversight, and the test names the file that will tell you so.
@@ -220,7 +221,6 @@ EDU_COPY_SUBTITLE_FIELDS <- c(
   "config_tab$continuous_departure",
   "config_tab$chinn_caveat",
   "config_tab$responder_default",
-  "multi_outcome$save_intro",
   "multi_outcome$list_empty",
   "multi_outcome$step4_intro",
   "multi_outcome$step4_empty",

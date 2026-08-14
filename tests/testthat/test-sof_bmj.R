@@ -106,6 +106,35 @@ test_that("style = 'bmj' returns a flextable with the spanning absolute header",
   expect_match(.body_col(ft, 3), "^Risk ratio [0-9.]+ \\([0-9.]+ to [0-9.]+\\)$")
 })
 
+test_that("every column outside the absolute-effects span is merged vertically", {
+  # The blanks the spanning row used to leave above the other five labels made
+  # the navy header read as one full-width band with "Absolute effects (95%
+  # CI)" floating on it. Each of those columns now carries its own label across
+  # both header rows.
+  for (drop_plain in c(FALSE, TRUE)) {
+    g <- make_binary()
+    if (drop_plain) g$rating_target <- NULL
+    ft   <- sof_table(g, style = "bmj")
+    hdrs <- names(ft$body$dataset)
+    ncol <- length(hdrs)
+
+    vspan <- ft$header$spans$columns
+    # 2 = the top cell opens a two-row span; 0 = the cell below is covered.
+    standalone <- setdiff(seq_len(ncol), 4:6)
+    expect_equal(unname(vspan[1L, standalone]), rep(2L, length(standalone)),
+                 info = paste("has_plain =", !drop_plain))
+    expect_equal(unname(vspan[2L, standalone]), rep(0L, length(standalone)))
+    # The three absolute-effect columns keep their own second-row label.
+    expect_equal(unname(vspan[1L, 4:6]), rep(1L, 3L))
+
+    # A merged span renders its TOP-LEFT cell, so the label has to be in row 1
+    # or it disappears from the rendered table.
+    top <- as.character(unlist(ft$header$dataset[1L, ]))
+    expect_identical(top[standalone], hdrs[standalone])
+    expect_equal(sum(top == "Absolute effects (95% CI)"), 3L)
+  }
+})
+
 test_that("the bmj table can be written to docx", {
   skip_if_not_installed("officer")
   g   <- make_binary()
@@ -114,7 +143,20 @@ test_that("the bmj table can be written to docx", {
   expect_no_error(flextable::save_as_docx(ft, path = out))
   expect_true(file.exists(out))
   expect_gt(file.size(out), 0)
-  unlink(out)
+
+  # Word expresses a vertical span as w:vMerge, so the merge has to survive the
+  # docx writer and not only the flextable object: one restart per merged
+  # column, and the "Absolute effects" span as a w:gridSpan.
+  xml_dir <- tempfile()
+  dir.create(xml_dir)
+  utils::unzip(out, exdir = xml_dir)
+  doc <- paste(readLines(file.path(xml_dir, "word", "document.xml"),
+                         warn = FALSE), collapse = "")
+  expect_equal(
+    lengths(regmatches(doc, gregexpr("w:vMerge w:val=\"restart\"", doc))), 5L)
+  expect_gte(lengths(regmatches(doc, gregexpr("<w:gridSpan", doc))), 1L)
+
+  unlink(c(out, xml_dir), recursive = TRUE)
 })
 
 test_that("follow_up = NULL leaves the outcome cell without a time-frame line", {
