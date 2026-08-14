@@ -1,7 +1,7 @@
 Type: Project
 Package: pairwise.meta.analysis.app
 Title: pmatools wizard (Shiny app for pairwise MA + GRADE)
-Version: 3.0.0
+Version: 3.1.0
 Authors@R: person("Yuki", "Furukawa", email = "furukawa.y.psy@gmail.com",
                   role = c("aut", "cre"))
 Description: NOT AN R PACKAGE, AND NOT DELETABLE. This file exists so
