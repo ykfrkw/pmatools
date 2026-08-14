@@ -280,18 +280,12 @@ step3_ui <- function(state = NULL) {
     )
   }
 
-  # Explicit per-domain confirmation checkbox (output gate W4-A). Ticking it is
-  # the ONE thing that confirms the domain (pma_domain_confirmations()), so it
-  # is also what un-greys the Next button below it.
-  .confirm_checkbox <- function(id,
-                                label = "I have reviewed this domain") {
-    htmltools::div(
-      style = paste(
-        "margin-top: 1rem; padding: 0.5rem 0.75rem;",
-        "border: 1px dashed hsl(var(--border)); border-radius: 6px;"),
-      shiny::checkboxInput(id, label, value = FALSE, width = "100%")
-    )
-  }
+  # The explicit per-domain confirmation checkbox used to be a closure here,
+  # under the local name `.confirm_checkbox`. It is pma_confirm_checkbox() in
+  # R/ui_helpers.R now: .responder_block() in R/step3_threshold.R renders the
+  # Configuration tab's OTHER gating confirmation and could not reach a
+  # closure, so that one shipped as a bare checkboxInput() and did not read as
+  # a required click at all. Do not reintroduce a local copy.
 
   htmltools::tagList(
     # Highlights the branch each domain judgment took in its flowchart (see
@@ -349,7 +343,7 @@ step3_ui <- function(state = NULL) {
           # Its SCOPE is unchanged - still one review-wide setting that
           # persists across outcomes - only the point of edit moved.
           shiny::uiOutput("config_status"),
-          .confirm_checkbox("threshold_confirm",
+          pma_confirm_checkbox("threshold_confirm",
             paste0("I have reviewed and confirm this configuration ",
                    "(required before export; the default values are fine ",
                    "if you agree with them)")),
@@ -431,7 +425,7 @@ step3_ui <- function(state = NULL) {
               choices = pma_judgment_choices()),
             .override_rationale("rob_override", "rob_override_rationale")
           ),
-          .confirm_checkbox("rob_confirm_na"),
+          pma_confirm_checkbox("rob_confirm_na"),
           shiny::uiOutput("grade_nav_rob")
         ),
 
@@ -478,7 +472,7 @@ step3_ui <- function(state = NULL) {
               choices = pma_judgment_choices()),
             .override_rationale("incon_override", "incon_override_rationale")
           ),
-          .confirm_checkbox("incon_confirm_na"),
+          pma_confirm_checkbox("incon_confirm_na"),
           shiny::uiOutput("grade_nav_inconsistency")
         ),
 
@@ -610,7 +604,7 @@ step3_ui <- function(state = NULL) {
           ),
           shiny::uiOutput("indir_forest_image_block"),
           pma_forest_display_panel("indir"),
-          .confirm_checkbox("indir_confirm_na"),
+          pma_confirm_checkbox("indir_confirm_na"),
           shiny::uiOutput("grade_nav_indirectness")
         ),
 
@@ -678,7 +672,7 @@ step3_ui <- function(state = NULL) {
               choices = pma_judgment_choices()),
             .override_rationale("impre_override", "impre_override_rationale")
           ),
-          .confirm_checkbox("impre_confirm_na"),
+          pma_confirm_checkbox("impre_confirm_na"),
           shiny::uiOutput("grade_nav_imprecision")
         ),
 
@@ -816,7 +810,7 @@ step3_ui <- function(state = NULL) {
               choices = pma_judgment_choices()),
             .override_rationale("pubias_override", "pubias_override_rationale")
           ),
-          .confirm_checkbox("pubias_confirm_na"),
+          pma_confirm_checkbox("pubias_confirm_na"),
           shiny::uiOutput("grade_nav_pubias")
         ),
 

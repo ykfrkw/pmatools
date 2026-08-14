@@ -1248,6 +1248,15 @@
   table, so a set of answers containing a *No* (very serious indirectness)
   folded to nothing and was reported as *not serious* when the app compared an
   overall rating against it.
+* **Shiny app: a confirmation the reviewer has to tick now looks like one.**
+  The Configuration tab has two confirmations that gate its Next button, and
+  only one of them was boxed — `responder_p0_confirm` was a bare checkbox in a
+  column of numeric inputs and notes, so reviewers could not tell a click was
+  required of them. All seven Step 3 confirmations are now built by one shared
+  helper and carry a `REQUIRED` mark and a lifted border until they are ticked,
+  after which the box settles back to the muted treatment it always had.
+  **No gate moved**: the same boxes gate the same buttons under the same
+  conditions, and no judgment, note or export changes.
 
 # pmatools 0.5.0
 

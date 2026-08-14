@@ -861,7 +861,7 @@ Rendered by `.responder_block()` (`R/step3_threshold.R`), **below** the Decision
 - **`"effect"` is still the default**, not `"both"`. The premise that a continuous outcome must be dichotomised before it can be rated is false here: `convert_smd_to_or` reaches `sof_table()` only, `grade_meta()` never sees it, and Imprecision is rated on the SMD/MD against `threshold_cont` whichever of the three is chosen. The Decision threshold section says so on screen. The conversion previously defaulted **on**, which read as the primary route; defaulting to `"both"` would bring back the same problem in a milder form, since `"both"` also demands a responder proportion the reviewer has to justify.
 - If `sof_presentation` is `"responder"` **or** `"both"` — both run the conversion, so both need the same inputs, and a `conditionalPanel` testing only `'responder'` would leave a reviewer on `"both"` with no way to enter the proportion:
   - `numericInput("baseline_risk_chinn", "Proportion of control patients meeting the threshold of clinical interest", value = RESPONDER_P0_DEFAULT (0.20), min = 0.01, max = 0.99)`, gating Next until it is confirmed or replaced-with-a-rationale. The two `conditionalPanel`s compare against the **constant**, not the seed: what obliges a rationale is departing from the app convention.
-  - `textAreaInput("responder_p0_rationale", ...)` when the default is replaced; `checkboxInput("responder_p0_confirm", ...)` when it is not.
+  - `textAreaInput("responder_p0_rationale", ...)` when the default is replaced; `pma_confirm_checkbox("responder_p0_confirm", ...)` when it is not. It is built with the **shared confirmation box** (§3.4.13), not a bare `checkboxInput()`: this is the Configuration tab's second Next gate and has to look like the first one. It stays where it is — between `EDU_COPY$config_tab$responder_default` and `threshold_label` — because it and the rationale textarea are the two arms of one `conditionalPanel` pair, so the box reads as the alternative to justifying a change, which is what it is.
   - `textInput("threshold_label", "Definition of the threshold of clinical interest (free text)")`
   - `output$chinn_direction_echo` — `chinn_invert` is derived from the Step 2 direction answer, not asked again.
 - `output$responder_p0_badge` renders `confirmed` / `unconfirmed assumption` beside the section heading, and **nothing at all** on the `"effect"` route, where there is no assumption to confirm.
@@ -1714,7 +1714,44 @@ rationale, *or* the checkbox. Two things were wrong with it.
 
 Configuration keeps one extra condition, and only it: `config_blockers()` must
 be empty. That gate is about values being *set* — three of the five domains are
-judged against the threshold — so a tick alone will not do.
+judged against the threshold — so a tick alone will not do. One member of
+`config_blockers()` is itself a tick: `responder_p0_confirm`, on the responder
+route (§3.4.10a). So the Configuration tab carries **two** confirmations that
+gate its Next, and they are built the same way.
+
+**Every confirmation is built by `pma_confirm_checkbox()` (`R/ui_helpers.R`),
+and looks unfinished until it is ticked.** The helper is shared rather than
+local because `responder_p0_confirm` is rendered from `R/step3_threshold.R`
+and the other six from `step3_ui()` in `R/step3_grade.R`; a closure inside
+`step3_ui()` — which is what this was until it moved — is unreachable from the
+first, and the consequence shipped: one gate boxed, one gate rendered as a
+bare `checkboxInput()` in a column of numeric inputs and notes, with nothing
+saying a click was required. `PMA_OUTCOME_CONFIRM_IDS` is the canonical list of
+all seven, and `test-confirm-checkbox.R` asserts against the **built UI** that
+the boxed set and that list are the same set, so a confirmation added as a
+bare checkbox fails rather than ships.
+
+Two visual states, both in `www/shadcn.css`, no JavaScript and no server round
+trip:
+
+| state | treatment |
+|---|---|
+| unticked | an uppercase `REQUIRED` pill above the label, `--primary` border and a faint `--primary` wash — an outstanding action, legible before anything has been pressed |
+| ticked | the muted dashed border these boxes have always had; the pill greys to `--muted` rather than being removed, so the box does not change height and drag the Next button out from under the cursor |
+
+The pill reuses the vocabulary of Step 2's `.pma-required-unset` mark
+(§3.3.6): same radius, same type. It sits at `--primary` rather than Step 2's
+armed `--destructive` because there is no "armed" tier here — these boxes are
+static markup with nothing to arm on, and a permanently red box would destroy
+the never-red-on-a-fresh-page property the two-tier scheme exists for.
+**Unticked is the base rule** and `:has(input:checked)` is what quietens it, so
+a browser without `:has()` degrades to "always looks required" rather than
+"always looks done"; only the second of those can let a reviewer walk past a
+gate believing it cleared.
+
+This is a legibility change only. `responder_p0_confirmed()`,
+`config_blockers()` and `pma_domain_confirmations()` are untouched: the same
+clicks are required, they just look required.
 
 **Every Next is gated; nothing else is.** `output$grade_nav_<key>` renders the
 Back/Next pair of each domain tab from `STEP3_DOMAIN_NAVS`, and the Next is

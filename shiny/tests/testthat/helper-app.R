@@ -5,12 +5,18 @@
 # them only DEFINES things at source time - no Shiny session is created, no
 # reactive is touched.
 #
-# R/step2_ma.R is on the list for its UI half only: step2_ui() is a pure
-# function of `state` and can be rendered to HTML and inspected (see
-# test-step2-layout.R). Its other half, step2_server(), is merely defined here
-# and never called - like R/step1_data.R, R/step3_grade.R and R/step4_export.R,
-# whose server functions need `input` / `output` / `session` / `state` and a
-# Shiny test harness this app does not have.
+# R/step2_ma.R and R/step3_grade.R are on the list for their UI halves only:
+# step2_ui() and step3_ui() are pure functions of `state` and can be rendered
+# to HTML and inspected (see test-step2-layout.R and
+# test-confirm-checkbox.R). Their other halves, step2_server() and
+# step3_server(), are merely defined here and never called - like
+# R/step1_data.R and R/step4_export.R, whose server functions need `input` /
+# `output` / `session` / `state` and a Shiny test harness this app does not
+# have.
+#
+# Sourcing a file for one half of it is only safe because nothing in it runs
+# at source time and no top-level name collides with one already sourced;
+# test-vendor-collisions.R is the standing guard on the second half of that.
 
 # testthat::test_dir() sets the working directory to tests/testthat before
 # sourcing helpers, so walking up from getwd() lands on the app root -- which
@@ -64,7 +70,7 @@ for (.stem in c("utils.R", "multi_outcome.R", "data_ingest.R",
 rm(.stem)
 
 for (.f in c("R/ui_helpers.R", "R/educational_copy.R", "R/step3_threshold.R",
-             "R/step2_ma.R")) {
+             "R/step2_ma.R", "R/step3_grade.R")) {
   source(file.path(PMA_APP_ROOT, .f))
 }
 rm(.f)

@@ -786,6 +786,74 @@ table.dataTable th { background: hsl(var(--muted)); }
 }
 
 /* ---------------------------------------------------------------------------
+   Step 3 confirmation boxes (pma_confirm_checkbox() in R/ui_helpers.R).
+
+   The same idea as the two tiers above, for a control that is a click rather
+   than a value: a reviewer has to be able to see, without having pressed
+   anything, that this box is an outstanding action. It used to be a dashed
+   border in BOTH states, which said nothing about which state it was in, and
+   the Configuration tab's other confirmation was not boxed at all - so one
+   gate looked like a note and the other looked the same ticked as unticked.
+
+   The vocabulary is deliberately the required-pill's: same 9999px radius,
+   same 0.7rem/600 type, same "border + background + foreground move
+   together". What differs is which token it moves to. Step 2's tier 2 arms to
+   --destructive only after a failed Next; these boxes have no such event to
+   arm on - they are static markup with no server round trip - so they sit
+   permanently at --primary instead. Red on a page nobody has touched yet is
+   what the two-tier scheme exists to avoid, and a permanently red box would
+   reintroduce it.
+
+   UNTICKED IS THE BASE RULE, on purpose. :has() is what flips the state, and
+   in a browser without it every declaration below simply never applies, so
+   the box stays lifted forever: "always looks required" rather than "always
+   looks done". Only one of those two failures can let a reviewer walk past a
+   gate believing it is cleared.
+   --------------------------------------------------------------------------- */
+.pma-confirm {
+  margin-top: 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid hsl(var(--primary) / 0.45);
+  border-radius: var(--radius);
+  background: hsl(var(--primary) / 0.05);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+/* checkboxInput() ships a .form-group whose bottom margin would leave the
+   tick floating above a band of empty box. */
+.pma-confirm .shiny-input-container { margin-bottom: 0; }
+.pma-confirm .checkbox { margin: 0; }
+
+.pma-confirm-eyebrow {
+  display: inline-block;
+  margin-bottom: 0.35rem;
+  padding: 0.02rem 0.45rem;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border: 1px solid hsl(var(--primary));
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: background 0.15s ease, color 0.15s ease,
+              border-color 0.15s ease;
+}
+
+/* Ticked: back to the muted dashed treatment these boxes have always had.
+   The eyebrow greys out rather than being removed from the flow, because a
+   box that changes height on tick drags the Next button below it out from
+   under the cursor that just clicked. */
+.pma-confirm:has(input[type="checkbox"]:checked) {
+  border: 1px dashed hsl(var(--border));
+  background: transparent;
+}
+.pma-confirm:has(input[type="checkbox"]:checked) > .pma-confirm-eyebrow {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  border-color: hsl(var(--border));
+}
+
+/* ---------------------------------------------------------------------------
    Form-control labels: keep input labels and option labels aligned cleanly
    so wrapped text uses a hanging indent (does not flow under the radio /
    checkbox circle) and short widget labels do not break unnecessarily.

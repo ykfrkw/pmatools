@@ -793,6 +793,36 @@ pma_clear_outcome_confirmations <- function(session) {
   invisible(NULL)
 }
 
+# The widget every id in PMA_OUTCOME_CONFIRM_IDS is built with (output gate
+# W4-A). Ticking one is the ONE thing that confirms its domain
+# (pma_domain_confirmations()), so it is also what un-greys the Next button
+# below it.
+#
+# This lives here, and not as a closure inside step3_ui() where it started,
+# because the Configuration tab renders its confirmations from TWO files:
+# `threshold_confirm` and the five `*_confirm_na` boxes come from step3_ui()
+# in R/step3_grade.R, but `responder_p0_confirm` comes from .responder_block()
+# in R/step3_threshold.R, which a closure in step3_ui() cannot reach. The
+# consequence of that unreachability shipped: the responder confirmation was a
+# bare checkboxInput() sitting in a column of numeric inputs and notes, and
+# reviewers could not tell it was a click they had to make - while the boxed
+# `threshold_confirm` two screens down, gating the same Next button, read
+# plainly as a gate. Two gates on one tab must not look like one gate and one
+# note, so there is one implementation and every call site uses it.
+#
+# The eyebrow is a real element rather than a CSS `content:` string so that
+# the class alone is enough for a test to prove a confirmation was rendered
+# through this helper. www/shadcn.css paints the UNTICKED state as the base
+# rule and quietens it under :has(input:checked); see the long comment there
+# for why that direction and not the other.
+pma_confirm_checkbox <- function(id, label = "I have reviewed this domain") {
+  htmltools::div(
+    class = "pma-confirm",
+    htmltools::span(class = "pma-confirm-eyebrow", "Required"),
+    shiny::checkboxInput(id, label, value = FALSE, width = "100%")
+  )
+}
+
 # ----- Putting an answer back after Step 3 is rebuilt ----------------------
 # app.R renders output$step_body from step3_ui() on every entry, so leaving
 # Step 3 and coming back destroys every widget on it and builds it again from

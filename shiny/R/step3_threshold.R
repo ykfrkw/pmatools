@@ -975,12 +975,17 @@ RESPONDER_P0_DEFAULT <- 0.20
             "reduction criterion in the three trials that reported it; ",
             "taken from the placebo arm of Jones 2019."))
       ),
+      # The other half of the pair above, and a gate on the Configuration
+      # tab's Next exactly as `threshold_confirm` is - so it is built with the
+      # same pma_confirm_checkbox() rather than a bare checkboxInput(). As a
+      # bare box it read as one more note in a column of notes, which is the
+      # whole reason reviewers walked past it and then could not find what was
+      # holding the Next button shut.
       shiny::conditionalPanel(
         sprintf("input.baseline_risk_chinn == %s", RESPONDER_P0_DEFAULT),
-        shiny::checkboxInput("responder_p0_confirm",
+        pma_confirm_checkbox("responder_p0_confirm",
           paste0("I have considered this rate and accept 20 percent ",
-                 "(200 per 1,000) for this outcome"),
-          value = FALSE)
+                 "(200 per 1,000) for this outcome"))
       ),
       shiny::textInput("threshold_label",
         "Definition of the threshold of clinical interest (free text)",
