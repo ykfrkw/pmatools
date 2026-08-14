@@ -216,15 +216,16 @@
   longer settable.** `rob_inf_threshold` — the slider on the Configuration tab
   labelled "Sensitivity-analysis change threshold (Risk of Bias only)" — is
   deleted, and the app no longer passes `rob_inflation_threshold` to
-  `grade_meta()` at all. The package default of `0.10` now applies
-  unconditionally, so a review that had moved the slider will rate Risk of Bias
-  against 10 percent instead, and the judgment can change on the one rule that
+  `grade_meta()` at all. The package default `PMA_ROB_INFLATION_THRESHOLD` now
+  applies unconditionally, so a review that had moved the slider will rate Risk
+  of Bias against 20 percent instead — this release moves that default too, see
+  the entry below — and the judgment can change on the one rule that
   consults it (a bias-favouring shift within the same non-trivial zone) and on
   whether the analysis is restricted to the low risk-of-bias studies. The
   control was a pmatools convention rather than a Core GRADE 4 rule, and a
   reviewer had no basis on which to move it. `grade_meta()` still takes the
   argument, so a script that sets it is unaffected; the bundled `analysis.R`
-  writes the same `0.10` it always did when the app had not been touched.
+  writes whatever the package default is at the time it is generated.
 
 * **Shiny app: Indirectness now takes the subdomain path by default, which
   changes the exported bundle.** The four Core GRADE 5 PICO radios ship

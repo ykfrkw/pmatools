@@ -300,7 +300,8 @@ step3_ui <- function(state = NULL) {
           shiny::uiOutput("per_panel"),
           # The risk-of-bias conventions used to be a boxed section here. Both
           # have gone: `rob_inf_threshold` is deleted outright (the package
-          # default of 0.10 applies unconditionally), and `rob_some_concerns`
+          # default `PMA_ROB_INFLATION_THRESHOLD`, 0.20 since 0.5.1, applies
+          # unconditionally), and `rob_some_concerns`
           # moved to the Risk of Bias tab, next to the verdict it produces.
           # Its SCOPE is unchanged - still one review-wide setting that
           # persists across outcomes - only the point of edit moved.

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 593" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="rob-title rob-desc">
   <title id="rob-title">Risk of bias: the Core GRADE 4 Figure 2 decision as pmatools implements it</title>
-  <desc id="rob-desc">Flowchart. Do the high risk of bias studies dominate the evidence (55% or more of the pooled weight by default)? If they do, pmatools checks the direction of bias by comparing the pooled estimate with and without those studies and applying five mutually exclusive rules: both estimates trivial, or the same zone with a change within 10%, do not rate down; the same zone with a bias-favouring change over 10%, zones differing on the same side of the null, zones differing across the null, or a direction that cannot be assessed, rate down one level. If the high risk of bias studies do not dominate, pmatools asks whether there is appreciable evidence from the low risk of bias studies and, if so, whether the two magnitudes of effect are similar or substantially different; neither answer rates down, but a substantial difference restricts the analysis to the low risk of bias studies. A body of evidence with no high risk of bias study at all takes that same undominated route and does not rate down. This is pmatools&#8217; operationalisation of the Core GRADE 4 Figure 2 decision, not a reproduction of the published figure: the five rules are pmatools&#8217; and are not enumerated in the source.</desc>
+  <desc id="rob-desc">Flowchart. Do the high risk of bias studies dominate the evidence (55% or more of the pooled weight by default)? If they do, pmatools checks the direction of bias by comparing the pooled estimate with and without those studies and applying five mutually exclusive rules: both estimates trivial, or the same zone with a change within 20%, do not rate down; the same zone with a bias-favouring change over 20%, zones differing on the same side of the null, zones differing across the null, or a direction that cannot be assessed, rate down one level. If the high risk of bias studies do not dominate, pmatools asks whether there is appreciable evidence from the low risk of bias studies and, if so, whether the two magnitudes of effect are similar or substantially different; neither answer rates down, but a substantial difference restricts the analysis to the low risk of bias studies. A body of evidence with no high risk of bias study at all takes that same undominated route and does not rate down. This is pmatools&#8217; operationalisation of the Core GRADE 4 Figure 2 decision, not a reproduction of the published figure: the five rules are pmatools&#8217; and are not enumerated in the source.</desc>
   <style>
     .pma-fc-node rect, .pma-fc-leaf rect {
       fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2;
@@ -84,13 +84,13 @@
   <g id="pma-rob-leaf-rule2" class="pma-fc-leaf">
     <rect x="35" y="323" width="400" height="39" rx="6" ry="6"/>
     <text x="47" y="346" text-anchor="start">
-      <tspan x="47" dy="0">2  same zone, change within 10%  &#8594;  do not rate down</tspan>
+      <tspan x="47" dy="0">2  same zone, change within 20%  &#8594;  do not rate down</tspan>
     </text>
   </g>
   <g id="pma-rob-leaf-rule3" class="pma-fc-leaf">
     <rect x="35" y="368" width="400" height="39" rx="6" ry="6"/>
     <text x="47" y="391" text-anchor="start">
-      <tspan x="47" dy="0">3  same zone, bias-favouring change over 10%  &#8594;  rate down 1</tspan>
+      <tspan x="47" dy="0">3  same zone, bias-favouring change over 20%  &#8594;  rate down 1</tspan>
     </text>
   </g>
   <g id="pma-rob-leaf-rule4" class="pma-fc-leaf">

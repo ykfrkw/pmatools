@@ -210,15 +210,20 @@ build_rob <- function() {
                     c("Check the direction of bias",
                       "Compare the pooled estimate with and without",
                       "the high risk of bias studies"))
+  # The percentage rules 2 and 3 quote is PMA_ROB_INFLATION_THRESHOLD in
+  # R/domain_rob.R, and nothing links the two: the figure is generated ahead of
+  # time, so it cannot read the constant, and it went on saying 10% for a whole
+  # release after the constant moved to 0.20. Move the literals here, and the
+  # <desc> below, whenever that constant moves.
   rules <- list(
     fc_box("pma-rob-leaf-rule1", "leaf", 35, 278, 400,
            c("1  both estimates trivial  &#8594;  do not rate down"),
            align = "start"),
     fc_box("pma-rob-leaf-rule2", "leaf", 35, 323, 400,
-           c("2  same zone, change within 10%  &#8594;  do not rate down"),
+           c("2  same zone, change within 20%  &#8594;  do not rate down"),
            align = "start"),
     fc_box("pma-rob-leaf-rule3", "leaf", 35, 368, 400,
-           c("3  same zone, bias-favouring change over 10%  &#8594;  rate down 1"),
+           c("3  same zone, bias-favouring change over 20%  &#8594;  rate down 1"),
            align = "start"),
     fc_box("pma-rob-leaf-rule4", "leaf", 35, 413, 400,
            c("4  zones differ, same side of the null  &#8594;  rate down 1"),
@@ -281,8 +286,8 @@ build_rob <- function() {
            "do, pmatools checks the direction of bias by comparing the ",
            "pooled estimate with and without those studies and applying five ",
            "mutually exclusive rules: both estimates trivial, or the same ",
-           "zone with a change within 10%, do not rate down; the same zone ",
-           "with a bias-favouring change over 10%, zones differing on the ",
+           "zone with a change within 20%, do not rate down; the same zone ",
+           "with a bias-favouring change over 20%, zones differing on the ",
            "same side of the null, zones differing across the null, or a ",
            "direction that cannot be assessed, rate down one level. If the ",
            "high risk of bias studies do not dominate, pmatools asks whether ",
@@ -329,9 +334,14 @@ build_incon <- function() {
                   c("Do not rate down",
                     "Report the subgroups as separate questions"))
   # Two levels, and pmatools knows Core GRADE 3 says otherwise; the caption
-  # and R/domain_inconsistency.R carry the reasoning.
-  d2    <- fc_box("pma-incon-leaf-down2", "leaf", 560, 368, 380,
-                  c("Rate down 2 levels", "(serious)"))
+  # and R/domain_inconsistency.R carry the reasoning. The box carried a second
+  # line reading "(serious)", which was simply the wrong word for this leaf -
+  # the branch that reaches it assigns judgment = "very_serious" - so the line
+  # is gone rather than corrected. `y` moves down with the box's own height, to
+  # keep the pma-incon-edge-step3-no arrowhead landing on the text rather than
+  # on the bottom edge.
+  d2    <- fc_box("pma-incon-leaf-down2", "leaf", 560, 377, 380,
+                  c("Rate down 2 levels"))
 
   e <- list(
     fc_edge("pma-incon-edge-step1-no", list(c(490, 84), c(560, 84)),
