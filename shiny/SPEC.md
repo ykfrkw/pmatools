@@ -824,20 +824,39 @@ tab, and is now the only pointer to it.
 
 **Citation style [v0.5.1].** Every reference the app renders is written in one
 house style: **first author, `et al.`, journal abbreviation, year**. No volume,
-no pages, **no DOI and no `<a href>`** — a hyperlink bought nothing the citation
-itself did not carry, and it made the same paper render four different ways
-depending on which call site rendered it. `pma_reference(...)` takes citation
-strings and nothing else; its `doi` argument and the `<a href>` branch are gone,
-as is the unused `EDU_COPY$pmid_url()`. Each rated domain carries its reference
-as the single field `EDU_COPY$domains$*$ref`, replacing the `$ref_text` / `$doi`
-pair. The six BMJ 2025 Core GRADE papers are all Guyatt, all BMJ, all 2025, so
-the bare form cannot tell them apart; a specific paper carries its series number
-as a prefix — `Core GRADE 4. Guyatt G, et al. BMJ. 2025`. Risk of Bias and
-Publication bias both cite Core GRADE 4 and so render identically, which is
-correct. `test-edu-copy.R` pins the shape with a regex over every `$ref`, so the
-format cannot drift back. The rule reaches the whole app, not just Step 3: the
-Step 1 sample-dataset line, the Step 2 rare-events references, the RoB-ME notes
-on Steps 1 and 3, and the Step 4 "How to cite" card all follow it.
+no pages, **no DOI in the citation text**. `EDU_COPY$pmid_url()` is gone and so
+are the per-domain `$ref_text` / `$doi` pairs: each rated domain carries its
+reference as the single field `EDU_COPY$domains$*$ref`. The six BMJ 2025 Core
+GRADE papers are all Guyatt, all BMJ, all 2025, so the bare form cannot tell
+them apart; a specific paper carries its series number as a prefix — `Core
+GRADE 4. Guyatt G, et al. BMJ. 2025`. Risk of Bias and Publication bias both
+cite Core GRADE 4 and so render identically, which is correct.
+`test-edu-copy.R` pins the shape with a regex over every `$ref`, so the format
+cannot drift back. The rule reaches the whole app, not just Step 3: the Step 1
+sample-dataset line, the Step 2 rare-events references and the RoB-ME notes on
+Steps 1 and 3 all follow it. **Step 4's "How to cite" card is the one exception
+— it is Vancouver; see §Step 4.**
+
+**Linking a citation.** `pma_reference(..., url = NULL)` renders the citation
+text, wrapped in `<a href target="_blank" rel="noopener">` when a `url` is
+given and as plain text when it is not. The argument is back after having been
+removed: what the removal was right about was the *inconsistency* — the same
+paper rendered four different ways across the wizard — not the link itself, and
+a reviewer checking a domain against its source wants the paper rather than the
+ability to retype a citation into a search box. So the destination comes from
+one map, `PMA_CORE_GRADE_DOIS` in the package's `R/utils.R`, keyed on the Core
+GRADE series number and read through `.core_grade_doi_url()`, and every Core
+GRADE tab renders alike.
+
+Each rated domain names its paper as a **number**, `EDU_COPY$domains$*$core_grade`,
+and `pma_domain_reference(EDU_COPY$domains$<d>)` — the single call at all five
+Step 3 tabs — reads the citation and the link from that one entry. The number is
+a field rather than something parsed back out of the `"Core GRADE n."` prefix
+because the prefix is display text: a regex over it would turn any rewording of
+the citation into a silently dead link. `.core_grade_doi_url()` returns `NULL`
+for a number the map does not carry (series papers 6 and 7 have no DOI recorded),
+so an unmapped domain renders as plain text rather than losing its tab. Step 2's
+rare-events references pass no `url` and take that same plain path.
 
 **Judgment wording.** Badges, verdict lines and the four override
 `selectInput`s read `.grade_level_wording()` from the package (SPEC.md §5.0),
@@ -887,7 +906,7 @@ the UI still named MIC at all.
 |---|---|---|
 | `per` | Configuration | it relabels the control-group risk, the absolute threshold and the OIS figures, none of which are on Final certainty (Final certainty keeps a read-only echo) |
 | `rob_some_concerns` | **Risk of Bias**, under `Inputs for this domain` | it decides which side of the binary split each study falls on, and the stratified forest on that tab draws exactly that split. Its **scope is unchanged** — still one review-wide setting that persists across outcomes, still absent from `PMA_OUTCOME_INPUT_IDS$rob`. Only the point of edit moved (0.5.1; it was on Configuration for one release, and on a closed `<details>` on Risk of Bias before that). Seeded from `state$rob_some_concerns` — see below |
-| `rob_inf_threshold` | **deleted** (0.5.1) | a pmatools convention rather than a Core GRADE 4 rule, and a reviewer had no basis on which to move it. The package default `rob_inflation_threshold = 0.10` (`R/domain_rob.R`) now applies unconditionally; the app no longer passes the argument at all, and `export_bundle()` writes the same 0.10 into the bundled `analysis.R`. Deleting the slider also removed the only consumer of the RoB `how` closure's `inflation_threshold` argument — producer and consumer died together |
+| `rob_inf_threshold` | **deleted** (0.5.1) | a pmatools convention rather than a Core GRADE 4 rule, and a reviewer had no basis on which to move it. The package default `rob_inflation_threshold = PMA_ROB_INFLATION_THRESHOLD` (`R/domain_rob.R`, `0.20` since 0.5.1) now applies unconditionally; the app no longer passes the argument at all, and `export_bundle()` writes that same value into the bundled `analysis.R`. Deleting the slider also removed the only consumer of the RoB `how` closure's `inflation_threshold` argument — producer and consumer died together |
 
 **The some-concerns boundary survives a rebuild.** `state$rob_some_concerns`
 holds the setting; `step3_ui(state)` seeds the radio from it under `isolate()`,
@@ -1059,7 +1078,16 @@ always, and the equivalence block only when `detail = TRUE`.
 |---|---|---|
 | Risk of Bias | `FALSE` | it compares two pooled estimates against the band; the conversion arithmetic answers nothing |
 | Inconsistency | `FALSE` | the zone tally is computed for the reviewer and reported through `pma_facts_list()`; they never read a bound themselves |
-| Imprecision | `TRUE` | Core GRADE 2's two-level rule tests the confidence interval against the important-benefit **and** important-harm thresholds by eye, so both bounds — and the residual-asymmetry sentence, since only one conversion is exact on the absolute scale — are operative |
+| Imprecision | `FALSE` | `output$impre_evaluation`, directly below, renders the interval against both thresholds and states the verdict; the box was showing the arithmetic behind an answer the tab was about to give |
+
+Imprecision passed `TRUE` until 0.5.1, on the argument that Core GRADE 2's
+two-level rule tests the confidence interval against the important-benefit
+**and** important-harm thresholds by eye, so both bounds — and the
+residual-asymmetry sentence, since only one conversion is exact on the absolute
+scale — were operative. That is true of the rule and was still wrong for this
+box, which is not where the reviewer reads the interval. All three tabs now
+render the same one-line box. `detail` survives as a parameter because the
+argument for the long form is tab-specific and could win again.
 
 The trailing *"This decision threshold is shared by … Change it in the
 Configuration tab"* sentence is now the tab's own name as a link, built by
@@ -1097,21 +1125,48 @@ Nothing else branches on subdomains being present: `evidence_profile()`,
 `sof_table()` and the SoF footnotes are byte-identical across the change.
 
 The two boxed departure notes and the three per-element footnotes that sat in a
-shared `<details>` are **deleted**; what survives is two capped subtitles beside
-the questions — `EDU_COPY$domains$indirectness$surrogate` (a surrogate outcome
-is grounds to consider rating down; never pool the two) and `$gradient` (the
-fold is symmetric and ignores Table 2's ranking, which is why the override
-exists). `$mapping` and `$banner` are gone, and with `$banner` went
+shared `<details>` are **deleted**; what survives is three capped subtitles
+beside the questions:
+
+- `EDU_COPY$domains$indirectness$population`, under the Population radio — the
+  test is whether the treatment effect would differ, not whether the trial
+  population resembles the target one, and relative effects are rarely
+  different across populations, which is why Core GRADE 5 Table 2 ranks
+  Population least likely to warrant rating down. It sits under Population
+  because the radio's own wording ("sufficiently similar") invites the
+  demographic reading;
+- `$surrogate`, under the Outcome radio — a surrogate outcome is grounds to
+  consider rating down, and pooling it with the patient-important one is not
+  recommended. That last clause read *"Never pool the two"* until 0.5.1; Core
+  GRADE 5 states no such prohibition, so the imperative claimed more than the
+  source does;
+- `$gradient`, below the four questions — the fold is symmetric and ignores
+  Table 2's ranking, which is why the override exists.
+
+`$mapping` and `$banner` are gone, and with `$banner` went
 `output$indirectness_banner` and `state$indir_reviewed`: the banner said "no
 indirectness judgment recorded yet", and with the radios preselected there
 always is one.
 
-**Imprecision.** `output$impre_branch` reads the `fig4_path` / `ois_used`
-**facts** instead of regex-parsing the note string. The `.override_details`
-preamble is deleted (it restated the branch text), and the nested `<details>`
-inside it is unwrapped: the one sentence a reviewer needs at the override —
-*"Rate down two levels when the plain language summary warrants 'may' rather
-than 'likely'"* — is now the only thing there, visible.
+**Imprecision.** The tab is, in order: the domain header and reference, the
+read-only threshold box, `output$impre_evaluation`, the inputs, the override.
+
+**`output$impre_branch` and its "Core GRADE 2 Figure 4 branch taken" heading are
+deleted [0.5.1].** They rendered the `fig4_path` / `ois_used` facts as a headline
+plus two paragraphs of prose. The Fig 4 flowchart inside `impre_evaluation`
+directly below draws the *same* `fig4_path` fact with the route lit up
+(`pma_flowchart_details()`, §3.4), so the tab named its branch twice and argued
+with itself about which was the answer. What the prose was for — making it
+visible that sample size is not consulted unless the OIS branch is reached — is
+what an unlit OIS node on the chart says; and the two-level condition the
+algorithm cannot judge is stated at the override, where the reviewer can act on
+it. Nothing else read `impre_branch`: its fact lookup was a closure inside the
+`renderUI`, and it went with it.
+
+The `.override_details` preamble is deleted (it restated the branch text), and
+the nested `<details>` inside it is unwrapped: the one sentence a reviewer needs
+at the override — *"Rate down two levels when the plain language summary
+warrants 'may' rather than 'likely'"* — is now the only thing there, visible.
 `.inputs_details(open = TRUE)` stays open.
 
 **Final certainty.** `other_text` / `other_downgrade` are answers and stay
@@ -1216,21 +1271,52 @@ banks an outcome once every domain is confirmed *and* it has a name, while the
 download unlocks on the domains alone, so an unnamed outcome can reach the
 button with nothing banked.
 
-#### 3.5.4 "How to cite this analysis" expandable
+#### 3.5.4 "How to cite" card
 
-```
-Bibtex entries for:
-- pmatools (this package)
-- BMJ Core GRADE series (papers 1, 3, 4, 5)
-- {meta} R package
-- CINeMA approach for Inconsistency
+A `pma_card` holding one model sentence and an **ordered** reference list of
+seven entries: Core GRADE 1–5, `{meta}`, pmatools.
 
-Plus a paragraph:
-"Pairwise meta-analysis was performed using the {meta} R package (Schwarzer 2007).
-Certainty of evidence was rated using the GRADE approach following the BMJ 2025 Core GRADE series
-(Guyatt et al. 2025), implemented in the pmatools R package
-(https://github.com/ykfrkw/pmatools)."
-```
+**This card is Vancouver, and it is the app's one exception to the house
+citation style [0.5.1].** Everywhere else a reference points a reviewer at a
+paper *while they work*, and the short form (`.core_grade_ref()`) is the right
+length for that. Here the reference **is** the deliverable — the reviewer copies
+these lines into a manuscript — so each entry carries up to six authors then
+`et al.`, the volume, the elocation id and the DOI. **Do not fold this list back
+onto `.core_grade_ref()`.**
+
+The prose cites **by bracketed number** into that list rather than repeating
+short forms inline, so the card is one citation system and not two:
+
+> Pairwise meta-analysis was performed using the {meta} R package [6]. Certainty
+> of evidence was rated following the BMJ 2025 Core GRADE series [1-5],
+> implemented in pmatools [7].
+
+Numbering runs Core GRADE 1–5, `{meta}`, pmatools rather than by first
+appearance: an author pasting this in renumbers against their own bibliography
+regardless, and keeping the series contiguous is what makes it readable as a
+block.
+
+The pmatools entry is software, not an article, so it takes Vancouver's
+`Available from:` form for the URL and carries a **version**, because an
+analysis is only reproducible against one.
+
+That version comes from **`pma_pmatools_version_number()`** — never
+`utils::packageVersion()`, which errors under the vendored `source()` the
+deployed app runs on (CLAUDE.md §1), and **never `pma_pmatools_version()`**,
+which appends a ` (vendored)` provenance marker. The marker is right where it is
+used — the Step 2 environment block (`step2_ma.R`) and the app footer (`app.R`)
+are reporting *how the code was loaded* — and wrong here, because this line is
+pasted into someone else's manuscript, where `Version 0.5.1 (vendored).` lands
+in their reference list and reads as part of the version number. The two
+helpers must not converge; `test-edu-copy.R` asserts both forms.
+
+`pma_pmatools_version_number()` returns **`NULL`** when the version is genuinely
+unknown (no installed package and no `pmatools.version_stamp` option), and the
+card then **omits the whole `Version X.` clause**. An incomplete citation is
+honest; `Version (vendored; version unknown).` in a bibliography is not.
+
+Entries are ASCII apart from `Rücker`, written as the HTML entity `&uuml;` —
+the shinyapps.io build has mangled Latin-1 in this app before.
 
 #### 3.5.5 The saved-outcome list lives here (v0.5.1)
 

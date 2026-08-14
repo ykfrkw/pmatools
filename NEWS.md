@@ -241,6 +241,34 @@
   `pma-pubias-edge-q4-na`, and rename `pma-incon-leaf-down1` to
   `pma-incon-leaf-down2`.
 
+* **The Risk-of-bias inflation threshold now defaults to 0.20, not 0.10.**
+  `rob_inflation_threshold` is the relative change of the pooled estimate that
+  counts as bias-favouring inflation on Core GRADE 4 Fig 2's *dominated* branch
+  (rule 3, "rate down") and as a "substantially different magnitude" on its
+  *non-dominated* branch (`analysis_set = "low_only"`, which by default refits
+  the model). Doubling it means analyses that used to rate down for risk of
+  bias, or to be refitted on the low-RoB subset, may now do neither — **so a
+  stored analysis re-run under this release can report a different certainty
+  rating and different pooled numbers with no change to the input data.**
+
+  The old value was too tight to be about bias. `TE_low` is always a
+  fixed-effect estimate while `TE_all` usually is not, so the two differ by the
+  estimator alone; with any real heterogeneity that gap routinely clears 10%,
+  and the domain rated down on arithmetic rather than on risk of bias. Core
+  GRADE 4 puts no number on either node — the dominance gate is the only one
+  its Fig 2 footnote quantifies — so both values are pmatools conventions and
+  neither is the source's.
+
+  Pass `rob_inflation_threshold = 0.10` to `grade_meta()` to restore the old
+  behaviour. The default now lives in one place,
+  `PMA_ROB_INFLATION_THRESHOLD` in `R/domain_rob.R`, which `assess_rob()`,
+  `.flowchart_rob()`, `.assess_bias_direction()` and `export_bundle()`'s
+  fallback all read; it used to be a literal `0.10` repeated at each of those
+  four sites. The comparison is unchanged and still strict (`>`), so a relative
+  change of exactly 0.20 does not rate down. The Shiny app has exposed no
+  slider for this since 0.5.1 and takes the package default, so the app moves
+  with it.
+
 ## New features
 
 * **Cochrane RoB 2's three judgments and ROBINS-I's four are accepted

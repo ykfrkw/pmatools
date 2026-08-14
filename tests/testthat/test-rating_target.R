@@ -130,8 +130,8 @@ test_that("null threshold + point estimate near null -> little_to_no_difference,
                                    threshold = 1.2, threshold_scale = "ratio"))
   expect_equal(g$rating_target, "little_to_no_difference")
   expect_match(g$rating_target_note, "very near the null")
-  # Imprecision must now use +/-MID, not the null.
-  expect_match(impre(g)$notes, "Threshold (+/-MID)", fixed = TRUE)
+  # Imprecision must now use the +/-Threshold band, not the null.
+  expect_match(impre(g)$notes, "the +/-Threshold band", fixed = TRUE)
 })
 
 test_that("null threshold + point estimate not near null -> non_null_effect, judged against the null", {
@@ -145,7 +145,9 @@ test_that("null threshold + point estimate not near null -> non_null_effect, jud
 test_that("null threshold without a MID falls back to non_null_effect and says so", {
   g <- suppressWarnings(grade_meta(meta_near_null(), threshold_type = "null"))
   expect_equal(g$rating_target, "non_null_effect")
-  expect_match(g$rating_target_note, "No MID was supplied")
+  # The note says "threshold", not "MID": the two words name one thing and
+  # the app's Configuration tab calls it a threshold (0.5.1).
+  expect_match(g$rating_target_note, "No threshold was supplied")
 })
 
 test_that("a MID-based target without a MID aborts", {
