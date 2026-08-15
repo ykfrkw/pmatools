@@ -297,7 +297,8 @@ test_that(".responder_block() offers a three-way choice defaulting to both", {
   expect_match(html, "The SMD itself", fixed = TRUE)
   expect_match(html, "Chinn", fixed = TRUE)
   expect_match(html, 'value="both"')
-  expect_match(html, "Both, in one row: the SMD on its own scale", fixed = TRUE)
+  expect_match(html, "Both, on two rows of one outcome: the SMD on its own scale",
+               fixed = TRUE)
   expect_match(html, "what Core GRADE 6 recommends", fixed = TRUE)
   expect_match(as.character(.responder_block("MD")), "The MD itself",
                fixed = TRUE)

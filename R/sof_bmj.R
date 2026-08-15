@@ -231,18 +231,23 @@
                               unit = paste0("per ", per_str), digits = 0L))
   }
 
+  # A mean difference SURVIVES the deletion that emptied the two arm columns
+  # beside it, and that is the non-obvious half of this: the arm columns went
+  # because a pooled control-arm mean is not interpretable once endpoint and
+  # change-from-baseline scores are mixed in one analysis, which is the ordinary
+  # case. The mean difference is not built from arm means -- it is the pooled
+  # contrast, and mixing the two kinds of score leaves it exactly as valid as it
+  # was. So it stays, in the outcome's own units.
   if (identical(sm, "MD")) {
     return(.difference_string(est, lo, hi, unit = unit, digits = 2L))
   }
 
-  # An SMD is in standard deviation units, so it never takes the outcome's own
-  # unit -- and now that the two arm columns beside it can be re-expressed on
-  # the original scale, labelling it "days" would invite the reader to subtract
-  # one from the other and find the numbers do not agree.
-  if (identical(sm, "SMD")) {
-    return(.difference_string(est, lo, hi, unit = "standard deviations",
-                              digits = 2L))
-  }
+  # An SMD's difference cell is empty. Printing "0.44 fewer standard
+  # deviations" here restates the Effect column two cells to the left in the
+  # same words, and it is the same quantity the arm columns could not support:
+  # nothing in a column headed "Absolute effects" can be read in standard
+  # deviation units.
+  if (identical(sm, "SMD")) return("")
 
   "-"
 }
@@ -285,17 +290,22 @@
 # when the row is not converted. It is passed rather than re-derived because
 # three cells depend on it and only one of them is the pair of arm cells the
 # caller hands down: the Difference cell moves onto the responder scale, and the
-# Effect cell gains the derived risk ratio. A converted row whose `chinn` is
-# missing would show responder rates in its arm columns and a standard-deviation
-# difference beside them, which is exactly the mismatch this argument exists to
-# prevent. `arm_note` is the caller's, for the same reason: with `cer_str`
-# supplied the row cannot look the note up itself.
+# Effect cell reports the derived odds ratio. A converted row whose `chinn` is
+# missing would show responder rates in its arm columns and an empty Difference
+# beside them, which is exactly the mismatch this argument exists to prevent.
+#
+# A row asking for both presentations comes back with `split` filled: the four
+# splitting cells for the upper row and the four for the lower, which
+# .bmj_row_cell_sets() turns into two table rows. The flat `effect` / `cer` /
+# `ier` / `diff` fields still hold the whole row's content, joined by newlines,
+# for consumers that have no way to render two rows -- the CSV mirror is the
+# one that matters (.sof_set_dataframe(), export_bundle_multi.R).
 .bmj_row_values <- function(nm, g, per = 1000, prediction = FALSE,
                             follow_up = NULL, unit = NULL,
                             cer_str = NULL, ier_str = NULL,
                             label_intervention = "intervention",
                             markers = NULL,
-                            chinn = NULL, arm_note = NULL) {
+                            chinn = NULL) {
   if (.is_not_reported(g)) {
     return(.bmj_row_values_not_reported(nm, g, follow_up))
   }
@@ -327,33 +337,52 @@
 
   # Both arm columns of the "Absolute effects" block. A Chinn dichotomisation
   # supplies its own pair; otherwise they come off the object -- the baseline
-  # risk for a binary outcome, the pooled control arms for a continuous one.
+  # risk for a binary outcome, nothing at all for a continuous one.
   arm <- .sof_arm_cells(meta_obj, g$baseline_risk, per,
-                        big_mark = nf$big_mark, ci_sep = nf$ci_sep,
-                        unit = unit)
-  caller_cells <- !is.null(cer_str) || !is.null(ier_str)
+                        big_mark = nf$big_mark, ci_sep = nf$ci_sep)
 
   effect_cell <- .format_effect_bmj(meta_obj, g$outcome_type,
                                     prediction = prediction)
   diff_cell   <- .format_difference(meta_obj, g$baseline_risk, per, unit,
                                     g$outcome_type)
+  cer_cell    <- cer_str %||% arm$cer
+  ier_cell    <- ier_str %||% arm$ier
+  split       <- NULL
 
   if (!is.null(chinn)) {
-    invert <- isTRUE(chinn$chinn_invert)
-    p0     <- chinn$baseline_risk
-    rr_line <- .chinn_rr_line(meta_obj, p0, invert = invert,
+    invert  <- isTRUE(chinn$chinn_invert)
+    p0      <- chinn$baseline_risk
+    or_line <- .chinn_or_line(meta_obj, p0, invert = invert,
                               ci_sep = nf$ci_sep)
-    if (!is.null(rr_line)) effect_cell <- paste0(effect_cell, "\n", rr_line)
-
     rd_cell <- .format_difference_chinn(meta_obj, p0, per, invert = invert)
-    # Both scales in one cell keeps the two lines in the same order the arm
-    # cells use -- own scale first, responder scale second -- so a reader
-    # reading across the row does not have to change which line they are on.
-    diff_cell <- if (isTRUE(chinn$keep_effect_scale) && !identical(rd_cell, "-")) {
-      paste0(diff_cell, "\n", rd_cell)
-    } else {
-      rd_cell
+
+    join <- function(a, b) {
+      parts <- c(a, b)
+      paste(parts[nzchar(parts)], collapse = "\n")
     }
+    # The derived odds ratio RIDES UNDER the pooled estimate; it never replaces
+    # it. Two reasons, and the first is a hard one: the Effect column's header
+    # is built from meta_obj$sm (.bmj_headers()), so a cell holding only an
+    # odds ratio sits under a heading that reads "Standardized mean difference
+    # (95% CI)". The second is that the standardised mean difference is the
+    # quantity every domain was rated on, and a Summary of Findings that omits
+    # it cannot be checked against the certainty beside it. Core GRADE 6 asks
+    # for the responder proportion ALONGSIDE the effect, not instead of it.
+    if (isTRUE(chinn$keep_effect_scale) && !is.null(or_line)) {
+      # The upper row keeps whatever the unconverted row would have shown --
+      # for an MD that includes a Difference cell in the outcome's own units,
+      # which is a pooled contrast and belongs beside the pooled estimate.
+      split <- list(
+        top    = list(effect = effect_cell, cer = "", ier = "",
+                      diff = diff_cell),
+        bottom = list(effect = or_line, cer = cer_cell, ier = ier_cell,
+                      diff = rd_cell))
+    }
+    # Single-row and two-row differ in LAYOUT only, so the joined cells are
+    # built the same way either way: the two-row form is the split above, the
+    # single-row form is these joins, and the content is identical.
+    effect_cell <- join(effect_cell, or_line)
+    diff_cell   <- join(diff_cell, rd_cell)
   }
 
   list(
@@ -361,14 +390,48 @@
     n         = .n_participants_studies_bmj(meta_obj$k, .total_n(meta_obj),
                                             g$study_design),
     effect    = effect_cell,
-    cer       = cer_str %||% arm$cer,
-    ier       = ier_str %||% arm$ier,
+    cer       = cer_cell,
+    ier       = ier_cell,
     diff      = diff_cell,
     certainty = cert_cell,
     plain     = .plain_language_for(g, intervention_label = pl_tx),
-    arm_note  = if (caller_cells) arm_note else arm$note
+    split     = split,
+    # Whether the arm columns of this row hold event rates, which is what the
+    # footer's "Absolute effects: ..." sentence describes. A continuous outcome
+    # that was not converted has two empty cells, and a sentence explaining how
+    # a rate was computed is noise over them.
+    has_rates = !is.null(chinn) || !isTRUE(arm$continuous)
   )
 }
+
+# The cells of one logical row, as the one or two flextable rows it renders as.
+# The lower row of a pair leaves the merged columns empty: a vertical merge
+# renders the top cell of the span, so anything written below it is discarded
+# anyway, and writing it would only invite somebody to read the two as separate
+# outcomes.
+.bmj_row_cell_sets <- function(v, has_plain) {
+  row_of <- function(effect, cer, ier, diff, top) {
+    c(if (top) v$outcome else "",
+      if (top) v$n else "",
+      effect, cer, ier, diff,
+      if (top) v$certainty else "",
+      if (has_plain) (if (top) v$plain %||% "" else "") else NULL)
+  }
+  if (is.null(v$split)) {
+    return(list(row_of(v$effect, v$cer, v$ier, v$diff, top = TRUE)))
+  }
+  list(
+    row_of(v$split$top$effect, v$split$top$cer, v$split$top$ier,
+           v$split$top$diff, top = TRUE),
+    row_of(v$split$bottom$effect, v$split$bottom$cer, v$split$bottom$ier,
+           v$split$bottom$diff, top = FALSE))
+}
+
+# Columns of the BMJ layout that do not split when a row shows both
+# presentations, and those that do. The plain language summary is the eighth
+# and is only present in some tables, so it is added by the caller.
+BMJ_MERGED_COLS <- c(1L, 2L, 7L)
+BMJ_SPLIT_COLS  <- 3:6
 
 # BMJ row for an outcome nobody reported. `nm` already carries the [n] marker
 # disp() applied, if any. The caller's per-outcome follow_up still wins over
@@ -500,7 +563,7 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
                            follow_up = NULL, unit = NULL,
                            chinn_active = FALSE, chinn_invert = FALSE,
                            threshold_label = NULL,
-                           chinn_arm = NULL,
+                           keep_effect_scale = FALSE,
                            label_intervention = "intervention",
                            label_control      = "control") {
   meta_obj <- x$meta
@@ -519,14 +582,10 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
     fact_markers[[dm]] <- length(fact_notes)
   }
 
-  # `keep_effect_scale` here is what the row ACHIEVED, not what it asked for: a
-  # both-scales row whose arm cells fell back to responder proportions must not
-  # keep a standard-deviation line in its Difference cell, or half the row would
-  # show one presentation and half the other.
   chinn <- if (chinn_active) {
     list(baseline_risk     = baseline_for_display,
          chinn_invert      = isTRUE(chinn_invert),
-         keep_effect_scale = isTRUE(chinn_arm$both))
+         keep_effect_scale = isTRUE(keep_effect_scale))
   } else NULL
 
   vals <- .bmj_row_values(
@@ -535,16 +594,15 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
     cer_str = cer_str, ier_str = ier_str,
     label_intervention = label_intervention,
     markers = fact_markers,
-    chinn = chinn, arm_note = chinn_arm$note
+    chinn = chinn
   )
 
   has_plain <- !is.null(vals$plain)
   hdrs <- .bmj_headers(meta_obj$sm, has_plain,
                        label_intervention, label_control)
 
-  cells <- c(vals$outcome, vals$n, vals$effect, vals$cer, vals$ier,
-             vals$diff, vals$certainty, if (has_plain) vals$plain)
-  df <- as.data.frame(matrix(cells, nrow = 1L), stringsAsFactors = FALSE)
+  cell_sets <- .bmj_row_cell_sets(vals, has_plain)
+  df <- as.data.frame(do.call(rbind, cell_sets), stringsAsFactors = FALSE)
   names(df) <- hdrs
 
   ft <- flextable::flextable(df)
@@ -556,18 +614,16 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
   ft <- flextable::bold(ft,  j = 7, part = "body")
   ft <- flextable::align(ft, j = 7, align = "center", part = "body")
 
-  # A both-scales row carries an arm note AND event rates, so the rate sentence
-  # stays: it is the only thing explaining the second line of each arm cell.
+  if (length(cell_sets) > 1L) {
+    ft <- .pma_merge_split_row(
+      ft, i = 1L,
+      merge_cols = c(BMJ_MERGED_COLS, if (has_plain) 8L),
+      rule_cols  = BMJ_SPLIT_COLS)
+  }
+
   ft <- flextable::add_footer_lines(
     ft, values = .bmj_base_note(label_intervention, prediction,
-                                rate_arms = is.null(vals$arm_note) ||
-                                  chinn_active))
-
-  # How the two arm columns were derived when they hold arm-level means rather
-  # than event rates (see .cont_arm_note()).
-  if (!is.null(vals$arm_note)) {
-    ft <- flextable::add_footer_lines(ft, values = vals$arm_note)
-  }
+                                rate_arms = isTRUE(vals$has_rates)))
 
   for (i in seq_along(fact_notes)) {
     ft <- flextable::add_footer_lines(
@@ -593,12 +649,6 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
       ft, values = .chinn_note(invert = isTRUE(chinn_invert),
                                threshold_label = threshold_label,
                                baseline_risk = baseline_for_display))
-  }
-
-  # Both scales were asked for and only one could be given.
-  if (!is.null(chinn_arm$degraded_reason)) {
-    ft <- flextable::add_footer_lines(
-      ft, values = .responder_scale_degraded_note(chinn_arm$degraded_reason))
   }
 
   if (has_plain) {
@@ -643,7 +693,7 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
       args <- responder[[nm]]$args
       list(baseline_risk     = args$baseline_risk,
            chinn_invert      = isTRUE(args$chinn_invert),
-           keep_effect_scale = isTRUE(arm$both))
+           keep_effect_scale = isTRUE(args$keep_effect_scale))
     }
     .bmj_row_values(disp(nm), outcomes[[nm]], per = per,
                     prediction = prediction,
@@ -652,7 +702,7 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
                     cer_str   = arm$cer, ier_str = arm$ier,
                     label_intervention = label_intervention,
                     markers   = fact_markers[[nm]],
-                    chinn     = chinn, arm_note = arm$note)
+                    chinn     = chinn)
   })
   names(row_vals) <- nms
 
@@ -680,6 +730,7 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
   all_rows   <- list()
   label_rows <- integer(0)
   cert_rows  <- list()   # row index (char) -> outcome name
+  split_rows <- integer(0)  # first row of every two-row outcome
   row_idx    <- 0L
 
   add_label <- function(text) {
@@ -690,15 +741,23 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
     all_rows[[length(all_rows) + 1L]] <<- r
     label_rows <<- c(label_rows, row_idx)
   }
+  # An outcome shown on both scales occupies two table rows and is still ONE
+  # outcome, so cert_rows records only the first of the pair and split_rows
+  # remembers that a second follows. Everything indexed by row below -- the
+  # certainty colouring, the merges, the rule -- reads those two rather than
+  # assuming one row per outcome, which is the assumption that would silently
+  # colour the wrong row once a split outcome sits above another.
   add_outcome <- function(nm) {
-    row_idx <<- row_idx + 1L
-    v <- row_vals[[nm]]
-    cells <- c(v$outcome, v$n, v$effect, v$cer, v$ier, v$diff, v$certainty,
-               if (has_plain) v$plain %||% "")
-    r <- as.data.frame(matrix(cells, nrow = 1L), stringsAsFactors = FALSE)
-    names(r) <- hdrs
-    all_rows[[length(all_rows) + 1L]] <<- r
-    cert_rows[[as.character(row_idx)]] <<- nm
+    v     <- row_vals[[nm]]
+    first <- row_idx + 1L
+    for (cells in .bmj_row_cell_sets(v, has_plain)) {
+      row_idx <<- row_idx + 1L
+      r <- as.data.frame(matrix(cells, nrow = 1L), stringsAsFactors = FALSE)
+      names(r) <- hdrs
+      all_rows[[length(all_rows) + 1L]] <<- r
+    }
+    cert_rows[[as.character(first)]] <<- nm
+    if (row_idx > first) split_rows <<- c(split_rows, first)
   }
 
   if (!is.null(primary)) {
@@ -727,7 +786,11 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
   }
 
   for (ri in names(cert_rows)) {
+    # Both rows of a split outcome, not only the first: the certainty column is
+    # merged over the pair, and a background applied to half a span leaves the
+    # unpainted half showing through under it.
     i <- as.integer(ri)
+    i <- if (i %in% split_rows) c(i, i + 1L) else i
     g <- outcomes[[cert_rows[[ri]]]]
     if (.is_not_reported(g)) {
       # Neutral grey italics: the palette encodes a rating this row does not
@@ -746,28 +809,24 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
     ft <- flextable::align(ft, i = i, j = 7, align = "center", part = "body")
   }
 
-  # Continuous outcomes derive their arm columns differently; the note is
-  # written once however many rows it covers, and the rate sentence is kept
-  # only while some row still reports rates. Counted over the rated rows only:
-  # a not-reported row reports neither rates nor arm-level means, so letting it
-  # stand in for a rate-reporting row would keep a sentence describing columns
-  # that no row fills.
-  rated_vals <- row_vals[names(.rated_outcomes(outcomes[nms]))]
-  # A converted row carries an arm note only when it shows both scales, and its
-  # cells hold event rates either way, so it must not be counted as a row that
-  # reports no rates -- otherwise a table of nothing but both-scales rows would
-  # drop the sentence that explains their second line.
-  n_cont     <- sum(vapply(names(rated_vals), function(nm) {
-    !is.null(rated_vals[[nm]]$arm_note) && !(nm %in% converted_nms)
-  }, logical(1)))
-  arm_notes  <- unique(unlist(lapply(rated_vals, function(v) v$arm_note),
-                              use.names = FALSE))
-  ft <- flextable::add_footer_lines(
-    ft, values = .bmj_base_note(label_intervention, prediction,
-                                rate_arms = n_cont < length(rated_vals)))
-  for (nt in arm_notes) {
-    ft <- flextable::add_footer_lines(ft, values = nt)
+  # Merged after the colouring, so the merge sees the finished cells.
+  for (sr in split_rows) {
+    ft <- .pma_merge_split_row(
+      ft, i = sr,
+      merge_cols = c(BMJ_MERGED_COLS, if (has_plain) 8L),
+      rule_cols  = BMJ_SPLIT_COLS)
   }
+
+  # The rate sentence is kept only while some row still reports rates. Counted
+  # over the rated rows only: a not-reported row reports nothing at all, so
+  # letting it stand in for a rate-reporting row would keep a sentence
+  # describing columns that no row fills.
+  rated_vals <- row_vals[names(.rated_outcomes(outcomes[nms]))]
+  ft <- flextable::add_footer_lines(
+    ft, values = .bmj_base_note(
+      label_intervention, prediction,
+      rate_arms = any(vapply(rated_vals, function(v) isTRUE(v$has_rates),
+                             logical(1)))))
 
   # What "Not reported" means, stated once for the table however many such rows
   # it has.

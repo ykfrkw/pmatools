@@ -780,7 +780,7 @@
   `SMD (standardised mean difference)` back to `SMD`.
 
 * **A Summary of Findings row converted with Chinn's formula now reports an
-  absolute risk difference and a derived risk ratio.** This changes what two
+  absolute risk difference and a derived odds ratio.** This changes what two
   columns say for anyone using `convert_smd_to_or = TRUE`; no argument changed,
   so it is a behaviour change and not a breaking one.
 
@@ -795,20 +795,59 @@
   binary rows use, so the direction words, the CI ordering and the "per 1000"
   label are identical for a converted row and a binary one.
 
-  The **Effect** column gains a second line, "Derived risk ratio 2.57 (2.31 to
-  2.79)" — the intervention proportion over the assumed control proportion. A
-  second line and not a second column: it is the same pooled estimate read on
-  another scale, and a column would present it as an independent result.
+  The **Effect** column gains a second line, "Derived odds ratio 1.41 (0.85 to
+  2.35)" — `exp(SMD x pi / sqrt(3))`, which is what Chinn's formula emits. Not
+  the risk ratio: that is `p1 / p0` and exists only once the assumed control
+  proportion has been laid on top of the formula's output, so the odds ratio
+  puts one fewer assumption between the pooled estimate and the number on the
+  page. A second line and not a second column, because it is the same pooled
+  estimate read on another scale and a column would present it as an
+  independent result. It rides **under** the pooled estimate and never replaces
+  it — the column header is built from the effect measure, so a cell holding
+  only an odds ratio would sit beneath "Standardized mean difference", and the
+  estimate every domain was rated on would be absent from the table reporting
+  the certainty.
 
-  Both are DERIVED, not fitted, and the Chinn footnote now says so and names
-  the assumed control proportion they were computed against. A footnote is the
-  right place for that caveat; printing a different quantity in the column was
-  not.
+  Everything derived here is DERIVED, not fitted, and the Chinn footnote now
+  says so and separates the two kinds: the odds ratio does not move with the
+  assumed control proportion, while the two arm rates and the risk difference
+  do, and it names that proportion.
 
   Internally the three proportions the conversion produces are computed once by
   a new internal `.chinn_rates()` rather than re-derived per cell, so the arm
-  cells, the difference and the risk ratio cannot drift apart.
+  cells, the difference and the odds ratio cannot drift apart.
   `.format_ier_chinn()`'s output is byte-for-byte unchanged.
+
+* **A continuous outcome no longer shows a pooled control-arm mean, and the
+  Summary of Findings presented as "both" now takes two table rows.** This
+  changes the table for **every** continuous outcome, including ones that never
+  asked for the conversion.
+
+  A continuous meta-analysis routinely pools endpoint scores together with
+  change-from-baseline scores. The pooled contrast survives that; a pooled
+  control-arm *mean* does not, and neither does anything built on one. So
+  "With control" and "With intervention" are now **empty** for a continuous
+  outcome unless the Chinn conversion is active, in which case they hold the
+  responder rates and only those. The Difference column follows: for an SMD the
+  standard-deviation string is gone — it restated the Effect column and rested
+  on the same arm means — while for an MD the difference in the outcome's own
+  units stays, because that is the pooled contrast itself.
+
+  It also retires a mislabel. `pma_sof_unit()` returns "standard deviation
+  units" for an SMD, which is right for the Difference column it was written
+  for; the same value reached the arm cells, where a control mean already
+  re-expressed on the outcome's own scale printed as "13.89 standard deviation
+  units".
+
+  With the mean-scale content gone, `keep_effect_scale = TRUE` would have
+  rendered identically to the responder-only presentation, so it now splits the
+  outcome across **two table rows** instead of stacking lines in one: the
+  effect on its own scale above, the dichotomised reading below, with
+  "Outcome and follow-up", "No of participants", "Certainty of evidence" and
+  "Plain language summary" merged over the pair and a rule drawn between them.
+  `grade_table()` renders such a pair beside single-row outcomes without
+  disturbing the certainty colouring or the footnote markers, which are indexed
+  by row.
 
 * **Core GRADE 4 Fig 2's undominated branch now answers "similar or
   substantially different magnitudes of effect?" with the same five-rule check

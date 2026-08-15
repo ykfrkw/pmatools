@@ -24,10 +24,9 @@
 #' @param follow_up (v0.5) Follow-up / time frame text for the \code{"bmj"}
 #'   style: a character vector named by outcome, or a single unnamed value
 #'   applied to every outcome. \code{NULL} (default) omits the line.
-#' @param unit (v0.5) Unit for the continuous-outcome cells -- the Difference
-#'   column of the \code{"bmj"} style and the arm columns of either style (see
-#'   \code{\link{sof_table}}); same named-vector convention as
-#'   \code{follow_up}.
+#' @param unit (v0.5) Unit for the Difference column of the \code{"bmj"} style
+#'   when \code{sm = "MD"} (see \code{\link{sof_table}}); same named-vector
+#'   convention as \code{follow_up}.
 #' @param per Denominator for SoF rate columns. \code{1000} (default) or
 #'   \code{100}.
 #' @param prediction Logical (default \code{FALSE}); when \code{TRUE}, the
@@ -38,16 +37,22 @@
 #'
 #' @section Presenting a continuous outcome as a proportion of responders:
 #' \code{\link{sof_table}} takes the responder presentation as arguments
-#' (\code{convert_smd_to_or}, \code{baseline_risk}, \code{threshold_label},
-#' \code{chinn_invert}), which is right for a table of one row. A combined
-#' table has to answer it per row -- one continuous outcome converted, another
-#' not, a binary one that cannot be -- so the choice rides on each rated object
-#' as the \code{"pmatools_display"} attribute, a named list holding those four
-#' names (see \code{\link{export_bundle.pmatools_set}} for the same attribute's
-#' export arguments). Both layouts fill the converted row's two arm columns
-#' with the dichotomised rates, marked \code{*} and explained in a footnote
-#' written once for the table however many rows used it -- and not at all when
-#' none did.
+#' (\code{convert_smd_to_or}, \code{keep_effect_scale}, \code{baseline_risk},
+#' \code{threshold_label}, \code{chinn_invert}), which is right for a table of
+#' one row. A combined table has to answer it per row -- one continuous outcome
+#' converted, another not, a binary one that cannot be -- so the choice rides
+#' on each rated object as the \code{"pmatools_display"} attribute, a named
+#' list holding those five names (see
+#' \code{\link{export_bundle.pmatools_set}} for the same attribute's export
+#' arguments). Both layouts fill the converted row's two arm columns with the
+#' dichotomised rates, marked \code{*} and explained in a footnote written once
+#' for the table however many rows used it -- and not at all when none did.
+#'
+#' A row asking for \code{keep_effect_scale} occupies \strong{two table rows},
+#' the effect on its own scale above and the dichotomised reading below, with
+#' the outcome, participant, certainty and domain cells merged across the pair.
+#' It is still one outcome, and it can sit beside single-row outcomes without
+#' either of them moving.
 #'
 #' A row that asks for the conversion and cannot support it -- a non-SMD/MD
 #' effect measure, no responder proportion in (0, 1), no usable pooled estimate
@@ -131,8 +136,7 @@ grade_table <- function(outcomes,
   # reason has to reach the footnote register below.
   responder     <- .resolve_responder(outcomes, nms, per,
                                       big_mark = nf$big_mark,
-                                      ci_sep   = nf$ci_sep,
-                                      unit     = unit)
+                                      ci_sep   = nf$ci_sep)
   converted_nms <- .converted_outcomes(responder)
 
   # One numbered footnote pool for every note that belongs to a single row
@@ -226,19 +230,16 @@ grade_table <- function(outcomes,
   eff_hdr  <- if (length(eff_hdrs) == 1L) eff_hdrs else "Effect\n(95% CI)"
 
   # The arm cells are built before the headers because they decide them: a
-  # continuous outcome fills them with arm-level means, which the "Risk with
-  # control (per 1,000)" wording would misdescribe.
+  # continuous outcome leaves them empty, and the "Risk with control (per
+  # 1,000)" wording over an empty pair describes a rate the row never had.
   arms <- lapply(nms, function(nm) {
     g <- outcomes[[nm]]
     # A not-reported outcome has no arms to describe: NULL here leaves it out
-    # of the continuous-header vote and of the arm-derivation footnote, and
-    # .build_row() never reads it.
+    # of the continuous-header vote, and .build_row() never reads it.
     if (.is_not_reported(g)) return(NULL)
-    # A converted row supplies its own pair: responder rates, not the arm-level
-    # means the object would otherwise be read for.
+    # A converted row supplies its own pair: responder rates.
     if (!is.null(responder[[nm]]$arm)) return(responder[[nm]]$arm)
-    .sof_arm_cells(g$meta, g$baseline_risk, per,
-                   unit = .per_outcome_arg(unit, nm))
+    .sof_arm_cells(g$meta, g$baseline_risk, per)
   })
   names(arms) <- nms
   cont_any <- any(vapply(arms, function(a) isTRUE(a$continuous), logical(1)))
@@ -252,6 +253,7 @@ grade_table <- function(outcomes,
   all_rows    <- list()
   label_rows  <- integer(0)   # row indices of group-label rows
   outcome_map <- list()        # row index (char) → outcome name
+  split_rows  <- integer(0)    # first row of every two-row outcome
   row_idx <- 0L
 
   add_label <- function(text) {
@@ -263,15 +265,20 @@ grade_table <- function(outcomes,
     label_rows <<- c(label_rows, row_idx)
   }
 
+  # .build_row() returns TWO rows for an outcome shown on both scales, and it
+  # is still one outcome: outcome_map records the first of the pair and
+  # split_rows remembers that a second follows, so the certainty colouring and
+  # the merges below can index by row without assuming one row per outcome.
   add_outcome <- function(nm) {
-    row_idx <<- row_idx + 1L
     r <- .build_row(disp(nm), outcomes[[nm]], show_domains, per, prediction,
                     arm = arms[[nm]], markers = fact_markers[[nm]],
                     chinn = if (is.null(responder[[nm]]$arm)) NULL else
                       responder[[nm]]$args)
     names(r) <- hdrs
     all_rows[[length(all_rows) + 1L]] <<- r
-    outcome_map[[as.character(row_idx)]] <<- nm
+    outcome_map[[as.character(row_idx + 1L)]] <<- nm
+    if (nrow(r) > 1L) split_rows <<- c(split_rows, row_idx + 1L)
+    row_idx <<- row_idx + nrow(r)
   }
 
   if (!is.null(primary)) {
@@ -311,7 +318,11 @@ grade_table <- function(outcomes,
   # Certainty cell color per outcome row
   cert_col <- hdrs[6]
   for (ri in names(outcome_map)) {
+    # Both rows of a split outcome: the certainty column is merged over the
+    # pair, and a background applied to half a span leaves the unpainted half
+    # showing through under it.
     i  <- as.integer(ri)
+    i  <- if (i %in% split_rows) c(i, i + 1L) else i
     nm <- outcome_map[[ri]]
     if (.is_not_reported(outcomes[[nm]])) {
       # Neutral grey italics: the certainty palette encodes a rating, and there
@@ -330,6 +341,15 @@ grade_table <- function(outcomes,
     ft <- flextable::color(ft, i = i, j = cert_col, color = p$text, part = "body")
     ft <- flextable::bold(ft,  i = i, j = cert_col,                 part = "body")
     ft <- flextable::align(ft, i = i, j = cert_col, align = "center", part = "body")
+  }
+
+  # Merged after the colouring, so the merge sees the finished cells. The
+  # domain columns do not split either, so they join the merge.
+  for (sr in split_rows) {
+    ft <- .pma_merge_split_row(
+      ft, i = sr,
+      merge_cols = c(GRADEPRO_MERGED_COLS, if (show_domains) 7:11),
+      rule_cols  = GRADEPRO_SPLIT_COLS)
   }
 
   # Header style
@@ -366,13 +386,6 @@ grade_table <- function(outcomes,
   # it has.
   if (.has_not_reported(outcomes)) {
     ft <- flextable::add_footer_lines(ft, values = .not_reported_table_note())
-  }
-
-  # How the arm columns were derived for any continuous outcome in the table
-  # (see .cont_arm_note()); written once however many rows it covers.
-  for (nt in unique(unlist(lapply(arms, function(a) a$note),
-                           use.names = FALSE))) {
-    ft <- flextable::add_footer_lines(ft, values = nt)
   }
 
   # Per-row notes (risk-of-bias analysis set, not-reported reason), keyed to
@@ -415,15 +428,6 @@ grade_table <- function(outcomes,
   for (nm in converted_nms) {
     ft <- flextable::add_footer_lines(
       ft, values = .responder_row_note(nm, responder[[nm]]$args))
-    # A row that asked for both scales and could only be given one says so
-    # against its own name, since the table's other converted rows may have
-    # managed both.
-    reason <- responder[[nm]]$arm$degraded_reason
-    if (!is.null(reason)) {
-      ft <- flextable::add_footer_lines(
-        ft, values = paste0("[", nm, "] ",
-                            .responder_scale_degraded_note(reason)))
-    }
   }
   ft
 }
@@ -461,27 +465,51 @@ grade_table <- function(outcomes,
   cer_str  <- arm$cer
   ier_str  <- arm$ier
   eff      <- .format_effect(meta_obj, g$outcome_type, prediction = prediction)
-  # The derived risk ratio, on the second line of the Effect cell. This layout
-  # has no Difference column, so it is the only thing here relating the two
-  # responder proportions to each other.
-  if (!is.null(chinn)) {
-    rr_line <- .chinn_rr_line(meta_obj, chinn$baseline_risk,
-                              invert = isTRUE(chinn$chinn_invert))
-    if (!is.null(rr_line)) eff <- paste0(eff, "\n", rr_line)
+  # The derived odds ratio, in the Effect cell. This layout has no Difference
+  # column, so it is the only thing here relating the two responder proportions
+  # to each other.
+  or_line <- if (is.null(chinn)) NULL else {
+    .chinn_or_line(meta_obj, chinn$baseline_risk,
+                   invert = isTRUE(chinn$chinn_invert))
+  }
+  # Both presentations means two table rows, the effect above and the
+  # dichotomised reading below; the caller merges everything else over the
+  # pair. On one row they would overwrite each other.
+  split <- !is.null(or_line) && isTRUE(chinn$keep_effect_scale)
+  # On one row the two lines stack; they never overwrite each other. The
+  # column header is built from the effect measure, so a cell holding only the
+  # derived odds ratio would sit under a heading naming the standardised mean
+  # difference -- and the estimate every domain was rated on would be missing
+  # from the table reporting the certainty. Single-row and two-row differ in
+  # layout, not in content.
+  if (!split && !is.null(or_line)) {
+    eff <- paste(c(eff, or_line)[nzchar(c(eff, or_line))], collapse = "\n")
   }
   # Domain-fact markers sit after the certainty symbol; unchanged when NULL.
   cert_str <- paste0(g$certainty, "\n", CERTAINTY_SYMBOLS[[g$certainty]],
                      .fact_marker_suffix(markers))
 
-  row <- data.frame(
-    col1 = nm,
-    col2 = .n_participants_studies(k, n_total, g$study_design),
-    col3 = cer_str,
-    col4 = ier_str,
-    col5 = eff,
-    col6 = cert_str,
-    stringsAsFactors = FALSE
-  )
+  row <- if (split) {
+    data.frame(
+      col1 = c(nm, ""),
+      col2 = c(.n_participants_studies(k, n_total, g$study_design), ""),
+      col3 = c("", cer_str),
+      col4 = c("", ier_str),
+      col5 = c(eff, or_line),
+      col6 = c(cert_str, ""),
+      stringsAsFactors = FALSE
+    )
+  } else {
+    data.frame(
+      col1 = nm,
+      col2 = .n_participants_studies(k, n_total, g$study_design),
+      col3 = cer_str,
+      col4 = ier_str,
+      col5 = eff,
+      col6 = cert_str,
+      stringsAsFactors = FALSE
+    )
+  }
 
   if (show_domains) {
     d   <- g$domain_assessments
@@ -490,11 +518,14 @@ grade_table <- function(outcomes,
       if (nrow(r) == 0) return("?")
       .domain_symbol(r$judgment[1])
     }
-    row$d1 <- dom("Risk of bias")
-    row$d2 <- dom("Indirectness")
-    row$d3 <- dom("Inconsistency")
-    row$d4 <- dom("Imprecision")
-    row$d5 <- dom("Publication bias")
+    # Padded to the row count: the domain columns are merged over a split pair,
+    # so only the upper cell is rendered.
+    sym <- function(name) c(dom(name), rep("", nrow(row) - 1L))
+    row$d1 <- sym("Risk of bias")
+    row$d2 <- sym("Indirectness")
+    row$d3 <- sym("Inconsistency")
+    row$d4 <- sym("Imprecision")
+    row$d5 <- sym("Publication bias")
   }
   row
 }

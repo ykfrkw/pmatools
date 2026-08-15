@@ -235,10 +235,11 @@ grade_report <- function(outcomes,
                            per = 1000, prediction = FALSE) {
   per_str <- format(per, big.mark = ",", scientific = FALSE)
 
-  # A continuous outcome fills the two arm columns with arm-level means, not
-  # rates, so the header drops the rate wording as soon as one appears.
+  # A continuous outcome leaves the two arm columns empty, so the header drops
+  # the rate wording as soon as one appears: "Control rate (per 1,000)" over an
+  # empty cell describes a rate the row never had.
   arms <- lapply(outcomes, function(g) {
-    .sof_arm_cells(g$meta, g$baseline_risk, per, unit = g$unit)
+    .sof_arm_cells(g$meta, g$baseline_risk, per)
   })
   cont_any <- any(vapply(arms, function(a) isTRUE(a$continuous), logical(1)))
   arm_hdr  <- if (cont_any) {
@@ -291,11 +292,7 @@ grade_report <- function(outcomes,
       cer, ier, eff, cert))
   }
 
-  # How the arm columns were derived for any continuous outcome, matching the
-  # footnote the flextable carries (see .cont_arm_note()).
-  notes <- unique(unlist(lapply(arms, function(a) a$note), use.names = FALSE))
-  c(hdr, sep, rows,
-    if (length(notes) > 0) c("", paste0("*", notes, "*")))
+  c(hdr, sep, rows)
 }
 
 # --------------------------------------------------------------------------

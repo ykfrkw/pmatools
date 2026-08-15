@@ -947,9 +947,9 @@ RESPONDER_P0_DEFAULT <- 0.20
         c(sprintf("The %s itself, on its own scale", sm),
           paste0("The proportion of responders, converted with Chinn's ",
                  "formula (Core GRADE 6 option 2)"),
-          sprintf(paste0("Both, in one row: the %s on its own scale and the ",
-                         "proportion of responders (what Core GRADE 6 ",
-                         "recommends)"), sm))),
+          sprintf(paste0("Both, on two rows of one outcome: the %s on its own ",
+                         "scale above and the proportion of responders below ",
+                         "(what Core GRADE 6 recommends)"), sm))),
       selected = "both"),
     # Every input below belongs to the responder conversion, which both
     # 'responder' and 'both' run. Testing only 'responder' would leave a

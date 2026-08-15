@@ -99,3 +99,23 @@ test_that("pma_fmt_pct() keeps enough resolution to separate the two bands", {
   expect_equal(pma_fmt_pct(NA_real_), "not estimable")
   expect_equal(pma_fmt_pct(NULL), "not estimable")
 })
+
+# pma_sof_unit() has exactly one destination as of v0.6: the Difference column
+# of a mean difference. It used to return "standard deviation units" for an
+# SMD, and the same value reached sof_table()'s `unit`, which labelled the ARM
+# columns with it -- so a control mean already re-expressed on the outcome's own
+# scale printed as "13.89 standard deviation units". Those columns are gone.
+test_that("pma_sof_unit() labels a mean difference and nothing else", {
+  md_unit <- function(sm, unit) {
+    pma_sof_unit(list(meta = list(sm = sm)), unit)
+  }
+  expect_identical(md_unit("MD", "days"), "days")
+  expect_identical(md_unit("MD", "  days  "), "days")
+  expect_null(md_unit("MD", NULL))
+  expect_null(md_unit("MD", "   "))
+
+  # An SMD's Difference cell is empty, so there is nothing left to label.
+  expect_null(md_unit("SMD", "days"))
+  expect_null(md_unit("RR", "days"))
+  expect_null(md_unit("RoM", "days"))
+})

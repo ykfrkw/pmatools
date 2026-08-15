@@ -870,7 +870,7 @@ step3_ui <- function(state = NULL) {
               # interest are not display preferences, they are inputs the
               # rating is read against, and they belong with the threshold
               # they mirror. The old convert_smd_to_or tick-box became the
-              # two-way input$sof_presentation radio there; Step 4 reads the
+              # three-way input$sof_presentation radio there; Step 4 reads the
               # guarded state$display mirror rather than the input, so the
               # rename did not reach it. chinn_invert lost its checkbox
               # entirely - it is now derived from the Step 2 direction answer
@@ -1358,9 +1358,10 @@ step3_server <- function(input, output, session, state) {
   # in, and on every outcome whose sm is not SMD/MD) means the effect itself,
   # which is also the widget's default.
   #
-  # "both" runs the conversion too: it shows the responder proportion beside
-  # the effect, so it needs the same responder proportion, the same rationale
-  # gate and the same direction as "responder" does. Everything that asks
+  # "both" runs the conversion too: it shows the responder proportion under
+  # the effect, on a second row of the same outcome, so it needs the same
+  # responder proportion, the same rationale gate and the same direction as
+  # "responder" does. Everything that asks
   # "is the conversion on?" must therefore see both values, and only the one
   # question of whether the effect's own scale is kept is decided separately.
   responder_mode <- shiny::reactive({
@@ -1368,10 +1369,11 @@ step3_server <- function(input, output, session, state) {
       identical(input$sof_presentation, "both")
   })
 
-  # The second half of the presentation choice: whether the row also keeps the
-  # outcome on its own scale. Separate from responder_mode() because they are
-  # different questions - one gates the responder proportion's inputs, the
-  # other only changes what sof_table() prints once it has them.
+  # The second half of the presentation choice: whether the outcome also keeps
+  # a row showing the effect on its own scale. Separate from responder_mode()
+  # because they are different questions - one gates the responder
+  # proportion's inputs, the other only changes how many rows sof_table()
+  # draws once it has them.
   keep_effect_scale_mode <- shiny::reactive({
     identical(input$sof_presentation, "both")
   })

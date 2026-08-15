@@ -485,18 +485,23 @@ export_bundle.pmatools_set <- function(x,
 
 # Plain-text mirror of the summary table, one row per outcome and in set order.
 # Built from the same BMJ cell helpers as the .docx so the two cannot drift.
+#
+# ONE CSV row per outcome, including an outcome the .docx draws on two rows
+# because it shows both the effect and the proportion of responders. A merged
+# cell has no meaning in CSV, so a two-row rendering here would have to either
+# repeat the outcome name, the participant count and the certainty on both rows
+# -- which reads as two outcomes to anything that groups by name -- or leave
+# them blank, which reads as missing data. The row keeps its shape instead and
+# the two scales share a cell, separated by the space every other embedded
+# newline in this file is flattened to.
 .sof_set_dataframe <- function(set, per = 1000, prediction = FALSE,
                                label_intervention = "intervention") {
   outcomes <- .set_outcome_list(set)
   # The .docx is drawn in the BMJ layout, so the plain-text mirror resolves the
   # responder presentation with the same number formatting.
   nf <- .bmj_number_format("bmj")
-  # The unit each row would be rendered with, so a row showing both scales
-  # labels its mean-scale line here exactly as the .docx does.
   responder <- .resolve_responder(outcomes, set$order, per,
-                                  big_mark = nf$big_mark, ci_sep = nf$ci_sep,
-                                  unit = .display_arg_from_outcomes(outcomes,
-                                                                    "unit"))
+                                  big_mark = nf$big_mark, ci_sep = nf$ci_sep)
   rows <- lapply(set$order, function(nm) {
     g <- outcomes[[nm]]
 
@@ -529,13 +534,13 @@ export_bundle.pmatools_set <- function(x,
       args <- responder[[nm]]$args
       list(baseline_risk     = args$baseline_risk,
            chinn_invert      = isTRUE(args$chinn_invert),
-           keep_effect_scale = isTRUE(arm$both))
+           keep_effect_scale = isTRUE(args$keep_effect_scale))
     }
     v <- .bmj_row_values(nm, g, per = per, prediction = prediction,
                          follow_up = g$follow_up, unit = g$unit,
                          cer_str = arm$cer, ier_str = arm$ier,
                          label_intervention = label_intervention,
-                         chinn = chinn, arm_note = arm$note)
+                         chinn = chinn)
     data.frame(
       order            = which(set$order == nm),
       outcome          = nm,

@@ -2542,16 +2542,21 @@ pma_sof_follow_up <- function(x) {
   if (grepl("^follow[ -]?up", x, ignore.case = TRUE)) x else paste0("Follow-up: ", x)
 }
 
-# Unit for the Difference column of a continuous outcome.
+# Unit for the Difference column of a continuous outcome, and for nothing else.
 #
 # The unit the reviewer typed describes the measurement scale, so it is the
-# right label for a mean difference. A standardized mean difference is not on
-# that scale, so its difference is labelled in standard deviation units
-# whatever the reviewer typed; a ratio measure has no unit at all (the
-# difference is printed "per 1000") and gets NULL.
+# right label for a mean difference, which is on that scale. Everything else
+# gets NULL: an SMD's Difference cell is empty as of v0.6 (a standard-deviation
+# string there only restates the Effect column), and a ratio measure has no
+# unit at all, its difference being printed "per 1000".
+#
+# This used to return "standard deviation units" for an SMD, and the same value
+# reached sof_table()'s `unit`, which then labelled the ARM columns with it: a
+# control mean already re-expressed on the outcome's own scale printed as
+# "13.89 standard deviation units". Those columns are gone, so the mislabel
+# went with them, and `unit` now has exactly one destination.
 pma_sof_unit <- function(g, unit = NULL) {
   sm <- as.character((g$meta$sm %||% "")[1])
-  if (identical(sm, "SMD")) return("standard deviation units")
   if (!identical(sm, "MD")) return(NULL)
   if (is.null(unit) || length(unit) != 1L || is.na(unit)) return(NULL)
   unit <- trimws(as.character(unit))

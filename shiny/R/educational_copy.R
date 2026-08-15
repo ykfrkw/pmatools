@@ -126,11 +126,11 @@ EDU_COPY <- list(
   # bodies: it was a recitation of what Core GRADE 6 ranks, and the reviewer
   # answers nothing with it.
   config_tab = list(
-    # The third option prints the two presentations side by side, so Core
-    # GRADE 6's agreement check is reachable and the old "not side by side"
-    # caveat is no longer true. What none of the three touches is the rating,
-    # and a reviewer picking between them here has every reason to think it
-    # might.
+    # The third option prints the two presentations on two rows of one
+    # outcome, so Core GRADE 6's agreement check is reachable and the old "not
+    # side by side" caveat is no longer true. What none of the three touches is
+    # the rating, and a reviewer picking between them here has every reason to
+    # think it might.
     continuous_departure = paste0(
       "Core GRADE 6 recommends showing the effect and the responder ",
       "proportion together; the third option does that. None of the three ",
