@@ -1146,6 +1146,19 @@
 
 ## Bug fixes
 
+* **The Shiny app's Run analysis button did nothing at all.** On a fresh
+  session the reviewer could load data, reach Step 2 with every required field
+  already filled from the sample defaults, press Run analysis, and get no
+  result, no message, no spinner and nothing in the log. `arm_assignment_ui` is
+  the only source of `experimental_label` and `control_label`, and it lives
+  inside the "Data mapping" accordion panel, which has been closed on build
+  since the sidebar began asking one question at a time. Shiny suspends a
+  hidden output, so the two selects were never created, `input$experimental_
+  label` stayed `NULL`, and the analysis reactive hit the one exit in it that
+  returned `NULL` without saying anything. Opening the panel by hand was the
+  only way through, and nothing on screen suggested it. The output now renders
+  regardless of visibility, and that exit reports unset or duplicated arms
+  instead of returning in silence.
 * Imprecision's large-effect note called every ratio-scale effect a "relative
   risk reduction", so a pooled odds ratio of 2.33 — an increase — was reported
   as "relative risk reduction 57%". The magnitude was right (the statistic is

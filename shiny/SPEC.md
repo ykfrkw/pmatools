@@ -363,6 +363,21 @@ One `pma_card("Model configuration")` holding a `bslib::accordion(multiple = FAL
   longer depends on `state$ma`: Data mapping used to open alongside Outcome
   until a pooled object existed, which made the two together longer than a
   laptop viewport on the very first visit.
+- **`arm_assignment_ui` MUST carry `outputOptions(suspendWhenHidden = FALSE)`.**
+  It is the only source of `experimental_label` and `control_label`, it lives in
+  a panel that is never open on build, and the `ma` reactive bails on NULL arm
+  labels. Under Shiny's default the closed panel suspends the output, the two
+  selects are never created, and Run analysis does nothing at all — no result,
+  no message, no log. The other two `uiOutput`s in closed panels do not need the
+  exemption and do not have it: `sm_cont` falls back to `run_ma()`'s own default
+  and `subgroup_order` is guarded on `NULL`, so neither can stop an analysis.
+- **No exit from the `ma` reactive is silent once the reviewer has asked for a
+  run.** The arm-label guard used to `return(NULL)` saying nothing, which is
+  what turned the suspension above into an app with an inert button. It now
+  names what is wrong — arms unset, or the same arm value picked twice — under
+  the same `!auto || clicked` condition the required-fields branch uses, so a
+  first page load stays quiet and a reviewer who pressed Run analysis never
+  gets nothing back.
 - **`multiple = FALSE` is load-bearing for `www/required-fields.js`.** It is
   what puts `data-bs-parent` on every `.accordion-collapse`, and that attribute
   is how Bootstrap closes the open sibling. The reveal in §3.3.6 therefore goes

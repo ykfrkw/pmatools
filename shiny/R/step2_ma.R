@@ -474,6 +474,16 @@ step2_server <- function(input, output, session, state) {
                          choices = arms, selected = ctrl_selected)
     )
   })
+  # This output is the only source of input$experimental_label and
+  # input$control_label, and it lives inside the "Data mapping" accordion
+  # panel, which is closed every time Step 2 is built (open_panels above, and
+  # multiple = FALSE). Under Shiny's default the panel being closed suspends
+  # the output, the two selects are never created, and the `ma` reactive below
+  # bails on NULL arm labels -- so Run analysis did nothing whatsoever, with no
+  # toast, no spinner and no log. Rendering regardless of visibility is what
+  # keeps the analysis reachable without the reviewer first opening a panel
+  # they have no reason to open.
+  shiny::outputOptions(output, "arm_assignment_ui", suspendWhenHidden = FALSE)
 
   # Summary measure for continuous outcomes. RoM (ratio of means) is only
   # meaningful when every mean value is positive, so include it conditionally.
@@ -784,6 +794,32 @@ step2_server <- function(input, output, session, state) {
     d$treat <- d[[args$col_treat]]
     if (is.null(args$experimental_label) || is.null(args$control_label) ||
         identical(args$experimental_label, args$control_label)) {
+      # This was the one exit in this reactive that said nothing at all, and a
+      # suspended arm_assignment_ui (see outputOptions above) turned that
+      # silence into an app whose Run analysis button was inert. The suspension
+      # is fixed at its source; this message is what makes the next one visible
+      # rather than inert, and it is the only feedback the reviewer gets when
+      # they pick the same arm value twice.
+      #
+      # Quiet on a first page load, for the reason the required-fields branch
+      # above is: auto defaults TRUE and run_ma has not been clicked, so the
+      # reviewer is told off only once they have actually asked for a run.
+      if (!auto || clicked) {
+        same_arm <- !is.null(args$experimental_label) &&
+          identical(args$experimental_label, args$control_label)
+        shiny::showNotification(
+          if (same_arm) {
+            paste0("The intervention and control arms are both set to \"",
+                   args$experimental_label, "\". Pick two different arm ",
+                   "values under Data mapping.")
+          } else {
+            paste0("The analysis did not run: the intervention and control ",
+                   "arms are not set. Open Data mapping in the sidebar and ",
+                   "pick them.")
+          },
+          id = "step2_arm_assignment", type = "warning", duration = 8
+        )
+      }
       return(NULL)
     }
     # Guard: when the user just swapped data, input$experimental_label /
