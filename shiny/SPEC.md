@@ -1607,6 +1607,95 @@ is now `PMA_SOF_CER_EER_NOTE`, written into the SoF footer by
 `pma_sof_add_notes()`, so it travels into the exported .docx — which it never
 did as page text.
 
+#### 3.4.14 Rare events in Step 3
+
+> **Status: specified, not yet built.** Step 3 currently contains no reference
+> to the rare-event workflow at all.
+
+**The gap is not that Step 3 rates the wrong number.** When the reviewer accepts
+the rare-event workflow, `state$ma` already *is* `state$rare$primary` — the
+sparse-data fit, `BB_CR` by default — so every domain is rated on it. The gap is
+that Step 3 does not know it: it never says which method produced the estimate,
+never says the rating would survive a different one, and runs three domain
+computations whose assumptions the data has already broken.
+
+**The governing rule: rare mode changes what is computed and what is said, and
+never changes a rating by itself.** Core GRADE has five domains and sparse data
+does not earn a sixth; what it earns is arithmetic that is valid on the data at
+hand and a record of how much the answer depended on a method choice. Every
+change below is either a correction to a computation or a fact added to the
+record — none of them moves a judgment on their own.
+
+**What Step 3 reads.** `state$rare_diagnostics` (the `pma_rare_diagnostics`
+object), `state$rare_mode_active`, `state$rare_primary_method`, and
+`state$rare` — the whole fitted suite, not just the primary. The suite is the
+part that matters most and is currently used for nothing after Step 2.
+
+**1. The method is named, once, where the rating is set up.** The Configuration
+tab states that the pooled estimate comes from the rare-event workflow and which
+method produced it, and the method id is stamped onto the banked outcome so the
+exported record carries it. A reader of the Summary of Findings cannot otherwise
+tell a beta-binomial estimate from an inverse-variance one.
+
+**2. Imprecision: the rule is unchanged, the information size and the
+sensitivity are not.** Whether the confidence interval crosses the threshold
+stays exactly Core GRADE's question.
+
+- **The optimal information size switches to an event basis.** An OIS in
+  participants is the wrong denominator when the events are what is scarce; with
+  a 0.5% event rate a "sufficiently large" participant count can carry a dozen
+  events. When `rare_flow` is set the OIS seed is computed on total events and
+  the panel says which basis it used. Rating against a participant-based OIS on
+  sparse data is not a stricter reading of Core GRADE, it is a wrong one.
+- **The suite becomes a sensitivity analysis for the rating, not just for the
+  estimate.** For each method in `state$rare`, ask the same crossing question the
+  primary was asked, and report whether the answer is unanimous. Unanimity is a
+  fact worth having; disagreement means the imprecision judgment rests on the
+  method choice and the reviewer is told which methods disagree and by how much.
+  This costs no new statistics — every fit already exists.
+- **One arm with no events at all** (`one_arm_total_zero`) has no finite odds
+  ratio and no interval to compare with a threshold. Imprecision is
+  not-assessable, said in those words, and the domain's confirmation is what
+  carries the reviewer's decision.
+
+**3. Inconsistency: the I² proxy is withdrawn, not reinterpreted.** The
+automated path uses I² as a statistical proxy for Core GRADE 3's first question.
+On sparse data τ² is badly estimated and I² inherits that, so under `rare_flow`
+the proxy reports not-assessable rather than a number the reviewer would read as
+evidence. The manual flowchart is unchanged and is the route that still works;
+`incon_confirm_na` is the existing gate and needs no new mechanism.
+
+**4. Publication bias: rare data takes the k < 10 route, whatever k is.** Egger's
+test loses validity on sparse binary data, and Core GRADE 4 Fig 5 already has a
+branch for "Egger is not available to you" — the one k < 10 takes, which asks
+about registries and unpublished studies instead. Under `rare_flow` the wizard
+takes that branch at any k, and the funnel status dot is ⚪ (§3.4.12). This adds
+no node to Fig 5; it routes to one the figure already has, for the reason the
+figure already has it.
+
+**5. Absolute effects: one denominator per outcome, chosen from the data.** The
+per-N unit is already reviewer-selectable and already flows through one
+formatter to every string in Step 3 and into `sof_table()`
+(`step3_per_label()` / `display_per_state()`), so nothing new is needed but a
+better default: under `rare_flow`, seed the unit from the control-arm event rate
+so the smaller of the two arm risks still has a significant figure, instead of
+defaulting to 1,000 and printing `0 per 1,000` against `0 per 1,000`.
+
+**The threshold moves with it.** The decision threshold is stated in the same
+per-N unit, and it must be the same one, for the reason §3.4.8b gives about
+trim-and-fill: an effect and the threshold it is judged against on two different
+scales is the failure mode this app has already had once.
+
+**6. The continuity correction needs no Step 3 change, only a record.** The
+`incr` input is Step 2's, and the suite's methods are correction-free by
+construction. What Step 3 owes the reader is the statement that no 0.5 was added
+— a 0.5 correction biases toward the null and would otherwise be an invisible
+assumption behind every downstream number.
+
+**Not done, deliberately:** no rare-event domain, no automatic downgrade for
+sparse data, and no change to any domain's decision rule. Sparse data makes an
+estimate harder to trust, and Core GRADE already has the domain for that.
+
 ### 3.5 Step 4 — Export
 
 #### 3.5.1 Step header copy
