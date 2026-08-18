@@ -196,10 +196,16 @@ body with `showModal(modalDialog(...))`, **once per session**, before the
 reviewer touches anything.
 
 It carries the one claim in the app that is about the work *around* the
-analysis: statistical pooling is a small part of a systematic review, which
-also needs a prespecified and pre-registered protocol, a comprehensive search,
-dual independent screening and extraction, and risk-of-bias assessment, all
-completed before the analysis.
+analysis: statistical pooling is a small part of a systematic review and
+meta-analysis (SR&MA), which also needs a prespecified and pre-registered
+protocol, a comprehensive search, dual independent screening and extraction,
+and risk-of-bias assessment, all completed before the analysis.
+
+**The first sentence names the whole activity, then abbreviates it.** It reads
+"a systematic review and meta-analysis (SR&MA)", not "a systematic review":
+the modal is the one place the app says what the reviewer is doing, and the
+sentences after it already use `SR&MA`, so the expansion has to come first or
+the abbreviation arrives undefined.
 
 Two rules:
 
@@ -853,6 +859,129 @@ Resulting judgment: {{judgment}}
 - `radioButtons("pubias_unpublished", "Are unpublished studies documented in registries or FDA?", c("No" = "no", "Yes" = "yes", "Unsure" = ""))` *(k < 10 only)*
 - `selectInput("pubias_override", "Override Publication bias judgment", same options)`
 
+#### 3.4.8a Missing results (RoB-ME) — the status dot's algorithm
+
+> **Status: specified, not yet built.** This section and the status-dot bullets
+> in §3.4.12 are the contract; no dot is rendered yet.
+
+The dot on the RoB-ME tab (§3.4.12's tabset) answers one question: **how far
+from the observed pooled effect would the missing studies have to lie before the
+conclusion changes?** Far means the missing evidence cannot overturn the result;
+near means it can. Nothing here rates the domain — RoB-ME is not part of the
+Core GRADE algorithm and the tab already says so.
+
+**Inputs.** `state$pubias_missing` (`studlab`, `n`, `results_known`, `source`)
+and `state$ma`. The threshold `T` is the Core GRADE threshold already chosen for
+the outcome (null or MID, §3.4.10a); no second threshold is introduced.
+
+**Imputing a missing study's standard error.** Borrow from the observed studies
+rather than assuming an SD, a control-group risk or an allocation ratio — none
+of which exist for every effect measure:
+
+```
+c_med = median(seTE_i * sqrt(n_i))     over observed studies
+se_j  = c_med / sqrt(n_j)              n_j blank -> median(seTE_i)
+```
+
+`se ∝ 1/sqrt(n)` holds for SMD, MD, log OR and log RR alike, so one formula
+covers every measure the app pools. This is the reviewer's "assume the same SD"
+generalised to measures that have no SD.
+
+**The tipping point is closed-form.** Assume the `m` missing studies share one
+effect `δ`, and **hold `tau2` at its observed value** — placing every missing
+study at a single `δ` would otherwise shrink it artificially, which flatters the
+result:
+
+```
+W_obs = 1/seTE_pooled^2
+w_j   = 1/(se_j^2 + tau2)          W_miss = sum(w_j)
+TE_new(δ) = (W_obs*TE_obs + W_miss*δ) / (W_obs + W_miss)
+se_new    = 1/sqrt(W_obs + W_miss)          -- independent of δ
+```
+
+`se_new` not depending on `δ` is what makes this cheap enough to redraw on every
+edit of the table: the interval's width is constant, `TE_new` is linear in `δ`,
+and the crossing solves directly as
+`δ* = (W_tot*(T ± 1.96*se_new) − W_obs*TE_obs) / W_miss`. No root-finding.
+
+**Ordered decision, cheapest and most decisive first:**
+
+```
+1. m = 0                                            -> 🟢
+2. no prediction interval (tau2 = 0, k < 3) or
+   se imputation impossible                         -> ⚪
+3. δ = TE_obs already changes the conclusion        -> 🔴  (precision alone)
+4. no δ changes the conclusion                      -> 🟢  (cannot be overturned)
+5. direction gate: δ* outside the suspected region  -> 🟢
+6. magnitude: δ* against the intervals below        -> 🔴 / 🟡 / 🟢
+```
+
+**Steps 3 and 4 MUST precede step 6.** Adding studies shrinks `se_new`, so a
+body of evidence can cross the threshold on precision alone, with the missing
+studies reporting exactly what the observed ones did; step 6 asked on its own
+would call that case reassuring.
+
+**Step 6 is anchored on the prediction interval, not on a fixed effect size.**
+
+| `δ*` lies | dot | reading |
+|---|---|---|
+| inside the pooled 95% CI | 🔴 | an ordinary missing result changes the conclusion |
+| outside the CI, inside the 95% prediction interval | 🟡 | a plausible missing result changes it |
+| outside the prediction interval, or unreachable | 🟢 | only a study unlike any observed changes it |
+
+A fixed cutoff in SMD units was considered and rejected: SMD does not exist for
+a binary outcome, so it cannot be the app's one rule. The prediction interval is
+already computed, needs no cutoff, and works on whatever scale the model was fit
+on. It is conservative in the safe direction — `δ*` is the *mean* of `m` studies
+but is judged against the spread of a single one, which errs toward 🔴.
+
+**Step 5 makes direction a gate, not a second scale.** `results_known` records
+*why* a result is missing, which is what RoB-ME is actually about, and three of
+its five labels also imply *which way* the missing effect lies. With the null at
+0 (log scale for ratio measures) and `s = sign(TE_obs)`:
+
+| `results_known` | mechanism | suspected region for `δ` |
+|---|---|---|
+| Not measured | none | unconstrained, but step 6 **caps at 🟡** |
+| Reported but data not extractable | unknown | unconstrained |
+| Measured but not reported (suspect P > 0.05) | present | null-ward, `δ*s < TE_obs*s` |
+| Measured but not reported (suspect P < 0.05) | present | further out, `δ*s > TE_obs*s` |
+| Measured but not reported (opposite direction) | present | `δ*s < 0` |
+| free text | unknown | unconstrained |
+
+Take the **union** across rows. One unconstrained row makes the union everything
+and the gate never fires, which is the conservative answer and the right one:
+an unconstrained row means no direction can be ruled out.
+
+The gate earns its place on cases like this one: the missing results are
+suspected null-ward, but `δ*` is further from the null than the observed effect.
+Nothing the missing studies could plausibly report moves the conclusion **in the
+direction they are suspected of lying**, so the dot is 🟢 whatever its magnitude
+would have said. This is the direction-of-bias step of the Risk of bias
+flowchart, asked of missing evidence instead of high-RoB evidence.
+
+**`Not measured` is capped at 🟡 and nothing else is.** An outcome that was never
+assessed cannot have been suppressed for what it showed, so its absence is
+incompleteness rather than bias, and incompleteness does not earn the strongest
+warning the tab can give. `Reported but data not extractable` — the label
+auto-seeded onto every NA-TE row, and therefore the most common one — is
+deliberately **not** capped: "not significant, data not shown" is textbook
+selective reporting and the label cannot rule it out. The default behaviour is
+therefore magnitude-driven, which is what the dot is for.
+
+> **Open: which scale the trim-and-fill comparison runs on.** The reviewer asked
+> for the original-versus-adjusted comparison in natural units rather than log.
+> The existing machinery it would share (`PMA_ROB_INFLATION_THRESHOLD`,
+> `.pubias_trimfill_inflation()`, the direction-of-bias rules) measures
+> magnitude as `|TE|`, i.e. distance from **zero**, which is distance from the
+> null only on the internal scale. On the natural scale a ratio measure's null
+> is 1, so `|OR| = 2.0` and `|OR| = 0.5` — equidistant from the null in fact —
+> come out four-fold apart, and the inflation ratio changes with the scale as
+> well. Natural units therefore need `|TE − null|` rather than `|TE|`, which is
+> a different formula from the one the Risk of bias tab shares. Until this is
+> decided the trim-and-fill dot is unimplemented; the funnel and RoB-ME dots do
+> not depend on it.
+
 #### 3.4.9 Final certainty summary
 
 Below the accordion, a `pma-card` with:
@@ -1225,6 +1354,32 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
   only toggles `display`, so the outputs are built once and survive every
   switch. `pubias_missing_editor` keeps
   `outputOptions(suspendWhenHidden = FALSE)`.
+  - **Each tab title carries a status dot, and the dot rates nothing.** A
+    reviewer who never opens a tab never learns that its diagnostic disagreed
+    with the answer they gave the wizard, and these three are reference material
+    precisely because Core GRADE 4 Fig 5 has no node for any of them. The dot is
+    a nudge toward looking, not an input: no dot reaches `assess_pubias()` or
+    `grade_meta()`, and the wizard's answers stay the only thing that rates the
+    domain.
+    - **Four states, and the fourth is not a colour.** 🟢 / 🟡 / 🔴 say what the
+      diagnostic found; ⚪ says it was never computed, with the reason as its
+      tooltip. Three colours alone make "not computed" read as "nothing wrong",
+      which is backwards for every tab here: each one declines to compute on
+      exactly the sparse data where reporting bias is most likely.
+    - **Funnel** is Egger's p — 🟢 at `p >= 0.05`, 🟡 at `0.01 <= p < 0.05`, 🔴 at
+      `p < 0.01`, ⚪ when Egger did not run. It does not run below the existing
+      `k >= 10` gate, **and it does not run on rare-event data**: Egger loses
+      validity on sparse binary data, so a `rare_flow` from
+      `rare_event_diagnostics()` forces ⚪ rather than letting an invalid
+      p-value paint a 🔴.
+    - **Missing results (RoB-ME)** is the tipping-point algorithm in §3.4.8a.
+    - **Trim-and-fill** is the direction-of-bias verdict read off the pair
+      (original pooled effect, trim-and-fill adjusted effect): `not_serious` is
+      🟢, one level is 🟡, two levels is 🔴, and the panel's existing `k >= 10`
+      gate is ⚪. It is the same check the Risk of bias tab runs on the low-RoB
+      subset, so the 20% figure stays `PMA_ROB_INFLATION_THRESHOLD` and is not
+      duplicated here. **The scale the comparison runs on is unsettled and this
+      dot is unimplemented until it is** — see §3.4.8a's closing note.
   - The tabset is **not gated on a wizard node**. All three are computable the
     moment `state$ma` exists and all three are reference material rather than
     answers; gating them meant the funnel appeared only at `q3` and the RoB-ME

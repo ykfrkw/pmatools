@@ -1591,6 +1591,76 @@ The object then carries `$meta` (rated analysis), `$meta_full` (all studies), `$
 
 **Two index spaces, one mapping.** The Fig 2 maths runs in **k-space** (length `meta_obj$k`, the estimable studies), whereas `rob_overrides` keys and `update.meta(subset = )` live in **studlab space** (length `meta_obj$studlab`). The two differ whenever {meta} drops a study from the pool — a trial with missing results, a double-zero trial under `method = "Inverse"`. `R/domain_rob.R` resolves the mapping **once per `assess_rob()` call** in `.rob_alignment()`, and `.rob_expand()` / `.rob_contract()` move vectors between the spaces, so nothing re-derives it. The resolver never guesses: it tries `length(studlab) == k`, then `!is.na(TE)`, then `is.finite(TE)`, and unless one of them reproduces exactly `k` rows it returns `NULL` and the caller keeps its existing abort/skip behaviour. `attr(<rob domain row>, "high_idx")` is studlab-aligned, which is what `update.meta(subset = )` needs.
 
+### 5.1a Risk of bias — the drawing (`inst/figures/rob.svg`)
+
+> **Status: specified, not yet built.** This section is the contract the figure
+> is being changed to meet; `inst/figures/rob.svg`, `.ROB_FIG2_NODE_IDS` and the
+> two `flow_path` emit sites named below still describe the previous shape. They
+> move together or not at all.
+
+The figure is not decoration: `.flowchart_rob()` emits a `flow_path` fact naming
+the node ids the assessment traversed, `shiny/www/flowchart.js` lights them, and
+`?grade_flowcharts` renders the same file unlit. `.ROB_FIG2_NODE_IDS`
+(`R/domain_rob.R`) and `tests/testthat/test-flowchart-nodes.R` hold the constant
+and the SVG to a 1:1 correspondence in both directions, so a branch added
+without being drawn fails the build. **That safety net means the SVG, the
+constant and every `flow_path` emit site move in one commit or none.**
+
+**The figure follows the source's shape, and the five rules are not leaves.**
+Below "Check the direction of bias" Core GRADE 4 Fig 2 has exactly two boxes and
+two leaves: risk of bias may be responsible for the apparent effect *or* for the
+apparent lack of one → **rate down**; there is an apparent effect and bias would
+have decreased it *or* there is no apparent effect and bias would have increased
+it → **do not rate down**. pmatools draws that structure. The five direction
+rules sit **above** those boxes as the mechanism deciding which one is reached —
+rules 1–2 land on the do-not-rate-down box, rules 3–5 on the rate-down box, the
+correspondence `R/domain_rob.R` has always documented. Enumerating the rules as
+six leaves, which the figure did up to this change, erased the source's shape
+and left the reader without the two sentences that explain what the branch
+means.
+
+**Rule 5's second level is an annotation on the single red leaf, not a leaf of
+its own.** The source's leaves are two — "rate down" and "do not rate down" —
+and splitting the red one to carry pmatools' −2 would move the drawing away from
+the source in the act of moving it closer. The leaf therefore stays single and
+carries the note; §5.1's `.ROB_TWO_LEVEL_NOTE` remains the full statement in
+prose, so the reader who acts on the judgment always meets the reasoning even
+though the figure only flags it.
+
+**The "appreciable evidence = no" edge is deleted, because it is unreachable.**
+Reaching the non-dominated branch at all means `w_high < rob_dominant_threshold`
+(default 0.55), hence a low-RoB weight share above 0.45; Core GRADE 4 puts the
+appreciable threshold at 35–45%. Across the whole range the source discusses —
+up to a 65% dominance threshold, leaving a 35% low-RoB share — the answer is
+always yes, so the node keeps its question and loses its second answer.
+
+Two `flow_path` emit sites used that edge and both re-route to the **green leaf**
+through `edge-appreciable-yes`:
+
+| case | why it was on the "no" edge | where it goes |
+|---|---|---|
+| `n_high == 0` | mislabelled: with no high-RoB study the evidence is *entirely* low-RoB, which is the strongest possible yes | the yes edge, correcting the route as well as the drawing |
+| `!assessable` (the high-vs-low comparison cannot be made) | the magnitude question was never asked | the yes edge, **keeping its own edge id** |
+
+The not-assessable route keeps a distinct id rather than being folded into
+`edge-magnitude-similar`: "the question could not be asked" and "the question was
+asked and the answer was similar" reach the same leaf but are not the same
+finding, and `flow_path` is the record of which one happened. The distinction
+lives in the id and in the notes, not in a shape the source does not have.
+
+**Node ids are added, never replaced.** `pma-rob-leaf-rule1`…`rule5`, `rulena`
+stay as the intermediate layer and the two source leaves get new ids, so a lit
+path shows both which rule fired and which leaf it reached — more than the
+source figure records, without changing what the figure looks like.
+
+**The figure carries no footnote, and the app carries the claim instead.** The
+"pmatools' operationalisation, not a reproduction" footnote is removed. It was
+the only place *in the drawing* that said the five rules and the −2 are
+pmatools' own, and the closer the figure gets to the source the more that claim
+is needed — so it moves to the prose beside the figure rather than disappearing.
+`.ROB_DIRECTIONAL_NODE_NOTE` and `.ROB_TWO_LEVEL_NOTE` are unaffected: they are
+in the exported judgment notes and were never what the footnote duplicated.
+
 ### 5.2 Inconsistency — BMJ Core GRADE 3 flowchart (v0.2)
 
 > **Design rationale.** v0.2 preserves the BMJ Core GRADE 3 flowchart implemented in v0.1.0. The only enhancement is that **Step 2's clinical decision boundary uses ±Threshold** when supplied (instead of always using null = 0). I², τ², and Q-test are supplementary context only — they never drive the judgment in the manual flowchart path. PI is **not** used in the decision logic. Per-study CIs are also not used (CI overlap is judged clinically by the user in manual mode, or proxied by I² in auto mode).
