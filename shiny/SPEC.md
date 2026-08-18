@@ -969,18 +969,39 @@ deliberately **not** capped: "not significant, data not shown" is textbook
 selective reporting and the label cannot rule it out. The default behaviour is
 therefore magnitude-driven, which is what the dot is for.
 
-> **Open: which scale the trim-and-fill comparison runs on.** The reviewer asked
-> for the original-versus-adjusted comparison in natural units rather than log.
-> The existing machinery it would share (`PMA_ROB_INFLATION_THRESHOLD`,
-> `.pubias_trimfill_inflation()`, the direction-of-bias rules) measures
-> magnitude as `|TE|`, i.e. distance from **zero**, which is distance from the
-> null only on the internal scale. On the natural scale a ratio measure's null
-> is 1, so `|OR| = 2.0` and `|OR| = 0.5` — equidistant from the null in fact —
-> come out four-fold apart, and the inflation ratio changes with the scale as
-> well. Natural units therefore need `|TE − null|` rather than `|TE|`, which is
-> a different formula from the one the Risk of bias tab shares. Until this is
-> decided the trim-and-fill dot is unimplemented; the funnel and RoB-ME dots do
-> not depend on it.
+#### 3.4.8b The scale the trim-and-fill comparison runs on
+
+The direction-of-bias rules measure magnitude as `|TE|` and zones as `±T`, both
+of which mean "distance from the null" **only on a scale whose null is zero**.
+Reading the original-versus-adjusted comparison off the raw summary measure
+would break that for every ratio: an odds ratio's null is 1, so `|OR| = 2.0` and
+`|OR| = 0.5` — equidistant from the null in fact — come out four-fold apart.
+
+**So the comparison runs on whichever scale puts the null at zero, and for a
+binary outcome that is the absolute risk difference the app already computes.**
+
+| outcome | scale the check runs on | why |
+|---|---|---|
+| binary (OR, RR, and any measure on a `metabin`) | absolute risk difference per 1,000 at the outcome's baseline risk `p0` | null is 0, and it is the scale the reviewer's threshold is already stated in |
+| continuous difference measures (MD, SMD) | the internal scale unchanged | already a difference with the null at 0 |
+| RoM | the internal (log) scale | a ratio on a continuous outcome has no event rate to convert to; log puts its null at 0 |
+
+No new arithmetic is introduced for the binary row. `step3_ard_equivalence()` /
+`step3_p1_from_ratio()` already convert an effect to an event rate at `p0`, the
+absolute difference is `p1 − p0`, and `.threshold_candidates()` already carries
+the threshold as `absolute1000`. The check therefore compares two absolute risk
+differences against a threshold stated in the same units, which is also the form
+the Configuration tab shows the reviewer (§3.4.10a) — the dot and the number the
+reviewer read are on one scale, not two.
+
+`PMA_ROB_INFLATION_THRESHOLD` is unchanged and still shared: it is a *ratio* of
+magnitudes, so it transfers to any scale whose null is zero without being
+restated.
+
+**Where no baseline risk is available** — a `metabin` whose control arm gives no
+usable `p0`, or a reviewer who has cleared it — the dot is ⚪ rather than falling
+back to the internal scale. A silent scale change is what this section exists to
+prevent.
 
 #### 3.4.9 Final certainty summary
 
@@ -1008,6 +1029,8 @@ Rendered by `.responder_block()` (`R/step3_threshold.R`), **below** the Decision
   - `textAreaInput("responder_p0_rationale", ...)` when the default is replaced; `pma_confirm_checkbox("responder_p0_confirm", ...)` when it is not. It is built with the **shared confirmation box** (§3.4.13), not a bare `checkboxInput()`: this is the Configuration tab's second Next gate and has to look like the first one. It stays where it is — between `EDU_COPY$config_tab$responder_default` and `threshold_label` — because it and the rationale textarea are the two arms of one `conditionalPanel` pair, so the box reads as the alternative to justifying a change, which is what it is.
   - `textInput("threshold_label", "Definition of the threshold of clinical interest (free text)")`
   - `output$chinn_direction_echo` — `chinn_invert` is derived from the Step 2 direction answer, not asked again.
+**The threshold-equivalence summary is not a question and must stop looking like one.** The block under the threshold input that reads `Increase: 156 per 1,000 -> 206 per 1,000, equivalent OR 1.404` (and its decrease mirror) is derived entirely from the number typed directly above it: there is nothing in it to answer. It currently carries a left accent on a filled ground — the wizard-question costume — which is what makes a reviewer read it as one more question in the same column as Publication bias's. It becomes body copy under its input, per §3.4.13, and the accent it gives up goes to `threshold_confirm`, which is the thing on that tab that genuinely has to be answered.
+
 - `output$responder_p0_badge` renders `confirmed` / `unconfirmed assumption` beside the section heading, and **nothing at all** on the `"effect"` route, where there is no assumption to confirm.
 - `input$sof_presentation` is registered in `PMA_OUTCOME_INPUT_IDS$configuration` (`R/ui_helpers.R`), so a change of outcome clears it. An id missing from that list is an id whose stale answer survives an outcome change.
 - `responder_mode()` in `step3_server()` is the single definition of "the responder route was chosen" and is TRUE for `"responder"` and `"both"` alike; the Next gate, `sof_convert_args()` and the `state$display$convert` mirror all read it rather than the input. `keep_effect_scale_mode()` beside it decodes the one question that separates the two, and is read only by `sof_convert_args()`.
@@ -1361,6 +1384,12 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
     a nudge toward looking, not an input: no dot reaches `assess_pubias()` or
     `grade_meta()`, and the wizard's answers stay the only thing that rates the
     domain.
+    - **It must not be the domain tabs' mark.** The Step 3 domain tabs already
+      carry `pma-tab-mark` — a `●` meaning "opened, not yet confirmed", i.e.
+      *the reviewer's progress*. These dots mean *what a diagnostic found*, on a
+      tabset nested inside one of those tabs, so one glyph would carry two
+      unrelated meanings a few pixels apart. The status dot takes its own class
+      and its own shape; `pma-tab-mark` is untouched.
     - **Four states, and the fourth is not a colour.** 🟢 / 🟡 / 🔴 say what the
       diagnostic found; ⚪ says it was never computed, with the reason as its
       tooltip. Three colours alone make "not computed" read as "nothing wrong",
@@ -1378,8 +1407,8 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
       🟢, one level is 🟡, two levels is 🔴, and the panel's existing `k >= 10`
       gate is ⚪. It is the same check the Risk of bias tab runs on the low-RoB
       subset, so the 20% figure stays `PMA_ROB_INFLATION_THRESHOLD` and is not
-      duplicated here. **The scale the comparison runs on is unsettled and this
-      dot is unimplemented until it is** — see §3.4.8a's closing note.
+      duplicated here. It runs on the absolute risk scale for a binary outcome —
+      see §3.4.8b, which is also what makes ⚪ reachable without a baseline risk.
   - The tabset is **not gated on a wizard node**. All three are computable the
     moment `state$ma` exists and all three are reference material rather than
     answers; gating them meant the funnel appeared only at `q3` and the RoB-ME
@@ -1900,6 +1929,36 @@ saying a click was required. `PMA_OUTCOME_CONFIRM_IDS` is the canonical list of
 all seven, and `test-confirm-checkbox.R` asserts against the **built UI** that
 the boxed set and that list are the same set, so a confirmation added as a
 bare checkbox fails rather than ships.
+
+**A left accent on a filled ground means "answer this", and nothing else on a
+tab may wear it.** The accent is the wizard question's (§3.4.12): a
+`hsl(var(--primary))` left border on a `hsl(var(--muted))` ground. A read-only
+block that borrows the shape is read as a question, and a required block that
+is lighter than the read-only blocks around it is read as optional — the tab
+then teaches the reviewer the opposite of what it means, and no amount of
+wording inside either block undoes it.
+
+> **Status: specified, not yet built.** The Configuration tab currently
+> contradicts this rule, measured on the deployed app: the read-only
+> threshold-equivalence summary sits on a solid `rgb(245,245,245)` ground
+> behind a **4px** left accent, while `.pma-confirm` around `threshold_confirm`
+> — the gate that actually blocks Next — has a near-transparent
+> `rgba(15,23,41,0.05)` ground and a **1px** translucent border. The heaviest
+> block on the tab is the one with nothing to answer and the lightest is the
+> one that must be answered. This is why the REQUIRED pill added with the
+> shared helper did not settle the question the reviewer raised: the pill was
+> never the problem, the ranking was.
+
+The rule is therefore two-directional, and both halves ship together:
+
+- **Every required answer carries the same treatment, and it outranks every
+  read-only block on its tab.** `.pma-confirm` gets the accent — the same left
+  border weight and ground the wizard question uses — so "must be answered"
+  looks identical wherever it appears, on Step 2's fields and Step 3's seven
+  confirmations alike.
+- **Derived read-only summaries lose the accent and the ground.** They are
+  body copy under the input they are derived from, distinguished by position
+  rather than by decoration. §3.4.10a names the one that has to move.
 
 Two visual states, both in `www/shadcn.css`, no JavaScript and no server round
 trip:
