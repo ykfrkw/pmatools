@@ -1145,3 +1145,48 @@ details > summary {
     animation: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Publication-bias reference tabs: the status dot (0.5.1)
+
+   A marker on each of the three reference tab titles (Funnel, Trim-and-fill,
+   Missing results) saying what that tab's diagnostic found. It is NOT
+   .pma-tab-mark: that one is a round glyph meaning "the reviewer opened this
+   tab", i.e. their progress, and it sits on the tabs one level up. Two
+   unrelated meanings a few pixels apart would be unreadable, so this marker
+   is a CSS-drawn ROUNDED SQUARE - a different shape, not just a different
+   colour - and .pma-tab-mark is untouched.
+
+   Drawn rather than written: an empty element with a class cannot arrive
+   mojibaked whatever the deploy bundle's encoding does to a glyph.
+
+   Four states, and the fourth is deliberately not a colour. Three colours
+   alone make "not computed" read as "nothing wrong", which is backwards for
+   every tab here - each declines to compute on exactly the sparse data where
+   reporting bias is most likely. "unknown" is therefore hollow: an outline
+   with no fill, which reads as an empty slot rather than as a verdict.
+   --------------------------------------------------------------------------- */
+.pma-tab-status {
+  display: inline-block;
+  width: 0.62rem;
+  height: 0.62rem;
+  margin-left: 0.4rem;
+  border-radius: 2px;
+  vertical-align: 0.02rem;
+  /* Every state carries the same outline, so the hollow one is the same
+     shape as the filled ones and only the fill distinguishes them. */
+  border: 1px solid hsl(var(--muted-foreground) / 0.55);
+}
+.pma-tab-status-green   { background: var(--grade-high-fg); }
+.pma-tab-status-amber   { background: var(--grade-low-fg); }
+.pma-tab-status-red     { background: var(--grade-vlow-fg); }
+.pma-tab-status-unknown { background: transparent; }
+
+/* A colour difference alone fails a reader who cannot see it, and the title
+   attribute is not reachable on a touch device. The forced-colours fallback
+   keeps the four apart by their border style, which high-contrast mode
+   preserves where it discards background colours. */
+@media (forced-colors: active) {
+  .pma-tab-status { forced-color-adjust: none; border-width: 2px; }
+  .pma-tab-status-unknown { border-style: dotted; }
+}

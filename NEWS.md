@@ -392,6 +392,59 @@
 
 ## New features
 
+* **The three publication-bias reference tabs each carry a status dot, and
+  none of them rates anything.** The funnel plot, the trim-and-fill funnel and
+  the missing-results (RoB-ME) table sit on a tabset, one at a time, so a
+  reviewer who never clicks past the first never learns that the other two
+  disagreed with the answer they had just given the wizard. Each tab title now
+  carries a marker saying what that tab's diagnostic found: 🟢 nothing to worry
+  about, 🟡 worth reading before moving on, 🔴 the strongest signal the tab can
+  give, and ⚪ **not computed**, with the reason as its tooltip. The fourth
+  state is deliberately not a colour — each of these diagnostics declines to
+  compute on exactly the sparse data where reporting bias is most likely, so
+  "not computed" painted green would read as "nothing found".
+
+  Two new algorithms sit behind them, both in the package rather than the app
+  so a test can hold them to a contract (`R/pubias_status.R`,
+  `R/pubias_missing.R`; `SPEC.md` §5.5b, `shiny/SPEC.md` §3.4.8a and §3.4.8b):
+
+  - **Trim-and-fill** reuses the risk-of-bias direction check
+    (`.assess_bias_direction()`), asked of the pair (original pooled effect,
+    trim-and-fill adjusted effect) instead of (whole body, low-RoB subset), so
+    `PMA_ROB_INFLATION_THRESHOLD` stays shared and the five rules stay in one
+    place. It runs on **whichever scale puts the null at zero** — the absolute
+    risk difference per 1,000 for a binary outcome, the internal scale for
+    MD / SMD / RoM. On a raw odds ratio, `|OR| = 2.0` and `|OR| = 0.5` are
+    equidistant from the null in fact and four-fold apart in the arithmetic,
+    which would make every zone and magnitude rule wrong for one of them. With
+    no usable baseline risk the dot is ⚪ rather than quietly falling back to
+    the internal scale.
+  - **Missing results** answers one question: how far from the observed pooled
+    effect would the missing studies have to lie before the conclusion
+    changes? The `m` missing studies are given one shared effect `δ` and an
+    imputed standard error borrowed from the observed studies as
+    `median(seTE·√n) / √n_j`; `tau²` is held at its observed value, and the
+    tipping point solves in closed form. Its ordered decision is the load-
+    bearing part: adding studies shrinks the pooled standard error, so a body
+    of evidence can cross the decision threshold on **precision alone**, with
+    the missing studies reporting exactly what the observed ones did. That case
+    is 🔴 and is asked before the magnitude comparison, which on its own would
+    have called it reassuring. `results_known` then acts as a direction
+    **gate** — three of its five labels imply which way the missing effect
+    lies, one unconstrained row makes the union everything, and an
+    all-`Not measured` table is capped at 🟡, because an outcome that was never
+    assessed cannot have been suppressed for what it showed.
+
+  **No dot value reaches `assess_pubias()` or `grade_meta()`.** Core GRADE 4
+  Fig 5 has no node for a funnel p value, for trim-and-fill or for missing
+  results, and the wizard's answers stay the only thing that rates the domain;
+  `test-pubias_status.R` and the app's `test-pubias-dots.R` are the standing
+  structural guards on that. The marker takes its own class
+  (`pma-tab-status`) and its own shape — a CSS-drawn rounded square — so it
+  cannot be confused with `pma-tab-mark`, the round glyph on the Step 3 domain
+  tabs one level up that means "opened, not yet confirmed". `pma-tab-mark` is
+  untouched.
+
 * **`sof_table()` gains `keep_effect_scale`, so a continuous outcome can be
   shown as its own effect AND as a proportion of responders in one row.** Core
   GRADE 6 recommends presenting the two together; pmatools offered them as an

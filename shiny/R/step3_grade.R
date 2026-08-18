@@ -280,6 +280,19 @@ step3_ui <- function(state = NULL) {
     )
   }
 
+  # Title of one of the three publication-bias REFERENCE tabs: the label plus
+  # the slot its status dot is painted into. Same tagList-title mechanics as
+  # .tab_title() above, and the same consequence - tabPanel can no longer
+  # derive a `value` from a string title, so every one of these states its
+  # own. Nothing matches on those values today; they are stated so that the
+  # day something does, it does not match a Bootstrap-generated id.
+  .plot_tab_title <- function(label, dot_id) {
+    htmltools::tagList(
+      label,
+      shiny::uiOutput(dot_id, inline = TRUE)
+    )
+  }
+
   # The explicit per-domain confirmation checkbox used to be a closure here,
   # under the local name `.confirm_checkbox`. It is pma_confirm_checkbox() in
   # R/ui_helpers.R now: .responder_block() in R/step3_threshold.R renders the
@@ -737,7 +750,9 @@ step3_ui <- function(state = NULL) {
           shiny::tabsetPanel(
             id = "pubias_plots", type = "tabs",
 
-            shiny::tabPanel("Funnel",
+            shiny::tabPanel(
+              .plot_tab_title("Funnel", "pubias_dot_funnel"),
+              value = "Funnel",
               shinycssloaders::withSpinner(
                 shiny::imageOutput("pubias_funnel", height = "auto"),
                 type = 4, color = "#0f172a", size = 0.6,
@@ -746,7 +761,9 @@ step3_ui <- function(state = NULL) {
               shiny::uiOutput("pubias_egger_result")
             ),
 
-            shiny::tabPanel("Trim-and-fill",
+            shiny::tabPanel(
+              .plot_tab_title("Trim-and-fill", "pubias_dot_trimfill"),
+              value = "Trim-and-fill",
               htmltools::p(class = "pma-card-subtitle",
                 "How the pooled estimate would shift if the imputed studies ",
                 "existed. ",
@@ -760,7 +777,10 @@ step3_ui <- function(state = NULL) {
               shiny::uiOutput("pubias_trimfill_summary")
             ),
 
-            shiny::tabPanel("Missing results (RoB-ME)",
+            shiny::tabPanel(
+              .plot_tab_title("Missing results (RoB-ME)",
+                              "pubias_dot_missing"),
+              value = "Missing results (RoB-ME)",
               htmltools::p(class = "pma-card-subtitle",
                 "Studies with no extractable estimate arrive automatically; ",
                 "add trials that exist but were never loaded. ",
@@ -3444,6 +3464,20 @@ step3_server <- function(input, output, session, state) {
   shiny::outputOptions(output, "pubias_egger_result",
                        suspendWhenHidden = FALSE)
 
+  # The trim-and-fill fit itself, computed once. Three surfaces read it - the
+  # funnel, the numerical summary and the tab's status dot - and meta::trimfill()
+  # refits the model, so three independent calls would triple that work on
+  # every reactive flush. The k gate lives here rather than in each reader,
+  # which is also what keeps the three from disagreeing about when
+  # trim-and-fill exists at all.
+  pubias_trimfill_fit <- shiny::reactive({
+    obj <- state$ma
+    if (is.null(obj) || !step3_pubias_statistical(.effective_pubias_k(obj))) {
+      return(NULL)
+    }
+    tryCatch(suppressWarnings(meta::trimfill(obj)), error = function(e) NULL)
+  })
+
   # Trim-and-fill funnel plot (reference only, NOT forest)
   # Imputed (filled) studies are drawn as solid red filled circles so they
   # stand out from observed studies (default dark-gray fill, black border).
@@ -3458,8 +3492,7 @@ step3_server <- function(input, output, session, state) {
       return(list(src = "", contentType = "image/png",
                   alt = "Trim-and-fill requires k >= 10.", width = "100%"))
     }
-    tf <- tryCatch(suppressWarnings(meta::trimfill(obj)),
-                   error = function(e) NULL)
+    tf <- pubias_trimfill_fit()
     da <- pma_funnel_display_args(input, "funnel_trim", include_egger = FALSE)
 
     pma_render_trimmed(
@@ -3522,8 +3555,7 @@ step3_server <- function(input, output, session, state) {
     # trim-and-fill summary while Q2 said statistical analysis was not
     # feasible (and vice versa).
     if (is.null(obj) || .effective_pubias_k(obj) < 10) return(NULL)
-    tf <- tryCatch(suppressWarnings(meta::trimfill(obj)),
-                   error = function(e) NULL)
+    tf <- pubias_trimfill_fit()
     if (is.null(tf)) return(NULL)
 
     k_imputed <- length(tf$TE) - length(obj$TE)
@@ -3705,6 +3737,121 @@ step3_server <- function(input, output, session, state) {
       }
     )
   }, deleteFile = TRUE)
+
+  # ----- Reference tabs: the status dots ---------------------------------
+  # One dot per reference tab, on the tab title, saying what that tab's
+  # diagnostic found. They exist because the three tabs are a tabset: a
+  # reviewer who never clicks past Funnel never learns that the RoB-ME table
+  # they filled in is enough to overturn the result.
+  #
+  # NOTHING HERE RATES ANYTHING. No value below reaches grade_obj(),
+  # assess_pubias() or grade_meta() - the wizard's answers stay the only
+  # thing that rates the domain. The arithmetic and the wording both live in
+  # the package (R/pubias_status.R, R/pubias_missing.R) where a test can hold
+  # them to that; what is here is the wiring and only the wiring.
+
+  # The Core GRADE threshold on the TE scale, which is where both the
+  # trim-and-fill zones and the RoB-ME conclusion are measured. Derived with
+  # the package's own threshold_to_te_scale(), i.e. the same call grade_meta()
+  # makes on the same arguments, so the dot cannot end up judging against a
+  # different threshold from the rating beside it. NULL when the app has no
+  # usable threshold, which both dots read as "the null".
+  .dot_threshold_internal <- function(obj) {
+    if (is.null(obj)) return(NULL)
+    th <- .threshold_grade_args(obj)
+    if (is.null(th$threshold)) return(NULL)
+    res <- tryCatch(
+      threshold_to_te_scale(
+        threshold          = th$threshold,
+        threshold_scale    = th$threshold_scale,
+        sm                 = obj$sm,
+        threshold_baseline = th$threshold_baseline,
+        meta_obj           = obj),
+      error = function(e) NULL)
+    v <- res$threshold_internal
+    if (is.null(v) || length(v) != 1L || !is.finite(v) || v <= 0) return(NULL)
+    v
+  }
+
+  # Step 2 makes small_values required, so it is set by the time a fitted
+  # analysis exists; anything else is normalised to NULL rather than passed
+  # on, exactly as output$pubias_trimfill_summary does.
+  .dot_small_values <- function() {
+    sv <- state$small_values
+    if (identical(sv, "desirable") || identical(sv, "undesirable")) sv else NULL
+  }
+
+  output$pubias_dot_funnel <- shiny::renderUI({
+    if (is.null(state$ma)) return(NULL)
+    egger <- pubias_egger()
+    pma_tab_status_dot(.pubias_funnel_dot(
+      p         = egger$p,
+      feasible  = egger$feasible,
+      k_ok      = step3_pubias_statistical(pubias_k()),
+      # Egger loses validity on sparse binary data, so a rare-event analysis
+      # gets no colour at all rather than an invalid p value painting a red
+      # one. state$rare_diagnostics is what Step 2 already keeps.
+      rare_flow = isTRUE(state$rare_diagnostics$rare_flow),
+      alpha     = STEP3_EGGER_ALPHA))
+  })
+  shiny::outputOptions(output, "pubias_dot_funnel", suspendWhenHidden = FALSE)
+
+  output$pubias_dot_trimfill <- shiny::renderUI({
+    obj <- state$ma
+    if (is.null(obj)) return(NULL)
+    tf  <- pubias_trimfill_fit()
+    k_ok <- step3_pubias_statistical(.effective_pubias_k(obj))
+    binary <- step3_is_binary_outcome(obj, input$outcome_type)
+    baseline <- threshold_baseline_state()
+    pma_tab_status_dot(.pubias_trimfill_dot(
+      te_original  = obj$TE.random,
+      te_adjusted  = if (is.null(tf)) NA_real_ else tf$TE.random,
+      small_values = .dot_small_values(),
+      k_ok         = k_ok,
+      sm           = obj$sm,
+      binary       = binary,
+      # Per 1,000 on screen, a proportion here. NA when the reviewer has
+      # cleared the box, which is one of the ways the dot goes uncoloured
+      # rather than silently changing scale.
+      baseline_risk      = if (is.finite(baseline)) baseline / 1000
+                           else NA_real_,
+      threshold_abs1000  = threshold_abs_state(),
+      threshold_internal = .dot_threshold_internal(obj),
+      # The event-rate map the Configuration tab already uses, injected
+      # rather than reimplemented in the package: see R/pubias_status.R.
+      p1_from_ratio      = step3_p1_from_ratio))
+  })
+  shiny::outputOptions(output, "pubias_dot_trimfill",
+                       suspendWhenHidden = FALSE)
+
+  output$pubias_dot_missing <- shiny::renderUI({
+    obj <- state$ma
+    if (is.null(obj)) return(NULL)
+    miss <- state$pubias_missing %||% .pubias_missing_empty()
+    random <- isTRUE(obj$random)
+    n_total <- if (!is.null(obj$n.e) && !is.null(obj$n.c) &&
+                   length(obj$n.e) == length(obj$seTE) &&
+                   length(obj$n.c) == length(obj$seTE)) {
+      obj$n.e + obj$n.c
+    } else {
+      rep(NA_real_, length(obj$seTE))
+    }
+    pma_tab_status_dot(.pubias_missing_dot(
+      results_known = miss$results_known,
+      n_missing     = miss$n,
+      te_obs        = step3_pooled_te(obj),
+      se_pooled     = if (random) obj$seTE.random else obj$seTE.common,
+      tau2          = obj$tau2,
+      ci_lower      = if (random) obj$lower.random else obj$lower.common,
+      ci_upper      = if (random) obj$upper.random else obj$upper.common,
+      pi_lower      = obj$lower.predict,
+      pi_upper      = obj$upper.predict,
+      se_studies    = obj$seTE,
+      n_studies     = n_total,
+      threshold_internal = .dot_threshold_internal(obj),
+      k             = .effective_pubias_k(obj)))
+  })
+  shiny::outputOptions(output, "pubias_dot_missing", suspendWhenHidden = FALSE)
 
   # output$indirectness_banner and the state$indir_reviewed flag behind it were
   # deleted here. The banner said "no indirectness judgment recorded yet", and

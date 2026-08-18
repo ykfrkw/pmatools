@@ -861,8 +861,9 @@ Resulting judgment: {{judgment}}
 
 #### 3.4.8a Missing results (RoB-ME) — the status dot's algorithm
 
-> **Status: specified, not yet built.** This section and the status-dot bullets
-> in §3.4.12 are the contract; no dot is rendered yet.
+Built in 0.5.1 as `.pubias_missing_tipping()` / `.pubias_missing_dot()`
+(`R/pubias_missing.R`) — in the package, not the app, so the arithmetic below
+is unit-tested against this section rather than only rendered.
 
 The dot on the RoB-ME tab (§3.4.12's tabset) answers one question: **how far
 from the observed pooled effect would the missing studies have to lie before the
@@ -921,6 +922,26 @@ body of evidence can cross the threshold on precision alone, with the missing
 studies reporting exactly what the observed ones did; step 6 asked on its own
 would call that case reassuring.
 
+**"The conclusion", precisely, and when step 4 can fire.** The conclusion is
+which side of `T` the pooled 95% interval lies on: `above` when
+`TE − 1.96*se > +T`, `below` when `TE + 1.96*se < −T`, `spans` otherwise. Both
+the observed and the new conclusion are read with `1.96*se`, never off the
+reported confidence limits — a Hartung-Knapp interval is wider than `1.96*se`,
+and comparing one against the other would report a change that came from the
+quantile rather than from the missing studies. The reported limits are used at
+step 6 only, where the CI is a *region* `δ*` is judged against rather than a
+decision rule.
+
+Step 4 is a guard, and fires only when `W_miss = 0`. `TE_new` is affine and
+increasing in `δ` and covers the whole real line, and each conclusion is an
+interval in `TE_new`, so a finite `δ*` exists whenever the missing studies
+carry any weight at all. Studies too imprecise to carry any leave
+`TE_new(δ) = TE_obs` for every `δ`, which is the one case in which the
+conclusion genuinely cannot be overturned — 🟢, not ⚪, because the model gave
+an answer rather than failing to run. The step keeps its place in the order
+regardless: step 6 divides by `W_miss` too, and an infinity compared against
+the prediction interval would come out 🟢 by accident rather than by reasoning.
+
 **Step 6 is anchored on the prediction interval, not on a fixed effect size.**
 
 | `δ*` lies | dot | reading |
@@ -969,6 +990,12 @@ deliberately **not** capped: "not significant, data not shown" is textbook
 selective reporting and the label cannot rule it out. The default behaviour is
 therefore magnitude-driven, which is what the dot is for.
 
+The cap applies only when **every** row is `Not measured`. One row with any
+other label is a row whose absence could be selective, and capping the whole
+dot because that row shares a table with never-assessed outcomes would suppress
+exactly the warning the tab exists to give. The cap is also a ceiling and never
+a floor: it turns 🔴 into 🟡 and touches nothing else.
+
 #### 3.4.8b The scale the trim-and-fill comparison runs on
 
 The direction-of-bias rules measure magnitude as `|TE|` and zones as `±T`, both
@@ -988,11 +1015,20 @@ binary outcome that is the absolute risk difference the app already computes.**
 
 No new arithmetic is introduced for the binary row. `step3_ard_equivalence()` /
 `step3_p1_from_ratio()` already convert an effect to an event rate at `p0`, the
-absolute difference is `p1 − p0`, and `.threshold_candidates()` already carries
-the threshold as `absolute1000`. The check therefore compares two absolute risk
+absolute difference is `p1 − p0`, and `step3_threshold_suggestions()` already
+carries the threshold as `absolute1000` (`threshold_abs_state()` is where it is
+stored). The check therefore compares two absolute risk
 differences against a threshold stated in the same units, which is also the form
 the Configuration tab shows the reviewer (§3.4.10a) — the dot and the number the
 reviewer read are on one scale, not two.
+
+Built in 0.5.1 as `.pubias_trimfill_scale()` (`R/pubias_status.R`). It owns the
+**decision** — which scale, and when the answer is ⚪ — and the event-rate map
+is **injected**: `step3_p1_from_ratio()` lives in the app, and a second copy in
+the package is exactly the pair of implementations that drift. With no map
+supplied a binary outcome is ⚪, never converted by a guess. A measure already
+stated as an absolute difference (`RD` / `ARD`) needs no map, only the change of
+unit to per 1,000.
 
 `PMA_ROB_INFLATION_THRESHOLD` is unchanged and still shared: it is a *ratio* of
 magnitudes, so it transfers to any scale whose null is zero without being
@@ -1389,7 +1425,19 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
       *the reviewer's progress*. These dots mean *what a diagnostic found*, on a
       tabset nested inside one of those tabs, so one glyph would carry two
       unrelated meanings a few pixels apart. The status dot takes its own class
-      and its own shape; `pma-tab-mark` is untouched.
+      and its own shape; `pma-tab-mark` is untouched. Rendered by
+      `pma_tab_status_dot()` (`R/ui_helpers.R`, class `pma-tab-status`) into a
+      `uiOutput` slot on each tab title, and drawn by `www/shadcn.css` as a
+      **rounded square** — a shape, not only a colour, so the two markers never
+      read as the same thing whatever the font does. Drawn in CSS rather than
+      written as a glyph for the reason `pma_wizard_nav()` gives about HTML
+      entities: an empty element with a class cannot arrive mojibaked.
+    - **The three algorithms live in the package** (`R/pubias_status.R`,
+      `R/pubias_missing.R`), not in the app: they are arithmetic a test should
+      hold to a contract, and the app is the wiring. A tag list title leaves
+      `tabPanel` with no string to derive a `value` from, so all three reference
+      tabs state their own — the same consequence `.tab_title()` met on the
+      domain tabs.
     - **Four states, and the fourth is not a colour.** 🟢 / 🟡 / 🔴 say what the
       diagnostic found; ⚪ says it was never computed, with the reason as its
       tooltip. Three colours alone make "not computed" read as "nothing wrong",

@@ -1987,6 +1987,26 @@ What the trim-and-fill computation does supply is one of the numbers that answer
 - **Rule 1 of §5.1 has no counterpart** — this comparison is given no threshold, so a pair of near-null estimates can report a large percentage. `.pubias_trimfill_line()` prints both estimates beside the percentage so a reader can see that is what happened, and labels the whole sentence "reference only, rates nothing".
 - Unassessable inputs (either estimate non-finite, or `|TE_adjusted|` at or below 1e-9) return `assessable = FALSE` and are reported as *not assessable*, never as *no concern*. An unrecognised `small_values` is an error.
 
+### 5.5b Publication bias — the reference-tab status dots (0.5.1)
+
+The same principle as §5.5a, applied to three diagnostics rather than one. A host application that shows the funnel plot, the trim-and-fill funnel and a missing-results table on separate tabs shows the reviewer one of them at a time, and a reviewer who never opens the other two never learns they disagreed. `R/pubias_status.R` and `R/pubias_missing.R` supply a one-glyph verdict per tab. **None of them rates anything**: no value returned here reaches `assess_pubias()` or `grade_meta()`, and `test-pubias_status.R` is the standing structural guard on that.
+
+```r
+.pubias_funnel_dot(p, feasible, k_ok, rare_flow, alpha, strong_alpha)
+.pubias_trimfill_scale(te_original, te_adjusted, sm, binary, baseline_risk,
+                       threshold_abs1000, threshold_internal, p1_from_ratio)
+.pubias_trimfill_dot(...)          # the same formals, plus small_values, k_ok
+.pubias_missing_tipping(...)       # -> list(step, state, reason, delta_star,
+.pubias_missing_dot(...)           #         se_new, capped)
+# every *_dot() -> list(state, reason); state is one of PMA_PUBIAS_DOT_STATES
+```
+
+- **Four states, and the fourth is not a colour.** `PMA_PUBIAS_DOT_STATES` is `c("green", "amber", "red", "unknown")`. Each of these diagnostics declines to compute on exactly the sparse data where reporting bias is most likely, so "not computed" rendered as a colour would read as "nothing found". Every `"unknown"` carries the reason in `$reason`, for the caller to show as a tooltip.
+- **Funnel** — Egger's p in three bands: 🟢 at `p >= alpha`, 🟡 at `strong_alpha <= p < alpha`, 🔴 at `p < strong_alpha`. `alpha` is a formal because the host already names 0.05 for the sentence it prints under the funnel; `strong_alpha` (`PMA_PUBIAS_EGGER_STRONG_ALPHA`, 0.01) exists only on the dot. `rare_flow` is checked **before** `k_ok`: below k = 10 Egger is underpowered, whereas on sparse binary data it is invalid, and letting an invalid p value paint a 🔴 is what the ordering avoids.
+- **Trim-and-fill** — `.assess_bias_direction()` (§5.1) called on the pair (original, adjusted), with the adjusted effect passed as a single-element low-RoB pool of unit standard error so that its inverse-variance mean *is* that effect. A call, not a copy: `PMA_ROB_INFLATION_THRESHOLD` and the five rules stay in one place. `not_serious` → 🟢, one level → 🟡, two levels → 🔴, `rule = NA` → ⚪.
+- **The comparison runs on a scale whose null is zero** — absolute risk difference per 1,000 for a binary outcome, the internal scale for MD / SMD / RoM. `|OR| = 2.0` and `|OR| = 0.5` are equidistant from the null in fact and four-fold apart on the raw measure, so every zone and magnitude rule would be wrong for one of them. `.pubias_trimfill_scale()` owns the decision; the event-rate map is **injected** rather than reimplemented (the host already owns one), and with none supplied a binary outcome is ⚪ rather than silently converted. No baseline risk is ⚪ for the same reason: a silent scale change is what the split exists to prevent.
+- **Missing results** — the tipping-point algorithm, fully specified in `shiny/SPEC.md` §3.4.8a. Assume the `m` missing studies share one effect `δ`, hold `tau^2` at its observed value, and solve `δ* = (W_tot*(T ± 1.96*se_new) − W_obs*TE_obs) / W_miss` in closed form. Six ordered steps, of which the order is the load-bearing part: `δ = TE_obs` changing the conclusion on precision alone is 🔴 and must be asked before the magnitude comparison, which on its own would call that case reassuring.
+
 ### 5.6 Structured domain facts (v0.5.1)
 
 The container is **domain-agnostic**: `.fact(key, label, value, numeric = NA)` builds one row, `.facts(...)` binds the non-`NULL` ones into a tibble, and the assessors attach it to their `make_domain_row(facts = )`. `grade_meta()` collects the non-`NULL` results into `$domain_facts`, keyed by domain name; a domain that records nothing is simply absent from the list. Reached with `domain_facts()` (§4.15).
@@ -2151,6 +2171,8 @@ instead.
 | test-domain_rob.R (extended) | the k-space / studlab-space alignment (§5.1): refit and `rob_overrides` when {meta} drops a study; unresolvable alignment keeps the skip-with-a-warning behaviour |
 | test-sof_bmj.R (extended) | arm-level columns for continuous outcomes: the IV-weighted control mean, the SMD × pooled-SD rescale, the two derivation footnotes, and binary tables left unchanged; §4.6: an overridden domain's footnote leads with the reviewer's rationale, a domain with no facts gets one at all, an automatic rating's footnote is unchanged, and `.parse_override_note()` reads the head rather than inferring from `auto` |
 | test-pubias_trimfill.R | §5.5a: the orientation of the comparison (original vs adjusted, and the mirror case under each `small_values`), the shared threshold and its strict `>`, magnitude-only comparison without `small_values`, unassessable inputs reported as such rather than as "no concern", the printed sentence, and a source guard that `assess_pubias()` does not read any of it |
+| test-pubias_status.R | §5.5b: Egger's three bands and both boundaries; every ⚪ path on the funnel and the trim-and-fill dots, including rare-event data checked ahead of the k gate; the absolute-risk scale for a binary outcome and the untouched internal scale for a continuous one; the shared `PMA_ROB_INFLATION_THRESHOLD` bracketed on both sides; and the structural guard that no rating path in the package calls a dot function |
+| test-pubias_missing.R | §5.5b / `shiny/SPEC.md` §3.4.8a: each of the six ordered outcomes, with step 3 (precision alone) shown firing where step 6 alone would have said 🟢; the direction gate firing and not firing; the union rule when one row is unconstrained; the `Not measured` cap as a ceiling and never a floor; the `c_med / sqrt(n)` imputation and its blank-`n` fallback; and every ⚪ path |
 
 ---
 

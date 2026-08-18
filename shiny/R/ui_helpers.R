@@ -198,6 +198,53 @@ pma_tab_mark <- function(confirmed, visited) {
   NULL
 }
 
+# The status marker on a publication-bias REFERENCE tab (funnel,
+# trim-and-fill, missing results). `dot` is the list(state =, reason =) the
+# package's .pubias_funnel_dot() / .pubias_trimfill_dot() /
+# .pubias_missing_dot() return.
+#
+# It is deliberately NOT pma_tab_mark(). That mark is a filled dot glyph
+# meaning "the reviewer has opened this tab, and has not yet confirmed the
+# domain" - their PROGRESS. These mean "the diagnostic on this tab found X",
+# and they sit on a tabset nested inside one of the tabs the progress mark is
+# on, so one glyph a few pixels from the other would carry two unrelated
+# meanings. This marker therefore takes its own class and its own shape: a
+# CSS-drawn rounded square, not a round glyph, so the two never read as the
+# same thing whatever the font does.
+#
+# Drawn in CSS rather than written as a character for the reason
+# pma_wizard_nav() gives about HTML entities: the deploy bundle's encoding is
+# not guaranteed, and an empty element with a class cannot arrive mojibaked.
+#
+# NOTHING here rates anything. The dot's value never reaches assess_pubias()
+# or grade_meta(); it is a nudge toward opening a tab the reviewer would
+# otherwise skip.
+PMA_STATUS_DOT_LABELS <- c(
+  green   = "No concern found",
+  amber   = "Worth a look",
+  red     = "Concern found",
+  unknown = "Not computed"
+)
+
+pma_tab_status_dot <- function(dot) {
+  if (is.null(dot)) return(NULL)
+  state <- dot$state
+  if (is.null(state) || length(state) != 1L ||
+      !state %in% names(PMA_STATUS_DOT_LABELS)) {
+    return(NULL)
+  }
+  reason <- dot$reason %||% ""
+  label  <- unname(PMA_STATUS_DOT_LABELS[[state]])
+  htmltools::span(
+    class = paste0("pma-tab-status pma-tab-status-", state),
+    # The tooltip is the whole point of the "unknown" state: a marker that
+    # says "not computed" without saying why is worse than no marker.
+    title = reason,
+    role  = "img",
+    `aria-label` = if (nzchar(reason)) paste0(label, ": ", reason) else label
+  )
+}
+
 # Comma-separated actionLinks, one per domain key, each jumping to the Step 3
 # tab that clears it. `id_prefix` separates the Step 3 and Step 4 copies: both
 # can exist in one session and Shiny input ids have to be unique. The observers
