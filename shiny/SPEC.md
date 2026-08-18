@@ -1029,7 +1029,7 @@ Rendered by `.responder_block()` (`R/step3_threshold.R`), **below** the Decision
   - `textAreaInput("responder_p0_rationale", ...)` when the default is replaced; `pma_confirm_checkbox("responder_p0_confirm", ...)` when it is not. It is built with the **shared confirmation box** (§3.4.13), not a bare `checkboxInput()`: this is the Configuration tab's second Next gate and has to look like the first one. It stays where it is — between `EDU_COPY$config_tab$responder_default` and `threshold_label` — because it and the rationale textarea are the two arms of one `conditionalPanel` pair, so the box reads as the alternative to justifying a change, which is what it is.
   - `textInput("threshold_label", "Definition of the threshold of clinical interest (free text)")`
   - `output$chinn_direction_echo` — `chinn_invert` is derived from the Step 2 direction answer, not asked again.
-**The threshold-equivalence summary is not a question and must stop looking like one.** The block under the threshold input that reads `Increase: 156 per 1,000 -> 206 per 1,000, equivalent OR 1.404` (and its decrease mirror) is derived entirely from the number typed directly above it: there is nothing in it to answer. It currently carries a left accent on a filled ground — the wizard-question costume — which is what makes a reviewer read it as one more question in the same column as Publication bias's. It becomes body copy under its input, per §3.4.13, and the accent it gives up goes to `threshold_confirm`, which is the thing on that tab that genuinely has to be answered.
+**The threshold-equivalence summary is not a question and must stop looking like one.** The block under the threshold input that reads `Increase: 156 per 1,000 -> 206 per 1,000, equivalent OR 1.404` (and its decrease mirror) is derived entirely from the number typed directly above it: there is nothing in it to answer. It used to carry a left accent on a filled ground — the wizard-question costume — which is what made a reviewer read it as one more question in the same column as Publication bias's. It is body copy under its input, per §3.4.13, and the accent it gave up went to `threshold_confirm`, which is the thing on that tab that genuinely has to be answered.
 
 - `output$responder_p0_badge` renders `confirmed` / `unconfirmed assumption` beside the section heading, and **nothing at all** on the `"effect"` route, where there is no assumption to confirm.
 - `input$sof_presentation` is registered in `PMA_OUTCOME_INPUT_IDS$configuration` (`R/ui_helpers.R`), so a change of outcome clears it. An id missing from that list is an id whose stale answer survives an outcome change.
@@ -2027,16 +2027,26 @@ is lighter than the read-only blocks around it is read as optional — the tab
 then teaches the reviewer the opposite of what it means, and no amount of
 wording inside either block undoes it.
 
-> **Status: specified, not yet built.** The Configuration tab currently
-> contradicts this rule, measured on the deployed app: the read-only
-> threshold-equivalence summary sits on a solid `rgb(245,245,245)` ground
-> behind a **4px** left accent, while `.pma-confirm` around `threshold_confirm`
-> — the gate that actually blocks Next — has a near-transparent
-> `rgba(15,23,41,0.05)` ground and a **1px** translucent border. The heaviest
-> block on the tab is the one with nothing to answer and the lightest is the
-> one that must be answered. This is why the REQUIRED pill added with the
-> shared helper did not settle the question the reviewer raised: the pill was
-> never the problem, the ranking was.
+**The rule is about the `--primary` accent, not about every left accent.** The
+app has a second, older vocabulary — the alert and status palette, amber and
+green and red on their own tinted grounds — worn by `output$config_status`, the
+incomplete-certainty banner, the stale-analysis and rare-event banners, the
+Egger callout and `.pma-analysis-set`. Those say "notice this state", they are
+read-only by design, and they are none of this rule's business: a reviewer never
+mistakes an amber notice for a question. Only `--primary` on `--muted` is
+reserved, which is what the test enforces — it rejects the primary colour
+specifically rather than any 4px border, so a status block cannot fail it and a
+question-costumed read-only block cannot pass.
+
+What the Configuration tab shipped before this rule, measured on the deployed
+app: the read-only threshold-equivalence summary sat on a solid
+`rgb(245,245,245)` ground behind a **4px** left accent, while `.pma-confirm`
+around `threshold_confirm` — the gate that actually blocks Next — had a
+near-transparent `rgba(15,23,41,0.05)` ground and a **1px** translucent border.
+The heaviest block on the tab was the one with nothing to answer and the
+lightest the one that had to be answered. That is why the REQUIRED pill added
+with the shared helper did not settle the question the reviewer raised: the
+pill was never the problem, the ranking was.
 
 The rule is therefore two-directional, and both halves ship together:
 
@@ -2047,15 +2057,25 @@ The rule is therefore two-directional, and both halves ship together:
   confirmations alike.
 - **Derived read-only summaries lose the accent and the ground.** They are
   body copy under the input they are derived from, distinguished by position
-  rather than by decoration. §3.4.10a names the one that has to move.
+  rather than by decoration. Two wore the costume and both moved:
+  `output$threshold_equiv`, the threshold-equivalence summary §3.4.10a names,
+  and `output$ois_rrr_equiv`, which reads the Imprecision tab's relative risk
+  reduction back on the absolute scale. Neither takes an answer.
+
+The rule is enforced on the source, not on a screenshot: `.pma-confirm`'s left
+border is asserted to be no lighter than `.pma-wizard-question`'s, and no block
+in `R/step3_grade.R` may pair a 4px `#0f172a` left border with a filled ground
+(`test-confirm-checkbox.R`). The publication-bias callouts are deliberately not
+covered by the second half — `.pubias_egger_callout()` accents in the judgment's
+own green or amber, which is the status vocabulary, not the question's.
 
 Two visual states, both in `www/shadcn.css`, no JavaScript and no server round
 trip:
 
 | state | treatment |
 |---|---|
-| unticked | an uppercase `REQUIRED` pill above the label, `--primary` border and a faint `--primary` wash — an outstanding action, legible before anything has been pressed |
-| ticked | the muted dashed border these boxes have always had; the pill greys to `--muted` rather than being removed, so the box does not change height and drag the Next button out from under the cursor |
+| unticked | an uppercase `REQUIRED` pill above the label, a **4px `--primary` left accent on a `--muted` ground** — the wizard question's own weight and ground — inside a 1px `--primary` outline. An outstanding action, legible before anything has been pressed |
+| ticked | the muted dashed border these boxes have always had; the `border` shorthand drops the accent, because an answered box must stop claiming "answer this". The pill greys to `--muted` rather than being removed, so the box does not change height and drag the Next button out from under the cursor |
 
 The pill reuses the vocabulary of Step 2's `.pma-required-unset` mark
 (§3.3.6): same radius, same type. It sits at `--primary` rather than Step 2's

@@ -809,13 +809,24 @@ table.dataTable th { background: hsl(var(--muted)); }
    the box stays lifted forever: "always looks required" rather than "always
    looks done". Only one of those two failures can let a reviewer walk past a
    gate believing it is cleared.
+
+   THE ACCENT IS THE WIZARD QUESTION'S, and deliberately so: a left border at
+   --primary on a --muted ground means "answer this", and an unticked
+   confirmation is exactly that. It used to sit a whole tier below the
+   read-only blocks it shares a tab with - a 1px translucent outline and a
+   near-transparent wash, under a derived summary carrying a 4px accent on a
+   solid ground - so the heaviest block on the Configuration tab was the one
+   with nothing to answer. The pill alone could not fix that: the ranking was
+   the problem. Weight and ground therefore track .pma-wizard-question above;
+   changing one without the other reopens the inversion.
    --------------------------------------------------------------------------- */
 .pma-confirm {
   margin-top: 1rem;
   padding: 0.5rem 0.75rem;
   border: 1px solid hsl(var(--primary) / 0.45);
+  border-left: 4px solid hsl(var(--primary));
   border-radius: var(--radius);
-  background: hsl(var(--primary) / 0.05);
+  background: hsl(var(--muted));
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 /* checkboxInput() ships a .form-group whose bottom margin would leave the
@@ -842,7 +853,9 @@ table.dataTable th { background: hsl(var(--muted)); }
 /* Ticked: back to the muted dashed treatment these boxes have always had.
    The eyebrow greys out rather than being removed from the flow, because a
    box that changes height on tick drags the Next button below it out from
-   under the cursor that just clicked. */
+   under the cursor that just clicked. The `border` shorthand is what drops
+   the accent - a ticked box has been answered, so it must stop claiming the
+   "answer this" treatment from the block that still needs one. */
 .pma-confirm:has(input[type="checkbox"]:checked) {
   border: 1px dashed hsl(var(--border));
   background: transparent;

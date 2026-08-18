@@ -1702,10 +1702,16 @@ step3_server <- function(input, output, session, state) {
     dir <- step3_directed_threshold(eq, .threshold_direction())
     ln  <- .equiv_lines(eq, dir, per)
     .exact_first <- identical(dir$exact_side %||% "increase", "decrease")
+    # Body copy under the box it is derived from, NOT a bordered block. It used
+    # to sit on a solid ground behind a 4px left accent - the wizard question's
+    # costume (shiny/SPEC.md 3.4.13) - which made the one thing on the tab with
+    # nothing to answer the heaviest thing on it. There is no decision in these
+    # numbers: every one of them follows from the threshold typed directly
+    # above. Position says where it comes from; decoration would only say
+    # "answer me".
     htmltools::div(
       style = paste0(
-        "padding: 0.5rem 0.75rem; background: #f5f5f5; ",
-        "border-left: 4px solid #0f172a; margin: 0.5rem 0; ",
+        "padding: 0.15rem 0 0.35rem; margin: 0.25rem 0 0.5rem; ",
         "font-size: 0.85rem;"),
       # The exact side is emboldened, so the reader can see at a glance which
       # of the two the judgments are anchored to.
@@ -1973,10 +1979,13 @@ step3_server <- function(input, output, session, state) {
     p1d <- round(p0d * (if (up) 1 + rrr else 1 - rrr))
     p1d <- min(max(p1d, 0), 1000)
     dif <- abs(p0d - p1d)
+    # Body copy, for the same reason as output$threshold_equiv above: this is
+    # the RRR of the box beside it read on the absolute scale, and the reviewer
+    # answers nothing with it. Only a block that must be answered wears the
+    # accent (shiny/SPEC.md 3.4.13).
     htmltools::div(
       style = paste0(
-        "padding: 0.5rem 0.75rem; background: #f5f5f5; ",
-        "border-left: 4px solid #0f172a; margin: 0.5rem 0; ",
+        "padding: 0.15rem 0 0.35rem; margin: 0.25rem 0 0.5rem; ",
         "font-size: 0.85rem;"),
       htmltools::p(style = "margin: 0;",
         htmltools::strong(sprintf(

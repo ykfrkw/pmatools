@@ -26,12 +26,15 @@ EDU_COPY <- list(
   intro_modal = list(
     title = "Before you start",
     body  = htmltools::HTML(paste0(
+      # The abbreviation is expanded here, in the first sentence, because the
+      # next one uses it: "SR&MA" arriving undefined is the reader's first
+      # encounter with the whole activity the app sits inside.
       "<p><strong>Statistical pooling is only a small part of a systematic ",
-      "review. A high-quality SR&amp;MA also needs a detailed, prespecified ",
-      "and pre-registered protocol (e.g., on PROSPERO, OSF or other ",
-      "platforms), a comprehensive search, dual independent screening and ",
-      "data extraction, and risk-of-bias assessment - all completed BEFORE ",
-      "the analysis.</strong></p>",
+      "review and meta-analysis (SR&amp;MA). A high-quality SR&amp;MA also ",
+      "needs a detailed, prespecified and pre-registered protocol (e.g., on ",
+      "PROSPERO, OSF or other platforms), a comprehensive search, dual ",
+      "independent screening and data extraction, and risk-of-bias ",
+      "assessment - all completed BEFORE the analysis.</strong></p>",
       "<p>This app handles the pooling and Core GRADE certainty steps; make ",
       "sure the upstream review work is in place first.</p>"
     )),

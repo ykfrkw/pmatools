@@ -1309,6 +1309,23 @@
   after which the box settles back to the muted treatment it always had.
   **No gate moved**: the same boxes gate the same buttons under the same
   conditions, and no judgment, note or export changes.
+* **Shiny app: the block that must be answered is now the heaviest one on its
+  tab.** The `REQUIRED` mark above did not settle the complaint it was meant
+  to, because the ranking was the problem and not the wording: measured on the
+  deployed app, the read-only threshold-equivalence summary sat on a solid
+  ground behind a 4px left accent while the confirmation gating the same tab's
+  Next carried a 1px translucent outline and a near-transparent wash — the
+  heaviest block on the Configuration tab was the one with nothing to answer.
+  A left accent on a filled ground now means "answer this" and nothing else
+  wears it: the confirmation boxes take the wizard question's own weight and
+  ground, and the two derived read-only blocks that borrowed it — the
+  threshold-equivalence summary and the Imprecision tab's absolute-scale
+  reading of the relative risk reduction — become body copy under the input
+  they are derived from, distinguished by position rather than by decoration.
+  Presentation only: no gate, no id and nothing that blocks Next changes.
+* Shiny app: the orientation modal expands the abbreviation before it uses it —
+  "a systematic review and meta-analysis (SR&MA)". The sentence after it has
+  always said `SR&MA`, which until now arrived undefined.
 
 # pmatools 0.5.0
 

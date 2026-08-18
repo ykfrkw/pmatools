@@ -62,6 +62,66 @@ test_that("every confirmation in the registry is rendered through it", {
   expect_setequal(.boxed_confirm_ids(built), PMA_OUTCOME_CONFIRM_IDS)
 })
 
+# ----- The ranking rule (shiny/SPEC.md 3.4.13) -----------------------------
+#
+# "A left accent on a filled ground means 'answer this', and nothing else on a
+# tab may wear it." What shipped before: the read-only threshold-equivalence
+# summary sat on a solid ground behind a 4px accent while the confirmation
+# gating the same tab's Next carried a 1px translucent outline, so the tab
+# taught the reviewer the opposite of what it meant. Asserted on the stylesheet
+# and on the source rather than on a rendering, because that inversion is a
+# pair of numbers in two files and nothing about it needs a browser to see.
+
+.css_rule <- function(css, selector) {
+  # Comments first: the block comment above .pma-confirm quotes the very
+  # declarations these assertions read.
+  bare  <- gsub("/\\*.*?\\*/", "", css)
+  rules <- strsplit(bare, "}", fixed = TRUE)[[1L]]
+  hit <- Filter(function(r) grepl(paste0(selector, "\\s*\\{"), r), rules)
+  expect_true(length(hit) > 0, info = selector)
+  hit[[1L]]
+}
+
+.left_border_px <- function(rule) {
+  m <- regmatches(rule, regexpr("border-left:\\s*([0-9.]+)px", rule))
+  expect_true(nzchar(m), info = rule)
+  as.numeric(sub("^border-left:\\s*", "", sub("px$", "", m)))
+}
+
+test_that("a required answer is never lighter than a read-only block", {
+  css <- paste(readLines(file.path(PMA_APP_ROOT, "www", "shadcn.css"),
+                         warn = FALSE), collapse = "\n")
+
+  question <- .css_rule(css, "\\.pma-wizard-question")
+  confirm  <- .css_rule(css, "\\.pma-confirm")
+
+  # Same weight and same ground as the one live wizard question, so "must be
+  # answered" looks identical wherever it appears.
+  expect_gte(.left_border_px(confirm), .left_border_px(question))
+  expect_match(confirm, "border-left:\\s*4px solid hsl\\(var\\(--primary\\)\\)")
+  expect_match(confirm, "background:\\s*hsl\\(var\\(--muted\\)\\)")
+
+  # The wash it replaced. A translucent primary tint under a solid #f5f5f5
+  # block is the inversion this rule exists to forbid.
+  expect_no_match(confirm, "background:\\s*hsl\\(var\\(--primary\\) / 0\\.05\\)")
+})
+
+test_that("no read-only Step 3 block wears the question's accent", {
+  src <- paste(readLines(file.path(PMA_APP_ROOT, "R", "step3_grade.R"),
+                         warn = FALSE),
+               collapse = "\n")
+
+  # #0f172a IS --primary (222 47% 11%), so a 4px left border in it is the
+  # wizard question's accent spelled as a literal. Both blocks that carried it
+  # -- output$threshold_equiv and output$ois_rrr_equiv -- are derivations of
+  # the box directly above them and are now body copy under it.
+  #
+  # Scoped to that colour on purpose: .pubias_egger_callout() accents in the
+  # judgment's own green or amber, which is the status vocabulary and not this
+  # rule's business.
+  expect_no_match(src, "border-left: 4px solid #0f172a", fixed = TRUE)
+})
+
 test_that("the boxing helper has exactly one implementation", {
   src <- paste(readLines(file.path(PMA_APP_ROOT, "R", "step3_grade.R"),
                          warn = FALSE),
