@@ -53,10 +53,9 @@ Ignored by the \code{"bmj"} style, which has no domain columns.}
 style: a character vector named by outcome, or a single unnamed value
 applied to every outcome. \code{NULL} (default) omits the line.}
 
-\item{unit}{(v0.5) Unit for the continuous-outcome cells -- the Difference
-column of the \code{"bmj"} style and the arm columns of either style (see
-\code{\link{sof_table}}); same named-vector convention as
-\code{follow_up}.}
+\item{unit}{(v0.5) Unit for the Difference column of the \code{"bmj"} style
+when \code{sm = "MD"} (see \code{\link{sof_table}}); same named-vector
+convention as \code{follow_up}.}
 
 \item{label_intervention, label_control}{Arm labels used in the
 "Risk with ..." column headers (GRADEpro vocabulary).
@@ -71,16 +70,22 @@ Summary of Findings table for multiple outcomes
 \section{Presenting a continuous outcome as a proportion of responders}{
 
 \code{\link{sof_table}} takes the responder presentation as arguments
-(\code{convert_smd_to_or}, \code{baseline_risk}, \code{threshold_label},
-\code{chinn_invert}), which is right for a table of one row. A combined
-table has to answer it per row -- one continuous outcome converted, another
-not, a binary one that cannot be -- so the choice rides on each rated object
-as the \code{"pmatools_display"} attribute, a named list holding those four
-names (see \code{\link{export_bundle.pmatools_set}} for the same attribute's
-export arguments). Both layouts fill the converted row's two arm columns
-with the dichotomised rates, marked \code{*} and explained in a footnote
-written once for the table however many rows used it -- and not at all when
-none did.
+(\code{convert_smd_to_or}, \code{keep_effect_scale}, \code{baseline_risk},
+\code{threshold_label}, \code{chinn_invert}), which is right for a table of
+one row. A combined table has to answer it per row -- one continuous outcome
+converted, another not, a binary one that cannot be -- so the choice rides
+on each rated object as the \code{"pmatools_display"} attribute, a named
+list holding those five names (see
+\code{\link{export_bundle.pmatools_set}} for the same attribute's export
+arguments). Both layouts fill the converted row's two arm columns with the
+dichotomised rates, marked \code{*} and explained in a footnote written once
+for the table however many rows used it -- and not at all when none did.
+
+A row asking for \code{keep_effect_scale} occupies \strong{two table rows},
+the effect on its own scale above and the dichotomised reading below, with
+the outcome, participant, certainty and domain cells merged across the pair.
+It is still one outcome, and it can sit beside single-row outcomes without
+either of them moving.
 
 A row that asks for the conversion and cannot support it -- a non-SMD/MD
 effect measure, no responder proportion in (0, 1), no usable pooled estimate

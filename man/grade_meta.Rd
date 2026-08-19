@@ -50,7 +50,10 @@ grade_meta(
   pubias_funnel_asymmetry = NULL,
   pubias_unpublished = NULL,
   pubias_registry_complete = NULL,
-  pubias_rationale = NULL
+  pubias_rationale = NULL,
+  rare_flow = FALSE,
+  rare_one_arm_total_zero = FALSE,
+  rare_method = NULL
 )
 }
 \arguments{
@@ -527,6 +530,25 @@ automated Egger's test). The informational inputs
 \code{pubias_small_industry}, \code{pubias_unpublished} and
 \code{pubias_registry_complete} do not require a rationale. See
 \code{rob_rationale} for how it is recorded. Default \code{NULL}.}
+
+\item{rare_flow}{Logical. \code{TRUE} when the estimate comes from the
+rare-event workflow (\code{\link{rare_event_diagnostics}}'s
+\code{rare_flow}). It changes three computations and no decision rule: the
+optimal information size switches to an event basis, the Inconsistency
+I-squared surrogate is withdrawn as not assessable, and Core GRADE 4 Fig 5
+takes its \code{k < 10} branch at any \code{k} because Egger's test loses
+validity on sparse binary data. No domain rates down because of it.}
+
+\item{rare_one_arm_total_zero}{Logical. \code{TRUE} when one arm has no
+events at all across every study (\code{rare_event_diagnostics()}'s
+\code{one_arm_total_zero}). Imprecision is then reported as not
+assessable: there is no finite effect and no interval to compare with the
+threshold. No downgrade follows from it.}
+
+\item{rare_method}{Method id of the \code{\link{run_rare_ma}} primary that
+produced the estimate (e.g. \code{"BB_CR"}). Recorded on the returned
+object as \code{$rare} so the exported record names the method; it is read
+by nothing that rates anything.}
 }
 \value{
 An S3 object of class \code{pmatools} containing:

@@ -50,10 +50,10 @@ outcome name in the \code{"bmj"} style, e.g.
 \code{"Follow-up: longest, range 7.7-60 months"}. \code{NULL} (default)
 omits the line. Ignored by the \code{"gradepro"} style.}
 
-\item{unit}{(v0.5) Optional unit for the continuous-outcome cells, e.g.
-\code{"days"}: the Difference column of the \code{"bmj"} style, and the
-two arm columns of either style when they hold arm-level means. Ignored
-for relative effect measures.}
+\item{unit}{(v0.5) Optional unit for the Difference column of the
+\code{"bmj"} style when \code{sm = "MD"}, e.g. \code{"days"}. Ignored for
+every other effect measure: a standardised mean difference is not on the
+outcome's scale, and a ratio measure has no unit at all.}
 
 \item{convert_smd_to_or}{(v0.2) Logical. If \code{TRUE} and the meta
 object uses \code{sm = "SMD"} or \code{"MD"}, the "Risk with control" /
@@ -66,15 +66,11 @@ Difference and Effect columns follow the arm columns onto that scale; see
 
 \item{keep_effect_scale}{(v0.6) Logical, only read when
 \code{convert_smd_to_or = TRUE}. \code{FALSE} (default) presents the
-outcome as responder proportions alone. \code{TRUE} presents \emph{both}
-in one row, which is what Core GRADE 6 recommends: each arm cell holds the
-outcome on its own scale on the first line and the responder proportion on
-the second, and the Difference cell holds the standardised mean difference
-first and the per-\code{per} risk difference second. No extra rows and no
-extra columns. When the arm-level means cannot be computed honestly (no
-usable control-arm summaries, or no reference SD to re-express an SMD
-with), the row degrades to the responder-only presentation and a footnote
-names the reason.}
+outcome as responder proportions alone. \code{TRUE} presents \emph{both},
+which is what Core GRADE 6 recommends: the outcome stays one logical row
+and renders as two table rows, the effect on its own scale above and the
+dichotomised reading below, with the outcome, participant, certainty and
+plain-language cells merged across the pair. No extra columns.}
 
 \item{baseline_risk}{Numeric in (0,1), required when
 \code{convert_smd_to_or = TRUE}. Otherwise inherited from the
@@ -102,48 +98,35 @@ A \code{flextable} object suitable for printing, Word export, etc.
 \description{
 Generate a Summary of Findings (SoF) table as a flextable
 }
-\section{Arm columns for a continuous outcome}{
+\section{Absolute effects for a continuous outcome}{
 
-Core GRADE 6 asks for the outcome in the comparison group, in the
-intervention group and the difference between them. A \code{metacont}
-object has no baseline risk to build event rates from, so the two arm
-columns are filled from the arm-level summaries it carries: the control
-column is the inverse-variance weighted mean of the control arms (weights
-\eqn{n / SD^2}, falling back to \eqn{n} when the SDs are unusable), and the
-intervention column is that value plus the pooled difference, its interval
-coming from the pooled difference alone. The control mean is pooled with
-fixed weights whatever model produced the effect estimate, because
-heterogeneity in arm-level means is a different quantity from heterogeneity
-in the contrast and pmatools does not fit a second meta-analysis to estimate
-it. With \code{sm = "SMD"} the pooled difference is in standard deviation
-units and is re-expressed on the outcome's own scale by multiplying it by
-the pooled within-arm SD of the control arms (Cochrane Handbook 15.5.3.2)
-before it is added, which assumes the control arms share one scale; the
-Difference column reports the standardised mean difference itself, in
-standard deviation units. Both derivations are stated in a table footnote.
-The headers become "With control" / "With intervention" in this case, since
-the rate wording and the \code{per} denominator would misdescribe a mean.
+The three absolute-effect cells -- "With control", "With intervention" and
+"Difference" -- hold nothing mean-derived for a continuous outcome, and the
+first two are empty unless the responder conversion below is active.
+
+A continuous meta-analysis routinely pools endpoint scores together with
+change-from-baseline scores. The pooled contrast survives that; a pooled
+\emph{control-arm mean} does not, because the two kinds of arm summary are
+not measurements of the same quantity, and neither does anything built on
+one. Until v0.6 the arm columns held an inverse-variance weighted mean of the
+control arms and that mean plus the pooled difference, which is a number no
+reader could act on in the ordinary mixed case. The pooled difference itself
+is unaffected, so \code{sm = "MD"} keeps its Difference cell in the outcome's
+own units; \code{sm = "SMD"} leaves it empty, since a standard-deviation
+string there only restates the Effect column.
 }
 
 \section{Absolute effects on the responder path}{
 
 With \code{convert_smd_to_or = TRUE} the arm columns hold responder
-proportions, and the three cells beside them are derived from the same two
-numbers -- the assumed control proportion and the pooled estimate:
-\itemize{
-\item the Difference column is the \strong{absolute risk difference}
-between the two proportions, per \code{per} patients, worded like every
-other absolute difference in the table ("177 more per 1000 (72 more to
-271 more)"). It is not the pooled effect in standard deviation units:
-a Difference column reading in SD units beside two columns reading in
-responders per 1000 is not an absolute effect at all, which is what the
-column is for;
-\item the Effect column gains a second line, "Derived risk ratio r
-(lo to hi)", the ratio of the two proportions;
-\item both are DERIVED, not fitted: they inherit Chinn's logistic
-latent-variable assumption and move with the assumed control proportion.
-The footnote says so and names the proportion used.
-}
+proportions and the Difference column the \strong{absolute risk difference}
+between them, per \code{per} patients, worded like every other absolute
+difference in the table ("177 more per 1000 (72 more to 271 more)"). The
+Effect column reads "Derived odds ratio r (lo to hi)": that odds ratio is
+Chinn's formula's own output, \eqn{\exp(SMD \times \pi / \sqrt{3})}, and is
+the one derived quantity here that does \emph{not} depend on the assumed
+control proportion. The two arm rates and the risk difference beside them
+do. The footnote draws that line and names the proportion used.
 }
 
 \section{Plain language summaries -- one adverb per certainty level}{
