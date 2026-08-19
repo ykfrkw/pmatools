@@ -185,8 +185,8 @@ grade_table <- function(outcomes,
 
   # Per-outcome follow-up / unit ride on the rated objects themselves when
   # grade_meta_multi() was given them, so a multi-outcome caller does not have
-  # to re-assemble a parallel named vector here. `unit` reaches the GRADEpro
-  # layout too, which labels the arm columns of a continuous outcome with it.
+  # to re-assemble a parallel named vector here. Only the BMJ style reads
+  # `unit` (see below); the GRADEpro layout ignores it.
   follow_up <- follow_up %||% .display_arg_from_outcomes(outcomes, "follow_up")
   unit      <- unit      %||% .display_arg_from_outcomes(outcomes, "unit")
 
