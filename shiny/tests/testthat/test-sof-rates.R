@@ -119,3 +119,23 @@ test_that("pma_sof_unit() labels a mean difference and nothing else", {
   expect_null(md_unit("RR", "days"))
   expect_null(md_unit("RoM", "days"))
 })
+
+test_that("the rare-event alert names the arms the table names", {
+  # The alert quotes two arm rates and then names a column by its header. With
+  # a reviewer's own labels in the headers, an alert saying "the intervention
+  # arm" and 'the "With intervention" column' points at a column the table does
+  # not have.
+  a <- pma_rare_event_alert(
+    .fake_g(event.e = 9, n.e = 1000, event.c = 10, n.c = 1000),
+    labels = list(intervention = "CBT-I", control = "placebo"))
+  expect_false(is.null(a))
+  expect_match(a$note, "in the placebo arm", fixed = TRUE)
+  expect_match(a$note, "in the CBT-I arm", fixed = TRUE)
+  expect_match(a$note, '"With CBT-I" column', fixed = TRUE)
+
+  # Unchanged when the arms were never named.
+  b <- pma_rare_event_alert(
+    .fake_g(event.e = 9, n.e = 1000, event.c = 10, n.c = 1000))
+  expect_match(b$note, "in the control arm", fixed = TRUE)
+  expect_match(b$note, '"With intervention" column', fixed = TRUE)
+})

@@ -27,8 +27,8 @@
 #' @param unit (v0.5) Unit for the Difference column of the \code{"bmj"} style
 #'   when \code{sm = "MD"} (see \code{\link{sof_table}}); same named-vector
 #'   convention as \code{follow_up}.
-#' @param per Denominator for SoF rate columns. \code{1000} (default) or
-#'   \code{100}.
+#' @param per Denominator for SoF rate columns. \code{1000} (default); any
+#'   positive denominator is accepted (see \code{\link{sof_table}}).
 #' @param prediction Logical (default \code{FALSE}); when \code{TRUE}, the
 #'   95 percent prediction interval is shown in the Effect column.
 #' @param label_intervention,label_control Arm labels used in the
@@ -136,7 +136,8 @@ grade_table <- function(outcomes,
   # reason has to reach the footnote register below.
   responder     <- .resolve_responder(outcomes, nms, per,
                                       big_mark = nf$big_mark,
-                                      ci_sep   = nf$ci_sep)
+                                      ci_sep   = nf$ci_sep,
+                                      label_control = label_control)
   converted_nms <- .converted_outcomes(responder)
 
   # One numbered footnote pool for every note that belongs to a single row
@@ -412,7 +413,8 @@ grade_table <- function(outcomes,
     }
   }
 
-  ft <- .add_responder_notes(ft, responder, converted_nms)
+  ft <- .add_responder_notes(ft, responder, converted_nms,
+                             label_intervention, label_control)
 
   ft <- .style_table_footer(ft)
 
@@ -422,12 +424,18 @@ grade_table <- function(outcomes,
 # The '*' footnote explaining the responder presentation, written once however
 # many rows used it and not at all when none did, followed by one line per
 # converted row for the direction and threshold that row was converted against.
-.add_responder_notes <- function(ft, responder, converted_nms) {
+.add_responder_notes <- function(ft, responder, converted_nms,
+                                 label_intervention = "intervention",
+                                 label_control = "control") {
   if (length(converted_nms) == 0L) return(ft)
-  ft <- flextable::add_footer_lines(ft, values = .chinn_note(reading = TRUE))
+  ft <- flextable::add_footer_lines(
+    ft, values = .chinn_note(reading = TRUE,
+                             label_intervention = label_intervention,
+                             label_control = label_control))
   for (nm in converted_nms) {
     ft <- flextable::add_footer_lines(
-      ft, values = .responder_row_note(nm, responder[[nm]]$args))
+      ft, values = .responder_row_note(nm, responder[[nm]]$args,
+                                       label_intervention, label_control))
   }
   ft
 }

@@ -161,8 +161,14 @@ test_that("Rule 5 records the sign flip as rule 5 and lights its own leaf", {
                   rob_inflation_threshold = 0.10)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   facts <- domain_facts(g, "Risk of bias")
-  expect_match(facts$value[facts$key == "flow_path"], "pma-rob-leaf-rule5",
-               fixed = TRUE)
+  # The figure no longer draws the five rules, so flow_path cannot name one.
+  # fig2_branch is where the rule number lives, and it says rule 5 in both
+  # registers: as a number, and in the sentence beside it.
+  expect_identical(facts$numeric[facts$key == "fig2_branch"], 5)
+  expect_match(facts$value[facts$key == "fig2_branch"],
+               "direction-of-bias rule 5", fixed = TRUE)
+  expect_false(grepl("pma-rob-leaf-rule",
+                     facts$value[facts$key == "flow_path"], fixed = TRUE))
 })
 
 test_that("Rule 5's own wording says two levels, and discloses the departure", {

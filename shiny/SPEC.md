@@ -1088,7 +1088,14 @@ Below the accordion, a `pma-card` with:
 - Large heading: `Final certainty: {{certainty}} {{symbol}}` (symbol = ⊕⊕⊕⊕ etc.)
 - Color-coded by CINeMA pastel palette
 - "Why this rating?" expandable showing per-domain judgment + 1-line justification
-- Embedded SoF preview rendered from `pmatools::sof_table()` via `htmltools_value(ft)`
+- Embedded SoF preview rendered from `pmatools::sof_table()` via `htmltools_value(ft)`,
+  called with the review's own arm labels, resolved by `pma_arm_labels(state)`
+  (`R/ui_helpers.R`) from `state$arm_e` / `state$arm_c`. **One resolver, two
+  steps:** it was a closure inside `step4_server()` until 0.5.1, so this preview
+  showed `With control` and a Core GRADE 6 Box 1 subject of `Treatment` one screen
+  before Step 4's combined table showed the reviewer's own words. The rare-event
+  alert and the two footnotes under the table take the same labels, because each
+  of them names a column by its header
 
 #### 3.4.10 Display options card
 
@@ -1108,6 +1115,24 @@ Rendered by `.responder_block()` (`R/step3_threshold.R`), **below** the Decision
   - `textInput("threshold_label", "Definition of the threshold of clinical interest (free text)")`
   - `output$chinn_direction_echo` — `chinn_invert` is derived from the Step 2 direction answer, not asked again.
 **The threshold-equivalence summary is not a question and must stop looking like one.** The block under the threshold input that reads `Increase: 156 per 1,000 -> 206 per 1,000, equivalent OR 1.404` (and its decrease mirror) is derived entirely from the number typed directly above it: there is nothing in it to answer. It used to carry a left accent on a filled ground — the wizard-question costume — which is what made a reviewer read it as one more question in the same column as Publication bias's. It is body copy under its input, per §3.4.13, and the accent it gave up went to `threshold_confirm`, which is the thing on that tab that genuinely has to be answered.
+
+**And it is two lines, not four (0.5.1).** The block used to end with two
+italic paragraphs deriving the conversion: *"What the algorithm uses: a
+symmetric +/- log(1.396) band…"* and *"The … side is therefore the approximate
+one: the band's mirror is OR 0.717…"*. Both are deleted, from
+`output$threshold_equiv` **and** from `threshold_summary()`, and `.equiv_lines()`
+no longer builds them. The two conversion lines above are what a reviewer reads
+this block for; the derivation behind them is not a decision anyone makes here.
+
+Nothing about the residual asymmetry is lost. `step3_threshold_note()` states
+it, is written onto the rated object, and travels into the domain notes and the
+Evidence Profile footnote — see the exception block below, whose status this
+raises rather than lowers: it is now the only statement of the asymmetry.
+`.equiv_lines()` still returns a `caveat`, surfaced under the two lines, but
+only when the requested direction could **not** be honoured. That one is not
+part of the derivation: an app that quietly converts on the opposite side to
+the one the pooled effect lies on is the silent exit §2.3 forbids.
+
 
 - `output$responder_p0_badge` renders `confirmed` / `unconfirmed assumption` beside the section heading, and **nothing at all** on the `"effect"` route, where there is no assumption to confirm.
 - `input$sof_presentation` is registered in `PMA_OUTCOME_INPUT_IDS$configuration` (`R/ui_helpers.R`), so a change of outcome clears it. An id missing from that list is an id whose stale answer survives an outcome change.
@@ -1254,6 +1279,17 @@ against equating the threshold with a Minimally Important Change — is
 `threshold` / `threshold_type` / `threshold_scale`, and this was the last place
 the UI still named MIC at all.
 
+Two more `.config_note()` paragraphs are **deleted** (0.5.1), on the same
+"delete first" test. The control-group risk box's *"Converts the absolute
+threshold to the analysis scale, and seeds the Optimal Information Size…"*:
+the input above it is already labelled *Control-group risk (events per N
+patients)*, and the box it seeds is one tab away. The per-N radio's *"One
+setting for the whole app — display only, never what is computed…"*: the radio
+above it is labelled *Report event rates per* and the units are the answer. The
+conditional rare-event note under the same radio **stays** — it reports
+something that happened (a unit was seeded, and why) rather than restating a
+control.
+
 | input | where it lives | why |
 |---|---|---|
 | `per` | Configuration | it relabels the control-group risk, the absolute threshold and the OIS figures, none of which are on Final certainty (Final certainty keeps a read-only echo) |
@@ -1274,13 +1310,32 @@ value, closing the window between a rebuild and the rebuilt radio reporting in,
 during which the domains would otherwise be rated against the opposite
 convention.
 
-**The per-N display unit.** `radioButtons("per", …)` offers the units in
-`STEP3_PER_UNITS` — 100, 1,000, 10,000 and 100,000, with the labels built by
-`step3_per_choices()` — and is backed by the `display_per_state()` reactiveVal,
+**The per-N display unit.** `radioButtons("per", …)` offers
+`step3_per_units_offered(rare, selected)` — **100 and 1,000 for an ordinary
+analysis, and 10,000 and 100,000 as well when the analysis on screen is flagged
+rare** — with the labels built by `step3_per_choices()`, and is backed by the
+`display_per_state()` reactiveVal,
 seeded under `isolate()` and synced back with `.sync_widget()` — the same
 machinery the threshold values use, because a statically declared radio would
 push its default back on every 3 → 2 → 3 round trip. The two large units exist
 for rare events (§3.4.14) and are seeded there; the default is 1,000.
+
+> **Two lists, one rule: narrow the offer, never the acceptance.**
+> `STEP3_PER_UNITS` keeps all four and remains the set `step3_per_unit()`
+> validates against, because a rare analysis seeded to 10,000 (§3.4.14) must
+> keep validating — `app.R` routes `state$display$per` through the same
+> function, so a validator that had learned about the offered set would print
+> per 10,000 on screen and export per 1,000, with nothing on screen to say so.
+> `STEP3_PER_UNITS_COMMON` is what the radio shows. `step3_rare_per_seed()`
+> still reads all four in ascending order and is unchanged.
+>
+> **A unit the reviewer is standing on is never taken away.**
+> `step3_per_units_offered()` unions the current selection into the offer, so
+> an analysis that stops being rare at per 100,000 keeps that choice on the
+> radio. Without it `radioButtons()` renders with no selection and pushes its
+> first choice — per 100, coarser than the default — back on the next rebuild.
+> Same principle as the seeding observer's "only while the unit is still the
+> default": the display unit is a property of the review, not of the outcome.
 
 **Internal storage stays per-1,000.** `threshold_abs_state()`,
 `threshold_baseline_state()`, `.threshold_grade_args()` and `ois_p0_value()`
@@ -1550,8 +1605,14 @@ branch, via a `conditionalPanel` on `output.incon_subgroup_relevant`
 
 **Risk of Bias.** `output$rob_rule_note` (a ~180-word standing statement of the
 binary rule) and the "See also RoB 2" paragraph are deleted, not collapsed: the
-`rob_some_concerns` radio states the rule in one sentence beside itself, the
-two-group forest *shows* it, and `pma_reference()` already carries the source.
+`rob_some_concerns` radio states the rule beside itself — that Core GRADE 4
+rates risk of bias from a **two-way split**, that Fig 2 asks whether the high
+risk of bias group dominates, and that RoB 2's three judgments therefore have
+to fold into two before the question can be asked at all — the two-group forest
+*shows* it, and `pma_reference()` already carries the source. That copy says
+why the control exists; up to 0.5.1 it said only that Core GRADE 4 left the
+boundary open, which describes the choice without naming the mechanism that
+forces it.
 `output$rob_forest` passes
 `plot_forest_rob(some_concerns_as = .rob_some_concerns_setting())`, so the plot
 and the judgment beside it agree about how many groups there are.
@@ -1695,9 +1756,21 @@ warrants 'may' rather than 'likely'"* — is now the only thing there, visible.
 
 **Final certainty.** `other_text` / `other_downgrade` are answers and stay
 open; the rest of Display options collapses. The Heimke CER/EER recommendation
-is now `PMA_SOF_CER_EER_NOTE`, written into the SoF footer by
+is now `pma_sof_cer_eer_note(arms)`, written into the SoF footer by
 `pma_sof_add_notes()`, so it travels into the exported .docx — which it never
 did as page text.
+
+> **CER and EER keep their acronyms (0.5.1).** The arm labels are *not*
+> substituted into "control event rate" / "intervention event rate": the two
+> acronyms are the cited source's own and stop deriving from the words the
+> moment the words change ("the placebo event rate (CER)"). What the reviewer
+> needs is to find the columns, so the note names the columns instead — and
+> those do follow the labels, because the headers do. Same reasoning inverted
+> for `pma_sof_limitations_note(arms)`, which names the arm columns and
+> therefore must follow them: it says "the value with &lt;control&gt;", mirroring
+> the column head "With &lt;control&gt;", because the older
+> "&lt;label&gt;-group value" shape does not survive free text ("CBT-I-group
+> value").
 
 #### 3.4.14 Rare events in Step 3
 
@@ -1803,7 +1876,10 @@ figure already has, for the reason the figure already has it.
 per-N unit is already reviewer-selectable and already flows through one
 formatter to every string in Step 3 and into `sof_table()`
 (`step3_per_label()` / `display_per_state()`), so what was needed is a better
-default and two more units. `STEP3_PER_UNITS` gains 10,000 and 100,000, and
+default and two more units. `STEP3_PER_UNITS` gains 10,000 and 100,000 as
+*accepted* units — they are offered on the radio only while the analysis is
+flagged rare (§3.4.10a), since four choices made the commonest control on the
+tab twice as long for a case almost no analysis is in — and
 `step3_rare_per_seed(event_rate_c)` picks the **smallest** unit at which the
 control-arm event rate still rounds to a whole event — never below the 1,000
 default, since 100 is the coarser unit and would make the problem worse.
@@ -1893,6 +1969,10 @@ output$download_zip <- downloadHandler(
   }
 )
 ```
+
+`arms` is `pma_arm_labels(state)` (`R/ui_helpers.R`), shared with the Step 3
+preview (§3.4.9). It was a closure inside `step4_server()` until 0.5.1, which
+is exactly why the two disagreed: Step 3's preview could not call it.
 
 Everything else the bundler needs is **per outcome**, and travels on the rated
 object rather than being read from the live state at download time — which
@@ -2082,7 +2162,8 @@ The bundled `analysis.R` needs no extra work: `export_bundle_multi()` already
 emits one `add_not_reported()` call per not-reported outcome, after
 `grade_meta_multi()` and before `reorder_outcomes()` (SPEC.md §4.14).
 
-`PMA_SOF_LIMITATIONS_NOTE` lost its first sentence with this change. It said
+`pma_sof_limitations_note()` (a constant until 0.5.1, when it had to start
+following the arm labels) lost its first sentence with this change. It said
 *"'Not reported' rows: outcomes the evidence base did not measure are absent
 from this table"*, which is no longer true.
 

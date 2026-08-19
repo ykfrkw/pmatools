@@ -2,6 +2,35 @@
 
 ## Breaking changes
 
+* **Eight ids leave the risk-of-bias `flow_path` vocabulary, because the
+  drawing no longer has them.** `.ROB_FIG2_NODE_IDS` drops
+  `pma-rob-leaf-rule1` … `rule5`, `pma-rob-leaf-rulena`,
+  `pma-rob-edge-direction-rules` and `pma-rob-edge-magnitude-notassessable`,
+  going from 27 ids to 19. A `flow_path` recorded by an earlier release that
+  names any of them lights nothing when it is drawn against the new figure.
+
+  The five direction-of-bias rules are unchanged and still decide the judgment;
+  what changed is that they are no longer *drawn*. Core GRADE 4 Fig 2 has
+  exactly two boxes and two leaves below "check the direction of bias", and
+  enumerating the rules as six numbered leaves put six verdicts on the page
+  where the source has two sentences — so the column is gone, and the dominated
+  branch now runs `node-dominance → edge-dominance-yes → node-direction →
+  edge-rules-{responsible|conservative} → node-bias-{…} → edge-{…} →
+  leaf-{ratedown|noratedown}`.
+
+  **The rule number is not lost.** It is recorded, as it always was, on the
+  `fig2_branch` fact, and named in the domain notes, the Summary of Findings
+  footnote and the Evidence Profile. `domain_facts(g, "Risk of bias")` is the
+  stable reader; `flow_path` is a drawing route and always was.
+
+  `pma-rob-edge-magnitude-notassessable` is merged into
+  `pma-rob-edge-magnitude-similar`, relabelled *"Similar/Not assessable"*. Both
+  already reached the same leaf and rated down neither way. The two are still
+  not the same finding, and the distinction still travels — in the note ("the
+  magnitude question is never asked") and in `fig2_branch` — but two arrows
+  into one box showed a reader two routes rather than two meanings. Same
+  reasoning that deleted `pma-rob-edge-appreciable-no`.
+
 * **The domain judgment values are now Core GRADE's own words, `"serious"` has
   moved from −2 to −1, and passing a bare `"serious"` is an error for this
   release.** The stored vocabulary was `"no"` / `"some_concerns"` / `"serious"`,
@@ -860,6 +889,36 @@
   the bundler. `sof_notes` does not reach the certainty appendix.
 
 ## Behaviour changes
+
+* **The risk-of-bias figure's rate-down leaf reads "Rate down", and nothing
+  else.** It carried "1 level, or 2 on rule 5 with a threshold supplied — Core
+  GRADE 4 describes no two-level downgrade", which made the only coloured shape
+  in the figure the wordiest one and named a rule the figure no longer draws.
+  The source's two leaves are two phrases and pmatools' now match them. The
+  two-level departure is stated in no fewer places than before: `.ROB_TWO_LEVEL_NOTE`,
+  the notes of every judgment on that branch, the figure's `<desc>`,
+  `?grade_flowcharts`, and the caption under the chart in the Shiny app.
+
+* **Arm labels now reach the Summary of Findings footnotes, not just its column
+  headers.** `label_intervention` / `label_control` are substituted into the
+  base note, the BMJ absolute-effects note and the Chinn dichotomisation
+  footnotes, so a review whose arms are "CBT-I" and "placebo" no longer reads
+  *"Control event rate user-specified"* under a column headed *"Risk with
+  placebo"*. `grade_report(format = "md")` receives them too — its markdown
+  table printed *"Intervention rate (per 1,000)"* whatever it was asked for,
+  while the `.docx` branch had threaded them from the start.
+
+  **Output at the default labels is byte-identical to earlier releases**: the
+  substitution is a no-op when nothing was named, so an existing script's
+  tables do not move. Two rules keep free text readable in a sentence —
+  `.arm_label_cap()` raises only the first character (so `"CBT-I"` is not
+  shouted back), and `.arm_subject()` falls back to the generic word when the
+  label is the package default, because *"OR > 1 = intervention better"* is not
+  a sentence anyone writes.
+
+  `export_bundle()` on a single outcome still takes no label arguments, by
+  design: it calls `sof_table()` with the defaults so its shipped table and the
+  `analysis.R` that rebuilds it cannot disagree.
 
 * **Forest plots print `Mean` and `SD` to one decimal place, and the precision
   is now adjustable.** `plot_forest()` gains `digits_mean` and `digits_sd`,

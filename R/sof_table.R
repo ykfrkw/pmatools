@@ -53,9 +53,11 @@
 #' @param palette Color palette for the certainty cell.
 #'   \code{"pastel"} (default) uses soft backgrounds with colored text.
 #'   \code{"classic"} uses saturated backgrounds with white text.
-#' @param per Denominator for event rate columns. \code{1000} (default) or
-#'   \code{100}. Controls the scale of the "Risk with control" and
-#'   "Risk with intervention" columns.
+#' @param per Denominator for event rate columns. \code{1000} (default). Any
+#'   positive denominator is accepted and used as a plain multiplier; the Shiny
+#'   app offers 100 and 1000, and 10000 / 100000 as well on rare-event data.
+#'   Controls the scale of the "Risk with <control>" and
+#'   "Risk with <intervention>" columns.
 #' @param prediction Logical. If \code{TRUE} (default \code{FALSE}), the
 #'   Effect column also shows the 95 percent prediction interval on a second line,
 #'   provided the meta object was run with \code{prediction = TRUE}.
@@ -320,9 +322,9 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
     # them with rates, and a sentence describing how a rate was computed is
     # noise over two empty cells.
     if (arm$continuous) "" else paste0(
-      " Intervention rate (Risk with ", label_intervention, ") = ",
-      "intervention-arm event rate computed from baseline risk and pooled ",
-      "relative effect.")
+      " ", .arm_label_cap(label_intervention), " rate (Risk with ",
+      label_intervention, ") = ", label_intervention, "-arm event rate ",
+      "computed from baseline risk and pooled relative effect.")
   )
   ft <- flextable::add_footer_lines(ft, values = base_note)
 
@@ -357,7 +359,9 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
       ft, values = .chinn_note(invert = isTRUE(chinn_invert),
                                threshold_label = threshold_label,
                                reading = TRUE,
-                               baseline_risk = baseline_risk))
+                               baseline_risk = baseline_risk,
+                               label_intervention = label_intervention,
+                               label_control = label_control))
   }
 
   ft <- .style_table_footer(ft)
@@ -556,6 +560,29 @@ sof_add_notes <- function(x, notes) {
 # (per 1,000)" is the wording for an event rate; when the cells hold the
 # outcome's own value instead (a continuous outcome's pooled arm means), the
 # rate vocabulary and the denominator would both be wrong, so the headers fall
+
+# An arm label at the START of a sentence. Labels are free text a reviewer
+# typed -- "CBT-I", "usual care", "placebo" -- so only the first character is
+# touched. toupper() on the whole string would shout an acronym back at them.
+.arm_label_cap <- function(x) {
+  if (!length(x) || is.na(x) || !nzchar(x)) return(x)
+  paste0(toupper(substring(x, 1L, 1L)), substring(x, 2L))
+}
+
+# The arm as the SUBJECT of a sentence, which is not the same job as labelling
+# a column. The package default "intervention" is a column label; "OR > 1 =
+# intervention better" is not a sentence anyone writes. So the default falls
+# back to the generic word these footnotes have always used, and a
+# caller-supplied label replaces it.
+#
+# Consequence, and it is the point: at the default labels every footnote below
+# is byte-identical to what it was before the labels reached them, so a review
+# that never named its arms gets exactly the table it always got.
+.arm_subject <- function(label_intervention, generic = "treatment") {
+  if (identical(label_intervention, "intervention")) generic else
+    label_intervention
+}
+
 # back to the measure-neutral "... with control".
 .arm_headers <- function(continuous, per = 1000,
                          label_intervention = "intervention",
@@ -872,7 +899,8 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
 # the whole document away from a reviewer because one outcome cannot be
 # converted is the worse answer, so grade_table() falls back to the unconverted
 # presentation and prints this sentence against the row instead.
-.responder_unavailable_reason <- function(g, args) {
+.responder_unavailable_reason <- function(g, args,
+                                          label_control = "control") {
   sm <- as.character(g$meta$sm %||% "")
   if (!sm %in% c("SMD", "MD")) {
     return(sprintf(paste0(
@@ -883,8 +911,8 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
   p0 <- args$baseline_risk
   if (is.null(p0) || !is.numeric(p0) || length(p0) != 1L || is.na(p0) ||
       p0 <= 0 || p0 >= 1) {
-    return(paste0("no control-group responder proportion in (0, 1) was ",
-                  "recorded for it"))
+    return(paste0("no ", label_control, "-group responder proportion in ",
+                  "(0, 1) was recorded for it"))
   }
   est <- .pooled_estimate(g$meta)$est
   if (is.null(est) || length(est) != 1L || !is.finite(est)) {
@@ -926,11 +954,14 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
 # reason it passes no direction: its rows can be converted against different
 # proportions, and .responder_row_note() states each row's own.
 .chinn_note <- function(invert = NULL, threshold_label = NULL,
-                        reading = FALSE, baseline_risk = NULL) {
+                        reading = FALSE, baseline_risk = NULL,
+                        label_intervention = "intervention",
+                        label_control = "control") {
   invert_str <- if (is.null(invert)) {
     ""
   } else if (isTRUE(invert)) {
-    " (OR direction inverted: OR > 1 = treatment better)"
+    paste0(" (OR direction inverted: OR > 1 = ",
+           .arm_subject(label_intervention), " better)")
   } else {
     " (OR direction as given: positive SMD -> OR > 1)"
   }
@@ -941,13 +972,14 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
   paste0(
     "* Continuous outcome dichotomised via Chinn's formula ",
     "(log OR = SMD x pi / sqrt(3))", invert_str,
-    ". Control event rate user-specified.", threshold_str,
+    ". ", .arm_label_cap(label_control), " event rate user-specified.",
+    threshold_str,
     " This is NOT Core GRADE 6's option 2, which assumes a normal ",
     "distribution and computes, per study and before pooling, the ",
     "proportion in each arm improving by more than the MID; Chinn's formula ",
     "assumes a logistic latent variable, uses no MID and is applied to the ",
     "pooled SMD. The two do not generally agree.",
-    " ", .chinn_derived_sentence(baseline_risk),
+    " ", .chinn_derived_sentence(baseline_risk, label_control),
     if (reading) paste0(
       " Recommended reading: ",
       "Chinn S. Stat Med. 2000; ",
@@ -967,14 +999,16 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
 # Said in one sentence shared by the single- and multi-outcome footers, because
 # the two stating it differently is how a reader ends up trusting one table more
 # than the other.
-.chinn_derived_sentence <- function(baseline_risk = NULL) {
+.chinn_derived_sentence <- function(baseline_risk = NULL,
+                                    label_control = "control") {
   p0_str <- if (!is.null(baseline_risk) && length(baseline_risk) == 1L &&
                 is.numeric(baseline_risk) && is.finite(baseline_risk)) {
     sprintf(" of %s", format(baseline_risk))
   } else ""
   paste0(
     "The Effect column's derived odds ratio comes from the formula above ",
-    "alone and does NOT depend on the assumed control responder proportion",
+    "alone and does NOT depend on the assumed ", label_control,
+    " responder proportion",
     p0_str, ": revising that proportion leaves it unchanged. The two arm ",
     "rates and the Difference column's absolute risk difference DO depend on ",
     "it, and move with it. All of them are derived from the pooled estimate ",
@@ -986,9 +1020,12 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
 # What .chinn_note() leaves out for a combined table: the direction and the
 # threshold of ONE converted row. Keyed by outcome name, like the per-outcome
 # publication-bias sentences of the same footer.
-.responder_row_note <- function(nm, args) {
+.responder_row_note <- function(nm, args,
+                                label_intervention = "intervention",
+                                label_control = "control") {
   dir_str <- if (isTRUE(args$chinn_invert)) {
-    "OR direction inverted (OR > 1 = treatment better)"
+    paste0("OR direction inverted (OR > 1 = ",
+           .arm_subject(label_intervention), " better)")
   } else {
     "OR direction as given (positive SMD -> OR > 1)"
   }
@@ -1004,7 +1041,8 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
   p0 <- args$baseline_risk
   p0_str <- if (!is.null(p0) && length(p0) == 1L && is.numeric(p0) &&
                 is.finite(p0)) {
-    sprintf(" Assumed control responder proportion: %s.", format(p0))
+    sprintf(" Assumed %s responder proportion: %s.", label_control,
+            format(p0))
   } else ""
   scale_str <- if (isTRUE(args$keep_effect_scale)) {
     paste0(" Shown on two rows: the effect on its own scale above, the ",
@@ -1029,13 +1067,14 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
 # (.sof_set_dataframe(), export_bundle_multi.R), so the .docx and the .csv
 # cannot disagree about how a row is presented.
 .resolve_responder <- function(outcomes, nms = names(outcomes), per = 1000,
-                               big_mark = TRUE, ci_sep = "; ") {
+                               big_mark = TRUE, ci_sep = "; ",
+                               label_control = "control") {
   out <- lapply(nms, function(nm) {
     g <- outcomes[[nm]]
     .check_outcome_display(g, nm)
     args <- .responder_args(g)
     if (is.null(args)) return(NULL)
-    why <- .responder_unavailable_reason(g, args)
+    why <- .responder_unavailable_reason(g, args, label_control)
     if (!is.null(why)) return(list(args = args, reason = why, arm = NULL))
     list(args   = args,
          reason = NULL,

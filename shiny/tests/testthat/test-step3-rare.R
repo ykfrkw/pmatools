@@ -191,6 +191,51 @@ test_that("every offered unit has a radio label", {
   expect_identical(names(choices)[[4]], "100,000 patients")
 })
 
+test_that("the radio offers two units normally and four on rare-event data", {
+  # ACCEPTED is not OFFERED. 10,000 and 100,000 answer a question only a
+  # rare-event analysis asks, and a reviewer pooling ordinary event rates
+  # should not read past them to reach the two they pick between -- but
+  # narrowing what step3_per_unit() ACCEPTS instead would make a seeded 10,000
+  # fail validation and snap the exported denominator back to 1,000 behind the
+  # reviewer's back.
+  expect_identical(step3_per_units_offered(rare = FALSE), c(100L, 1000L))
+  expect_identical(step3_per_units_offered(rare = TRUE), STEP3_PER_UNITS)
+
+  # Still accepted either way: the offered list is a display decision only.
+  expect_identical(step3_per_unit(10000), 10000L)
+})
+
+test_that("the offered units always contain the unit currently in force", {
+  # An analysis can stop being rare -- a column remapped, a study dropped --
+  # while a seeded 10,000 is still the unit on screen. A radio rendered
+  # without its own selected value shows no selection at all and pushes a
+  # different unit back to the server on the next rebuild, which would move
+  # the exported denominator without anyone touching the control.
+  offered <- step3_per_units_offered(rare = FALSE, selected = 10000L)
+  expect_true(10000L %in% offered)
+  expect_identical(offered, c(100L, 1000L, 10000L))
+
+  # Ascending and unique, so the labels read in order and no unit is listed
+  # twice when the selected value is already common.
+  common <- step3_per_units_offered(rare = FALSE, selected = 100L)
+  expect_identical(common, c(100L, 1000L))
+  expect_false(any(duplicated(step3_per_units_offered(rare = TRUE,
+                                                      selected = 1000L))))
+
+  # A junk selection falls back through step3_per_unit() rather than widening
+  # the list with something the rest of Step 3 would reject.
+  expect_identical(step3_per_units_offered(rare = FALSE, selected = 7L),
+                   c(100L, 1000L))
+})
+
+test_that("every offered unit still has a radio label", {
+  # step3_per_choices() is handed the offered set now, not always the accepted
+  # one, so the label builder has to survive a short vector.
+  choices <- step3_per_choices(step3_per_units_offered(rare = FALSE))
+  expect_identical(unname(choices), c("100", "1000"))
+  expect_identical(names(choices), c("100 patients", "1,000 patients"))
+})
+
 # --------------------------------------------------------------------------
 # The method is named where the rating is set up
 # --------------------------------------------------------------------------

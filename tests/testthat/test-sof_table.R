@@ -73,6 +73,48 @@ test_that("sof_table honours custom arm labels", {
   expect_true("Risk with CBT-I\n(per 1,000)" %in% hdrs)
 })
 
+test_that("the arm labels reach the footnotes, not only the headers", {
+  # They reached the headers from the start and stopped there, so one table
+  # could name the arms two ways: "Risk with placebo" over a column, and
+  # "intervention-arm event rate" in the sentence describing that column.
+  g   <- make_common_only_grade()
+  ft  <- sof_table(g, label_intervention = "CBT-I", label_control = "placebo")
+  txt <- .footer_text(ft)
+  expect_match(txt, "CBT-I rate (Risk with CBT-I)", fixed = TRUE)
+  expect_match(txt, "CBT-I-arm event rate", fixed = TRUE)
+  expect_no_match(txt, "Intervention rate (Risk with", fixed = TRUE)
+  expect_no_match(txt, "intervention-arm event rate", fixed = TRUE)
+})
+
+test_that("the default footnote wording is byte-identical to before", {
+  # The whole substitution is a no-op at the defaults. That is what keeps a
+  # review which never named its arms producing the table it always did, and
+  # it is why every other test in this file could stay untouched.
+  g <- make_common_only_grade()
+  expect_match(
+    .footer_text(sof_table(g)),
+    "Intervention rate (Risk with intervention) = intervention-arm event rate",
+    fixed = TRUE)
+})
+
+test_that("a label starting a sentence is capitalised, an acronym is not", {
+  # Labels are free text a reviewer typed. Only the first character moves:
+  # toupper() on the whole string would shout "CBT-I" back as "CBT-I" and
+  # "usual care" as "USUAL CARE".
+  expect_identical(pmatools:::.arm_label_cap("placebo"), "Placebo")
+  expect_identical(pmatools:::.arm_label_cap("CBT-I"), "CBT-I")
+  expect_identical(pmatools:::.arm_label_cap("usual care"), "Usual care")
+  expect_identical(pmatools:::.arm_label_cap(""), "")
+
+  # And the sentence SUBJECT falls back to the generic word, because the
+  # package default is a column label rather than something a sentence can be
+  # about: "OR > 1 = intervention better" is not a sentence anyone writes.
+  expect_identical(pmatools:::.arm_subject("intervention"), "treatment")
+  expect_identical(pmatools:::.arm_subject("intervention", "Treatment"),
+                   "Treatment")
+  expect_identical(pmatools:::.arm_subject("CBT-I"), "CBT-I")
+})
+
 test_that("grade_table shows the effect for a common-effect-only analysis", {
   g  <- make_common_only_grade()
   ft <- grade_table(list("Common only" = g))

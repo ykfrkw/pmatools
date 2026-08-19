@@ -87,3 +87,37 @@ test_that("grade_report rejects non-pmatools outcome lists", {
   expect_error(grade_report(list(a = 1, b = 2)),
                regexp = "pmatools")
 })
+
+test_that("the markdown report names the review's own arms", {
+  # grade_report() has taken label_intervention / label_control since they
+  # existed and threaded them into the .docx branch. The markdown branch never
+  # received them: .md_sof_table() built "Control rate (per 1,000)" /
+  # "Intervention rate (per 1,000)" from literals, so a review whose arms were
+  # "CBT-I" and "placebo" got generic headers over its own numbers.
+  outcomes <- make_outcomes_gr()
+  out_dir  <- tempfile("grade_report_arms_")
+
+  paths <- grade_report(outcomes,
+                        primary            = "Outcome 1",
+                        format             = "md",
+                        output_dir         = out_dir,
+                        output_file        = "report_arms",
+                        label_intervention = "CBT-I",
+                        label_control      = "placebo")
+  content <- paste(readLines(paths[[1]], warn = FALSE), collapse = "\n")
+
+  expect_match(content, "CBT-I rate (per 1,000)", fixed = TRUE)
+  expect_match(content, "Placebo rate (per 1,000)", fixed = TRUE)
+  expect_no_match(content, "Intervention rate (per 1,000)", fixed = TRUE)
+  expect_no_match(content, "Control rate (per 1,000)", fixed = TRUE)
+})
+
+test_that("the markdown report is unchanged when no arms were named", {
+  outcomes <- make_outcomes_gr()
+  out_dir  <- tempfile("grade_report_default_")
+  paths <- grade_report(outcomes, primary = "Outcome 1", format = "md",
+                        output_dir = out_dir, output_file = "report_default")
+  content <- paste(readLines(paths[[1]], warn = FALSE), collapse = "\n")
+  expect_match(content, "Control rate (per 1,000)", fixed = TRUE)
+  expect_match(content, "Intervention rate (per 1,000)", fixed = TRUE)
+})

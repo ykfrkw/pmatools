@@ -210,8 +210,8 @@ test_that("pma_export_data() leaves not-reported outcomes out of the CSV", {
 # --- the footnote that used to say this was impossible ---------------------
 
 test_that("the limitations note no longer claims the rows are absent", {
-  expect_no_match(PMA_SOF_LIMITATIONS_NOTE, "Not reported", fixed = TRUE)
+  expect_no_match(pma_sof_limitations_note(), "Not reported", fixed = TRUE)
   # The other two caveats it carries are untouched.
-  expect_match(PMA_SOF_LIMITATIONS_NOTE, "Arm-level values", fixed = TRUE)
-  expect_match(PMA_SOF_LIMITATIONS_NOTE, "Per-domain footnotes", fixed = TRUE)
+  expect_match(pma_sof_limitations_note(), "Arm-level values", fixed = TRUE)
+  expect_match(pma_sof_limitations_note(), "Per-domain footnotes", fixed = TRUE)
 })

@@ -101,6 +101,33 @@ step3_blocked_message <- function(blocked) {
 STEP3_PER_UNITS <- c(100L, 1000L, 10000L, 100000L)
 STEP3_PER_DEFAULT <- 1000L
 
+# ACCEPTED is not OFFERED, and the split is the point.
+#
+# STEP3_PER_UNITS above is what step3_per_unit() will ACCEPT: narrowing it
+# would make a seeded 10,000 fail validation and snap back to 1,000, and since
+# app.R routes state$display$per through the same function, the exported
+# denominator would then disagree with the one on screen.
+#
+# What the radio OFFERS is this shorter list. 10,000 and 100,000 answer a
+# question only a rare-event analysis asks, and a reviewer pooling ordinary
+# event rates should not have to read past them to find the two units they
+# actually pick between.
+STEP3_PER_UNITS_COMMON <- c(100L, 1000L)
+
+# The units the radio should show. `rare` is whether the analysis on screen is
+# flagged rare; `selected` is the unit currently in force.
+#
+# `selected` is in the list whatever it is. An analysis can stop being rare -
+# a column remapped, a study dropped - while 10,000 is still the unit in
+# force, and a radio rendered without its own selected value shows no
+# selection at all and pushes a different unit back to the server on the next
+# rebuild.
+step3_per_units_offered <- function(rare = FALSE,
+                                    selected = STEP3_PER_DEFAULT) {
+  units <- if (isTRUE(rare)) STEP3_PER_UNITS else STEP3_PER_UNITS_COMMON
+  sort(unique(c(units, step3_per_unit(selected))))
+}
+
 # Labels for the radio, built from the units rather than written out beside
 # them: a unit added above and not here would be silently unofferable.
 step3_per_choices <- function(units = STEP3_PER_UNITS) {
@@ -1123,15 +1150,19 @@ RESPONDER_P0_DEFAULT <- 0.20
 }
 
 # Live equivalent-effect display for the absolute mode. Shows BOTH
-# directions and names the one that is exact.
+# directions; the caller emboldens the one that is exact.
 #
-# The algorithm is symmetric on the log scale: whichever ratio it is given,
-# the opposite side it applies is that ratio inverted. So the app converts
-# the absolute threshold on the side the pooled effect lies (that is the
-# crossing the judgments turn on) and hands grade_meta() the ratio rather
-# than the ARD. The residual asymmetry cannot be removed - it is moved to
-# the other side, and named here. Same wording as threshold_summary_text()
-# below; these two are the app's copies.
+# It used to spell the conversion out underneath as well - a paragraph naming
+# the symmetric log band and the side it was applied on, and a second one
+# deriving the mirrored value on the other side. Both are gone: the two lines
+# below already show what the threshold becomes in each direction, which is
+# the thing a reviewer reads this block for, and the derivation behind them is
+# not a decision anyone makes here.
+#
+# `caveat` survives that deletion because it is not part of the derivation. It
+# fires only when the requested direction could NOT be honoured, and an app
+# that quietly converts on the opposite side to the one the pooled effect lies
+# is exactly the silent exit this codebase does not allow.
 .equiv_lines <- function(eq, dir = NULL, per = STEP3_PER_DEFAULT) {
   sm <- eq$sm
   .lbl <- function(p) step3_per_label(1000 * p, per)
@@ -1143,44 +1174,8 @@ RESPONDER_P0_DEFAULT <- 0.20
   } else {
     "Decrease: not shown - the threshold exceeds the control-group risk."
   }
-  if (is.null(dir)) {
-    return(list(up = up, dn = dn, alg = character(), approx = character()))
+  if (is.null(dir) || is.na(dir$caveat)) {
+    return(list(up = up, dn = dn, caveat = character()))
   }
-  # The reason clause has to come from the pooled effect's own direction, not
-  # from the side that ended up exact. They usually agree, but they diverge on
-  # the fallback path: when the threshold is not smaller than the control-group
-  # risk the decrease-side conversion is undefined, so a below-the-null effect
-  # is converted on the increase side. Reading the word off exact_side there
-  # made this sentence assert "lies above the null" two lines above a caveat
-  # saying the opposite. dir$caveat explains the fallback, so say only that the
-  # side was chosen, not why, when the two disagree.
-  side_matches <- identical(dir$exact_side, dir$direction)
-  reason <- if (side_matches) {
-    sprintf(" because the pooled effect lies %s the null",
-            if (identical(dir$direction, "decrease")) "below" else "above")
-  } else {
-    ""
-  }
-  # Signed, so the reader can see which way the band moves; the unit follows
-  # the Configuration setting like every other rate on the tab.
-  .signed <- function(p1000) {
-    v <- step3_to_per(p1000, per)
-    sprintf("%+.0f %s", v, step3_per_unit_label(per))
-  }
-  alg <- sprintf(
-    paste0("What the algorithm uses: a symmetric +/- log(%.3f) band, ",
-           "converted on the %s side%s. That side is exact - %s %.3f is ",
-           "%s at this control-group risk."),
-    dir$ratio, dir$exact_side, reason,
-    sm, dir$exact_ratio, .signed(1000 * dir$exact_ard))
-  approx <- sprintf(
-    paste0("The %s side is therefore the approximate one: the band's ",
-           "mirror is %s %.3f, which implies %s rather than ",
-           "%s. Imprecision's two-level rule asks whether the ",
-           "confidence interval crosses both thresholds, so that one ",
-           "crossing is judged against the mirrored value."),
-    dir$approx_side, sm, dir$approx_ratio,
-    .signed(1000 * dir$approx_ard), .signed(-1000 * dir$exact_ard))
-  if (!is.na(dir$caveat)) approx <- paste(approx, dir$caveat)
-  list(up = up, dn = dn, alg = alg, approx = approx)
+  list(up = up, dn = dn, caveat = dir$caveat)
 }

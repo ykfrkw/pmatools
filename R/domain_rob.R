@@ -288,13 +288,6 @@ PMA_ROB_INFLATION_THRESHOLD <- 0.20
   "pma-rob-node-dominance",
   "pma-rob-edge-dominance-yes",
   "pma-rob-node-direction",
-  "pma-rob-edge-direction-rules",
-  "pma-rob-leaf-rule1",
-  "pma-rob-leaf-rule2",
-  "pma-rob-leaf-rule3",
-  "pma-rob-leaf-rule4",
-  "pma-rob-leaf-rule5",
-  "pma-rob-leaf-rulena",
   "pma-rob-edge-rules-responsible",
   "pma-rob-node-bias-responsible",
   "pma-rob-edge-responsible-ratedown",
@@ -309,7 +302,6 @@ PMA_ROB_INFLATION_THRESHOLD <- 0.20
   "pma-rob-node-magnitude",
   "pma-rob-edge-magnitude-similar",
   "pma-rob-leaf-all",
-  "pma-rob-edge-magnitude-notassessable",
   "pma-rob-edge-magnitude-different",
   "pma-rob-leaf-lowonly"
 )
@@ -1095,14 +1087,7 @@ assess_rob <- function(rob, meta_obj,
       },
       as.numeric(dir$rule)
     )
-    # The rule number picks the box in the intermediate layer; an unassessable
-    # direction has its own.
-    rule_leaf <- if (is.na(dir$rule)) {
-      "pma-rob-leaf-rulena"
-    } else {
-      paste0("pma-rob-leaf-rule", dir$rule)
-    }
-    # ... and the verdict picks which of Fig 2's two boxes, and which of its two
+    # The verdict picks which of Fig 2's two boxes, and which of its two
     # leaves, that rule reaches. Tested against "not_serious" rather than by
     # enumerating the rating levels, for the same reason the undominated branch
     # below is: a level added to the check later must not need a third leaf on
@@ -1128,12 +1113,17 @@ assess_rob <- function(rob, meta_obj,
         tbl_note
       ),
       facts    = .facts(f_high, f_weight, f_shift, f_branch,
+                        # The rule number is NOT in this path. The figure no
+                        # longer draws the five rules -- they are the
+                        # mechanism, not a shape Fig 2 has -- so there is no id
+                        # to name. f_branch above carries the number, and
+                        # carries it AS a number, so nothing that reported
+                        # which rule fired has stopped being able to.
                         .flow_path_fact(c(
                           "pma-rob-node-dominance",
                           "pma-rob-edge-dominance-yes",
                           "pma-rob-node-direction",
-                          "pma-rob-edge-direction-rules",
-                          rule_leaf, rule_tail)))
+                          rule_tail)))
     ), analysis_set = "all", high_idx = high_idx))
   }
 
@@ -1216,21 +1206,23 @@ assess_rob <- function(rob, meta_obj,
     as.numeric(dir$rule)
   )
 
-  # "Not assessable" is a third answer to the magnitude node, on its own edge.
-  # It used to be routed through the appreciable node's "no" edge, on the
-  # reading that a comparison that cannot be made is an absence of appreciable
-  # low-RoB evidence; that edge is gone, because below the dominance gate the
-  # low-RoB weight share always clears the source's 35-45% and the answer is
-  # always yes. What the old route was really recording is that the magnitude
-  # question was never asked, and that is what the distinct edge id records
-  # now. It is deliberately NOT folded into "similar": the two reach the same
-  # leaf but are not the same finding, and flow_path is the record of which one
-  # happened.
+  # "Not assessable" shares the "similar" edge. Both mean the low risk of bias
+  # studies are analysed and nothing is rated down, and the figure draws one
+  # arrow labelled "Similar/Not assessable" for the pair: a second arrow to the
+  # same box asked the reader to hold a distinction the drawing then made
+  # nothing of. Which of the two happened is still recorded -- in f_branch
+  # above, which says "similar magnitudes of effect" or "direction of bias not
+  # assessable" in as many words, and in the domain notes beside it.
+  #
+  # (It used to route through the appreciable node's "no" edge, on the reading
+  # that a comparison that cannot be made is an absence of appreciable low-RoB
+  # evidence. That edge is gone: below the dominance gate the low-RoB weight
+  # share always clears the source's 35-45% and the answer is always yes.)
   flow_ids <- c("pma-rob-node-dominance", "pma-rob-edge-dominance-no",
                 "pma-rob-node-appreciable", "pma-rob-edge-appreciable-yes",
                 "pma-rob-node-magnitude")
   flow_ids <- if (!assessable) {
-    c(flow_ids, "pma-rob-edge-magnitude-notassessable", "pma-rob-leaf-all")
+    c(flow_ids, "pma-rob-edge-magnitude-similar", "pma-rob-leaf-all")
   } else if (substantial) {
     c(flow_ids, "pma-rob-edge-magnitude-different", "pma-rob-leaf-lowonly")
   } else {

@@ -37,9 +37,11 @@ Core GRADE 2 Table 1 guidance).}
 \code{"pastel"} (default) uses soft backgrounds with colored text.
 \code{"classic"} uses saturated backgrounds with white text.}
 
-\item{per}{Denominator for event rate columns. \code{1000} (default) or
-\code{100}. Controls the scale of the "Risk with control" and
-"Risk with intervention" columns.}
+\item{per}{Denominator for event rate columns. \code{1000} (default). Any
+positive denominator is accepted and used as a plain multiplier; the Shiny
+app offers 100 and 1000, and 10000 / 100000 as well on rare-event data.
+Controls the scale of the "Risk with \if{html}{\out{<control>}}" and
+"Risk with \if{html}{\out{<intervention>}}" columns.}
 
 \item{prediction}{Logical. If \code{TRUE} (default \code{FALSE}), the
 Effect column also shows the 95 percent prediction interval on a second line,

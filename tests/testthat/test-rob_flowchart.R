@@ -316,18 +316,21 @@ test_that("not dominated: an unassessable comparison takes its own edge", {
   expect_equal(row$judgment, "not_serious")
   expect_equal(attr(row, "analysis_set"), "all")
   expect_match(row$notes, "the magnitude question is never asked", fixed = TRUE)
-  # The route reaches the same leaf as "similar" and keeps an id of its own,
-  # because "the question could not be asked" and "the question was asked and
-  # the answer was similar" are different findings. It used to be drawn on the
-  # appreciable node's "no" edge; that edge is deleted as unreachable (not
+  # The route shares the "similar" edge, which the figure labels
+  # "Similar/Not assessable". Both answers reach the same leaf and rate down
+  # neither way, so one arrow carries the pair; which of the two happened is
+  # recorded in the notes and in fig2_branch, not in the shape.
+  #
+  # It used to have an edge of its own, and before that it was drawn on the
+  # appreciable node's "no" edge -- deleted as unreachable, since not
   # dominating leaves the low-RoB studies at least the 35-45% of the weight
-  # Core GRADE 4 calls appreciable), so the distinction moved onto an edge out
-  # of the magnitude node.
+  # Core GRADE 4 calls appreciable.
   expect_true(all(c("pma-rob-edge-appreciable-yes",
-                    "pma-rob-edge-magnitude-notassessable",
+                    "pma-rob-edge-magnitude-similar",
                     "pma-rob-leaf-all") %in% ids))
-  expect_false("pma-rob-edge-magnitude-similar" %in% ids)
+  expect_false("pma-rob-edge-magnitude-notassessable" %in% ids)
   expect_false("pma-rob-edge-appreciable-no" %in% ids)
+  expect_false("pma-rob-leaf-lowonly" %in% ids)
   # And the note no longer claims the low-RoB evidence was not appreciable.
   expect_false(grepl("do not provide appreciable evidence", row$notes,
                      fixed = TRUE))

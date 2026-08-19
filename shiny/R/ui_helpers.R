@@ -1637,12 +1637,19 @@ PMA_FLOWCHART_FIGS <- list(
                             fn  = "assess_rob()",
                             file = "R/domain_rob.R",
                             src = "Core GRADE 4 Fig 2",
+                            # Reworded with the 0.5.1 redraw: the rules are no
+                            # longer drawn, so a sentence placing them "between"
+                            # two boxes described a picture that is not there.
+                            # This is now the ONLY place in the UI that states
+                            # the two-level rule 5, since the red leaf gave up
+                            # its annotation -- test-flowchart-ui.R pins both
+                            # halves of it.
                             departure = paste(
-                              "The five direction-of-bias rules between the",
-                              "direction question and its two outcomes are",
-                              "pmatools' operationalisation, not the source's;",
-                              "rule 5 rates down two levels, which Core GRADE 4",
-                              "never does.")),
+                              "The direction-of-bias question is decided by",
+                              "five rules of pmatools' own, not the source's,",
+                              "and they are reported in the notes rather than",
+                              "drawn; rule 5 rates down two levels, which Core",
+                              "GRADE 4 never does.")),
   "Inconsistency"    = list(fig = "incon",
                             fn  = "assess_inconsistency()",
                             file = "R/domain_inconsistency.R",
@@ -2608,6 +2615,34 @@ pma_wizard_nav <- function(current_step, max_step = 4,
 PMA_SOF_STYLE   <- "bmj"
 PMA_SOF_PALETTE <- "pastel"
 
+# The arm words every Summary of Findings in the app speaks, resolved once.
+#
+# `state`, never `input`: Step 2's two selects are destroyed when the wizard
+# leaves the step, so by the time a SoF is rendered the inputs read NULL and
+# both labels fall back to the generic wording. state$arm_e / state$arm_c are
+# written in step2_ma.R and survive the round trip.
+#
+# This lived inside step4_server() as a closure, which is why the Step 3
+# preview could not call it and rendered "With intervention" one screen before
+# Step 4 rendered "With CBT-I" -- the same table, naming the arms two ways.
+# Both steps take it from here now, so they cannot disagree again.
+#
+# The fallbacks are pmatools' own defaults for label_intervention /
+# label_control, so an unmapped analysis renders exactly as the package does.
+PMA_ARM_LABELS_DEFAULT <- list(intervention = "intervention",
+                               control      = "control")
+
+pma_arm_labels <- function(state) {
+  .usable <- function(x) !is.null(x) && length(x) == 1L && !is.na(x) &&
+    nzchar(as.character(x))
+  e  <- if (!is.null(state)) state$arm_e else NULL
+  c_ <- if (!is.null(state)) state$arm_c else NULL
+  list(
+    intervention = if (.usable(e))  as.character(e)  else "intervention",
+    control      = if (.usable(c_)) as.character(c_) else "control"
+  )
+}
+
 # Percentage with enough resolution to distinguish the two rare-event bands.
 pma_fmt_pct <- function(p, digits = 2) {
   if (is.null(p) || length(p) != 1L || !is.finite(p)) return("not estimable")
@@ -2688,7 +2723,8 @@ pma_sof_event_rates <- function(meta_obj) {
 PMA_RARE_BAND_1 <- 0.01
 PMA_RARE_BAND_2 <- 0.02
 
-pma_rare_event_alert <- function(g, baseline_risk = NULL, label = NULL) {
+pma_rare_event_alert <- function(g, baseline_risk = NULL, label = NULL,
+                                 labels = PMA_ARM_LABELS_DEFAULT) {
   if (is.null(g)) return(NULL)
   rates <- pma_sof_event_rates(g$meta)
   br    <- baseline_risk
@@ -2711,11 +2747,12 @@ pma_rare_event_alert <- function(g, baseline_risk = NULL, label = NULL) {
   } else {
     sprintf(paste0(
       "Observed event rates: %s overall (%s of %s participants), %s in the ",
-      "control arm, %s in the intervention arm. "),
+      "%s arm, %s in the %s arm. "),
       pma_fmt_pct(rates$overall),
       format(rates$events, big.mark = ",", scientific = FALSE, trim = TRUE),
       format(rates$n,      big.mark = ",", scientific = FALSE, trim = TRUE),
-      pma_fmt_pct(rates$control), pma_fmt_pct(rates$intervention))
+      pma_fmt_pct(rates$control), labels$control,
+      pma_fmt_pct(rates$intervention), labels$intervention)
   }
   baseline_txt <- if (is.finite(br)) {
     sprintf("Baseline risk used for the absolute columns: %s. ", pma_fmt_pct(br))
@@ -2732,7 +2769,8 @@ pma_rare_event_alert <- function(g, baseline_risk = NULL, label = NULL) {
     "<1%\", and recommends that review authors generally conduct ",
     "meta-analyses of risk differences instead ",
     "(Guyatt et al. BMJ 2025;389:e083866). ",
-    "The Difference column and the \"With intervention\" column are still ",
+    "The Difference column and the \"With ", labels$intervention,
+    "\" column are still ",
     "computed from the baseline risk and the pooled relative effect, and are ",
     "shown unchanged; read them with that warning in mind, and consider ",
     "reporting the risk difference from Step 2's rare-events workflow instead."
@@ -2769,10 +2807,16 @@ pma_rare_event_banner <- function(alert) {
 # It lives in the table footer only: a second copy used to sit under the table
 # as page text, which said the same thing twice in two different fonts, and the
 # footer is the copy that travels into the .docx.
-PMA_SOF_LIMITATIONS_NOTE <- paste0(
+# `labels` rather than a constant, because this sentence names the table's own
+# arm columns and a footnote that calls them something the headers do not is a
+# footnote about a different table. "the value with X" mirrors the column head
+# "With X" exactly; the old "<label>-group value" shape does not survive a
+# free-text label ("CBT-I-group value").
+pma_sof_limitations_note <- function(labels = PMA_ARM_LABELS_DEFAULT) paste0(
   "Not implemented in this table (Core GRADE 6 features pmatools does not yet ",
-  "produce). Arm-level values for continuous outcomes -- the ",
-  "control-group value, the intervention-group value and the difference, ",
+  "produce). Arm-level values for continuous outcomes -- the value with ",
+  labels$control, ", the value with ", labels$intervention,
+  " and the difference, ",
   "which Core GRADE 6 calls its preferred approach -- are now reported, ",
   "except where the analysis carries no arm-level means (a generic ",
   "inverse-variance analysis) or uses a ratio-of-means measure; those still ",
@@ -2786,10 +2830,17 @@ PMA_SOF_LIMITATIONS_NOTE <- paste0(
 # Core GRADE 6's own presentation advice, as a footnote on the table it is
 # about. It used to be a standing italic paragraph on the Final certainty tab,
 # where it was page text and therefore did not travel into the exported .docx.
-PMA_SOF_CER_EER_NOTE <- paste0(
-  "Recommended: report both the control event rate (CER) and the intervention ",
-  "event rate (EER) alongside the relative effect, to aid clinical ",
-  "interpretation (Heimke F, et al. BMJ Ment Health. 2024)."
+# The arm words are NOT substituted into "control event rate" / "intervention
+# event rate": CER and EER are the cited source's own acronyms and they stop
+# deriving from the words the moment the words change ("the placebo event rate
+# (CER)"). What the reviewer needs is to find the columns, so the columns are
+# named instead -- and those follow the labels, because the headers do.
+pma_sof_cer_eer_note <- function(labels = PMA_ARM_LABELS_DEFAULT) paste0(
+  "Recommended: report both the control event rate (CER, the \"With ",
+  labels$control, "\" column) and the intervention event rate (EER, the ",
+  "\"With ", labels$intervention, "\" column) alongside the relative ",
+  "effect, to aid clinical interpretation ",
+  "(Heimke F, et al. BMJ Ment Health. 2024)."
 )
 
 # Append free-text footer lines to a Summary of Findings flextable, keeping

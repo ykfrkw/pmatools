@@ -74,21 +74,25 @@ its verdict - this branch rates down nothing, so every rating rule reaches
 the same leaf. Every judgment that answers the node carries the departure in
 its \code{notes}.
 
-\strong{The five rules are drawn as a mechanism, not as leaves.} Below
-"check the direction of bias" Core GRADE 4 Fig 2 has exactly two boxes and
-two leaves: risk of bias may be responsible for the apparent effect, or for
-the apparent lack of one, so rate down; there is an apparent effect and bias
-would have decreased it, or there is no apparent effect and bias would have
-increased it, so do not rate down. The figure draws that structure, with the
-rules above it deciding which box is reached - rules 1 and 2 the
+\strong{The five rules are not in the drawing.} Below "check the direction
+of bias" Core GRADE 4 Fig 2 has exactly two boxes and two leaves: risk of
+bias may be responsible for the apparent effect, or for the apparent lack of
+one, so rate down; there is an apparent effect and bias would have decreased
+it, or there is no apparent effect and bias would have increased it, so do
+not rate down. The figure draws that structure and nothing else. The rules
+are the mechanism that decides which box is reached - rules 1 and 2 the
 do-not-rate-down box, rules 3, 4, 5 and the unassessable case the rate-down
-box. A recorded \code{flow_path} names both, so a route through this branch
-says which rule fired \emph{and} which conclusion it reached. Rule 5's
-second level is annotated on the single rate-down leaf rather than split off
-into a leaf of its own, because the source has two leaves and splitting one
-to carry pmatools' two levels would move the drawing away from the source in
-the act of moving it closer. Up to 0.5.1 the figure enumerated the rules as
-six leaves instead.
+box - and they are named in this topic, in the figure's \code{<desc>} and in
+the domain notes, not on the page.
+
+A recorded \code{flow_path} therefore names the conclusion, not the rule.
+The rule number rides on the \code{fig2_branch} fact beside it, which is
+what the domain notes, the Summary of Findings footnote and the Evidence
+Profile read - the places a reader acts on it. Rule 5's second level is
+stated in those notes and in the caption the Shiny app prints beside the
+figure; the rate-down leaf reads "Rate down" alone, as the source's does.
+Up to 0.5.1 the figure enumerated the rules as six numbered boxes and
+annotated the two levels on that leaf.
 
 The chart opens at the dominance question. A body of evidence with no
 high-risk study is not drawn a node of its own, because it does not reach a
@@ -103,11 +107,14 @@ undominated branch at all means the high-risk studies carry less than the
 dominance threshold, so the low-risk studies carry more than 45\% of the
 weight at the default gate and more than 35\% at the strictest gate Core
 GRADE 4 discusses - at or above the "35 to 45\%" the same paragraph calls
-appreciable. A comparison that cannot be made at all takes its own edge out
-of the magnitude node to the same leaf as "similar", so that the route still
-records that the question could not be asked.
+appreciable. A comparison that cannot be made at all is carried on the same
+edge as "similar", labelled "Similar/Not assessable", because both answers
+reach the same leaf and rate down neither way. The two are still different
+findings, and the difference is recorded where it can be read - in the
+judgment notes and in the \code{fig2_branch} fact - rather than drawn as a
+second arrow into the same box.
 
-\if{html}{\figure{rob.svg}{options: width="100\%" alt="pmatools risk-of-bias decision flowchart: whether the high risk of bias studies dominate the evidence, then either the five-rule direction-of-bias check feeding Core GRADE 4's two conclusions and their rate-down / do-not-rate-down leaves, or the appreciable-evidence and magnitude questions."}}
+\if{html}{\figure{rob.svg}{options: width="100\%" alt="pmatools risk-of-bias decision flowchart: whether the high risk of bias studies dominate the evidence, then either the direction-of-bias check feeding Core GRADE 4's two conclusions and their rate-down / do-not-rate-down leaves, or the appreciable-evidence and magnitude questions."}}
 \if{latex}{Figure omitted from the PDF manual (SVG); see the HTML help.}
 }
 

@@ -879,7 +879,36 @@ When `convert_smd_to_or = TRUE`:
   ```
 - SoF table shows: Outcome, k, N, Risk with &lt;control&gt; (X per `per`), Risk with &lt;intervention&gt; (Y per `per`, [Y_lo; Y_hi]), Effect (SMD ...), Certainty.
 - `chinn_invert = TRUE` flips the SMD sign before applying Chinn's formula, so a negative-is-better SMD yields OR > 1 in the dichotomised rate columns. The CI bounds are swapped with the sign, so `or_lower ≤ or_upper` and the reported interval is never backwards.
-- Adds a footer note row: *"Continuous outcome dichotomized via Chinn's formula (log OR = SMD × π/√3). Control event rate user-specified{{; threshold: <threshold_label>}}."*
+- Adds a footer note row: *"Continuous outcome dichotomized via Chinn's formula (log OR = SMD × π/√3). &lt;Control&gt; event rate user-specified{{; threshold: <threshold_label>}}."*
+
+**Where the arm labels go (0.5.1).** `label_intervention` / `label_control` are
+not only column headers. They are substituted into every footnote sentence that
+names an arm: the base note's *"&lt;Intervention&gt; rate (Risk with
+&lt;intervention&gt;) = &lt;intervention&gt;-arm event rate…"*, the BMJ base note's
+*"…computed from the &lt;control&gt;-arm (baseline) risk…"*, and the Chinn
+footnotes' *"&lt;Control&gt; event rate user-specified"*, *"assumed &lt;control&gt;
+responder proportion"* and *"OR > 1 = &lt;intervention&gt; better"*. Up to 0.5.1
+they stopped at the headers, so one table could name the arms two ways — *Risk
+with placebo* over a column and *intervention-arm event rate* in the sentence
+describing that column.
+
+Two rules keep free text readable inside a sentence, both in `R/sof_table.R`
+and both shared rather than inlined:
+
+- `.arm_label_cap()` raises **only the first character**, because labels are
+  what a reviewer typed. `"placebo"` becomes `"Placebo"`; `"CBT-I"` stays
+  `"CBT-I"`, which `toupper()` would not have.
+- `.arm_subject()` supplies the **subject of a sentence**, which is a different
+  job from labelling a column. The package default `"intervention"` is a column
+  label — *"OR > 1 = intervention better"* is not a sentence anyone writes — so
+  the default falls back to the generic word these footnotes have always used
+  (`"treatment"`, or Box 1's `"Treatment"`), and a caller-supplied label
+  replaces it. `.sof_row_bmj()` had this rule inline for the Box 1 subject and
+  now shares it, so the subject of one sentence cannot drift from another's.
+
+Both rules are no-ops at the defaults, so **a caller that passes no labels gets
+byte-identical output to every release before this one** — which is why the
+existing default-wording tests are unchanged.
 
 **The three proportions are computed once [v0.6].** `.chinn_rates(meta_obj, baseline_risk, invert)` returns `p1` / `p1_lo` / `p1_hi` and the odds-ratio triple they came from, or `NULL` when any ingredient is missing. Three cells of the row are functions of exactly those numbers — both arm cells and the Difference — and the derived odds ratio comes from the same call, so each of them re-deriving the conversion is how they end up disagreeing after one is edited. `.format_ier_chinn()` is a formatter over it and its output is unchanged.
 
@@ -1126,7 +1155,7 @@ Because the presentation rides on an attribute and `grade_meta_multi()` cannot r
 
 `other_text` / `other_downgrade` follow the same rule without an attribute: an outcome carrying its own `$other_text` (a non-blank single string) or `$other_downgrade` uses it for its own evidence profile, in the per-outcome directory and in the combined `evidence_profile.docx`, and the set-wide argument applies only to the outcomes that carry none.
 
-**Arm labels reach the script too.** `label_intervention` / `label_control` name the review's own arms in `summary_of_findings.docx` — the `With <control>` / `With <intervention>` column headers and the plain-language subject — so the generated `analysis.R` renders them onto its `grade_table()` call. Without them the script rebuilt every number of the shipped table and printed the three generic strings instead. A label left at its `grade_table()` default (`"intervention"` / `"control"`) is omitted from the generated call, so an ordinary bundle's script is byte-for-byte what it was; a non-default label is rendered with `deparse()`, which survives the apostrophe in free text such as `"clinicians' usual care"`. The single-outcome method has no such arguments — it calls `sof_table()` with the defaults — so its script and its table cannot disagree, and `inst/templates/analysis_script.R.tpl` therefore carries no label placeholder.
+**Arm labels reach the script too.** `label_intervention` / `label_control` name the review's own arms in `summary_of_findings.docx` — the `With <control>` / `With <intervention>` column headers, the plain-language subject, and, as of 0.5.1, the footnotes below the table (§4.6) — so the generated `analysis.R` renders them onto its `grade_table()` call. Without them the script rebuilt every number of the shipped table and printed the three generic strings instead. A label left at its `grade_table()` default (`"intervention"` / `"control"`) is omitted from the generated call, so an ordinary bundle's script is byte-for-byte what it was; a non-default label is rendered with `deparse()`, which survives the apostrophe in free text such as `"clinicians' usual care"`. The single-outcome method has no such arguments — it calls `sof_table()` with the defaults — so its script and its table cannot disagree, and `inst/templates/analysis_script.R.tpl` therefore carries no label placeholder.
 
 **Rare-event artifacts are gated on the outcome having a `rare` fit, not on `include`** — the same rule as the flat layout. `include` cannot answer "were this outcome's events rare enough to have been re-analysed?".
 
@@ -1323,6 +1352,8 @@ grade_report(
   label_control      = "control"
 ) -> chr (paths to written files)
 ```
+
+**`grade_report()` threads the arm labels into BOTH output branches [0.5.1].** It has accepted `label_intervention` / `label_control` since they existed and passed them into `grade_table()` for `format = "docx"`, but the markdown branch never received them: `.md_sof_table()` built its arm headers from literals, so `format = "md"` printed *"Control rate (per 1,000)"* and *"Intervention rate (per 1,000)"* over the numbers of a review that had named its arms. It now builds them from the labels, capitalised by `.arm_label_cap()` (§4.6). Output at the defaults is unchanged.
 
 Passing a `pmatools_set` uses the set's `order` for the row order and its `primary` for grouping; the named-list API is unchanged. In the BMJ style, per-outcome `follow_up` / `unit` recorded by `grade_meta_multi()` are picked up automatically, and a table mixing effect measures keeps a generic Effect header plus a footnote pointing at the per-cell measure names.
 
@@ -1556,6 +1587,8 @@ GRADE_DOWNGRADE <- c(not_serious = 0, serious = -1,
 
 ### 5.1 Risk of bias — Core GRADE 4 Fig 2 flowchart (v0.5.0)
 
+These five rules are the implementation of Fig 2's "check direction of bias" node. **They are not drawn** (§5.1a): the figure carries the source's two conclusions only, and the rule number is recorded on the `fig2_branch` fact and named in the domain notes.
+
 `assess_rob()` follows the BMJ 2025 Core GRADE 4 Fig 2 flowchart literally. `R/domain_rob.R`'s header comment is the maintained long form; this section is the contract.
 
 **Step 0 — binary classification.** Each study is folded into low or high risk of bias:
@@ -1606,7 +1639,7 @@ When `threshold_internal` is NULL/NA/≤ 0 the trivial zone collapses to `{0}`, 
 |---|---|---|
 | 3, 4, 5 (rate down) | substantially different | `"low_only"` |
 | 1, 2 (do not rate down) | similar | `"all"` |
-| none — the check bailed out (`rule` is `NA`) | never asked; the route takes the magnitude node's third edge, `pma-rob-edge-magnitude-notassessable`, to the same leaf as *similar* (§5.1a) | `"all"` |
+| none — the check bailed out (`rule` is `NA`) | never asked; the route shares `pma-rob-edge-magnitude-similar`, drawn as *Similar/Not assessable*, to the same leaf (§5.1a) | `"all"` |
 
 Two consequences follow from reading the rule verdict and both are load-bearing.
 
@@ -1632,62 +1665,98 @@ and the SVG to a 1:1 correspondence in both directions, so a branch added
 without being drawn fails the build. **That safety net means the SVG, the
 constant and every `flow_path` emit site move in one commit or none.**
 
-**The figure follows the source's shape, and the five rules are not leaves.**
-Below "Check the direction of bias" Core GRADE 4 Fig 2 has exactly two boxes and
-two leaves: risk of bias may be responsible for the apparent effect *or* for the
-apparent lack of one → **rate down**; there is an apparent effect and bias would
-have decreased it *or* there is no apparent effect and bias would have increased
-it → **do not rate down**. pmatools draws that structure. The five direction
-rules sit **above** those boxes as the mechanism deciding which one is reached —
-rules 1–2 land on the do-not-rate-down box, rules 3–5 on the rate-down box, the
-correspondence `R/domain_rob.R` has always documented. Enumerating the rules as
-six leaves, which the figure did up to this change, erased the source's shape
-and left the reader without the two sentences that explain what the branch
-means.
+**The figure follows the source's shape, and the five rules are not drawn at
+all.** Below "Check the direction of bias" Core GRADE 4 Fig 2 has exactly two
+boxes and two leaves: risk of bias may be responsible for the apparent effect
+*or* for the apparent lack of one → **rate down**; there is an apparent effect
+and bias would have decreased it *or* there is no apparent effect and bias
+would have increased it → **do not rate down**. pmatools draws that structure
+and nothing else.
 
-**Rule 5's second level is an annotation on the single red leaf, not a leaf of
-its own.** The source's leaves are two — "rate down" and "do not rate down" —
-and splitting the red one to carry pmatools' −2 would move the drawing away from
-the source in the act of moving it closer. The leaf therefore stays single and
-carries the note; §5.1's `.ROB_TWO_LEVEL_NOTE` remains the full statement in
-prose, so the reader who acts on the judgment always meets the reasoning even
-though the figure only flags it.
+The five direction rules are the mechanism deciding which box is reached —
+rules 1–2 the do-not-rate-down box, rules 3–5 and the unassessable case the
+rate-down box, the correspondence §5.1 documents. Up to 0.5.1 they were drawn
+as an intermediate column of six numbered boxes. That column was the tallest
+thing in the figure, and the numbers meant nothing to a reader without
+`R/domain_rob.R` open beside it. **The rule number is reported where a reader
+acts on it** — the `fig2_branch` fact, and from there the domain notes, the
+Summary of Findings footnote and the Evidence Profile — rather than drawn as a
+shape the source does not have. The correspondence is stated above and in the
+`<desc>`, since it is no longer readable off an edge label; the two branch
+edges lost their labels ("Rules 1 and 2", "Rules 3, 4, 5 and not assessable")
+for the same reason the boxes went.
+
+> **Given up, deliberately.** A lit `flow_path` no longer shows *which rule
+> fired*, only which of Fig 2's two conclusions it reached. `fig2_branch`
+> carries the number, and carries it *as* a number, so nothing that reported
+> the rule has stopped being able to — but a consumer reading the rule off the
+> path has to move. `domain_facts()` is the stable reader; `flow_path` is a
+> drawing route and always was.
+
+**The rate-down leaf reads "Rate down", and nothing else.** It carried two
+further lines annotating rule 5's second level, which made the only coloured
+shape in the figure the wordiest one and named a rule the figure no longer
+draws. The source's two leaves are two phrases and pmatools' now match them.
+`.ROB_TWO_LEVEL_NOTE` is the full statement, in the notes of every judgment on
+that branch; the `<desc>` keeps it; and in the app it rides on
+`PMA_FLOWCHART_FIGS[["Risk of bias"]]$departure`, which is now the **only**
+place in the UI that discloses the two-level departure and is pinned by
+`shiny/tests/testthat/test-flowchart-ui.R`.
 
 **The "appreciable evidence = no" edge is deleted, because it is unreachable.**
 Reaching the non-dominated branch at all means `w_high < rob_dominant_threshold`
 (default 0.55), hence a low-RoB weight share above 0.45; Core GRADE 4 puts the
 appreciable threshold at 35–45%. Across the whole range the source discusses —
 up to a 65% dominance threshold, leaving a 35% low-RoB share — the answer is
-always yes, so the node keeps its question and loses its second answer.
+always yes, so the node keeps its question and loses its second answer. Two
+`flow_path` emit sites used it and both re-route to the **green leaf** through
+`edge-appreciable-yes`: `n_high == 0` (mislabelled — with no high-RoB study the
+evidence is *entirely* low-RoB, the strongest possible yes) and `!assessable`.
 
-Two `flow_path` emit sites used that edge and both re-route to the **green leaf**
-through `edge-appreciable-yes`:
+**The not-assessable route shares `edge-magnitude-similar`, labelled
+*Similar/Not assessable*.** It kept an id of its own up to 0.5.1, on the
+reading that "the question could not be asked" and "the question was asked and
+the answer was similar" are not the same finding. That was right about the
+findings and wrong about where they are legible: both reach the same leaf and
+rate down neither way, so two arrows into one box showed a reader two routes
+rather than two meanings. The distinction lives in `branch_note` ("the
+magnitude question is never asked") and in the `fig2_branch` fact, both of
+which travel into the exported notes. Precedent: `pma-rob-edge-appreciable-no`.
 
-| case | why it was on the "no" edge | where it goes |
-|---|---|---|
-| `n_high == 0` | mislabelled: with no high-RoB study the evidence is *entirely* low-RoB, which is the strongest possible yes | the yes edge, correcting the route as well as the drawing |
-| `!assessable` (the high-vs-low comparison cannot be made) | the magnitude question was never asked | the yes edge, **keeping its own edge id** |
+**Node ids follow the drawing, and eight are removed in 0.5.1.** Gone:
+`pma-rob-leaf-rule1`…`rule5` and `rulena` (the rules are no longer drawn),
+`pma-rob-edge-direction-rules` (the branch edges now leave the direction node
+directly), and `pma-rob-edge-magnitude-notassessable` (merged above).
+`.ROB_FIG2_NODE_IDS` goes from 27 ids to 19. The dominated branch is now
 
-The not-assessable route keeps a distinct id rather than being folded into
-`edge-magnitude-similar`: "the question could not be asked" and "the question was
-asked and the answer was similar" reach the same leaf but are not the same
-finding, and `flow_path` is the record of which one happened. The distinction
-lives in the id and in the notes, not in a shape the source does not have.
+```
+node-dominance → edge-dominance-yes → node-direction
+  → edge-rules-{responsible|conservative}
+  → node-bias-{responsible|conservative}
+  → edge-{responsible-ratedown|conservative-noratedown}
+  → leaf-{ratedown|noratedown}
+```
 
-**Node ids are added, never replaced.** `pma-rob-leaf-rule1`…`rule5`, `rulena`
-stay as the intermediate layer and the two source leaves get new ids, so a lit
-path shows both which rule fired and which leaf it reached — more than the
-source figure records, without changing what the figure looks like. The layer
-below the rules is `pma-rob-node-bias-responsible` →
-`pma-rob-leaf-ratedown` (rules 3, 4, 5 and the unassessable case) and
-`pma-rob-node-bias-conservative` → `pma-rob-leaf-noratedown` (rules 1 and 2),
-each reached by an edge of its own (`pma-rob-edge-rules-responsible` /
-`-conservative`, `pma-rob-edge-responsible-ratedown` /
-`pma-rob-edge-conservative-noratedown`). The verdict is tested against
-`"not_serious"` rather than by enumerating the rating levels, so a level added
-to the five-rule check later cannot need a third leaf on a figure whose source
-has two. The not-assessable route's own id is
-`pma-rob-edge-magnitude-notassessable`.
+and the undominated branch
+
+```
+node-dominance → edge-dominance-no → node-appreciable → edge-appreciable-yes
+  → node-magnitude → edge-magnitude-{similar|different}
+  → leaf-{all|lowonly}
+```
+
+The two `edge-rules-*` ids are **kept** although the rules are no longer drawn:
+they still name which rules route where, which is true of the logic, and a
+`flow_path` recorded across releases should stay comparable where it can. The
+verdict picks the tail by testing against `"not_serious"` rather than by
+enumerating the rating levels, so a level added to the five-rule check later
+cannot need a third leaf on a figure whose source has two.
+
+The drawing shrinks with the column: the viewBox goes from 790 to 650 units,
+and everything below `node-direction` moves up. `node-bias-*` sit at y = 470
+rather than directly under the direction node because `node-bias-conservative`
+occupies the right half of the canvas, under the undominated branch, whose
+lowest leaf ends at 439.
 
 **The figure carries no footnote, and the prose beside it carries the claim.**
 The "pmatools' operationalisation, not a reproduction" footnote is removed. It
@@ -2098,8 +2167,9 @@ Core GRADE 5 Table 2 grades it on a gradient across the four PICO elements, so t
 no branch to draw or to record.
 
 **These are pmatools' own diagrams, not reproductions of the BMJ figures.** They differ
-from the source on purpose — the Risk-of-Bias chart enumerates five direction rules the
-source does not, the Fig 5 chart carries a pmatools node that is not one of Figure 5's
+from the source on purpose — the Risk-of-Bias chart implements five direction rules the
+source does not (naming them in its `<desc>` and in `?grade_flowcharts` rather than on
+the page, §5.1a), the Fig 5 chart carries a pmatools node that is not one of Figure 5's
 four, and the Inconsistency edges are labelled with pmatools' numeric surrogates
 (I² > 30%, the 0.80 / 0.20 zone shares) which Core GRADE declines to quantify. Each
 figure says so in its `<desc>` and names the source figure in its caption.
@@ -2110,9 +2180,16 @@ figure says so in its `<desc>` and names the source figure in its caption.
   study at high risk of bias?", whose "no" branch is not a decision — with no high-risk
   study the dominance share is 0, which is below the gate, and there is nothing to
   exclude. That case now routes through the surviving chart
-  (`dominance → dominance-no → appreciable → appreciable-no → leaf-all`), which is where
-  it always belonged, so `.ROB_FIG2_NODE_IDS` no longer carries
-  `pma-rob-node-anyhigh`, `pma-rob-leaf-nohigh` or the two `anyhigh` edges.
+  (`dominance → dominance-no → appreciable → appreciable-yes → magnitude →
+  magnitude-similar → leaf-all`), which is where it always belonged, so
+  `.ROB_FIG2_NODE_IDS` no longer carries `pma-rob-node-anyhigh`,
+  `pma-rob-leaf-nohigh` or the two `anyhigh` edges. (The `appreciable-no` edge
+  this route was once described as taking is itself deleted — see §5.1a.)
+- The Risk-of-bias chart drops the six numbered direction-of-bias rule boxes and
+  merges the magnitude node's *not assessable* answer onto its *similar* edge
+  (0.5.1). Eight ids leave `.ROB_FIG2_NODE_IDS` with them. The rules still decide
+  the judgment; they are reported on the `fig2_branch` fact rather than drawn.
+  §5.1a is the full account.
 - The Publication-bias chart's questions are **unnumbered**. The Q1–Q4 labels came from
   Core GRADE 4 Fig 5, but the chart interleaves a pmatools node between Q1 and Q2, so
   the numbering on screen described neither the source nor the route. The wizard
