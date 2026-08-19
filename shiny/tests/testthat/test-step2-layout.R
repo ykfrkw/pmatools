@@ -127,6 +127,85 @@ test_that("the arm-label guard says something instead of returning in silence", 
   expect_true(grepl('id = "step2_arm_assignment"', src, fixed = TRUE))
 })
 
+test_that("a Run analysis press is served once, not for the rest of the session", {
+  # THE bug this file exists to keep out. input$run_ma is an actionButton
+  # counter that only ever increases and that nothing resets, so the gate used
+  # to read it as `(input$run_ma %||% 0L) > 0L` and latch TRUE at the first
+  # press. From then on "auto-rerun off" did nothing at all: every change to
+  # the debounced input bundle re-ran the analysis, and on rare-event data that
+  # is run_rare_ma()'s whole multi-method suite -- the cost the OFF default
+  # exists to avoid.
+  fresh <- step2_run_request(0L, 0L)
+  expect_false(fresh$pending)
+
+  pressed <- step2_run_request(1L, 0L)
+  expect_true(pressed$pending)
+
+  # Served: the reactive records the count it ran for, and the SAME count must
+  # not authorise a second run. This is the assertion the latch failed.
+  expect_false(step2_run_request(1L, 1L)$pending)
+  expect_false(step2_run_request(7L, 7L)$pending)
+
+  # Pressing again does authorise one more run, and exactly one.
+  expect_true(step2_run_request(2L, 1L)$pending)
+  expect_false(step2_run_request(2L, 2L)$pending)
+})
+
+test_that("the spent baseline follows a rebuilt Run analysis button back down", {
+  # app.R's step_body is a renderUI, so a Step 2 -> 3 -> 2 round trip rebuilds
+  # the button and its counter restarts at 0 (see commit_loaded_data() in
+  # R/step1_data.R). A baseline that only ever climbs would then swallow the
+  # reviewer's next press -- numbered 1, against a stale baseline of 3 -- which
+  # is the inert Run analysis button all over again.
+  rebuilt <- step2_run_request(0L, 3L)
+  expect_false(rebuilt$pending)
+  expect_equal(rebuilt$spent, 0L)
+  expect_true(step2_run_request(1L, rebuilt$spent)$pending)
+
+  # A NULL counter is the same case: the widget has not reported yet.
+  expect_false(step2_run_request(NULL, 3L)$pending)
+  expect_equal(step2_run_request(NULL, 3L)$spent, 0L)
+})
+
+test_that("the analysis gate spends the press at the run, not at the gate", {
+  # Two properties of the reactive that no pure helper can hold, asserted on
+  # the source because their absence is invisible in every other test:
+  #
+  #  * the gate consults step2_run_request(), not the raw counter. A rewrite
+  #    back to `input$run_ma > 0L` here is the whole bug.
+  #  * the press is spent immediately before the run, not at the gate. Every
+  #    exit in between is a cheap guard on something the reviewer is expected
+  #    to go and fix (a blank required field, arm labels left over from the
+  #    previous dataset); a press held across those is served the moment the
+  #    blocker clears, instead of needing a second click.
+  src <- gsub("[[:space:]]+", " ", paste(deparse(body(step2_server)),
+                                         collapse = " "))
+  expect_true(grepl("if (!auto && !run_pending) return(NULL)", src,
+                    fixed = TRUE))
+  expect_false(grepl("(input$run_ma %||% 0L) > 0L", src, fixed = TRUE))
+  expect_match(
+    src,
+    "shiny::isolate(run_clicks_spent(run_clicks)) shiny::withProgress(",
+    fixed = TRUE
+  )
+})
+
+test_that("the required-field warnings keep the latch the run gate gave up", {
+  # "Has the reviewer asked for an analysis at all?" is a DIFFERENT question
+  # from "is a press waiting to be served", and the two warning branches want
+  # the first one: before the first request a half-filled form is a normal
+  # state and stays quiet, afterwards it is worth a toast however the reviewer
+  # got back to it. Fixing the run gate by making these one-shot too would
+  # silence the "the analysis has been cleared" toast on the common path, where
+  # auto-rerun is left ON and nothing is ever pending.
+  src <- gsub("[[:space:]]+", " ", paste(deparse(body(step2_server)),
+                                         collapse = " "))
+  expect_true(grepl("ever_run_requested <- run_clicks > 0L", src, fixed = TRUE))
+  expect_true(grepl("if (!auto || ever_run_requested || had_ma) {", src,
+                    fixed = TRUE))
+  expect_true(grepl("if (!auto || ever_run_requested) {", src, fixed = TRUE))
+})
+
 test_that("the column-mapping dropdowns are selectize widgets", {
   # A native <select> (selectize = FALSE) is token-styled while closed but its
   # open list is OS chrome that no stylesheet can reach, so these six changed

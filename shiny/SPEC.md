@@ -155,7 +155,7 @@ Step transitions (`Next` / `Back` buttons) update `state$step`. Each step's UI i
 **Re-computation rules:**
 
 - `state$data` recomputes when Step 1 inputs change (debounced 300ms).
-- `state$ma` recomputes only when user clicks **"Run analysis"** in Step 2.
+- `state$ma` recomputes on every change to Step 2's debounced input bundle while **`auto_rerun`** is ON, and only on an unserved press of **"Run analysis"** while it is OFF (§3.3.3). `input$run_ma` is a never-reset actionButton counter, so "unserved" means *greater than the count `ma()` has already run for* — read as a bare `> 0L` the first press latches, and the OFF setting stops doing anything for the rest of the session.
 - **`state$ma` is withdrawn only by something that genuinely invalidates it.** Step 1's commit observer depends on `state$rob_table` (so a Step 3 risk-of-bias edit cannot revert Step 1 cell edits), which means it re-runs on every RoB edit; it nulls `state$ma` / `state$grade` **only when `pma_dataset_signature()` changes**. A per-study RoB or indirectness relabel is a property of the studies, not of the outcome — the same contract `begin_new_outcome()` states — and the signature already excludes those two columns. Before v0.5.1 the null was unconditional and unrecoverable: `observeEvent(ma())` returns early on `NULL`, and after a Step 3 → Step 2 → Step 3 round trip `input$run_ma` is a rebuilt button reporting 0, so `ma()` never re-ran.
 - **A withdrawn analysis is never silent.** Every path in `ma()` that returns `NULL` after a successful run has been recorded either notifies or records why. Missing required inputs set `state$ma_blocked` to a character vector of Step 2 field labels; arm labels absent from the data raise a notification once `state$regular_ma` exists.
 
@@ -381,9 +381,9 @@ One `pma_card("Model configuration")` holding a `bslib::accordion(multiple = FAL
   run.** The arm-label guard used to `return(NULL)` saying nothing, which is
   what turned the suspension above into an app with an inert button. It now
   names what is wrong — arms unset, or the same arm value picked twice — under
-  the same `!auto || clicked` condition the required-fields branch uses, so a
-  first page load stays quiet and a reviewer who pressed Run analysis never
-  gets nothing back.
+  the same `!auto || ever_run_requested` condition the required-fields branch
+  uses, so a first page load stays quiet and a reviewer who pressed Run
+  analysis never gets nothing back.
 - **`multiple = FALSE` is load-bearing for `www/required-fields.js`.** It is
   what puts `data-bs-parent` on every `.accordion-collapse`, and that attribute
   is how Bootstrap closes the open sibling. The reveal in §3.3.6 therefore goes
@@ -450,6 +450,48 @@ One `pma_card("Model configuration")` holding a `bslib::accordion(multiple = FAL
   `checkboxInput("auto_rerun")`. The sidebar is taller than a laptop viewport
   with every panel open, and the primary action used to sit at the bottom of
   it, so changing a model setting meant scrolling back down to act on it.
+- **`auto_rerun` defaults ON, and OFF once rare events are detected**
+  (`step2_ui()` seeds it from `state$rare_diagnostics`; a one-time
+  `updateCheckboxInput()` in `step2_server` makes the live transition, once per
+  detection episode). Rare-event data puts `run_rare_ma()`'s multi-method suite
+  on every re-run, which is minutes on the shared shinyapps.io tier, so it must
+  not ride the debounced input bundle unasked.
+- **`run_ma` is a one-shot request, not a latch, and `auto_rerun` OFF therefore
+  keeps meaning what it says.** `input$run_ma` is an actionButton counter: it
+  only ever increases, and nothing in the app resets it. The `ma` reactive
+  therefore compares it against the count it has already served
+  (`run_clicks_spent`, via the pure `step2_run_request()`), and only an
+  *increase* authorises a run. Reading the counter as `> 0L` instead — which is
+  what it did — latched TRUE at the first press, so from then on every change
+  to the debounced input bundle re-ran the analysis no matter what the checkbox
+  said, silently defeating the OFF default above. The two states, spelled out:
+  - **`auto_rerun` ON** — every debounced change re-runs, presses are
+    irrelevant to the gate. Unchanged by the one-shot rule; this is the common
+    path.
+  - **`auto_rerun` OFF** — a run happens only for an unserved press. After the
+    run, changing a model setting re-enters the reactive, which returns `NULL`;
+    `observeEvent(ma())` ignores `NULL`, so the previous result and its Step 3
+    rating stay on screen until the reviewer presses Run analysis again.
+- **A pending press survives the cheap guards.** It is spent immediately before
+  `run_ma()` is called, not at the gate, so a press blocked by a missing
+  required field or by arm labels left over from the previous dataset is served
+  the moment that blocker clears — the reviewer does not have to press twice
+  while `arm_assignment_ui` re-renders. A press that reaches `run_ma()` is
+  spent whether the run returns a fit or the `tryCatch()` turns it into a
+  notification.
+- **The spent baseline follows a rebuilt counter back down.** app.R's
+  `step_body` is a `renderUI`, so a Step 2 → 3 → 2 round trip rebuilds the
+  button and its counter starts again at 0. `step2_run_request()` floors the
+  baseline at the observed count for that reason; without it the reviewer's
+  next press is numbered 1, the stale baseline is 3, and Run analysis is inert
+  again.
+- **The warning branches keep the latch on purpose.** "Has the reviewer asked
+  for an analysis at all?" is a different question from "is a press waiting to
+  be served", and the required-fields and arm-assignment toasts want the first
+  one (`ever_run_requested`, plain `input$run_ma > 0L`). Before the first
+  request a half-filled form is a normal state and stays quiet; afterwards it
+  is worth a toast however the reviewer got back to it. `required_touched`
+  (§3.3.6) is the same latch for the same reason.
 
 #### 3.3.4 Outputs (right pane)
 

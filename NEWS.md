@@ -1323,6 +1323,23 @@
 
 ## Bug fixes
 
+* **Shiny app: "Auto-rerun on change" stopped meaning anything the moment Run
+  analysis was pressed once.** `input$run_ma` is an actionButton counter — it
+  only ever increases, and nothing in the app resets it — but the Step 2
+  analysis reactive read it as `> 0L`, which latches `TRUE` at the first press
+  and stays that way. From then on every change to the debounced input bundle
+  re-ran the analysis whether or not the checkbox was ticked. That checkbox
+  defaults to OFF on rare-event data for one reason: a re-run there is
+  `run_rare_ma()`'s whole multi-method suite, which is minutes on the shared
+  shinyapps.io tier. The reviewer got that cost back, silently, from their
+  first click onwards — the leading suspect whenever Step 2 was reported as
+  slow on sparse data. The press is now a one-shot request, spent by the run it
+  asks for (`step2_run_request()`), so with auto-rerun off nothing re-runs
+  until Run analysis is pressed again. A press blocked by a missing required
+  field or by stale arm labels is held, not discarded, and served as soon as
+  the blocker clears; the counter's reset on a Step 2 → 3 → 2 round trip is
+  tracked too, so the next press is never swallowed. Behaviour with auto-rerun
+  left ON — the common path — is unchanged, warning toasts included.
 * **The Shiny app's Run analysis button did nothing at all.** On a fresh
   session the reviewer could load data, reach Step 2 with every required field
   already filled from the sample defaults, press Run analysis, and get no

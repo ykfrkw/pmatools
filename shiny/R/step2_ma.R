@@ -53,6 +53,29 @@ pma_spelled_choices <- function(codes, notes = NULL) {
   stats::setNames(codes, labels)
 }
 
+# The Run analysis button read as a one-shot request rather than a latch.
+#
+# `run_clicks` is `input$run_ma`: an actionButton counter that only ever
+# increases while the widget lives, and that starts again at 0 when app.R's
+# step_body renderUI rebuilds the Step 2 body (a 2 -> 3 -> 2 round trip).
+# `clicks_spent` is the count the analysis reactive has already served.
+#
+# Returns `pending` - this execution has a press to serve - and `spent`, the
+# baseline to carry forward. `spent` follows a rebuilt counter back DOWN,
+# because after a rebuild the reviewer's next press is numbered 1 and a stale
+# baseline of 3 would swallow it, which is the inert Run button again.
+#
+# Reading the counter as a plain `> 0L` instead is what made "auto-rerun off"
+# stop meaning anything: the flag latched TRUE for the rest of the session, so
+# one press put the analysis back on every debounced input change - including
+# run_rare_ma()'s multi-method suite, the cost the OFF default exists to avoid
+# on rare-event data (SPEC 3.3.3).
+step2_run_request <- function(run_clicks, clicks_spent) {
+  clicks <- run_clicks %||% 0L
+  spent  <- min(clicks_spent %||% 0L, clicks)
+  list(pending = clicks > spent, spent = spent)
+}
+
 step2_ui <- function(state = NULL) {
   s <- EDU_COPY$steps$step2
 
@@ -684,6 +707,10 @@ step2_server <- function(input, output, session, state) {
     )
   }) |> shiny::debounce(500)
 
+  # How much of input$run_ma this reactive has already served. See
+  # step2_run_request() above for why the raw counter cannot answer that.
+  run_clicks_spent <- shiny::reactiveVal(0L)
+
   ma <- shiny::reactive({
     args <- ma_inputs()
     # isolate(): the one-time "auto-rerun OFF" default applied when rare
@@ -691,9 +718,27 @@ step2_server <- function(input, output, session, state) {
     # heavy reactive. Toggling the checkbox therefore no longer forces an
     # immediate rerun; the next input change (or Run analysis click) does.
     auto <- isTRUE(shiny::isolate(input$auto_rerun))
-    clicked <- (input$run_ma %||% 0L) > 0L
-    # When auto-rerun is off, require an explicit Run analysis click
-    if (!auto && !clicked) return(NULL)
+    run_clicks <- input$run_ma %||% 0L
+    # TWO questions get asked of that counter below, and only one of them
+    # wants a latch.
+    #
+    #  * `run_pending` - "is a press of Run analysis still waiting to be
+    #    served?" This is the gate for auto-rerun-off, and it MUST be a
+    #    one-shot: the press is spent by the run it asks for (just above
+    #    withProgress below), so the next input change is not a re-run.
+    #  * `ever_run_requested` - "has the reviewer asked for an analysis at
+    #    all?" Here the latch IS the meaning, and the two warning branches
+    #    below want it exactly as it stands: before the first request a
+    #    half-filled form is a normal state and stays quiet; afterwards it is
+    #    worth a toast, however the reviewer got back to it. This is the
+    #    behaviour on the common path (auto-rerun left ON) and it does not
+    #    change.
+    request <- step2_run_request(run_clicks, shiny::isolate(run_clicks_spent()))
+    shiny::isolate(run_clicks_spent(request$spent))
+    run_pending <- isTRUE(request$pending)
+    ever_run_requested <- run_clicks > 0L
+    # When auto-rerun is off, require an unserved Run analysis press
+    if (!auto && !run_pending) return(NULL)
     if (is.null(args$data)) return(NULL)
 
     # Apply column mapping (rename user-selected columns to canonical names).
@@ -764,7 +809,7 @@ step2_server <- function(input, output, session, state) {
       # off once they actually ask for an analysis. `had_ma` is the exception:
       # withdrawing an analysis that WAS working is never a quiet event, no
       # matter how the reviewer got there.
-      if (!auto || clicked || had_ma) {
+      if (!auto || ever_run_requested || had_ma) {
         msgs <- character()
         if (had_ma) {
           msgs <- c(msgs, paste0(
@@ -779,9 +824,10 @@ step2_server <- function(input, output, session, state) {
           msgs <- c(msgs, paste("Complete required field(s):",
                                 paste(missing_required, collapse = ", ")))
         }
-        # `clicked` latches TRUE forever once Run analysis is pressed, so this
-        # branch can fire on every later input change. A fixed id makes each
-        # new toast replace the previous one instead of stacking them up.
+        # `ever_run_requested` latches TRUE once Run analysis has been pressed
+        # -- deliberately, see the gate above -- so this branch can fire on
+        # every later input change. A fixed id makes each new toast replace the
+        # previous one instead of stacking them up.
         shiny::showNotification(
           paste(msgs, collapse = " "),
           id = "step2_required_fields", type = "warning", duration = 8
@@ -804,7 +850,7 @@ step2_server <- function(input, output, session, state) {
       # Quiet on a first page load, for the reason the required-fields branch
       # above is: auto defaults TRUE and run_ma has not been clicked, so the
       # reviewer is told off only once they have actually asked for a run.
-      if (!auto || clicked) {
+      if (!auto || ever_run_requested) {
         same_arm <- !is.null(args$experimental_label) &&
           identical(args$experimental_label, args$control_label)
         shiny::showNotification(
@@ -924,6 +970,16 @@ step2_server <- function(input, output, session, state) {
       subgroup     = args$subgroup_col
     )
     run_args <- run_args[!vapply(run_args, is.null, logical(1))]
+
+    # The pending press is spent HERE, not at the gate above, and the distance
+    # between the two is the point: every exit in between is a cheap guard on
+    # something the reviewer is expected to go and fix (a blank required field,
+    # arm labels left over from the previous dataset). A press held across
+    # those is served the moment the blocker clears, which is what keeps Run
+    # analysis from looking inert while arm_assignment_ui re-renders. A press
+    # that reaches run_ma() is spent whether the run succeeds or the tryCatch
+    # below turns it into a notification: either way it has been answered.
+    shiny::isolate(run_clicks_spent(run_clicks))
 
     shiny::withProgress(
       message = "Running meta-analysis...", value = 0.4,
@@ -1482,7 +1538,8 @@ step2_server <- function(input, output, session, state) {
   })
 
   # ----- Required-field highlighting -------------------------------------
-  # Same "clicked" idea as ma() and state$step2_commit below: nothing is
+  # Same `ever_run_requested` idea as ma() and state$step2_commit below: a
+  # latch is what is wanted here too, and for the same reason. Nothing is
   # marked red until the user has actually asked for an analysis (Run
   # analysis, or Next, which runs the commit hook). A first page load with
   # both fields empty is a normal state, not an error.
