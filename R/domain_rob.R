@@ -104,10 +104,28 @@
 #   The scalar `rob` override, which requires rob_rationale, remains the way
 #   to record a judgment the flowchart does not reach, in either direction.
 #
-#   Rules 1-2 are the figure's "bias would under-estimate an existing effect /
-#   over-estimate an absent one" branch (do not rate down); rules 3-5 are its
-#   "bias could account for the apparent effect (or its absence)" branch
-#   (rate down, using all studies).
+#   THE RULES ARE THE MECHANISM, NOT THE CONCLUSION, AND THE FIGURE NOW DRAWS
+#   THEM THAT WAY. Below "check direction of bias" Core GRADE 4 Fig 2 has two
+#   boxes and two leaves, and inst/figures/rob.svg draws them:
+#     rules 1-2  -> "there is an apparent effect and bias would have decreased
+#                    it, or there is no apparent effect and bias would have
+#                    increased it"                       -> do not rate down
+#     rules 3-5, -> "risk of bias may be responsible for the apparent effect,
+#     not assessable  or for the apparent lack of one"    -> rate down
+#   That is the correspondence this comment has always stated; up to v0.5.1 the
+#   figure enumerated the rules as six leaves instead, which erased the
+#   source's shape and left the reader without the two sentences that say what
+#   the branch means. The rules keep their pma-rob-leaf-* ids as the
+#   intermediate layer, so a lit route names both the rule that fired and the
+#   leaf it reached. Rule 5's -2 is annotated on the single rate-down leaf
+#   rather than given a red leaf of its own.
+#
+#   The figure lost its footnote in the same move, and ?grade_flowcharts is now
+#   where "pmatools' operationalisation, not a reproduction" is said: the
+#   closer the drawing gets to Fig 2, the more a disclosure inside it reads as
+#   part of the source. Nothing in .ROB_TWO_LEVEL_NOTE or
+#   .ROB_DIRECTIONAL_NODE_NOTE moved -- those are in the exported judgment
+#   notes and were never what the footnote duplicated.
 #
 #   inflation_ratio = (|TE_all| - |TE_low|) / |TE_low|, evaluated only when the
 #   bias direction is bias-favouring (per `small_values`); a deflation in the
@@ -156,6 +174,17 @@
 #   "not substantially different" one node away on the dominated branch, and
 #   nothing in the output would say which answer the body of evidence has.
 #   Up to and including v0.5.0 this branch did read the node symmetrically.
+#
+#   The appreciable node has ONE answer, and the figure draws only that one.
+#   The quotation above puts appreciable at ">=35 to >=45%" of the weight, and
+#   reaching this branch at all means the high-RoB share is below the dominance
+#   threshold -- above 45% low-RoB at the default 0.55 gate, above 35% at the
+#   strictest 0.65 gate the source discusses. There is no reachable "no", so
+#   the two paths that used to be drawn on it are re-routed: `n_high == 0`
+#   (which is the strongest possible yes, not a no) and a comparison that
+#   cannot be made at all, which takes its own edge out of the magnitude node
+#   to the same leaf as "similar" so that flow_path still records that the
+#   question could not be asked. See the two returns below.
 #
 #   grade_meta() acts on `analysis_set = "low_only"` by refitting the meta
 #   object on the low-RoB subset (`rob_refit = TRUE`, the default), so every
@@ -231,6 +260,30 @@ PMA_ROB_INFLATION_THRESHOLD <- 0.20
 # question, so the "no high risk of bias study at all" case is routed through
 # it rather than around it -- see the n_high == 0 return below for why that is
 # the same decision and not a convenient fiction.
+#
+# THE RULE IDS ARE NOT LEAF IDS ANY MORE, THOUGH THEY ARE STILL SPELT THAT WAY.
+# Below "check direction of bias" the figure now draws what Fig 2 draws: two
+# boxes stating what the comparison means, and two leaves under them. The five
+# rules sit ABOVE those boxes as the mechanism that decides which one is
+# reached -- rules 1-2 reach the do-not-rate-down box, rules 3-5 and the
+# unassessable case reach the rate-down box, the correspondence this file has
+# always documented. The ids were kept rather than renamed (a rename would
+# break stored flow_path facts and the app's highlighter for nothing), so a
+# route through this branch names BOTH the rule that fired and the leaf it
+# reached, which is more than Fig 2 itself records.
+#
+# Rule 5's second level is an annotation on the single rate-down leaf, not a
+# leaf of its own: the source has two leaves and splitting one to carry
+# pmatools' -2 would move the drawing away from the source in the act of moving
+# it closer.
+#
+# The appreciable node's "no" edge is GONE, and it is not coming back. Reaching
+# the undominated branch means the high-RoB weight share is below the dominance
+# threshold, so the low-RoB share is above 45% at the default gate and above
+# 35% at the strictest gate Core GRADE 4 discusses (0.65) -- at or above the
+# "35 to 45%" the same paragraph calls appreciable, across the whole range. The
+# answer is therefore always yes and the node keeps its question but loses its
+# second answer. The two paths that used the deleted edge are re-routed below.
 .ROB_FIG2_NODE_IDS <- c(
   "pma-rob-node-dominance",
   "pma-rob-edge-dominance-yes",
@@ -242,13 +295,21 @@ PMA_ROB_INFLATION_THRESHOLD <- 0.20
   "pma-rob-leaf-rule4",
   "pma-rob-leaf-rule5",
   "pma-rob-leaf-rulena",
+  "pma-rob-edge-rules-responsible",
+  "pma-rob-node-bias-responsible",
+  "pma-rob-edge-responsible-ratedown",
+  "pma-rob-leaf-ratedown",
+  "pma-rob-edge-rules-conservative",
+  "pma-rob-node-bias-conservative",
+  "pma-rob-edge-conservative-noratedown",
+  "pma-rob-leaf-noratedown",
   "pma-rob-edge-dominance-no",
   "pma-rob-node-appreciable",
-  "pma-rob-edge-appreciable-no",
   "pma-rob-edge-appreciable-yes",
   "pma-rob-node-magnitude",
   "pma-rob-edge-magnitude-similar",
   "pma-rob-leaf-all",
+  "pma-rob-edge-magnitude-notassessable",
   "pma-rob-edge-magnitude-different",
   "pma-rob-leaf-lowonly"
 )
@@ -860,6 +921,15 @@ assess_rob <- function(rob, meta_obj,
   # all studies" is the right answer when there is nothing to exclude. Every
   # id below is a node the reader can see, so the picture lights up instead of
   # showing an unlit chart with no explanation.
+  #
+  # It takes the appreciable node's YES edge, and used to take a "no" edge that
+  # no longer exists. The old route was simply mislabelled: evidence with no
+  # high-RoB study at all is ENTIRELY low-RoB, which is the strongest possible
+  # yes to "is there appreciable evidence from the low risk of bias studies?".
+  # It then reaches the green leaf through the magnitude node's "similar" edge,
+  # which is likewise exact here rather than a convenience: with nothing to
+  # exclude the restricted estimate IS the pooled estimate, so the two
+  # magnitudes are identical, not merely similar.
   if (n_high == 0) {
     return(.rob_row(make_domain_row(
       domain   = "Risk of bias",
@@ -871,7 +941,8 @@ assess_rob <- function(rob, meta_obj,
       ),
       facts    = .facts(f_high, .flow_path_fact(c(
         "pma-rob-node-dominance", "pma-rob-edge-dominance-no",
-        "pma-rob-node-appreciable", "pma-rob-edge-appreciable-no",
+        "pma-rob-node-appreciable", "pma-rob-edge-appreciable-yes",
+        "pma-rob-node-magnitude", "pma-rob-edge-magnitude-similar",
         "pma-rob-leaf-all")))
     ), analysis_set = "all", high_idx = high_idx))
   }
@@ -1024,11 +1095,28 @@ assess_rob <- function(rob, meta_obj,
       },
       as.numeric(dir$rule)
     )
-    # The rule number picks the leaf; an unassessable direction has its own.
+    # The rule number picks the box in the intermediate layer; an unassessable
+    # direction has its own.
     rule_leaf <- if (is.na(dir$rule)) {
       "pma-rob-leaf-rulena"
     } else {
       paste0("pma-rob-leaf-rule", dir$rule)
+    }
+    # ... and the verdict picks which of Fig 2's two boxes, and which of its two
+    # leaves, that rule reaches. Tested against "not_serious" rather than by
+    # enumerating the rating levels, for the same reason the undominated branch
+    # below is: a level added to the check later must not need a third leaf on
+    # a figure whose source has two.
+    rule_tail <- if (identical(dir$judgment, "not_serious")) {
+      c("pma-rob-edge-rules-conservative",
+        "pma-rob-node-bias-conservative",
+        "pma-rob-edge-conservative-noratedown",
+        "pma-rob-leaf-noratedown")
+    } else {
+      c("pma-rob-edge-rules-responsible",
+        "pma-rob-node-bias-responsible",
+        "pma-rob-edge-responsible-ratedown",
+        "pma-rob-leaf-ratedown")
     }
     return(.rob_row(make_domain_row(
       domain   = "Risk of bias",
@@ -1045,7 +1133,7 @@ assess_rob <- function(rob, meta_obj,
                           "pma-rob-edge-dominance-yes",
                           "pma-rob-node-direction",
                           "pma-rob-edge-direction-rules",
-                          rule_leaf)))
+                          rule_leaf, rule_tail)))
     ), analysis_set = "all", high_idx = high_idx))
   }
 
@@ -1072,12 +1160,18 @@ assess_rob <- function(rob, meta_obj,
   assessable  <- !is.na(dir$rule %||% NA)
   substantial <- assessable && !identical(dir$judgment, "not_serious")
 
+  # The not-assessable wording changed with the route. It used to read "low-RoB
+  # studies do not provide appreciable evidence", which is the claim the
+  # deleted "no" edge encoded and which the arithmetic of the dominance gate
+  # contradicts: not dominating leaves the low-RoB studies at least the 35-45%
+  # of the weight Core GRADE 4 calls appreciable. The evidence is there; the
+  # comparison could not be made with it.
   branch_note <- if (!assessable) {
     paste0(
-      "Low-RoB studies do not provide appreciable evidence (the high-vs-low ",
-      "comparison is not assessable), so the magnitude question is never ",
-      "asked. Per Core GRADE 4 Fig 2 the non-dominated branch does not rate ",
-      "down; the analysis retains all studies."
+      "The high-vs-low risk of bias comparison is not assessable, so the ",
+      "magnitude question is never asked. Per Core GRADE 4 Fig 2 the ",
+      "non-dominated branch does not rate down; the analysis retains all ",
+      "studies."
     )
   } else if (substantial) {
     paste0(
@@ -1122,22 +1216,25 @@ assess_rob <- function(rob, meta_obj,
     as.numeric(dir$rule)
   )
 
-  # Fig 2's non-dominated side has two nodes, and "not assessable" is the
-  # answer to the FIRST of them ("is there appreciable evidence from the low
-  # risk of bias studies?"), not a third answer to the second. Routing it
-  # through the appreciable node's "no" edge rather than the magnitude node's
-  # "similar" edge is what keeps the picture honest: the magnitude question
-  # was never asked.
+  # "Not assessable" is a third answer to the magnitude node, on its own edge.
+  # It used to be routed through the appreciable node's "no" edge, on the
+  # reading that a comparison that cannot be made is an absence of appreciable
+  # low-RoB evidence; that edge is gone, because below the dominance gate the
+  # low-RoB weight share always clears the source's 35-45% and the answer is
+  # always yes. What the old route was really recording is that the magnitude
+  # question was never asked, and that is what the distinct edge id records
+  # now. It is deliberately NOT folded into "similar": the two reach the same
+  # leaf but are not the same finding, and flow_path is the record of which one
+  # happened.
   flow_ids <- c("pma-rob-node-dominance", "pma-rob-edge-dominance-no",
-                "pma-rob-node-appreciable")
+                "pma-rob-node-appreciable", "pma-rob-edge-appreciable-yes",
+                "pma-rob-node-magnitude")
   flow_ids <- if (!assessable) {
-    c(flow_ids, "pma-rob-edge-appreciable-no", "pma-rob-leaf-all")
+    c(flow_ids, "pma-rob-edge-magnitude-notassessable", "pma-rob-leaf-all")
   } else if (substantial) {
-    c(flow_ids, "pma-rob-edge-appreciable-yes", "pma-rob-node-magnitude",
-      "pma-rob-edge-magnitude-different", "pma-rob-leaf-lowonly")
+    c(flow_ids, "pma-rob-edge-magnitude-different", "pma-rob-leaf-lowonly")
   } else {
-    c(flow_ids, "pma-rob-edge-appreciable-yes", "pma-rob-node-magnitude",
-      "pma-rob-edge-magnitude-similar", "pma-rob-leaf-all")
+    c(flow_ids, "pma-rob-edge-magnitude-similar", "pma-rob-leaf-all")
   }
 
   .rob_row(make_domain_row(

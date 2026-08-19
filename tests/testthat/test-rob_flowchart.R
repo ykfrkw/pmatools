@@ -300,7 +300,7 @@ test_that("not dominated: a sign flip is substantially different, at no depth", 
   expect_true("pma-rob-edge-magnitude-different" %in% .rob_path(g))
 })
 
-test_that("not dominated: an unassessable comparison never reaches the node", {
+test_that("not dominated: an unassessable comparison takes its own edge", {
   # Low-RoB studies that exist and carry weight but have no usable standard
   # error. metagen() would drop them, so the assessor is driven directly.
   fake <- list(
@@ -316,8 +316,21 @@ test_that("not dominated: an unassessable comparison never reaches the node", {
   expect_equal(row$judgment, "not_serious")
   expect_equal(attr(row, "analysis_set"), "all")
   expect_match(row$notes, "the magnitude question is never asked", fixed = TRUE)
-  expect_true("pma-rob-edge-appreciable-no" %in% ids)
-  expect_false("pma-rob-node-magnitude" %in% ids)
+  # The route reaches the same leaf as "similar" and keeps an id of its own,
+  # because "the question could not be asked" and "the question was asked and
+  # the answer was similar" are different findings. It used to be drawn on the
+  # appreciable node's "no" edge; that edge is deleted as unreachable (not
+  # dominating leaves the low-RoB studies at least the 35-45% of the weight
+  # Core GRADE 4 calls appreciable), so the distinction moved onto an edge out
+  # of the magnitude node.
+  expect_true(all(c("pma-rob-edge-appreciable-yes",
+                    "pma-rob-edge-magnitude-notassessable",
+                    "pma-rob-leaf-all") %in% ids))
+  expect_false("pma-rob-edge-magnitude-similar" %in% ids)
+  expect_false("pma-rob-edge-appreciable-no" %in% ids)
+  # And the note no longer claims the low-RoB evidence was not appreciable.
+  expect_false(grepl("do not provide appreciable evidence", row$notes,
+                     fixed = TRUE))
 })
 
 test_that("both leaves of the magnitude node disclose the directional reading", {

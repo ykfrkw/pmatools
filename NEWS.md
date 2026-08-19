@@ -1197,6 +1197,71 @@
   a domain is confirmed by its checkbox and by nothing else, which is exactly
   why a preselected widget cannot open it.
 
+* **The risk-of-bias figure follows Core GRADE 4 Fig 2's shape, and the
+  five direction-of-bias rules are no longer drawn as leaves.** Below "check
+  the direction of bias" the source has exactly two boxes and two leaves: risk
+  of bias may be responsible for the apparent effect, or for the apparent lack
+  of one, so rate down; there is an apparent effect and bias would have
+  decreased it, or there is no apparent effect and bias would have increased
+  it, so do not rate down. `inst/figures/rob.svg` now draws that structure,
+  with the five rules above it as the mechanism deciding which box is reached —
+  rules 1 and 2 the do-not-rate-down box, rules 3, 4, 5 and the unassessable
+  case the rate-down box, the correspondence `R/domain_rob.R` has always
+  documented. Enumerating the rules as six leaves, which the figure did up to
+  0.5.1, erased the source's shape and left the reader without the two
+  sentences that say what the branch means. Each rule box now states its
+  condition only; the verdict, and its depth, live on the leaf.
+
+  **No judgment, rule or threshold changed** — this is the drawing, the node
+  vocabulary and the routes. What a consumer of `flow_path` sees:
+
+  | id | change |
+  |---|---|
+  | `pma-rob-leaf-rule1`…`rule5`, `rulena` | unchanged, and still emitted; they are now the intermediate layer rather than leaves |
+  | `pma-rob-node-bias-responsible`, `pma-rob-edge-rules-responsible`, `pma-rob-edge-responsible-ratedown`, `pma-rob-leaf-ratedown` | new; appended to a dominated route that rates down |
+  | `pma-rob-node-bias-conservative`, `pma-rob-edge-rules-conservative`, `pma-rob-edge-conservative-noratedown`, `pma-rob-leaf-noratedown` | new; appended to a dominated route that does not |
+  | `pma-rob-edge-magnitude-notassessable` | new; the route for a comparison that could not be made |
+  | `pma-rob-edge-appreciable-no` | **deleted**, and never emitted again |
+
+  A dominated route therefore names both the rule that fired and the leaf it
+  reached, which is more than Fig 2 itself records. Rule 5's second level is
+  annotated on the single rate-down leaf rather than split off into a leaf of
+  its own: the source has two leaves, and splitting one to carry pmatools' −2
+  would move the drawing away from the source in the act of moving it closer.
+  `.ROB_TWO_LEVEL_NOTE` remains the full statement, in the notes a reader acts
+  on.
+
+  **The deleted edge was unreachable, and one of the two paths on it was
+  mislabelled.** "Is there appreciable evidence from the low risk of bias
+  studies?" can only be answered yes below the dominance gate: not dominating
+  leaves the low-risk studies more than 45% of the weight at the default gate
+  and more than 35% at the strictest gate Core GRADE 4 discusses, at or above
+  the "35 to 45%" the same paragraph calls appreciable. Both paths that used
+  the edge now take the yes edge to the same green leaf. `n_high == 0` was the
+  mislabelled one — evidence with no high-risk study is *entirely* low risk of
+  bias, the strongest possible yes — and it reaches the leaf through
+  `pma-rob-edge-magnitude-similar`, which is exact rather than convenient:
+  with nothing to exclude the restricted estimate *is* the pooled estimate. The
+  not-assessable path keeps a distinct id, because "the question could not be
+  asked" and "the question was asked and the answer was similar" are not the
+  same finding. Its domain note no longer opens "Low-RoB studies do not provide
+  appreciable evidence", a claim the dominance arithmetic contradicts; the rest
+  of the note, and the judgment, are unchanged.
+
+  **The figure carries no footnote any more.** "pmatools' operationalisation,
+  not a reproduction" was the only place *in the drawing* that said the five
+  rules and the −2 are pmatools' own, and the closer the figure gets to the
+  source the more that claim is needed — so it moved to the prose beside the
+  figure, in `?grade_flowcharts`, rather than disappearing. The `<desc>` still
+  carries it for a reader who meets the file alone. **The Shiny app's caption
+  does not carry it yet** — `pma_algorithm_source()` names the source figure
+  and the implementing function only — so an app reader currently meets the
+  redrawn chart with no disclosure beside it; that caption is a follow-up in
+  `shiny/`.
+  `.ROB_DIRECTIONAL_NODE_NOTE` and `.ROB_TWO_LEVEL_NOTE` are untouched: they
+  are in the exported judgment notes and were never what the footnote
+  duplicated. See `SPEC.md` §5.1a.
+
 ## Bug fixes
 
 * **The Shiny app's Run analysis button did nothing at all.** On a fresh

@@ -195,3 +195,26 @@ test_that("the flowchart CSS outranks the style block inside the SVG", {
   # The highlight is not carried by colour alone; some reviewers print these.
   expect_match(css, "stroke-width: 2.5", fixed = TRUE)
 })
+
+test_that("the Risk of bias caption says what in the chart is not the source's", {
+  # The Fig 2 drawing gave up its footnote when it was redrawn to the source's
+  # shape (SPEC.md 5.1a). That footnote was the only place in the picture that
+  # said the five direction rules and the two-level rule 5 are pmatools' own,
+  # and a chart that looks more like the paper needs that said MORE, not less.
+  # The caption beside it is where it moved, so a caption that loses it again
+  # leaves a reviewer reading a departure as the source.
+  caption <- pma_algorithm_source("Risk of bias")
+  expect_match(caption, "Core GRADE 4 Fig 2", fixed = TRUE)
+  expect_match(caption, "assess_rob()", fixed = TRUE)
+  expect_match(caption, "not the source's", fixed = TRUE)
+  expect_match(caption, "rule 5 rates down two levels", fixed = TRUE)
+
+  # A chart that departs from its source in nothing says nothing extra, so the
+  # sentence stays a signal rather than boilerplate every caption carries.
+  plain <- pma_algorithm_source("Imprecision")
+  expect_match(plain, "Core GRADE 2 Fig 4", fixed = TRUE)
+  expect_false(grepl("not the source's", plain, fixed = TRUE))
+
+  # An unknown domain still has no caption at all.
+  expect_null(pma_algorithm_source("Indirectness"))
+})

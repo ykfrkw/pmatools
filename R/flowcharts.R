@@ -24,8 +24,13 @@
 #' These are pmatools' \emph{operationalisation} of the decision each cited
 #' figure describes, not reproductions of the published artwork, and they
 #' deliberately differ from the source where pmatools had to make the decision
-#' executable. Every difference is marked in the figure's caption and stated
-#' again below. Where a figure and the source disagree, the source is right
+#' executable. Every difference is stated below, and three of the four figures
+#' carry it in a caption as well. The risk-of-bias figure does not: its shape
+#' follows Core GRADE 4 Fig 2 closely enough that a footnote inside the drawing
+#' would read as part of the source, so \strong{this topic and that figure's
+#' \code{<desc>} are where its disclosure lives} - the five rules and the
+#' two-level fifth rule are pmatools' own, and nothing a reader sees in the
+#' drawing says so. Where a figure and the source disagree, the source is right
 #' about GRADE and the figure is right about pmatools.
 #'
 #' Each assessment also records the route it took through its figure, as a
@@ -80,13 +85,40 @@
 #' the same leaf. Every judgment that answers the node carries the departure in
 #' its \code{notes}.
 #'
+#' \strong{The five rules are drawn as a mechanism, not as leaves.} Below
+#' "check the direction of bias" Core GRADE 4 Fig 2 has exactly two boxes and
+#' two leaves: risk of bias may be responsible for the apparent effect, or for
+#' the apparent lack of one, so rate down; there is an apparent effect and bias
+#' would have decreased it, or there is no apparent effect and bias would have
+#' increased it, so do not rate down. The figure draws that structure, with the
+#' rules above it deciding which box is reached - rules 1 and 2 the
+#' do-not-rate-down box, rules 3, 4, 5 and the unassessable case the rate-down
+#' box. A recorded \code{flow_path} names both, so a route through this branch
+#' says which rule fired \emph{and} which conclusion it reached. Rule 5's
+#' second level is annotated on the single rate-down leaf rather than split off
+#' into a leaf of its own, because the source has two leaves and splitting one
+#' to carry pmatools' two levels would move the drawing away from the source in
+#' the act of moving it closer. Up to 0.5.1 the figure enumerated the rules as
+#' six leaves instead.
+#'
 #' The chart opens at the dominance question. A body of evidence with no
 #' high-risk study is not drawn a node of its own, because it does not reach a
 #' different decision: the dominance share is then 0, below the gate, and
 #' "analyse all studies" is the answer when there is nothing to exclude. That
-#' case therefore lights the undominated route like any other.
+#' case therefore lights the undominated route like any other, taking the
+#' appreciable node's "yes" edge - evidence with no high-risk study is entirely
+#' low risk of bias, which is the strongest possible yes.
 #'
-#' \if{html}{\figure{rob.svg}{options: width="100\%" alt="pmatools risk-of-bias decision flowchart: whether the high risk of bias studies dominate the evidence, then either the five-rule direction-of-bias check or the appreciable-evidence and magnitude questions."}}
+#' That node has no "no" edge, because the answer cannot be no. Reaching the
+#' undominated branch at all means the high-risk studies carry less than the
+#' dominance threshold, so the low-risk studies carry more than 45% of the
+#' weight at the default gate and more than 35% at the strictest gate Core
+#' GRADE 4 discusses - at or above the "35 to 45%" the same paragraph calls
+#' appreciable. A comparison that cannot be made at all takes its own edge out
+#' of the magnitude node to the same leaf as "similar", so that the route still
+#' records that the question could not be asked.
+#'
+#' \if{html}{\figure{rob.svg}{options: width="100\%" alt="pmatools risk-of-bias decision flowchart: whether the high risk of bias studies dominate the evidence, then either the five-rule direction-of-bias check feeding Core GRADE 4's two conclusions and their rate-down / do-not-rate-down leaves, or the appreciable-evidence and magnitude questions."}}
 #' \if{latex}{Figure omitted from the PDF manual (SVG); see the HTML help.}
 #'
 #' @section Inconsistency - Core GRADE 3 Fig 2:

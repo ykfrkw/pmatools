@@ -1575,7 +1575,7 @@ When `threshold_internal` is NULL/NA/≤ 0 the trivial zone collapses to `{0}`, 
 |---|---|---|
 | 3, 4, 5 (rate down) | substantially different | `"low_only"` |
 | 1, 2 (do not rate down) | similar | `"all"` |
-| none — the check bailed out (`rule` is `NA`) | never asked; the route takes the *appreciable evidence = no* edge | `"all"` |
+| none — the check bailed out (`rule` is `NA`) | never asked; the route takes the magnitude node's third edge, `pma-rob-edge-magnitude-notassessable`, to the same leaf as *similar* (§5.1a) | `"all"` |
 
 Two consequences follow from reading the rule verdict and both are load-bearing.
 
@@ -1592,11 +1592,6 @@ The object then carries `$meta` (rated analysis), `$meta_full` (all studies), `$
 **Two index spaces, one mapping.** The Fig 2 maths runs in **k-space** (length `meta_obj$k`, the estimable studies), whereas `rob_overrides` keys and `update.meta(subset = )` live in **studlab space** (length `meta_obj$studlab`). The two differ whenever {meta} drops a study from the pool — a trial with missing results, a double-zero trial under `method = "Inverse"`. `R/domain_rob.R` resolves the mapping **once per `assess_rob()` call** in `.rob_alignment()`, and `.rob_expand()` / `.rob_contract()` move vectors between the spaces, so nothing re-derives it. The resolver never guesses: it tries `length(studlab) == k`, then `!is.na(TE)`, then `is.finite(TE)`, and unless one of them reproduces exactly `k` rows it returns `NULL` and the caller keeps its existing abort/skip behaviour. `attr(<rob domain row>, "high_idx")` is studlab-aligned, which is what `update.meta(subset = )` needs.
 
 ### 5.1a Risk of bias — the drawing (`inst/figures/rob.svg`)
-
-> **Status: specified, not yet built.** This section is the contract the figure
-> is being changed to meet; `inst/figures/rob.svg`, `.ROB_FIG2_NODE_IDS` and the
-> two `flow_path` emit sites named below still describe the previous shape. They
-> move together or not at all.
 
 The figure is not decoration: `.flowchart_rob()` emits a `flow_path` fact naming
 the node ids the assessment traversed, `shiny/www/flowchart.js` lights them, and
@@ -1651,15 +1646,34 @@ lives in the id and in the notes, not in a shape the source does not have.
 **Node ids are added, never replaced.** `pma-rob-leaf-rule1`…`rule5`, `rulena`
 stay as the intermediate layer and the two source leaves get new ids, so a lit
 path shows both which rule fired and which leaf it reached — more than the
-source figure records, without changing what the figure looks like.
+source figure records, without changing what the figure looks like. The layer
+below the rules is `pma-rob-node-bias-responsible` →
+`pma-rob-leaf-ratedown` (rules 3, 4, 5 and the unassessable case) and
+`pma-rob-node-bias-conservative` → `pma-rob-leaf-noratedown` (rules 1 and 2),
+each reached by an edge of its own (`pma-rob-edge-rules-responsible` /
+`-conservative`, `pma-rob-edge-responsible-ratedown` /
+`pma-rob-edge-conservative-noratedown`). The verdict is tested against
+`"not_serious"` rather than by enumerating the rating levels, so a level added
+to the five-rule check later cannot need a third leaf on a figure whose source
+has two. The not-assessable route's own id is
+`pma-rob-edge-magnitude-notassessable`.
 
-**The figure carries no footnote, and the app carries the claim instead.** The
-"pmatools' operationalisation, not a reproduction" footnote is removed. It was
-the only place *in the drawing* that said the five rules and the −2 are
+**The figure carries no footnote, and the prose beside it carries the claim.**
+The "pmatools' operationalisation, not a reproduction" footnote is removed. It
+was the only place *in the drawing* that said the five rules and the −2 are
 pmatools' own, and the closer the figure gets to the source the more that claim
 is needed — so it moves to the prose beside the figure rather than disappearing.
+In the package that prose is `?grade_flowcharts`, which states it for all four
+figures and marks this one as the figure that no longer says it itself; the
+`<desc>` keeps it too, for a reader who meets the file alone.
 `.ROB_DIRECTIONAL_NODE_NOTE` and `.ROB_TWO_LEVEL_NOTE` are unaffected: they are
 in the exported judgment notes and were never what the footnote duplicated.
+
+In the app the claim rides on `pma_algorithm_source()`, whose
+`PMA_FLOWCHART_FIGS` entry for this domain gains a `departure` sentence
+appended to the provenance line. Only a chart that departs from its source
+carries one — the other three say nothing extra — so the sentence stays a
+signal rather than boilerplate under every figure.
 
 ### 5.2 Inconsistency — BMJ Core GRADE 3 flowchart (v0.2)
 

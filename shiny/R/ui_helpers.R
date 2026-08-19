@@ -1607,10 +1607,22 @@ pma_facts_list <- function(facts, keys = NULL, max_rows = 6L) {
 # One table so the caption under the chart and the roxygen in R/flowcharts.R
 # cannot drift into naming different functions.
 PMA_FLOWCHART_FIGS <- list(
+  # `departure` is where a chart says what in it is NOT the source's. It exists
+  # because the Fig 2 drawing lost its footnote when it was redrawn to the
+  # source's shape (SPEC.md 5.1a): the closer the picture gets to the paper, the
+  # more the reader needs telling which parts are ours, and the figure itself is
+  # no longer the place that tells them. Omit the field for a chart that departs
+  # from its source in nothing.
   "Risk of bias"     = list(fig = "rob",
                             fn  = "assess_rob()",
                             file = "R/domain_rob.R",
-                            src = "Core GRADE 4 Fig 2"),
+                            src = "Core GRADE 4 Fig 2",
+                            departure = paste(
+                              "The five direction-of-bias rules between the",
+                              "direction question and its two outcomes are",
+                              "pmatools' operationalisation, not the source's;",
+                              "rule 5 rates down two levels, which Core GRADE 4",
+                              "never does.")),
   "Inconsistency"    = list(fig = "incon",
                             fn  = "assess_inconsistency()",
                             file = "R/domain_inconsistency.R",
@@ -1696,8 +1708,11 @@ pma_flowchart <- function(figkey, on_ids = character(0), caption = NULL,
 pma_algorithm_source <- function(domain) {
   spec <- PMA_FLOWCHART_FIGS[[domain]]
   if (is.null(spec)) return(NULL)
-  sprintf("%s, as implemented by %s in %s of the pmatools package.",
-          spec$src, spec$fn, spec$file)
+  provenance <- sprintf(
+    "%s, as implemented by %s in %s of the pmatools package.",
+    spec$src, spec$fn, spec$file)
+  if (is.null(spec$departure)) return(provenance)
+  paste(provenance, spec$departure)
 }
 
 # The flow_path fact, split into ids. `facts` is a domain_facts() tibble or

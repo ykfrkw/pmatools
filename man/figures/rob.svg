@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 593" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="rob-title rob-desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 790" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="rob-title rob-desc">
   <title id="rob-title">Risk of bias: the Core GRADE 4 Figure 2 decision as pmatools implements it</title>
-  <desc id="rob-desc">Flowchart. Do the high risk of bias studies dominate the evidence (55% or more of the pooled weight by default)? If they do, pmatools checks the direction of bias by comparing the pooled estimate with and without those studies and applying five mutually exclusive rules: both estimates trivial, or the same zone with a change within 20%, do not rate down; the same zone with a bias-favouring change over 20%, zones differing on the same side of the null, or a direction that cannot be assessed, rate down one level; and zones differing across the null, which means the estimate restricted to the low risk of bias studies falls on the opposite side of it, rate down two levels. If the high risk of bias studies do not dominate, pmatools asks whether there is appreciable evidence from the low risk of bias studies and, if so, whether the two magnitudes of effect are similar or substantially different. That second question is decided by the same five rules: a rule that would rate down means substantially different, one that would not means similar. Neither answer rates down, but a substantial difference restricts the analysis to the low risk of bias studies. A body of evidence with no high risk of bias study at all takes that same undominated route and does not rate down. This is pmatools&#8217; operationalisation of the Core GRADE 4 Figure 2 decision, not a reproduction of the published figure: the five rules are pmatools&#8217; and are not enumerated in the source; Core GRADE 4 words the magnitude question symmetrically where the rules are directional; and it describes no two-level risk-of-bias downgrade at all, so the two-level fifth rule is a departure from it, which also requires a threshold to have been supplied &#8212; without one that rule rates down one level.</desc>
+  <desc id="rob-desc">Flowchart. Do the high risk of bias studies dominate the evidence (55% or more of the pooled weight by default)? If they do, pmatools checks the direction of bias by comparing the pooled estimate with and without those studies and applying five mutually exclusive rules: both estimates trivial; the same zone with a change within 20%; the same zone with a bias-favouring change over 20%; zones differing on the same side of the null; and zones differing across the null, which means the estimate restricted to the low risk of bias studies falls on the opposite side of it. A sixth box covers a direction that cannot be assessed at all. Those rules decide which of the two conclusions Core GRADE 4 draws is reached. Rules 3, 4, 5 and the unassessable case reach: risk of bias may be responsible for the apparent effect, or for the apparent lack of one, so rate down &#8212; one level, or two on rule 5 where a threshold was supplied. Rules 1 and 2 reach: there is an apparent effect and bias would have decreased it, or there is no apparent effect and bias would have increased it, so do not rate down. If the high risk of bias studies do not dominate, pmatools asks whether there is appreciable evidence from the low risk of bias studies. Below the dominance gate that answer is always yes, so the node has one outgoing edge, and the chart then asks whether the two magnitudes of effect are similar or substantially different. That question is decided by the same five rules: a rule that would rate down means substantially different, one that would not means similar, and a comparison that cannot be made takes a third edge to the same leaf as similar. Neither answer rates down, but a substantial difference restricts the analysis to the low risk of bias studies. A body of evidence with no high risk of bias study at all takes that same undominated route and does not rate down. This is pmatools&#8217; operationalisation of the Core GRADE 4 Figure 2 decision, not a reproduction of the published figure: the five rules are pmatools&#8217; and are not enumerated in the source; Core GRADE 4 words the magnitude question symmetrically where the rules are directional; and it describes no two-level risk-of-bias downgrade at all, so the two-level fifth rule is a departure from it, which also requires a threshold to have been supplied &#8212; without one that rule rates down one level.</desc>
   <style>
     .pma-fc-node rect, .pma-fc-leaf rect {
       fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2;
@@ -39,15 +39,28 @@
     <path d="M 235 246 L 235 278"/>
     <path d="M 230.5 271 L 235 278 L 239.5 271"/>
   </g>
-  <g id="pma-rob-edge-appreciable-yes" class="pma-fc-edge">
-    <path d="M 800 229 L 800 275"/>
-    <path d="M 795.5 268 L 800 275 L 804.5 268"/>
-    <text class="pma-fc-edge-label" x="808" y="255" text-anchor="start">Yes</text>
+  <g id="pma-rob-edge-rules-responsible" class="pma-fc-edge">
+    <path d="M 150 542 L 150 580"/>
+    <path d="M 145.5 573 L 150 580 L 154.5 573"/>
+    <text class="pma-fc-edge-label" x="158" y="572" text-anchor="start">Rules 3, 4, 5 and not assessable</text>
   </g>
-  <g id="pma-rob-edge-appreciable-no" class="pma-fc-edge">
-    <path d="M 560 229 L 560 383"/>
-    <path d="M 555.5 376 L 560 383 L 564.5 376"/>
-    <text class="pma-fc-edge-label" x="568" y="309" text-anchor="start">No</text>
+  <g id="pma-rob-edge-rules-conservative" class="pma-fc-edge">
+    <path d="M 360 542 L 360 562 L 715 562 L 715 580"/>
+    <path d="M 710.5 573 L 715 580 L 719.5 573"/>
+    <text class="pma-fc-edge-label" x="368" y="556" text-anchor="start">Rules 1 and 2</text>
+  </g>
+  <g id="pma-rob-edge-responsible-ratedown" class="pma-fc-edge">
+    <path d="M 245 636 L 245 690"/>
+    <path d="M 240.5 683 L 245 690 L 249.5 683"/>
+  </g>
+  <g id="pma-rob-edge-conservative-noratedown" class="pma-fc-edge">
+    <path d="M 715 653 L 715 690"/>
+    <path d="M 710.5 683 L 715 690 L 719.5 683"/>
+  </g>
+  <g id="pma-rob-edge-appreciable-yes" class="pma-fc-edge">
+    <path d="M 800 246 L 800 275"/>
+    <path d="M 795.5 268 L 800 275 L 804.5 268"/>
+    <text class="pma-fc-edge-label" x="808" y="266" text-anchor="start">Yes</text>
   </g>
   <g id="pma-rob-edge-magnitude-similar" class="pma-fc-edge">
     <path d="M 660 331 L 660 383"/>
@@ -58,6 +71,11 @@
     <path d="M 860 331 L 860 383"/>
     <path d="M 855.5 376 L 860 383 L 864.5 376"/>
     <text class="pma-fc-edge-label" x="868" y="361" text-anchor="start">Different</text>
+  </g>
+  <g id="pma-rob-edge-magnitude-notassessable" class="pma-fc-edge">
+    <path d="M 620 303 L 560 303 L 560 383"/>
+    <path d="M 555.5 376 L 560 383 L 564.5 376"/>
+    <text class="pma-fc-edge-label" x="552" y="340" text-anchor="end">Not assessable</text>
   </g>
   <g id="pma-rob-node-dominance" class="pma-fc-node">
     <rect x="20" y="48" width="430" height="73" rx="6" ry="6"/>
@@ -78,51 +96,81 @@
   <g id="pma-rob-leaf-rule1" class="pma-fc-leaf">
     <rect x="35" y="278" width="400" height="39" rx="6" ry="6"/>
     <text x="47" y="301" text-anchor="start">
-      <tspan x="47" dy="0">1  both estimates trivial  &#8594;  do not rate down</tspan>
+      <tspan x="47" dy="0">1  both estimates trivial</tspan>
     </text>
   </g>
   <g id="pma-rob-leaf-rule2" class="pma-fc-leaf">
     <rect x="35" y="323" width="400" height="39" rx="6" ry="6"/>
     <text x="47" y="346" text-anchor="start">
-      <tspan x="47" dy="0">2  same zone, change within 20%  &#8594;  do not rate down</tspan>
+      <tspan x="47" dy="0">2  same zone, change within 20%</tspan>
     </text>
   </g>
   <g id="pma-rob-leaf-rule3" class="pma-fc-leaf">
     <rect x="35" y="368" width="400" height="39" rx="6" ry="6"/>
     <text x="47" y="391" text-anchor="start">
-      <tspan x="47" dy="0">3  same zone, bias-favouring change over 20%  &#8594;  rate down 1</tspan>
+      <tspan x="47" dy="0">3  same zone, bias-favouring change over 20%</tspan>
     </text>
   </g>
   <g id="pma-rob-leaf-rule4" class="pma-fc-leaf">
     <rect x="35" y="413" width="400" height="39" rx="6" ry="6"/>
     <text x="47" y="436" text-anchor="start">
-      <tspan x="47" dy="0">4  zones differ, same side of the null  &#8594;  rate down 1</tspan>
+      <tspan x="47" dy="0">4  zones differ, same side of the null</tspan>
     </text>
   </g>
   <g id="pma-rob-leaf-rule5" class="pma-fc-leaf">
     <rect x="35" y="458" width="400" height="39" rx="6" ry="6"/>
     <text x="47" y="481" text-anchor="start">
-      <tspan x="47" dy="0">5  zones differ across the null  &#8594;  rate down 2</tspan>
+      <tspan x="47" dy="0">5  zones differ across the null</tspan>
     </text>
   </g>
   <g id="pma-rob-leaf-rulena" class="pma-fc-leaf">
     <rect x="35" y="503" width="400" height="39" rx="6" ry="6"/>
     <text x="47" y="526" text-anchor="start">
-      <tspan x="47" dy="0">&#8211;  direction not assessable  &#8594;  rate down 1</tspan>
+      <tspan x="47" dy="0">&#8211;  direction not assessable</tspan>
+    </text>
+  </g>
+  <g id="pma-rob-node-bias-responsible" class="pma-fc-node">
+    <rect x="20" y="580" width="450" height="56" rx="6" ry="6"/>
+    <text x="245" y="603" text-anchor="middle">
+      <tspan x="245" dy="0">Risk of bias may be responsible for the</tspan>
+      <tspan x="245" dy="17">apparent effect, or for the apparent lack of one</tspan>
+    </text>
+  </g>
+  <g id="pma-rob-node-bias-conservative" class="pma-fc-node">
+    <rect x="490" y="580" width="450" height="73" rx="6" ry="6"/>
+    <text x="715" y="603" text-anchor="middle">
+      <tspan x="715" dy="0">There is an apparent effect and bias would have</tspan>
+      <tspan x="715" dy="17">decreased it, or there is no apparent effect and</tspan>
+      <tspan x="715" dy="17">bias would have increased it</tspan>
+    </text>
+  </g>
+  <g id="pma-rob-leaf-ratedown" class="pma-fc-leaf">
+    <rect x="20" y="690" width="450" height="73" rx="6" ry="6"/>
+    <text x="245" y="713" text-anchor="middle">
+      <tspan x="245" dy="0">Rate down</tspan>
+      <tspan x="245" dy="17">1 level, or 2 on rule 5 with a threshold supplied &#8212;</tspan>
+      <tspan x="245" dy="17">Core GRADE 4 describes no two-level downgrade</tspan>
+    </text>
+  </g>
+  <g id="pma-rob-leaf-noratedown" class="pma-fc-leaf">
+    <rect x="490" y="690" width="450" height="39" rx="6" ry="6"/>
+    <text x="715" y="713" text-anchor="middle">
+      <tspan x="715" dy="0">Do not rate down</tspan>
     </text>
   </g>
   <g id="pma-rob-node-appreciable" class="pma-fc-node">
-    <rect x="505" y="173" width="435" height="56" rx="6" ry="6"/>
+    <rect x="505" y="173" width="435" height="73" rx="6" ry="6"/>
     <text x="722.5" y="196" text-anchor="middle">
       <tspan x="722.5" dy="0">Is there appreciable evidence from</tspan>
       <tspan x="722.5" dy="17">the low risk of bias studies?</tspan>
+      <tspan x="722.5" dy="17">Always yes here: not dominating leaves 35% or more</tspan>
     </text>
   </g>
   <g id="pma-rob-node-magnitude" class="pma-fc-node">
     <rect x="620" y="275" width="320" height="56" rx="6" ry="6"/>
     <text x="780" y="298" text-anchor="middle">
       <tspan x="780" dy="0">Similar or substantially different</tspan>
-      <tspan x="780" dy="17">magnitudes? Decided by the five rules</tspan>
+      <tspan x="780" dy="17">magnitudes of effect?</tspan>
     </text>
   </g>
   <g id="pma-rob-leaf-all" class="pma-fc-leaf">
@@ -139,9 +187,5 @@
       <tspan x="832.5" dy="17">Analyse low risk studies</tspan>
     </text>
   </g>
-  <text class="pma-fc-caption" x="20" y="563">
-    <tspan x="20" dy="0">After BMJ Core GRADE 4 (Guyatt et al., 2025) Figure 2. pmatools&#8217; operationalisation, not a reproduction: the five direction-of-bias</tspan>
-    <tspan x="20" dy="16">rules are pmatools&#8217; own, they answer the symmetrically worded magnitude question, and rule 5 rates down two levels, which Core GRADE 4 never does.</tspan>
-  </text>
 </svg>
 
