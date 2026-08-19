@@ -68,6 +68,53 @@ test_that(".resolve_arm_labels replaces the {meta} 'Experimental' default", {
   )
 })
 
+test_that("plot_forest prints Mean and SD to one decimal by default", {
+  # {meta}'s own defaults are digits.mean = 2 and digits.sd = 4, i.e. an SD
+  # printed to twice the precision of the mean it belongs to. The argument list
+  # is inspected rather than the drawing, because the drawing is a grid device
+  # and the numbers on it are not readable back.
+  m <- make_metacont_pf()
+  seen <- NULL
+  with_null_device(
+    testthat::with_mocked_bindings(
+      plot_forest(m, show_events = TRUE, show_n = TRUE),
+      forest = function(...) { seen <<- list(...); invisible(NULL) },
+      .package = "meta"
+    )
+  )
+  expect_identical(seen$digits.mean, 1L)
+  expect_identical(seen$digits.sd, 1L)
+})
+
+test_that("plot_forest forwards the caller's Mean and SD decimal places", {
+  m <- make_metacont_pf()
+  seen <- NULL
+  capture_forest <- function(...) { seen <<- list(...); invisible(NULL) }
+  with_null_device({
+    testthat::with_mocked_bindings(
+      plot_forest(m, digits_mean = 3, digits_sd = 0),
+      forest = capture_forest, .package = "meta")
+    expect_identical(seen$digits.mean, 3L)
+    expect_identical(seen$digits.sd, 0L)
+
+    # A blank spinner in the app arrives as NA, and a negative is one keystroke
+    # away; both fall back to the default rather than reaching meta::forest(),
+    # whose error would be answered by the retry that strips the data columns.
+    testthat::with_mocked_bindings(
+      plot_forest(m, digits_mean = NA, digits_sd = -2),
+      forest = capture_forest, .package = "meta")
+    expect_identical(seen$digits.mean, 1L)
+    expect_identical(seen$digits.sd, 1L)
+
+    # An explicit meta-native pass-through wins, and does NOT collide with the
+    # argument: two elements of the same name would abort the do.call().
+    testthat::with_mocked_bindings(
+      plot_forest(m, digits_mean = 3, digits.mean = 2),
+      forest = capture_forest, .package = "meta")
+    expect_identical(seen$digits.mean, 2)
+  })
+})
+
 test_that("plot_forest tolerates NA addrow arguments", {
   m <- make_metabin_pf()
   with_null_device(

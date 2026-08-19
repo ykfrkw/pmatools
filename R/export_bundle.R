@@ -50,6 +50,10 @@
 #' @param prediction Show 95 percent prediction interval in SoF Effect column.
 #' @param convert_smd_to_or Logical. Passed to \code{\link{sof_table}} for
 #'   continuous-outcome dichotomisation.
+#' @param keep_effect_scale Logical (default \code{FALSE}). Passed to
+#'   \code{\link{sof_table}}: shows the outcome on its own scale AND as a
+#'   proportion of responders in one row. Only relevant when
+#'   \code{convert_smd_to_or = TRUE}.
 #' @param baseline_risk Numeric in (0,1). Passed to \code{\link{sof_table}}
 #'   when \code{convert_smd_to_or = TRUE}.
 #' @param threshold_label Optional free-text label describing the
@@ -81,7 +85,7 @@
 #'   \code{\link{plot_forest}} when rendering the bundled forest plot.
 #'   Recognised names: `title`, `label_e`, `label_c`, `xlim`,
 #'   `favors_left`, `favors_right`, `show_n`, `show_events`,
-#'   `addrow_above`, `addrow_below`.
+#'   `addrow_above`, `addrow_below`, `digits_mean`, `digits_sd`.
 #' @param rob Optional character vector of per-study Risk-of-Bias labels
 #'   (length \code{length(meta_obj$studlab)} or \code{meta_obj$k}). Required
 #'   when `"forest_rob"` is in `include` to render the stratified forest plot.
@@ -184,6 +188,7 @@ export_bundle.meta <- function(x,
                           unit         = NULL,
                           sof_notes    = NULL,
                           convert_smd_to_or = FALSE,
+                          keep_effect_scale = FALSE,
                           baseline_risk     = NULL,
                           threshold_label   = NULL,
                           chinn_invert      = FALSE,
@@ -243,6 +248,7 @@ export_bundle.meta <- function(x,
                             per, prediction,
                             convert_smd_to_or, baseline_risk, threshold_label,
                             script_path,
+                            keep_effect_scale = isTRUE(keep_effect_scale),
                             rare = rare,
                             style = style, follow_up = follow_up, unit = unit,
                             sof_notes = sof_notes)
@@ -342,6 +348,7 @@ export_bundle.meta <- function(x,
                         follow_up         = follow_up,
                         unit              = unit,
                         convert_smd_to_or = convert_smd_to_or,
+                        keep_effect_scale = isTRUE(keep_effect_scale),
                         baseline_risk     = baseline_risk,
                         threshold_label   = threshold_label,
                         chinn_invert      = isTRUE(chinn_invert))
@@ -636,6 +643,24 @@ export_bundle.meta <- function(x,
   writeLines(grade_print, con)
   writeLines("", con)
 
+  # How the pooled estimate was produced, when that is not the ordinary
+  # pairwise fit. Above the domain notes, because it qualifies all five of
+  # them: every domain below was rated on this estimate, and a reader who
+  # takes it for an inverse-variance one reads the whole block wrong.
+  if (is.list(grade$rare) && isTRUE(grade$rare$flow)) {
+    writeLines("[ Analysis method - rare events ]", con)
+    for (line in c(grade$rare$method_statement, grade$rare$no_cc_note,
+                   if (isTRUE(grade$rare$one_arm_total_zero)) paste0(
+                     "One arm has no events at all across every study, so ",
+                     "Imprecision could not be assessed; see its domain note ",
+                     "below."))) {
+      if (!is.null(line) && !is.na(line) && nzchar(line)) {
+        writeLines(strwrap(line, width = 78), con)
+      }
+    }
+    writeLines("", con)
+  }
+
   writeLines("[ Domain notes ]", con)
   d <- grade$domain_assessments
   for (i in seq_len(nrow(d))) {
@@ -667,6 +692,7 @@ export_bundle.meta <- function(x,
                                     per, prediction,
                                     convert_smd_to_or, baseline_risk, threshold_label,
                                     out_path,
+                                    keep_effect_scale = FALSE,
                                     rare = NULL,
                                     style = "bmj",
                                     follow_up = NULL, unit = NULL,
@@ -857,13 +883,33 @@ export_bundle.meta <- function(x,
       .arg_lit(grade_args[["pubias_registry_complete", exact = TRUE]], fallback = "NULL"),
     pubias_rationale_arg      =
       .arg_lit(grade_args[["pubias_rationale", exact = TRUE]],         fallback = "NULL"),
+    # The rare-event facts change three computations, so a script that omitted
+    # them would reproduce a different rating on the same data. The fallbacks
+    # read the RATED OBJECT rather than defaulting to FALSE: a bundle exported
+    # without grade_args must still reproduce the rating it describes, which is
+    # the bug small_values had.
+    rare_flow_arg    = .arg_lit(
+      grade_args[["rare_flow", exact = TRUE]],
+      fallback = if (isTRUE(grade$rare$flow)) "TRUE" else "FALSE"),
+    rare_one_arm_zero_arg = .arg_lit(
+      grade_args[["rare_one_arm_total_zero", exact = TRUE]],
+      fallback = if (isTRUE(grade$rare$one_arm_total_zero)) "TRUE" else "FALSE"),
+    rare_method_arg  = .arg_lit(
+      grade_args[["rare_method", exact = TRUE]],
+      fallback = if (is.character(grade$rare$method) &&
+                     length(grade$rare$method) == 1L) {
+        shQuote(grade$rare$method)
+      } else {
+        "NULL"
+      }),
     outcome_name     = grade$outcome_name,
     per              = per,
     sof_style        = style,
     sof_prediction   = if (isTRUE(prediction)) "TRUE" else "FALSE",
     display_args     = .display_args_str(follow_up, unit),
     sof_notes_block  = .sof_notes_block(sof_notes, "sof"),
-    convert_args     = .convert_args_str(convert_smd_to_or, baseline_risk, threshold_label),
+    convert_args     = .convert_args_str(convert_smd_to_or, baseline_risk,
+                                         threshold_label, keep_effect_scale),
     rare_block       = .rare_script_block(rare)
   )
 
@@ -1194,9 +1240,15 @@ ARG_LIT_ORIGINS <- c("null", "column", "scalar", "vector")
          paste(lits, collapse = ",\n  "), "\n))\n")
 }
 
-.convert_args_str <- function(convert_smd_to_or, baseline_risk, threshold_label) {
+.convert_args_str <- function(convert_smd_to_or, baseline_risk,
+                              threshold_label, keep_effect_scale = FALSE) {
   if (!isTRUE(convert_smd_to_or)) return("")
   parts <- ", convert_smd_to_or = TRUE"
+  # Emitted only when TRUE: FALSE is the default, and a script that spells out
+  # every default reads as though each one were a decision the review took.
+  if (isTRUE(keep_effect_scale)) {
+    parts <- paste0(parts, ", keep_effect_scale = TRUE")
+  }
   if (!is.null(baseline_risk)) {
     parts <- paste0(parts, ", baseline_risk = ", format(baseline_risk))
   }

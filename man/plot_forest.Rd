@@ -19,6 +19,8 @@ plot_forest(
   favors_right = NULL,
   addrow_above = 0,
   addrow_below = NULL,
+  digits_mean = 1L,
+  digits_sd = 1L,
   ...
 )
 }
@@ -79,6 +81,16 @@ band, the \code{label.left}/\code{label.right} row, and any
 \code{xlab} row (see \code{.auto_addrow_below()}). \code{NA}, a
 negative value, or anything not a length-1 finite number falls back to
 that automatic derivation.}
+
+\item{digits_mean, digits_sd}{Number of decimal places printed in the
+per-arm \code{Mean} and \code{SD} columns of a continuous outcome
+(passed to \code{\link[meta]{forest}} as \code{digits.mean} /
+\code{digits.sd}). Both default to \code{1}, which is deliberately not
+the pair \code{\link[meta]{forest}} defaults to on its own (\code{2} and
+\code{4}): those print an SD to twice the precision of the mean it
+belongs to, and neither is the precision a trial reports. \code{NA}, a
+negative value, or anything not a length-1 finite number falls back to
+\code{1}. Ignored for an outcome that draws no mean/SD columns.}
 
 \item{...}{Additional arguments passed to \code{\link[meta]{forest}}.}
 }

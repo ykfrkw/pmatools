@@ -14,30 +14,42 @@
 #'   outcome name in the \code{"bmj"} style, e.g.
 #'   \code{"Follow-up: longest, range 7.7-60 months"}. \code{NULL} (default)
 #'   omits the line. Ignored by the \code{"gradepro"} style.
-#' @param unit (v0.5) Optional unit for the continuous-outcome cells, e.g.
-#'   \code{"days"}: the Difference column of the \code{"bmj"} style, and the
-#'   two arm columns of either style when they hold arm-level means. Ignored
-#'   for relative effect measures.
-#' @section Arm columns for a continuous outcome:
-#' Core GRADE 6 asks for the outcome in the comparison group, in the
-#' intervention group and the difference between them. A \code{metacont}
-#' object has no baseline risk to build event rates from, so the two arm
-#' columns are filled from the arm-level summaries it carries: the control
-#' column is the inverse-variance weighted mean of the control arms (weights
-#' \eqn{n / SD^2}, falling back to \eqn{n} when the SDs are unusable), and the
-#' intervention column is that value plus the pooled difference, its interval
-#' coming from the pooled difference alone. The control mean is pooled with
-#' fixed weights whatever model produced the effect estimate, because
-#' heterogeneity in arm-level means is a different quantity from heterogeneity
-#' in the contrast and pmatools does not fit a second meta-analysis to estimate
-#' it. With \code{sm = "SMD"} the pooled difference is in standard deviation
-#' units and is re-expressed on the outcome's own scale by multiplying it by
-#' the pooled within-arm SD of the control arms (Cochrane Handbook 15.5.3.2)
-#' before it is added, which assumes the control arms share one scale; the
-#' Difference column stays in standard deviation units. Both derivations are
-#' stated in a table footnote. The headers become "With control" / "With
-#' intervention" in this case, since the rate wording and the \code{per}
-#' denominator would misdescribe a mean.
+#' @param unit (v0.5) Optional unit for the Difference column of the
+#'   \code{"bmj"} style when \code{sm = "MD"}, e.g. \code{"days"}. Ignored for
+#'   every other effect measure: a standardised mean difference is not on the
+#'   outcome's scale, and a ratio measure has no unit at all.
+#' @section Absolute effects for a continuous outcome:
+#' The three absolute-effect cells -- "With control", "With intervention" and
+#' "Difference" -- hold nothing mean-derived for a continuous outcome, and the
+#' first two are empty unless the responder conversion below is active.
+#'
+#' A continuous meta-analysis routinely pools endpoint scores together with
+#' change-from-baseline scores. The pooled contrast survives that; a pooled
+#' \emph{control-arm mean} does not, because the two kinds of arm summary are
+#' not measurements of the same quantity, and neither does anything built on
+#' one. Until v0.6 the arm columns held an inverse-variance weighted mean of the
+#' control arms and that mean plus the pooled difference, which is a number no
+#' reader could act on in the ordinary mixed case. The pooled difference itself
+#' is unaffected, so \code{sm = "MD"} keeps its Difference cell in the outcome's
+#' own units; \code{sm = "SMD"} leaves it empty, since a standard-deviation
+#' string there only restates the Effect column.
+#' @section Absolute effects on the responder path:
+#' With \code{convert_smd_to_or = TRUE} the arm columns hold responder
+#' proportions and the Difference column the \strong{absolute risk difference}
+#' between them, per \code{per} patients, worded like every other absolute
+#' difference in the table ("177 more per 1000 (72 more to 271 more)"). The
+#' Effect column reads "Derived odds ratio r (lo to hi)": that odds ratio is
+#' Chinn's formula's own output, \eqn{\exp(SMD \times \pi / \sqrt{3})}, and is
+#' the one derived quantity here that does \emph{not} depend on the assumed
+#' control proportion. The two arm rates and the risk difference beside them
+#' do. The footnote draws that line and names the proportion used.
+#' @param keep_effect_scale (v0.6) Logical, only read when
+#'   \code{convert_smd_to_or = TRUE}. \code{FALSE} (default) presents the
+#'   outcome as responder proportions alone. \code{TRUE} presents \emph{both},
+#'   which is what Core GRADE 6 recommends: the outcome stays one logical row
+#'   and renders as two table rows, the effect on its own scale above and the
+#'   dichotomised reading below, with the outcome, participant, certainty and
+#'   plain-language cells merged across the pair. No extra columns.
 #' @param palette Color palette for the certainty cell.
 #'   \code{"pastel"} (default) uses soft backgrounds with colored text.
 #'   \code{"classic"} uses saturated backgrounds with white text.
@@ -52,7 +64,9 @@
 #'   "Risk with intervention" columns display dichotomised event rates derived via Chinn's
 #'   formula (\eqn{\log OR = SMD \times \pi / \sqrt{3}}). Requires
 #'   \code{baseline_risk} (numeric in (0,1)) representing the proportion
-#'   of control patients meeting the threshold of clinical interest.
+#'   of control patients meeting the threshold of clinical interest. The
+#'   Difference and Effect columns follow the arm columns onto that scale; see
+#'   "Absolute effects on the responder path" below.
 #' @param baseline_risk Numeric in (0,1), required when
 #'   \code{convert_smd_to_or = TRUE}. Otherwise inherited from the
 #'   pmatools object.
@@ -106,6 +120,7 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
                       follow_up = NULL,
                       unit      = NULL,
                       convert_smd_to_or = FALSE,
+                      keep_effect_scale = FALSE,
                       baseline_risk     = NULL,
                       threshold_label   = NULL,
                       chinn_invert      = FALSE,
@@ -155,22 +170,19 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
   nf          <- .bmj_number_format(style)
   # Chinn dichotomisation replaces both arm cells with responder rates derived
   # from a user-supplied control event rate; everything else reads the arm
-  # cells off the object (baseline risk for binary outcomes, the control arms
-  # for continuous ones).
+  # cells off the object -- the baseline risk for a binary outcome, nothing at
+  # all for a continuous one, whose arm columns no longer carry a pooled
+  # control-arm mean (see .sof_arm_cells()).
+  chinn_args <- list(baseline_risk     = baseline_risk,
+                     chinn_invert      = isTRUE(chinn_invert),
+                     threshold_label   = threshold_label,
+                     keep_effect_scale = isTRUE(keep_effect_scale))
   if (chinn_active) {
-    arm <- list(
-      cer = .format_cer(baseline_for_display, per, big_mark = nf$big_mark),
-      ier = .format_ier_chinn(meta_obj, baseline_risk, per,
-                              invert = isTRUE(chinn_invert),
-                              big_mark = nf$big_mark, ci_sep = nf$ci_sep),
-      note = NULL, continuous = FALSE
-    )
-    if (arm$cer != "-") arm$cer <- paste0(arm$cer, " *")
-    if (arm$ier != "-") arm$ier <- paste0(arm$ier, " *")
+    arm <- .responder_arm_cells(meta_obj, chinn_args, per,
+                                big_mark = nf$big_mark, ci_sep = nf$ci_sep)
   } else {
     arm <- .sof_arm_cells(meta_obj, x$baseline_risk, per,
-                          big_mark = nf$big_mark, ci_sep = nf$ci_sep,
-                          unit = unit)
+                          big_mark = nf$big_mark, ci_sep = nf$ci_sep)
   }
   cer_str <- arm$cer
   ier_str <- arm$ier
@@ -189,6 +201,7 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
       follow_up = follow_up, unit = unit,
       chinn_active = chinn_active, chinn_invert = chinn_invert,
       threshold_label = threshold_label,
+      keep_effect_scale = isTRUE(keep_effect_scale),
       label_intervention = label_intervention,
       label_control      = label_control
     ))
@@ -196,6 +209,19 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
 
   effect_str  <- .format_effect(meta_obj, x$outcome_type,
                                 prediction = prediction)
+  # The derived odds ratio rides in the Effect column in both layouts, not only
+  # the BMJ one: the conversion is a property of how the row is presented, and a
+  # reader who switched layouts to get the GRADEpro column set would otherwise
+  # lose the only ratio the responder cells can be read against.
+  or_line <- if (chinn_active) {
+    .chinn_or_line(meta_obj, baseline_risk, invert = isTRUE(chinn_invert),
+                   ci_sep = nf$ci_sep)
+  } else NULL
+  # The responder presentation IS the dichotomised reading, so its Effect cell
+  # carries the derived odds ratio instead of the pooled estimate rather than
+  # under it. Asking for both keeps the pooled estimate, on a row of its own.
+  split_row <- chinn_active && isTRUE(keep_effect_scale) && !is.null(or_line)
+  if (chinn_active && !split_row) effect_str <- or_line %||% effect_str
 
   certainty_label <- x$certainty
   certainty_sym   <- CERTAINTY_SYMBOLS_UNICODE[[certainty_label]]
@@ -225,15 +251,31 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
   certainty_cell <- paste0(certainty_label, "\n", certainty_sym,
                            .fact_marker_suffix(fact_markers))
 
-  df <- data.frame(
-    col1 = x$outcome_name,
-    col2 = .n_participants_studies(k, n_total, x$study_design),
-    col3 = cer_str,
-    col4 = ier_str,
-    col5 = effect_str,
-    col6 = certainty_cell,
-    stringsAsFactors = FALSE
-  )
+  # One logical row, one or two table rows: the effect on its own scale above
+  # and the dichotomised reading below when both were asked for. The columns
+  # that do not split are merged over the pair below, so the lower row leaves
+  # them empty.
+  df <- if (split_row) {
+    data.frame(
+      col1 = c(x$outcome_name, ""),
+      col2 = c(.n_participants_studies(k, n_total, x$study_design), ""),
+      col3 = c("", cer_str),
+      col4 = c("", ier_str),
+      col5 = c(effect_str, or_line),
+      col6 = c(certainty_cell, ""),
+      stringsAsFactors = FALSE
+    )
+  } else {
+    data.frame(
+      col1 = x$outcome_name,
+      col2 = .n_participants_studies(k, n_total, x$study_design),
+      col3 = cer_str,
+      col4 = ier_str,
+      col5 = effect_str,
+      col6 = certainty_cell,
+      stringsAsFactors = FALSE
+    )
+  }
   names(df) <- headers
 
   ft <- flextable::flextable(df)
@@ -250,6 +292,12 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
   ft <- flextable::color(ft, j = cert_col, color = cell_colors$text, part = "body")
   ft <- flextable::bold(ft,  j = cert_col, part = "body")
   ft <- flextable::align(ft, j = cert_col, align = "center", part = "body")
+
+  if (split_row) {
+    ft <- .pma_merge_split_row(ft, i = 1L,
+                               merge_cols = GRADEPRO_MERGED_COLS,
+                               rule_cols  = GRADEPRO_SPLIT_COLS)
+  }
 
   ft <- flextable::width(ft, j = 1, width = 1.4)
   ft <- flextable::width(ft, j = 2, width = 1.2)
@@ -268,18 +316,15 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
     "Certainty rating (Core GRADE series): ", certainty_label, ". ",
     .PMA_CORE_GRADE_FOOTNOTE, " ",
     "CI = confidence interval.", pi_note,
+    # A continuous outcome's arm columns are empty unless the conversion filled
+    # them with rates, and a sentence describing how a rate was computed is
+    # noise over two empty cells.
     if (arm$continuous) "" else paste0(
       " Intervention rate (Risk with ", label_intervention, ") = ",
       "intervention-arm event rate computed from baseline risk and pooled ",
       "relative effect.")
   )
   ft <- flextable::add_footer_lines(ft, values = base_note)
-
-  # How the two arm columns were derived when they hold arm-level means rather
-  # than event rates (see .cont_arm_note()).
-  if (!is.null(arm$note)) {
-    ft <- flextable::add_footer_lines(ft, values = arm$note)
-  }
 
   # What actually drove each downgrade, keyed to the [n] markers on the
   # certainty cell.
@@ -311,7 +356,8 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
     ft <- flextable::add_footer_lines(
       ft, values = .chinn_note(invert = isTRUE(chinn_invert),
                                threshold_label = threshold_label,
-                               reading = TRUE))
+                               reading = TRUE,
+                               baseline_risk = baseline_risk))
   }
 
   ft <- .style_table_footer(ft)
@@ -705,17 +751,28 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
           round(p1_hi  * per))
 }
 
-# Experimental rate via Chinn (SMD/MD -> OR -> p1)
+# The intervention-arm proportions a Chinn dichotomisation implies, and the odds
+# ratio they were built from. NULL when any ingredient is missing.
+#
+# This used to live inside .format_ier_chinn(), which computed the three
+# proportions, printed one cell out of them and threw the rest away. Three other
+# cells of the same row are functions of exactly these numbers -- the per-1000
+# risk difference in the Difference column, the derived risk ratio on the second
+# line of the Effect column, and the responder line of a both-scales arm cell --
+# and each of them re-deriving the conversion is how the four end up disagreeing
+# after somebody edits one. They all read this instead.
+#
 # `invert = TRUE` flips the SMD sign before applying the formula, so a
 # negative-is-better SMD (e.g., depression severity reduction) yields OR > 1.
-.format_ier_chinn <- function(meta_obj, baseline_risk, per = 1000, invert = FALSE,
-                              big_mark = TRUE, ci_sep = "; ") {
-  if (is.null(baseline_risk)) return("-")
+# The bounds are swapped with the sign, which keeps or_lower below or_upper and
+# therefore keeps p1_lo below p1_hi whichever direction the outcome runs in.
+.chinn_rates <- function(meta_obj, baseline_risk, invert = FALSE) {
+  if (is.null(baseline_risk)) return(NULL)
   pooled <- .pooled_estimate(meta_obj)
   est <- pooled$est
   lo  <- pooled$lower
   hi  <- pooled$upper
-  if (is.null(est) || is.na(est)) return("-")
+  if (is.null(est) || is.na(est)) return(NULL)
 
   if (isTRUE(invert)) {
     est_eff <- -est
@@ -735,13 +792,53 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
   p1_lo  <- .p1(baseline_risk, log_or_lo,  "OR")
   p1_hi  <- .p1(baseline_risk, log_or_hi,  "OR")
 
-  if (is.null(p1_est)) return("-")
+  if (is.null(p1_est)) return(NULL)
+
+  list(p1 = p1_est, p1_lo = p1_lo, p1_hi = p1_hi,
+       or = conv$or, or_lower = conv$or_lower, or_upper = conv$or_upper)
+}
+
+# Experimental rate via Chinn (SMD/MD -> OR -> p1)
+.format_ier_chinn <- function(meta_obj, baseline_risk, per = 1000, invert = FALSE,
+                              big_mark = TRUE, ci_sep = "; ") {
+  rates <- .chinn_rates(meta_obj, baseline_risk, invert = invert)
+  if (is.null(rates)) return("-")
 
   per_str <- .per_label(per, big_mark)
   sprintf("%d per %s\n(%d%s%d)",
-          round(p1_est * per), per_str,
-          round(p1_lo  * per), ci_sep,
-          round(p1_hi  * per))
+          round(rates$p1    * per), per_str,
+          round(rates$p1_lo * per), ci_sep,
+          round(rates$p1_hi * per))
+}
+
+# The odds ratio a Chinn dichotomisation implies: exp(SMD x pi / sqrt(3)),
+# which is what the formula actually emits.
+#
+# This used to print the derived RISK ratio, p1 / p0. That number is
+# arithmetically correct, but it exists only once an assumed control proportion
+# has been laid on top of the formula's output, and the odds ratio is the
+# formula's output. Printing the odds ratio puts one fewer assumption between
+# the pooled estimate and the number on the page, and it is the only derived
+# quantity in the row that does not move when the reviewer revises p0 -- which
+# is exactly what the footnote now says (.chinn_derived_sentence()).
+#
+# It goes in the Effect column rather than in a column of its own, because it
+# is not a second analysis: it is the same pooled SMD read on a different
+# scale, and a column would present it as an independent result. NULL when the
+# conversion has no usable rates, so the caller leaves the Effect cell exactly
+# as .format_effect() wrote it.
+#
+# `baseline_risk` is still taken, even though the odds ratio does not depend on
+# it: it is what .chinn_rates() needs to answer at all, and a caller that had
+# no proportion would have no converted row to put this line in either.
+.chinn_or_line <- function(meta_obj, baseline_risk, invert = FALSE,
+                           ci_sep = "; ") {
+  rates <- .chinn_rates(meta_obj, baseline_risk, invert = invert)
+  if (is.null(rates)) return(NULL)
+  vals <- c(rates$or, rates$or_lower, rates$or_upper)
+  if (!all(is.finite(vals))) return(NULL)
+  b <- sort(vals[-1L])
+  sprintf("Derived odds ratio %.2f (%.2f%s%.2f)", vals[1L], b[1L], ci_sep, b[2L])
 }
 
 # --------------------------------------------------------------------------
@@ -759,9 +856,10 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
   if (.is_not_reported(g)) return(NULL)
   if (!isTRUE(.outcome_display(g, "convert_smd_to_or"))) return(NULL)
   list(
-    baseline_risk   = .outcome_display(g, "baseline_risk"),
-    threshold_label = .outcome_display(g, "threshold_label"),
-    chinn_invert    = isTRUE(.outcome_display(g, "chinn_invert"))
+    baseline_risk     = .outcome_display(g, "baseline_risk"),
+    threshold_label   = .outcome_display(g, "threshold_label"),
+    chinn_invert      = isTRUE(.outcome_display(g, "chinn_invert")),
+    keep_effect_scale = isTRUE(.outcome_display(g, "keep_effect_scale"))
   )
 }
 
@@ -796,8 +894,16 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
 }
 
 # The two arm cells of a converted row, each marked with the '*' that links it
-# to the Chinn footnote. `continuous = FALSE`: the cells hold event rates again,
-# whatever the outcome was measured on, so the rate headers are the right ones.
+# to the Chinn footnote. The cells hold event rates whatever the outcome was
+# measured on, so `continuous = FALSE` picks the rate headers.
+#
+# `keep_effect_scale` does not reach here. It used to: the both-scales row put
+# the mean-scale value on the first line of each cell and the responder rate on
+# the second. Both mean-scale halves are gone -- a pooled control-arm mean is
+# not interpretable when endpoint and change-from-baseline scores are mixed,
+# which is the ordinary case -- so asking for both now splits the row in two
+# rather than stacking two scales inside one cell, and these cells are the
+# lower row of that pair whichever way the question was answered.
 .responder_arm_cells <- function(meta_obj, args, per = 1000,
                                  big_mark = TRUE, ci_sep = "; ") {
   cer <- .format_cer(args$baseline_risk, per, big_mark = big_mark)
@@ -806,7 +912,7 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
                            big_mark = big_mark, ci_sep = ci_sep)
   if (cer != "-") cer <- paste0(cer, " *")
   if (ier != "-") ier <- paste0(ier, " *")
-  list(cer = cer, ier = ier, note = NULL, continuous = FALSE)
+  list(cer = cer, ier = ier, continuous = FALSE)
 }
 
 # The footnote the '*' on the converted arm cells points at. `invert` and
@@ -814,8 +920,13 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
 # the whole footnote; a combined table passes neither, because it can hold rows
 # converted in opposite directions against different thresholds, and states
 # those per row (.responder_row_note()). `reading` appends the two references.
+#
+# `baseline_risk` names the assumed control responder proportion the derived
+# quantities were computed against. A combined table passes none, for the same
+# reason it passes no direction: its rows can be converted against different
+# proportions, and .responder_row_note() states each row's own.
 .chinn_note <- function(invert = NULL, threshold_label = NULL,
-                        reading = FALSE) {
+                        reading = FALSE, baseline_risk = NULL) {
   invert_str <- if (is.null(invert)) {
     ""
   } else if (isTRUE(invert)) {
@@ -836,10 +947,39 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
     "proportion in each arm improving by more than the MID; Chinn's formula ",
     "assumes a logistic latent variable, uses no MID and is applied to the ",
     "pooled SMD. The two do not generally agree.",
+    " ", .chinn_derived_sentence(baseline_risk),
     if (reading) paste0(
       " Recommended reading: ",
       "Chinn S. Stat Med. 2000; ",
       "Heimke F, et al. BMJ Ment Health. 2024.") else ""
+  )
+}
+
+# Which of the converted row's numbers rest on the assumed control proportion
+# and which do not. Every one of them is DERIVED rather than fitted, but they
+# are not derived from the same ingredients, and that difference is the whole
+# reason the Effect column now reports the odds ratio: the odds ratio is
+# exp(SMD x pi / sqrt(3)) and nothing else, so revising the assumed proportion
+# leaves it where it is, while the two arm rates and the risk difference beside
+# them all move. A reader who cannot tell the two apart either distrusts the
+# whole row or trusts all of it, and neither is right.
+#
+# Said in one sentence shared by the single- and multi-outcome footers, because
+# the two stating it differently is how a reader ends up trusting one table more
+# than the other.
+.chinn_derived_sentence <- function(baseline_risk = NULL) {
+  p0_str <- if (!is.null(baseline_risk) && length(baseline_risk) == 1L &&
+                is.numeric(baseline_risk) && is.finite(baseline_risk)) {
+    sprintf(" of %s", format(baseline_risk))
+  } else ""
+  paste0(
+    "The Effect column's derived odds ratio comes from the formula above ",
+    "alone and does NOT depend on the assumed control responder proportion",
+    p0_str, ": revising that proportion leaves it unchanged. The two arm ",
+    "rates and the Difference column's absolute risk difference DO depend on ",
+    "it, and move with it. All of them are derived from the pooled estimate ",
+    "rather than fitted, and all carry the formula's logistic ",
+    "latent-variable assumption."
   )
 }
 
@@ -856,7 +996,22 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
                        nzchar(args$threshold_label)) {
     paste0(" Threshold definition: ", args$threshold_label, ".")
   } else ""
-  paste0("[", nm, "] Responder presentation: ", dir_str, ".", threshold_str)
+  # The assumed proportion belongs here rather than in .chinn_note(), because
+  # the arm rates and the risk difference of this row are computed against it
+  # and a combined table can hold rows converted against different ones. The
+  # derived odds ratio is not computed against it; .chinn_derived_sentence()
+  # says which is which, once, for the whole table.
+  p0 <- args$baseline_risk
+  p0_str <- if (!is.null(p0) && length(p0) == 1L && is.numeric(p0) &&
+                is.finite(p0)) {
+    sprintf(" Assumed control responder proportion: %s.", format(p0))
+  } else ""
+  scale_str <- if (isTRUE(args$keep_effect_scale)) {
+    paste0(" Shown on two rows: the effect on its own scale above, the ",
+           "dichotomised reading below.")
+  } else ""
+  paste0("[", nm, "] Responder presentation: ", dir_str, ".", p0_str,
+         threshold_str, scale_str)
 }
 
 # The row-note for an outcome that asked for the conversion and could not have
@@ -897,193 +1052,91 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
 }
 
 # --------------------------------------------------------------------------
-# Arm-level values for continuous outcomes
+# The two arm cells of any Summary of Findings row
 # --------------------------------------------------------------------------
 #
 # Core GRADE 6 calls it the preferred presentation to give the outcome in the
 # comparison group, in the intervention group and the difference between the
-# two. For a binary outcome the first two columns come from grade_meta()'s
-# baseline_risk; a metacont object has no baseline risk -- it is "only
-# meaningful for binary outcomes with a relative effect measure" -- but it does
-# carry the arm-level summaries it was built from (mean.c, sd.c, n.c), so both
-# columns can be filled from those and the pooled effect instead of falling
-# back to "-".
+# two. For a binary outcome the first two come from grade_meta()'s
+# baseline_risk and the pooled relative effect.
 #
-# How the control arms are pooled
-# -------------------------------
-# The control column is an inverse-variance weighted mean of the control arms:
-# the variance of a control-arm mean is sd.c^2 / n.c, so the weights are
-# n.c / sd.c^2. Arms measured precisely (large n, tight spread) therefore
-# dominate, exactly as they do in the pooled effect.
+# A continuous outcome gets neither, and the two cells are left blank. Until
+# v0.6 they were filled from the arm-level summaries a metacont object carries:
+# an inverse-variance weighted mean of the control arms, and that mean plus the
+# pooled difference (re-expressed through a pooled within-arm reference SD when
+# the measure was an SMD). Everything that machinery produced rested on a
+# pooled control-arm MEAN, and a continuous meta-analysis routinely pools
+# endpoint scores together with change-from-baseline scores -- the pooled
+# contrast survives that, an average over the two kinds of arm summary does
+# not. That case is the ordinary one rather than the exception, so the cells
+# are empty rather than conditionally empty: a number that is right only when
+# the reviewer happened to pool one kind of score is a number nobody can read
+# without knowing something the table does not say.
 #
-# These weights are fixed whatever model the parent meta-analysis used, and the
-# random/common setting is deliberately *not* honoured. A random-effects pooled
-# control mean would need a tau^2 for the between-study distribution of
-# arm-level means, which is a different quantity from the contrast-level tau^2
-# the parent model estimated: control means scatter with case mix, instrument
-# and era, none of which is what the treatment-effect heterogeneity measures.
-# Borrowing the contrast tau^2 would be simply wrong, and estimating a second
-# one means fitting a second meta-analysis that pmatools does not fit. The
-# pooled control mean is descriptive context for the difference, not an
-# inferential target, so it is reported as a weighted average and the footnote
-# says so.
-#
-# When the control-arm SDs are missing or non-positive the weights fall back to
-# the arm sizes (n.c), which is the same average with the spread ignored; the
-# footnote records which of the two was used.
-.pooled_control_mean <- function(meta_obj) {
-  mean_c <- meta_obj$mean.c
-  n_c    <- meta_obj$n.c
-  sd_c   <- meta_obj$sd.c
-  if (is.null(mean_c) || is.null(n_c)) return(NULL)
-  if (length(mean_c) == 0L || length(mean_c) != length(n_c)) return(NULL)
+# .pooled_control_mean(), .control_reference_sd(), .format_arm_values_cont(),
+# .cont_arm_note() and .cont_arm_unavailable_reason() were deleted with the
+# cells they fed. The pooled contrast is untouched: an MD still reports its
+# difference in the outcome's own units (.format_difference(), sof_bmj.R).
 
-  mean_c <- as.numeric(mean_c)
-  n_c    <- as.numeric(n_c)
-  sd_c   <- if (is.null(sd_c) || length(sd_c) != length(mean_c)) {
-    rep(NA_real_, length(mean_c))
-  } else {
-    as.numeric(sd_c)
-  }
-
-  keep <- is.finite(mean_c) & is.finite(n_c) & n_c > 0
-  # Studies shown in the forest plot but held out of the pool must be held out
-  # here too, or the control column would describe a different set of trials
-  # than the difference beside it.
-  excl <- meta_obj$exclude
-  if (!is.null(excl) && length(excl) == length(mean_c)) {
-    keep <- keep & !(is.logical(excl) & !is.na(excl) & excl)
-  }
-  if (!any(keep)) return(NULL)
-
-  iv <- keep & is.finite(sd_c) & sd_c > 0
-  if (all(iv[keep])) {
-    w <- n_c[iv] / (sd_c[iv]^2)
-    return(list(mean      = sum(w * mean_c[iv]) / sum(w),
-                weighting = "inverse-variance"))
-  }
-  w <- n_c[keep]
-  list(mean = sum(w * mean_c[keep]) / sum(w), weighting = "sample-size")
-}
-
-# Reference SD used to put a pooled SMD back on the outcome's own scale: the
-# pooled within-arm standard deviation of the CONTROL arms, sqrt(sum((n-1)
-# sd^2) / sum(n-1)). Control arms are the conventional choice (Cochrane
-# Handbook 15.5.3.2) because their spread is not touched by the intervention.
-.control_reference_sd <- function(meta_obj) {
-  n_c  <- meta_obj$n.c
-  sd_c <- meta_obj$sd.c
-  if (is.null(n_c) || is.null(sd_c) || length(n_c) != length(sd_c)) return(NULL)
-  n_c  <- as.numeric(n_c)
-  sd_c <- as.numeric(sd_c)
-
-  keep <- is.finite(n_c) & n_c > 1 & is.finite(sd_c) & sd_c > 0
-  excl <- meta_obj$exclude
-  if (!is.null(excl) && length(excl) == length(n_c)) {
-    keep <- keep & !(is.logical(excl) & !is.na(excl) & excl)
-  }
-  if (!any(keep)) return(NULL)
-
-  df  <- n_c[keep] - 1
-  out <- sqrt(sum(df * sd_c[keep]^2) / sum(df))
-  if (!is.finite(out) || out <= 0) return(NULL)
-  out
-}
-
-# Footnote explaining where the two continuous arm cells came from. `sd_ref` is
-# non-NULL only on the SMD path.
-.cont_arm_note <- function(weighting, sd_ref = NULL) {
-  w <- if (identical(weighting, "inverse-variance")) {
-    "the inverse-variance weighted mean of the control arms (weights n/SD^2)"
-  } else {
-    paste0("the sample-size weighted mean of the control arms (weights n; the ",
-           "control-arm standard deviations were unusable)")
-  }
-  note <- paste0(
-    "Continuous outcome: the ", "control column is ", w, ". It is pooled with ",
-    "fixed weights whatever model the effect estimate uses, because ",
-    "heterogeneity in arm-level means is a different quantity from ",
-    "heterogeneity in the contrast and pmatools does not fit a second ",
-    "meta-analysis to estimate it. The intervention column is that pooled ",
-    "control value plus the pooled difference, with the control value treated ",
-    "as a fixed reference, so the interval shown is the pooled difference's ",
-    "alone."
-  )
-  if (!is.null(sd_ref)) {
-    note <- paste0(
-      note, " The pooled standardised mean difference was re-expressed in the ",
-      "outcome's own units by multiplying it by SD = ", sprintf("%.2f", sd_ref),
-      ", the pooled within-arm standard deviation of the control arms ",
-      "(Cochrane Handbook 15.5.3.2); this assumes the control arms all measure ",
-      "one common scale. The Difference column stays in standard deviation ",
-      "units."
-    )
-  }
-  note
-}
-
-# The two arm cells for a continuous outcome, or NULL when the object cannot
-# support them. Returns the cells already formatted, plus the footnote.
-.format_arm_values_cont <- function(meta_obj, unit = NULL, ci_sep = "; ",
-                                    digits = 2L) {
-  sm <- as.character(meta_obj$sm %||% "")
-  if (!sm %in% c("MD", "SMD")) return(NULL)
-
-  ctrl <- .pooled_control_mean(meta_obj)
-  if (is.null(ctrl)) return(NULL)
-
-  pooled <- .pooled_estimate(meta_obj)
-  est <- pooled$est
-  if (is.null(est) || length(est) != 1L || !is.finite(est)) return(NULL)
-
-  # An SMD is in standard deviation units and cannot be added to a mean on the
-  # original scale; it is put back on that scale by the reference SD first.
-  # Without a usable reference SD there is no honest number to print.
-  sd_ref <- NULL
-  scale  <- 1
-  if (identical(sm, "SMD")) {
-    sd_ref <- .control_reference_sd(meta_obj)
-    if (is.null(sd_ref)) return(NULL)
-    scale <- sd_ref
-  }
-
-  fmt <- function(v) sprintf(paste0("%.", digits, "f"), v)
-  unit_str <- if (!is.null(unit) && length(unit) == 1L && !is.na(unit) &&
-                  nzchar(unit)) paste0(" ", unit) else ""
-
-  cer <- paste0(fmt(ctrl$mean), unit_str)
-  ier <- paste0(fmt(ctrl$mean + est * scale), unit_str)
-
-  lo <- pooled$lower
-  hi <- pooled$upper
-  if (!is.null(lo) && !is.null(hi) && length(lo) == 1L && length(hi) == 1L &&
-      is.finite(lo) && is.finite(hi)) {
-    b   <- sort(c(ctrl$mean + lo * scale, ctrl$mean + hi * scale))
-    ier <- sprintf("%s\n(%s%s%s)", ier, fmt(b[1]), ci_sep, fmt(b[2]))
-  }
-
-  list(cer  = cer,
-       ier  = ier,
-       note = .cont_arm_note(ctrl$weighting, sd_ref))
-}
-
-# The pair of arm cells for any outcome: the binary baseline-risk pair when the
-# object supports it, the continuous pair otherwise. `continuous` tells the
-# caller which one it got, since the column headers and the footnote differ.
+# The pair of arm cells for any outcome. `continuous` tells the caller which
+# kind it got, since the column headers differ: the rate wording and the `per`
+# denominator would misdescribe a pair of cells belonging to an outcome that
+# has no rates at all.
 .sof_arm_cells <- function(meta_obj, baseline_risk, per = 1000,
-                           big_mark = TRUE, ci_sep = "; ", unit = NULL) {
+                           big_mark = TRUE, ci_sep = "; ") {
   sm <- as.character(meta_obj$sm %||% "")
   if (sm %in% c("MD", "SMD")) {
-    cont <- .format_arm_values_cont(meta_obj, unit = unit, ci_sep = ci_sep)
-    if (!is.null(cont)) {
-      return(list(cer = cont$cer, ier = cont$ier, note = cont$note,
-                  continuous = TRUE))
-    }
+    # Empty strings rather than "-": "-" is this table's mark for a number that
+    # was expected and could not be computed, and here none was expected.
+    return(list(cer = "", ier = "", continuous = TRUE))
   }
   list(cer = .format_cer(baseline_risk, per, big_mark = big_mark),
        ier = .format_ier(meta_obj, baseline_risk, per,
                          big_mark = big_mark, ci_sep = ci_sep),
-       note = NULL, continuous = FALSE)
+       continuous = FALSE)
+}
+
+# --------------------------------------------------------------------------
+# One logical outcome, two table rows
+# --------------------------------------------------------------------------
+#
+# Asking for the effect AND the proportion of responders (keep_effect_scale)
+# used to stack the two scales inside each cell, one line each. With the
+# mean-scale arm cells gone there is nothing left to stack: the effect
+# presentation fills the Effect column and leaves the three absolute-effect
+# cells empty, the responder presentation fills all four. On one row the two
+# would overwrite each other and "both" would render as "responder"; on two
+# rows they read as what they are, one outcome on two scales.
+
+# Columns of the GRADEpro layout that do not split, and those that do.
+# grade_table() appends five domain columns beyond the sixth; those do not
+# split either, so it extends `merge_cols` rather than editing this.
+GRADEPRO_MERGED_COLS <- c(1L, 2L, 6L)
+GRADEPRO_SPLIT_COLS  <- 3:5
+
+# Merge `merge_cols` vertically across rows i and i+1 and rule the rest, so the
+# pair reads as one outcome shown twice rather than as two outcomes sharing a
+# certainty cell. Merging and ruling are one operation because they only work
+# together: a merge with no rule hides the split, and a rule with no merge
+# repeats the outcome name, the participant count and the rating.
+#
+# The rule is the body border theme_vanilla() already draws between rows, read
+# off the flextable defaults rather than written out here. A second border
+# weight in the same table would read as a second kind of division, and the
+# split is not a different kind of division from the row boundaries around it.
+# It is applied only to the columns that split: a rule across a merged column
+# would cut the cell it is merging.
+.pma_merge_split_row <- function(ft, i, merge_cols, rule_cols) {
+  for (j in merge_cols) {
+    ft <- flextable::merge_at(ft, i = i:(i + 1L), j = j, part = "body")
+  }
+  defaults <- flextable::get_flextable_defaults()
+  ft <- flextable::hline(
+    ft, i = i, j = rule_cols,
+    border = officer::fp_border(width = defaults$border.width,
+                                color = defaults$border.color),
+    part = "body")
+  flextable::fix_border_issues(ft)
 }
 
 # Compute experimental arm event rate from log-scale relative effect

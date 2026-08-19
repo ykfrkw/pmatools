@@ -20,12 +20,21 @@
 # WHAT THESE FIGURES ARE. They are pmatools' operationalisation of the Core
 # GRADE decision described in each cited figure, not a reproduction of the
 # published artwork. They deliberately differ from the source: the risk-of-
-# bias chart enumerates five direction-of-bias rules the source does not, the
-# publication-bias chart carries a registry node that is not in Core GRADE 4
+# bias chart enumerates five direction-of-bias rules the source does not and
+# rates the fifth down TWO levels, which Core GRADE 4 declines to describe at
+# all, the publication-bias chart carries a registry node that is not in Core GRADE 4
 # Fig 5, and the inconsistency chart names the numeric surrogates (I-squared
 # > 30%, the 80% / 20% zone shares) that Core GRADE 3 declines to quantify
 # and rates the opposite-sided branch down TWO levels, which Core GRADE 3
 # declines to describe at all. Every <desc> says so.
+#
+# Three of the four say it in a caption as well. The risk-of-bias chart does
+# not, and that is the one deliberate exception: its shape now follows Fig 2
+# closely enough that a footnote inside the drawing reads as part of the
+# source, so the claim is made in the prose beside the figure instead
+# (?grade_flowcharts in R/flowcharts.R). Nothing about the claim weakened;
+# only where it is written moved, and the <desc> still carries it for a reader
+# who meets the file alone.
 #
 # They also draw fewer boxes than the algorithm has branches, wherever the
 # extra box was not a decision: the risk-of-bias chart has no "any study at
@@ -33,6 +42,13 @@
 # undominated route is the answer), and the publication-bias chart has no
 # "qualitative assessment required" leaves (both were judged "no", and the
 # caveat belongs in the note that a reader can act on).
+#
+# And the risk-of-bias chart draws one box FEWER than it used to on the
+# undominated side: "is there appreciable evidence from the low risk of bias
+# studies?" has no "no" edge, because that answer is unreachable. Not
+# dominating means the low risk of bias studies carry more than 45% of the
+# weight at the default gate and more than 35% at the strictest one Core
+# GRADE 4 discusses, and the same paragraph puts appreciable at 35 to 45%.
 #
 # STYLING CONTRACT (see shiny/www/shadcn.css and shiny/www/flowchart.js):
 #   - no width/height on <svg>, so CSS can scale it;
@@ -210,29 +226,74 @@ build_rob <- function() {
                     c("Check the direction of bias",
                       "Compare the pooled estimate with and without",
                       "the high risk of bias studies"))
+  # THE FIVE RULES ARE NOT LEAVES. Core GRADE 4 Fig 2 has exactly two boxes and
+  # two leaves below "check direction of bias", and the rules are the mechanism
+  # that decides which box is reached, not an alternative to it. They are drawn
+  # as an intermediate layer for that reason, and each box states its CONDITION
+  # only: a rule box that ended "-> rate down 1" was itself a leaf statement,
+  # and the reader arriving at the bottom of the column met six verdicts where
+  # the source has two sentences saying what the branch means. The depth the
+  # trimmed arrows carried lives on the rate-down leaf instead, which is the one
+  # place it differs by rule.
+  #
+  # The percentage rules 2 and 3 quote is PMA_ROB_INFLATION_THRESHOLD in
+  # R/domain_rob.R, and nothing links the two: the figure is generated ahead of
+  # time, so it cannot read the constant, and it went on saying 10% for a whole
+  # release after the constant moved to 0.20. Move the literals here, and the
+  # <desc> below, whenever that constant moves.
   rules <- list(
     fc_box("pma-rob-leaf-rule1", "leaf", 35, 278, 400,
-           c("1  both estimates trivial  &#8594;  do not rate down"),
+           c("1  both estimates trivial"),
            align = "start"),
     fc_box("pma-rob-leaf-rule2", "leaf", 35, 323, 400,
-           c("2  same zone, change within 10%  &#8594;  do not rate down"),
+           c("2  same zone, change within 20%"),
            align = "start"),
     fc_box("pma-rob-leaf-rule3", "leaf", 35, 368, 400,
-           c("3  same zone, bias-favouring change over 10%  &#8594;  rate down 1"),
+           c("3  same zone, bias-favouring change over 20%"),
            align = "start"),
     fc_box("pma-rob-leaf-rule4", "leaf", 35, 413, 400,
-           c("4  zones differ, same side of the null  &#8594;  rate down 1"),
+           c("4  zones differ, same side of the null"),
            align = "start"),
     fc_box("pma-rob-leaf-rule5", "leaf", 35, 458, 400,
-           c("5  zones differ across the null  &#8594;  rate down 1"),
+           c("5  zones differ across the null"),
            align = "start"),
     fc_box("pma-rob-leaf-rulena", "leaf", 35, 503, 400,
-           c("&#8211;  direction not assessable  &#8594;  rate down 1"),
+           c("&#8211;  direction not assessable"),
            align = "start")
   )
+  # The source's two boxes, quoted as closely as a box will hold, and its two
+  # leaves under them. The ids are new; the rule ids above are not, so a lit
+  # path names both the rule that fired and the leaf it reached -- more than
+  # Fig 2 itself records, at no cost to the shape.
+  resp <- fc_box("pma-rob-node-bias-responsible", "node", 20, 580, 450,
+                 c("Risk of bias may be responsible for the",
+                   "apparent effect, or for the apparent lack of one"))
+  cons <- fc_box("pma-rob-node-bias-conservative", "node", 490, 580, 450,
+                 c("There is an apparent effect and bias would have",
+                   "decreased it, or there is no apparent effect and",
+                   "bias would have increased it"))
+  # One red leaf, not two. Rule 5's second level is annotated here rather than
+  # split off into a leaf of its own: the source has two leaves, and splitting
+  # this one to carry pmatools' -2 would move the drawing away from the source
+  # in the act of moving it closer. .ROB_TWO_LEVEL_NOTE remains the full
+  # statement, in the notes a reader acts on.
+  ldown <- fc_box("pma-rob-leaf-ratedown", "leaf", 20, 690, 450,
+                  c("Rate down",
+                    "1 level, or 2 on rule 5 with a threshold supplied &#8212;",
+                    "Core GRADE 4 describes no two-level downgrade"))
+  lstay <- fc_box("pma-rob-leaf-noratedown", "leaf", 490, 690, 450,
+                  c("Do not rate down"))
+  # The third line is not decoration: this node lost its "no" edge, and a
+  # question with one answer looks like a drawing error unless it says why.
+  # Reaching this side of the chart at all means the high risk of bias studies
+  # carry less than the dominance threshold, so the low risk of bias share is
+  # above 45% at the default gate and above 35% at the strictest one Core
+  # GRADE 4 discusses -- at or above the 35-45% the same paragraph calls
+  # appreciable, across the whole range. The "no" answer is unreachable.
   appr <- fc_box("pma-rob-node-appreciable", "node", 505, 173, 435,
                  c("Is there appreciable evidence from",
-                   "the low risk of bias studies?"))
+                   "the low risk of bias studies?",
+                   "Always yes here: not dominating leaves 35% or more"))
   magn <- fc_box("pma-rob-node-magnitude", "node", 620, 275, 320,
                  c("Similar or substantially different",
                    "magnitudes of effect?"))
@@ -249,53 +310,94 @@ build_rob <- function() {
                       "No", 460, 76, "start")
   e$dir_rules <- fc_edge("pma-rob-edge-direction-rules",
                          list(c(235, 246), c(235, 278)))
+  # Both edges leave the bottom of the rule column rather than the individual
+  # boxes: which rule fired is shown by the lit rule box, and six separate
+  # connectors would draw a fan where the source draws a branch.
+  e$rules_resp <- fc_edge("pma-rob-edge-rules-responsible",
+                          list(c(150, 542), c(150, 580)),
+                          "Rules 3, 4, 5 and not assessable", 158, 572,
+                          "start")
+  e$rules_cons <- fc_edge("pma-rob-edge-rules-conservative",
+                          list(c(360, 542), c(360, 562), c(715, 562),
+                               c(715, 580)),
+                          "Rules 1 and 2", 368, 556, "start")
+  e$resp_down <- fc_edge("pma-rob-edge-responsible-ratedown",
+                         list(c(245, 636), c(245, 690)))
+  e$cons_stay <- fc_edge("pma-rob-edge-conservative-noratedown",
+                         list(c(715, 653), c(715, 690)))
   e$appr_yes <- fc_edge("pma-rob-edge-appreciable-yes",
-                        list(c(800, 229), c(800, 275)),
-                        "Yes", 808, 255, "start")
-  e$appr_no <- fc_edge("pma-rob-edge-appreciable-no",
-                       list(c(560, 229), c(560, 383)),
-                       "No", 568, 309, "start")
+                        list(c(800, 246), c(800, 275)),
+                        "Yes", 808, 266, "start")
   e$mag_sim <- fc_edge("pma-rob-edge-magnitude-similar",
                        list(c(660, 331), c(660, 383)),
                        "Similar", 668, 361, "start")
   e$mag_dif <- fc_edge("pma-rob-edge-magnitude-different",
                        list(c(860, 331), c(860, 383)),
                        "Different", 868, 361, "start")
+  # A third answer to the magnitude node, and the space the deleted "no" edge
+  # used to occupy. It reaches the same leaf as "similar" and keeps an id of
+  # its own, because "the question could not be asked" and "the question was
+  # asked and the answer was similar" are not the same finding and flow_path is
+  # the record of which one happened.
+  e$mag_na <- fc_edge("pma-rob-edge-magnitude-notassessable",
+                      list(c(620, 303), c(560, 303), c(560, 383)),
+                      "Not assessable", 552, 340, "end")
 
-  b <- c(list(dom, dirn), rules, list(appr, magn, lall, llow))
+  b <- c(list(dom, dirn), rules,
+         list(resp, cons, ldown, lstay, appr, magn, lall, llow))
 
+  # No caption. The "pmatools' operationalisation, not a reproduction" line was
+  # the only place in the drawing that said the five rules and the -2 are
+  # pmatools' own, and the closer the figure gets to Fig 2's shape the more
+  # that claim is needed -- so it moves to the prose beside the figure
+  # (?grade_flowcharts, and the app's own caption) rather than disappearing.
+  # The <desc> below still carries it for a reader who meets the file alone.
   body <- c(
     unlist(lapply(e, `[[`, "markup"), use.names = FALSE),
-    unlist(lapply(b, `[[`, "markup"), use.names = FALSE),
-    fc_caption(563, c(
-      paste0("After BMJ Core GRADE 4 (Guyatt et al., 2025) Figure 2. ",
-             "pmatools&#8217; operationalisation, not a reproduction:"),
-      "the five direction-of-bias rules are pmatools&#8217; own."))
+    unlist(lapply(b, `[[`, "markup"), use.names = FALSE)
   )
 
   fc_svg(
-    "rob", 593,
+    "rob", 790,
     "Risk of bias: the Core GRADE 4 Figure 2 decision as pmatools implements it",
     paste0("Flowchart. Do the high risk of bias studies dominate the ",
            "evidence (55% or more of the pooled weight by default)? If they ",
            "do, pmatools checks the direction of bias by comparing the ",
            "pooled estimate with and without those studies and applying five ",
-           "mutually exclusive rules: both estimates trivial, or the same ",
-           "zone with a change within 10%, do not rate down; the same zone ",
-           "with a bias-favouring change over 10%, zones differing on the ",
-           "same side of the null, zones differing across the null, or a ",
-           "direction that cannot be assessed, rate down one level. If the ",
-           "high risk of bias studies do not dominate, pmatools asks whether ",
-           "there is appreciable evidence from the low risk of bias studies ",
-           "and, if so, whether the two magnitudes of effect are similar or ",
-           "substantially different; neither answer rates down, but a ",
+           "mutually exclusive rules: both estimates trivial; the same zone ",
+           "with a change within 20%; the same zone with a bias-favouring ",
+           "change over 20%; zones differing on the same side of the null; ",
+           "and zones differing across the null, which means the estimate ",
+           "restricted to the low risk of bias studies falls on the opposite ",
+           "side of it. A sixth box covers a direction that cannot be ",
+           "assessed at all. Those rules decide which of the two conclusions ",
+           "Core GRADE 4 draws is reached. Rules 3, 4, 5 and the unassessable ",
+           "case reach: risk of bias may be responsible for the apparent ",
+           "effect, or for the apparent lack of one, so rate down &#8212; one ",
+           "level, or two on rule 5 where a threshold was supplied. Rules 1 ",
+           "and 2 reach: there is an apparent effect and bias would have ",
+           "decreased it, or there is no apparent effect and bias would have ",
+           "increased it, so do not rate down. If the high risk of bias ",
+           "studies do not dominate, pmatools asks whether there is ",
+           "appreciable evidence from the low risk of bias studies. Below the ",
+           "dominance gate that answer is always yes, so the node has one ",
+           "outgoing edge, and the chart then asks whether the two magnitudes ",
+           "of effect are similar or substantially different. That question ",
+           "is decided by the same five rules: a rule that would rate down ",
+           "means substantially different, one that would not means similar, ",
+           "and a comparison that cannot be made takes a third edge to the ",
+           "same leaf as similar. Neither answer rates down, but a ",
            "substantial difference restricts the analysis to the low risk of ",
            "bias studies. A body of evidence with no high risk of bias study ",
            "at all takes that same undominated route and does not rate down. ",
            "This is pmatools&#8217; operationalisation of the Core GRADE 4 ",
            "Figure 2 decision, not a reproduction of the published figure: ",
            "the five rules are pmatools&#8217; and are not enumerated in the ",
-           "source."),
+           "source; Core GRADE 4 words the magnitude question symmetrically ",
+           "where the rules are directional; and it describes no two-level ",
+           "risk-of-bias downgrade at all, so the two-level fifth rule is a ",
+           "departure from it, which also requires a threshold to have been ",
+           "supplied &#8212; without one that rule rates down one level."),
     "Risk of bias &#8212; Core GRADE 4 Fig 2, as pmatools implements it",
     body
   )
@@ -329,9 +431,14 @@ build_incon <- function() {
                   c("Do not rate down",
                     "Report the subgroups as separate questions"))
   # Two levels, and pmatools knows Core GRADE 3 says otherwise; the caption
-  # and R/domain_inconsistency.R carry the reasoning.
-  d2    <- fc_box("pma-incon-leaf-down2", "leaf", 560, 368, 380,
-                  c("Rate down 2 levels", "(serious)"))
+  # and R/domain_inconsistency.R carry the reasoning. The box carried a second
+  # line reading "(serious)", which was simply the wrong word for this leaf -
+  # the branch that reaches it assigns judgment = "very_serious" - so the line
+  # is gone rather than corrected. `y` moves down with the box's own height, to
+  # keep the pma-incon-edge-step3-no arrowhead landing on the text rather than
+  # on the bottom edge.
+  d2    <- fc_box("pma-incon-leaf-down2", "leaf", 560, 377, 380,
+                  c("Rate down 2 levels"))
 
   e <- list(
     fc_edge("pma-incon-edge-step1-no", list(c(490, 84), c(560, 84)),

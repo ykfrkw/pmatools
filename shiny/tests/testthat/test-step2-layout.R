@@ -79,15 +79,65 @@ test_that("the sidebar is four accordion panels plus a sticky action bar", {
   expect_true(grepl("pma-step2-actions", html, fixed = TRUE))
 })
 
-test_that("Data mapping is open until an analysis exists, and closed after", {
-  # `state$ma` is the proxy for "the mapping resolved": nothing else can have
-  # produced a pooled object. Before that the panel is open because the
-  # reviewer still has to confirm it; after it, re-opening on every return trip
-  # from Step 3 is noise. A mapping select blanked afterwards is caught from
-  # the other end, by www/required-fields.js.
-  expect_setequal(step2_open_panels(step2_html(NULL)),
-                  c("outcome", "mapping"))
+test_that("the sidebar opens on Outcome alone, whatever state it is built from", {
+  # One panel at a time: "Outcome" is the only one holding something no default
+  # can supply, so it is where the step starts, and it starts there whether or
+  # not an analysis already exists. A mapping select left blank is caught from
+  # the other end, by www/required-fields.js, which opens the panel holding it.
+  expect_setequal(step2_open_panels(step2_html(NULL)), "outcome")
 
   settled <- shiny::reactiveValues(ma = list(TE = 0))
   expect_setequal(step2_open_panels(step2_html(settled)), "outcome")
+})
+
+test_that("the Step 2 accordion opens one panel at a time", {
+  # `multiple = FALSE` is what puts data-bs-parent on each .accordion-collapse,
+  # and that attribute is the whole mechanism: it is what lets Bootstrap close
+  # the open sibling. www/required-fields.js depends on it too - it opens a
+  # panel through the Collapse API precisely so the sibling closes with it.
+  html <- step2_html()
+  expect_true(grepl("data-bs-parent=", html, fixed = TRUE))
+})
+
+test_that("arm_assignment_ui is exempt from suspension while its panel is shut", {
+  # The panel holding it is never open on build (see above), and Shiny does not
+  # render a hidden output. Without the exemption the two arm selects are never
+  # created, input$experimental_label stays NULL, and the analysis reactive
+  # returns NULL - which is an app whose Run analysis button does nothing at
+  # all, with no message anywhere to say why. The exemption is one line and its
+  # absence is invisible in every other test, so it is asserted on the source.
+  #
+  # Only this output needs it. sm_cont falls back to run_ma()'s own default and
+  # subgroup_order is guarded on NULL, so a suspended sm_cont_ui or
+  # subgroup_order_ui costs a default rather than the analysis.
+  src <- gsub("[[:space:]]+", " ", paste(deparse(body(step2_server)),
+                                         collapse = " "))
+  expect_true(grepl(
+    'outputOptions(output, "arm_assignment_ui", suspendWhenHidden = FALSE)',
+    src, fixed = TRUE))
+})
+
+test_that("the arm-label guard says something instead of returning in silence", {
+  # This exit was the only one in the analysis reactive that produced no
+  # notification, so a suspended arm_assignment_ui was indistinguishable from a
+  # working app that had decided not to run. Losing the message would make the
+  # next such fault invisible again.
+  src <- gsub("[[:space:]]+", " ", paste(deparse(body(step2_server)),
+                                         collapse = " "))
+  expect_true(grepl('id = "step2_arm_assignment"', src, fixed = TRUE))
+})
+
+test_that("the column-mapping dropdowns are selectize widgets", {
+  # A native <select> (selectize = FALSE) is token-styled while closed but its
+  # open list is OS chrome that no stylesheet can reach, so these six changed
+  # appearance at the moment they were being read. selectize renders a
+  # <script data-for="<id>"> beside the hidden <select>; a native one does not.
+  html <- step2_html()
+  for (id in c("col_studlab", "col_treat", "col_n", "col_event",
+               "col_mean", "col_sd")) {
+    expect_true(grepl(sprintf('data-for="%s"', id), html, fixed = TRUE),
+                info = id)
+  }
+  # subgroup_col is deliberately left native and must stay that way.
+  expect_false(grepl('data-for="subgroup_col"', html, fixed = TRUE))
 })

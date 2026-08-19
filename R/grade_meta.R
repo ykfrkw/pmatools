@@ -433,6 +433,22 @@
 #' @param pubias_unpublished \code{"yes"} / \code{"no"}: Is there documentation of
 #'   unpublished studies (eg, in trial registry or FDA)? Only used when k < 10.
 #'   If \code{NULL} (default), assumed \code{"no"} with a warning.
+#' @param rare_flow Logical. \code{TRUE} when the estimate comes from the
+#'   rare-event workflow (\code{\link{rare_event_diagnostics}}'s
+#'   \code{rare_flow}). It changes three computations and no decision rule: the
+#'   optimal information size switches to an event basis, the Inconsistency
+#'   I-squared surrogate is withdrawn as not assessable, and Core GRADE 4 Fig 5
+#'   takes its \code{k < 10} branch at any \code{k} because Egger's test loses
+#'   validity on sparse binary data. No domain rates down because of it.
+#' @param rare_one_arm_total_zero Logical. \code{TRUE} when one arm has no
+#'   events at all across every study (\code{rare_event_diagnostics()}'s
+#'   \code{one_arm_total_zero}). Imprecision is then reported as not
+#'   assessable: there is no finite effect and no interval to compare with the
+#'   threshold. No downgrade follows from it.
+#' @param rare_method Method id of the \code{\link{run_rare_ma}} primary that
+#'   produced the estimate (e.g. \code{"BB_CR"}). Recorded on the returned
+#'   object as \code{$rare} so the exported record names the method; it is read
+#'   by nothing that rates anything.
 #' @param pubias_registry_complete \code{"yes"} / \code{"no"}: Top-level structural
 #'   rule-out for fields where pre-registration is universal and all registered
 #'   trials can be accounted for. \code{"yes"} short-circuits the publication
@@ -647,7 +663,22 @@ grade_meta <- function(meta_obj,
                        pubias_funnel_asymmetry          = NULL,
                        pubias_unpublished               = NULL,
                        pubias_registry_complete         = NULL,
-                       pubias_rationale                 = NULL) {
+                       pubias_rationale                 = NULL,
+                       # ----- Rare events (shiny/SPEC.md 3.4.14) -------------
+                       # Three facts about the analysis being rated, not three
+                       # new rules. `rare_flow` and `rare_one_arm_total_zero`
+                       # are rare_event_diagnostics() fields; `rare_method` is
+                       # the run_rare_ma() primary the estimate came from, kept
+                       # so the rated object says which method produced it.
+                       #
+                       # Explicit rather than derived from meta_obj, for the
+                       # reason every other Core GRADE input here is explicit:
+                       # a rating must not change because a detector's default
+                       # threshold moved. They default off, so an analysis that
+                       # never met the rare-event workflow is unaffected.
+                       rare_flow                        = FALSE,
+                       rare_one_arm_total_zero          = FALSE,
+                       rare_method                      = NULL) {
 
   # --- input check ---
   if (!inherits(meta_obj, "meta")) {
@@ -812,7 +843,8 @@ grade_meta <- function(meta_obj,
     inconsistency_threshold_side     = inconsistency_threshold_side,
     inconsistency_subgroup_explained = inconsistency_subgroup_explained,
     threshold_chosen                 = target_info$threshold_for_imprecision,
-    rationale                        = inconsistency_rationale
+    rationale                        = inconsistency_rationale,
+    rare_flow                        = rare_flow
   )
   incon_facts <- attr(d_incon, "facts")
 
@@ -860,7 +892,9 @@ grade_meta <- function(meta_obj,
       threshold_p0       = threshold_p0,
       rating_target      = target_info$target,
       threshold_type     = threshold_type,
-      threshold_for_imprecision = target_info$threshold_for_imprecision
+      threshold_for_imprecision = target_info$threshold_for_imprecision,
+      rare_flow          = rare_flow,
+      rare_one_arm_total_zero = rare_one_arm_total_zero
     )
   }
   # The scalar-override branch above records no facts; the domain is then
@@ -902,7 +936,8 @@ grade_meta <- function(meta_obj,
     pubias_funnel_asymmetry  = pubias_funnel_asymmetry,
     pubias_unpublished       = pubias_unpublished,
     pubias_registry_complete = pubias_registry_complete,
-    rationale                = pubias_rationale
+    rationale                = pubias_rationale,
+    rare_flow                = rare_flow
   )
   # bind_rows() below drops attributes, so every domain's facts have to be
   # lifted off its row BEFORE the bind. Publication bias was the one assessor
@@ -927,6 +962,30 @@ grade_meta <- function(meta_obj,
   # Resolved once: "metaprop" fits a GLMM, and the object records this number
   # in two places.
   baseline_risk_used <- .resolve_baseline_risk(baseline_risk, meta_obj, ois_p0)
+
+  # How this estimate was produced, said once, on the object rather than in
+  # five domain notes. Every consumer of the rating -- the app's Configuration
+  # tab, results.txt in the bundle -- reads it from here, so a reader of the
+  # Summary of Findings can tell a beta-binomial estimate from an
+  # inverse-variance one. NULL when the rare-event workflow was not used, which
+  # is the only signal a consumer needs to print nothing.
+  rare_record <- if (isTRUE(rare_flow)) {
+    list(
+      flow             = TRUE,
+      method           = rare_method,
+      method_label     = .rare_method_label(rare_method,
+                                            meta_obj$sm %||% "OR"),
+      one_arm_total_zero = isTRUE(rare_one_arm_total_zero),
+      method_statement = rare_method_statement(rare_method,
+                                               meta_obj$sm %||% "OR"),
+      # The suite's methods are correction-free by construction (see
+      # R/rare_step3.R). Stated on the object because a 0.5 that was never
+      # added leaves no trace anywhere else.
+      no_cc_note       = PMA_RARE_NO_CC_NOTE
+    )
+  } else {
+    NULL
+  }
 
   # --- output object ---
   structure(
@@ -981,7 +1040,8 @@ grade_meta <- function(meta_obj,
       meta               = meta_obj,
       meta_full          = meta_full,
       rob_analysis_set   = rob_analysis_set,
-      rob_refit          = refit_done
+      rob_refit          = refit_done,
+      rare               = rare_record
     ),
     class = "pmatools"
   )

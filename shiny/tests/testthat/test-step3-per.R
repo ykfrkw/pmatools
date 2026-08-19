@@ -8,7 +8,10 @@
 # the displayed value, its label and sof_table(per =) move. So every test
 # below is really a test that the two directions compose back to identity.
 
-test_that("step3_per_unit accepts only the two units the app offers", {
+# The two large units (10,000 and 100,000) were added for rare events
+# (shiny/SPEC.md 3.4.14) and are exercised in test-step3-rare.R; the tests
+# below are the original per-100 / per-1,000 contract, unchanged.
+test_that("step3_per_unit accepts only the units the app offers", {
   expect_identical(step3_per_unit(100), 100L)
   expect_identical(step3_per_unit(1000), 1000L)
   # A radioButtons value arrives as a character. This is the whole reason the

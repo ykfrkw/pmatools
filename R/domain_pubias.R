@@ -168,7 +168,10 @@ assess_pubias <- function(meta_obj,
                           pubias_funnel_asymmetry  = NULL,
                           pubias_unpublished       = NULL,
                           pubias_registry_complete = NULL,
-                          rationale                = NULL) {
+                          rationale                = NULL,
+                          # Rare-event routing; see the Q2 gate below. Defaults
+                          # off, so an ordinary analysis is unaffected.
+                          rare_flow                = FALSE) {
   k <- .pubias_effective_k(meta_obj)
   if (is.null(k) || is.na(k)) k <- 0L
 
@@ -245,7 +248,19 @@ assess_pubias <- function(meta_obj,
   }
 
   # --- Q2: Statistical feasibility (k >= 10) --------------------------------
-  if (k >= 10) {
+  # Fig 5's Q2 asks whether a statistical analysis is FEASIBLE, and answers it
+  # with a study count because k < 10 is the usual reason it is not. A
+  # rare-event analysis is the other reason: Egger's regression of the effect
+  # on its standard error breaks down on sparse binary data, where the two are
+  # mathematically coupled through the cell counts and the test acquires a
+  # false-positive rate that has nothing to do with publication bias.
+  #
+  # So `rare_flow` sends the assessment down the same "no" edge k < 10 takes,
+  # which asks about registries and unpublished studies instead. This adds NO
+  # node to Fig 5. It routes to a node the figure already has, for the reason
+  # the figure already has it, and the note says which of the two conditions
+  # sent it there.
+  if (k >= 10 && !isTRUE(rare_flow)) {
     return(.pubias_statistical(
       meta_obj                = meta_obj,
       k                       = k,
@@ -257,7 +272,8 @@ assess_pubias <- function(meta_obj,
     return(.pubias_registry(
       k                  = k,
       pubias_unpublished = pubias_unpublished,
-      q1_note            = q1_note
+      q1_note            = q1_note,
+      rare_flow          = isTRUE(rare_flow) && k >= 10
     ))
   }
 }
@@ -412,11 +428,33 @@ assess_pubias <- function(meta_obj,
 # --------------------------------------------------------------------------
 # Q4: k < 10 -- registry / unpublished studies branch
 # --------------------------------------------------------------------------
-.pubias_registry <- function(k, pubias_unpublished, q1_note) {
+#
+# `rare_flow` is TRUE only when this branch was reached DESPITE k >= 10, i.e.
+# when sparse data rather than the study count answered Q2. It changes the
+# sentence and nothing else: the same node, the same two answers, the same
+# judgments.
+.pubias_registry <- function(k, pubias_unpublished, q1_note,
+                             rare_flow = FALSE) {
+
+  q2_note <- if (isTRUE(rare_flow)) {
+    sprintf(paste0("Q2: Statistical analysis not feasible despite k = %d >= ",
+                   "10 -- this is a rare-event analysis, and Egger's ",
+                   "regression loses validity on sparse binary data. Fig 5's ",
+                   "'no' edge is taken for the reason the figure already has ",
+                   "it. "), k)
+  } else {
+    sprintf("Q2: Statistical analysis not feasible (k = %d < 10). ", k)
+  }
 
   if (is.null(pubias_unpublished)) {
     rlang::warn(paste0(
-      "pubias_unpublished not specified and k < 10 (k = ", k, "). ",
+      "pubias_unpublished not specified and ",
+      if (isTRUE(rare_flow)) {
+        paste0("Egger's test is not valid on this rare-event analysis (k = ",
+               k, "). ")
+      } else {
+        paste0("k < 10 (k = ", k, "). ")
+      },
       "Statistical analysis is not feasible. ",
       "Provide pubias_unpublished = 'yes' or 'no' based on registry search ",
       "(eg, ClinicalTrials.gov, FDA) for unpublished trials. ",
@@ -425,7 +463,9 @@ assess_pubias <- function(meta_obj,
     unpublished <- "no"
     src_note    <- paste0(
       " ", .PUBIAS_QUALITATIVE_MARKER,
-      ": no statistical test possible (k < 10) and no manual input given, ",
+      ": no statistical test possible (",
+      if (isTRUE(rare_flow)) "rare-event analysis" else "k < 10",
+      ") and no manual input given, ",
       "so publication bias was NOT formally assessed. ",
       .pubias_qualitative_guidance(),
       " [assumed 'no'; specify pubias_unpublished to override]"
@@ -461,13 +501,17 @@ assess_pubias <- function(meta_obj,
     domain   = "Publication bias",
     judgment = judgment,
     auto     = auto_flag,
-    notes    = paste0(
-      q1_note,
-      sprintf("Q2: Statistical analysis not feasible (k = %d < 10). ", k),
-      unpub_desc, src_note
-    ),
-    facts    = .facts(.pubias_k_fact(k), .flow_path_fact(c(
-      .PUBIAS_FLOW_TO_Q2, "pma-pubias-edge-q2-no",
-      "pma-pubias-node-q4", flow_end)))
+    notes    = paste0(q1_note, q2_note, unpub_desc, src_note),
+    facts    = .facts(
+      .pubias_k_fact(k),
+      if (isTRUE(rare_flow)) {
+        .fact("rare_flow", "Rare-event analysis",
+              paste0("yes - Fig 5's k < 10 route was taken at k = ", k,
+                     " because Egger's test loses validity on sparse binary ",
+                     "data"))
+      } else NULL,
+      .flow_path_fact(c(
+        .PUBIAS_FLOW_TO_Q2, "pma-pubias-edge-q2-no",
+        "pma-pubias-node-q4", flow_end)))
   )
 }

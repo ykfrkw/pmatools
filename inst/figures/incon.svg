@@ -111,10 +111,9 @@
     </text>
   </g>
   <g id="pma-incon-leaf-down2" class="pma-fc-leaf">
-    <rect x="560" y="368" width="380" height="56" rx="6" ry="6"/>
-    <text x="750" y="391" text-anchor="middle">
+    <rect x="560" y="377" width="380" height="39" rx="6" ry="6"/>
+    <text x="750" y="400" text-anchor="middle">
       <tspan x="750" dy="0">Rate down 2 levels</tspan>
-      <tspan x="750" dy="17">(serious)</tspan>
     </text>
   </g>
   <text class="pma-fc-caption" x="20" y="446">

@@ -5,12 +5,18 @@
 # them only DEFINES things at source time - no Shiny session is created, no
 # reactive is touched.
 #
-# R/step2_ma.R is on the list for its UI half only: step2_ui() is a pure
-# function of `state` and can be rendered to HTML and inspected (see
-# test-step2-layout.R). Its other half, step2_server(), is merely defined here
-# and never called - like R/step1_data.R, R/step3_grade.R and R/step4_export.R,
-# whose server functions need `input` / `output` / `session` / `state` and a
-# Shiny test harness this app does not have.
+# R/step2_ma.R and R/step3_grade.R are on the list for their UI halves only:
+# step2_ui() and step3_ui() are pure functions of `state` and can be rendered
+# to HTML and inspected (see test-step2-layout.R and
+# test-confirm-checkbox.R). Their other halves, step2_server() and
+# step3_server(), are merely defined here and never called - like
+# R/step1_data.R and R/step4_export.R, whose server functions need `input` /
+# `output` / `session` / `state` and a Shiny test harness this app does not
+# have.
+#
+# Sourcing a file for one half of it is only safe because nothing in it runs
+# at source time and no top-level name collides with one already sourced;
+# test-vendor-collisions.R is the standing guard on the second half of that.
 
 # testthat::test_dir() sets the working directory to tests/testthat before
 # sourcing helpers, so walking up from getwd() lands on the app root -- which
@@ -51,8 +57,15 @@ PMA_APP_ROOT <- local({
 # `not_reported_outcome()` decide which saved rows survive normalisation, and
 # an app-side re-implementation of that class check is exactly the drift the
 # other three entries are here to prevent.
+# R/rare_step3.R and R/rare_events.R ride along for the same reason as the
+# four above: the Configuration tab's rare-event block (.rare_method_block()
+# in R/step3_threshold.R) prints rare_method_statement() and
+# PMA_RARE_NO_CC_NOTE verbatim, and .rare_method_label() reads the method
+# labels off .rare_method_specs() so the app and the fitted suite cannot name
+# the same method two ways. Without them a test of that block would fail on a
+# missing object rather than on wrong copy.
 for (.stem in c("utils.R", "multi_outcome.R", "data_ingest.R",
-                "not_reported.R")) {
+                "not_reported.R", "rare_events.R", "rare_step3.R")) {
   for (.f in c(file.path(PMA_APP_ROOT, "R", "_pmatools", .stem),
                file.path(dirname(PMA_APP_ROOT), "R", .stem))) {
     if (file.exists(.f)) {
@@ -64,7 +77,7 @@ for (.stem in c("utils.R", "multi_outcome.R", "data_ingest.R",
 rm(.stem)
 
 for (.f in c("R/ui_helpers.R", "R/educational_copy.R", "R/step3_threshold.R",
-             "R/step2_ma.R")) {
+             "R/step2_ma.R", "R/step3_grade.R")) {
   source(file.path(PMA_APP_ROOT, .f))
 }
 rm(.f)

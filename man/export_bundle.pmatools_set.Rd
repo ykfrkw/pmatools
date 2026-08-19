@@ -121,12 +121,13 @@ above where an outcome carries none. It is the same arrangement that lets
 name in the attribute aborts rather than being ignored.
 
 The same attribute carries how a continuous outcome is presented in
-\code{summary_of_findings.docx} / \code{.csv}: \code{convert_smd_to_or}, \code{baseline_risk},
-\code{threshold_label} and \code{chinn_invert}, each the \code{\link{sof_table}}
-argument of the same name. \code{\link{grade_table}} reads them per row, so
-one outcome can be shown as a proportion of responders while another is
-shown as its effect, and the generated \code{analysis.R} re-stamps them onto the
-set it rebuilds.
+\code{summary_of_findings.docx} / \code{.csv}: \code{convert_smd_to_or},
+\code{keep_effect_scale}, \code{baseline_risk}, \code{threshold_label} and \code{chinn_invert},
+each the \code{\link{sof_table}} argument of the same name.
+\code{\link{grade_table}} reads them per row, so one outcome can be shown as
+a proportion of responders, another as both that and its own scale, and a
+third as its effect alone; the generated \code{analysis.R} re-stamps them onto
+the set it rebuilds.
 }
 
 \seealso{

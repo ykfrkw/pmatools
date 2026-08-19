@@ -391,6 +391,43 @@ test_that("the risk-of-bias vocabulary is fully reachable", {
   expect_identical(setdiff(.vocab$rob, seen), character(0))
 })
 
+test_that("a dominated path names both the rule and the leaf it reached", {
+  # The rule boxes are an intermediate layer, not leaves: below "check the
+  # direction of bias" the figure draws the source's two boxes and two leaves,
+  # and the rules decide which one is reached. A path that stopped at the rule
+  # would light a column of boxes and no conclusion.
+  down <- .rob_flow(c("no", "very_serious", "very_serious", "very_serious"),
+                    c(-0.60, -3.00, -3.10, -2.90), threshold = 0.5)   # rule 3
+  stay <- .rob_flow(c("no", "very_serious", "very_serious", "very_serious"),
+                    c(-1.00, -1.02, -1.01, -1.03), threshold = 0.5)   # rule 2
+
+  expect_true(all(c("pma-rob-leaf-rule3", "pma-rob-node-bias-responsible",
+                    "pma-rob-leaf-ratedown") %in% down))
+  expect_false("pma-rob-leaf-noratedown" %in% down)
+
+  expect_true(all(c("pma-rob-leaf-rule2", "pma-rob-node-bias-conservative",
+                    "pma-rob-leaf-noratedown") %in% stay))
+  expect_false("pma-rob-leaf-ratedown" %in% stay)
+})
+
+test_that("nothing is drawn or emitted on the deleted appreciable 'no' edge", {
+  # Reaching the undominated branch means the low risk of bias studies carry
+  # more than 45% of the weight at the default gate, and more than 35% at the
+  # strictest gate Core GRADE 4 discusses -- at or above the 35 to 45% the same
+  # paragraph calls appreciable. The "no" answer is unreachable, so the edge is
+  # gone from the vocabulary and from the figure, and the two paths that used
+  # it now reach the green leaf through the "yes" edge.
+  skip_if(is.na(.fig_dir), "inst/figures not available in this layout")
+  drawn <- .svg_ids(file.path(.fig_dir, "rob.svg"))
+  expect_false("pma-rob-edge-appreciable-no" %in% drawn)
+  expect_false("pma-rob-edge-appreciable-no" %in% .vocab$rob)
+
+  none_high <- .rob_flow(rep("no", 4), c(-1.0, -1.1, -0.9, -1.05),
+                         threshold = 0.5)
+  expect_true(all(c("pma-rob-edge-appreciable-yes", "pma-rob-leaf-all")
+                  %in% none_high))
+})
+
 test_that("the imprecision vocabulary is fully reachable", {
   defaults <- list(
     crosses_threshold = FALSE, crosses_both_thresholds = FALSE,

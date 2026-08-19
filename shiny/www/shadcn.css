@@ -464,6 +464,32 @@ a.pma-domain-jump { font-weight: 600; text-decoration: underline; }
 .pma-crumb strong { color: hsl(var(--foreground)); }
 .pma-crumb-auto { font-style: italic; }
 
+/* The one live wizard question. Every node's body is wrapped in this, because
+   a bare heading and a radio group read exactly like the reference plots and
+   the override <details> further down the tab -- and only this block can be
+   answered. The accent border is the primary colour, unshared with any other
+   block on the tab, so "what am I being asked" is one glance. */
+.pma-wizard-question {
+  margin: 0.25rem 0 1rem;
+  padding: 0.85rem 1rem 0.6rem;
+  border-left: 4px solid hsl(var(--primary));
+  background: hsl(var(--muted));
+  border-radius: var(--radius);
+}
+.pma-wizard-question > h5 { margin-top: 0; }
+/* Only the LAST widget: q3 carries a rationale textarea under its select and
+   that pair still needs the gap between them. */
+.pma-wizard-question > .shiny-input-container:last-child { margin-bottom: 0; }
+/* "Question 2 of 3". Quiet: it orients, it is not the question. */
+.pma-wizard-progress {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 0.35rem;
+}
+
 /* Buttons (work alongside bslib bs5 .btn) */
 .btn-primary {
   background: hsl(var(--primary));
@@ -760,6 +786,87 @@ table.dataTable th { background: hsl(var(--muted)); }
 }
 
 /* ---------------------------------------------------------------------------
+   Step 3 confirmation boxes (pma_confirm_checkbox() in R/ui_helpers.R).
+
+   The same idea as the two tiers above, for a control that is a click rather
+   than a value: a reviewer has to be able to see, without having pressed
+   anything, that this box is an outstanding action. It used to be a dashed
+   border in BOTH states, which said nothing about which state it was in, and
+   the Configuration tab's other confirmation was not boxed at all - so one
+   gate looked like a note and the other looked the same ticked as unticked.
+
+   The vocabulary is deliberately the required-pill's: same 9999px radius,
+   same 0.7rem/600 type, same "border + background + foreground move
+   together". What differs is which token it moves to. Step 2's tier 2 arms to
+   --destructive only after a failed Next; these boxes have no such event to
+   arm on - they are static markup with no server round trip - so they sit
+   permanently at --primary instead. Red on a page nobody has touched yet is
+   what the two-tier scheme exists to avoid, and a permanently red box would
+   reintroduce it.
+
+   UNTICKED IS THE BASE RULE, on purpose. :has() is what flips the state, and
+   in a browser without it every declaration below simply never applies, so
+   the box stays lifted forever: "always looks required" rather than "always
+   looks done". Only one of those two failures can let a reviewer walk past a
+   gate believing it is cleared.
+
+   THE ACCENT IS THE WIZARD QUESTION'S, and deliberately so: a left border at
+   --primary on a --muted ground means "answer this", and an unticked
+   confirmation is exactly that. It used to sit a whole tier below the
+   read-only blocks it shares a tab with - a 1px translucent outline and a
+   near-transparent wash, under a derived summary carrying a 4px accent on a
+   solid ground - so the heaviest block on the Configuration tab was the one
+   with nothing to answer. The pill alone could not fix that: the ranking was
+   the problem. Weight and ground therefore track .pma-wizard-question above;
+   changing one without the other reopens the inversion.
+   --------------------------------------------------------------------------- */
+.pma-confirm {
+  margin-top: 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid hsl(var(--primary) / 0.45);
+  border-left: 4px solid hsl(var(--primary));
+  border-radius: var(--radius);
+  background: hsl(var(--muted));
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+/* checkboxInput() ships a .form-group whose bottom margin would leave the
+   tick floating above a band of empty box. */
+.pma-confirm .shiny-input-container { margin-bottom: 0; }
+.pma-confirm .checkbox { margin: 0; }
+
+.pma-confirm-eyebrow {
+  display: inline-block;
+  margin-bottom: 0.35rem;
+  padding: 0.02rem 0.45rem;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border: 1px solid hsl(var(--primary));
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: background 0.15s ease, color 0.15s ease,
+              border-color 0.15s ease;
+}
+
+/* Ticked: back to the muted dashed treatment these boxes have always had.
+   The eyebrow greys out rather than being removed from the flow, because a
+   box that changes height on tick drags the Next button below it out from
+   under the cursor that just clicked. The `border` shorthand is what drops
+   the accent - a ticked box has been answered, so it must stop claiming the
+   "answer this" treatment from the block that still needs one. */
+.pma-confirm:has(input[type="checkbox"]:checked) {
+  border: 1px dashed hsl(var(--border));
+  background: transparent;
+}
+.pma-confirm:has(input[type="checkbox"]:checked) > .pma-confirm-eyebrow {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  border-color: hsl(var(--border));
+}
+
+/* ---------------------------------------------------------------------------
    Form-control labels: keep input labels and option labels aligned cleanly
    so wrapped text uses a hanging indent (does not flow under the radio /
    checkbox circle) and short widget labels do not break unnecessarily.
@@ -865,11 +972,18 @@ details > summary {
    <select> (inside .dataTables_length, outside any Shiny input container)
    keeps its table-native styling.
 
-   Inputs covered here: col_studlab, col_treat, col_n, col_event, col_mean,
-   col_sd, subgroup_col, sample_dataset, rare_primary_method
-   (native, selectize = FALSE); experimental_label, control_label, method,
-   method_tau, random_ci, subgroup_order, rob_override and the other
-   Step 3 / Step 4 pickers (selectize).
+   Inputs covered here: subgroup_col, sample_dataset, rare_primary_method
+   (native, selectize = FALSE); col_studlab, col_treat, col_n, col_event,
+   col_mean, col_sd, experimental_label, control_label, method, method_tau,
+   random_ci, subgroup_order, rob_override and the other Step 3 / Step 4
+   pickers (selectize).
+
+   The six col_* mapping selects moved from the first list to the second:
+   only the CLOSED native control is ours to paint. Its dropdown list is drawn
+   by the operating system, outside the document, and no rule below can reach
+   it - so those six changed appearance at exactly the moment they were being
+   read. A selectize dropdown is ordinary DOM and the rules further down
+   repaint it whole.
    --------------------------------------------------------------------------- */
 
 /* The caret glyph is shared by both flavours, so it lives in a custom property
@@ -1030,4 +1144,49 @@ details > summary {
   .pma-download-busy::before {
     animation: none;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Publication-bias reference tabs: the status dot (0.5.1)
+
+   A marker on each of the three reference tab titles (Funnel, Trim-and-fill,
+   Missing results) saying what that tab's diagnostic found. It is NOT
+   .pma-tab-mark: that one is a round glyph meaning "the reviewer opened this
+   tab", i.e. their progress, and it sits on the tabs one level up. Two
+   unrelated meanings a few pixels apart would be unreadable, so this marker
+   is a CSS-drawn ROUNDED SQUARE - a different shape, not just a different
+   colour - and .pma-tab-mark is untouched.
+
+   Drawn rather than written: an empty element with a class cannot arrive
+   mojibaked whatever the deploy bundle's encoding does to a glyph.
+
+   Four states, and the fourth is deliberately not a colour. Three colours
+   alone make "not computed" read as "nothing wrong", which is backwards for
+   every tab here - each declines to compute on exactly the sparse data where
+   reporting bias is most likely. "unknown" is therefore hollow: an outline
+   with no fill, which reads as an empty slot rather than as a verdict.
+   --------------------------------------------------------------------------- */
+.pma-tab-status {
+  display: inline-block;
+  width: 0.62rem;
+  height: 0.62rem;
+  margin-left: 0.4rem;
+  border-radius: 2px;
+  vertical-align: 0.02rem;
+  /* Every state carries the same outline, so the hollow one is the same
+     shape as the filled ones and only the fill distinguishes them. */
+  border: 1px solid hsl(var(--muted-foreground) / 0.55);
+}
+.pma-tab-status-green   { background: var(--grade-high-fg); }
+.pma-tab-status-amber   { background: var(--grade-low-fg); }
+.pma-tab-status-red     { background: var(--grade-vlow-fg); }
+.pma-tab-status-unknown { background: transparent; }
+
+/* A colour difference alone fails a reader who cannot see it, and the title
+   attribute is not reachable on a touch device. The forced-colours fallback
+   keeps the four apart by their border style, which high-contrast mode
+   preserves where it discards background colours. */
+@media (forced-colors: active) {
+  .pma-tab-status { forced-color-adjust: none; border-width: 2px; }
+  .pma-tab-status-unknown { border-style: dotted; }
 }

@@ -216,15 +216,16 @@
   longer settable.** `rob_inf_threshold` — the slider on the Configuration tab
   labelled "Sensitivity-analysis change threshold (Risk of Bias only)" — is
   deleted, and the app no longer passes `rob_inflation_threshold` to
-  `grade_meta()` at all. The package default of `0.10` now applies
-  unconditionally, so a review that had moved the slider will rate Risk of Bias
-  against 10 percent instead, and the judgment can change on the one rule that
+  `grade_meta()` at all. The package default `PMA_ROB_INFLATION_THRESHOLD` now
+  applies unconditionally, so a review that had moved the slider will rate Risk
+  of Bias against 20 percent instead — this release moves that default too, see
+  the entry below — and the judgment can change on the one rule that
   consults it (a bias-favouring shift within the same non-trivial zone) and on
   whether the analysis is restricted to the low risk-of-bias studies. The
   control was a pmatools convention rather than a Core GRADE 4 rule, and a
   reviewer had no basis on which to move it. `grade_meta()` still takes the
   argument, so a script that sets it is unaffected; the bundled `analysis.R`
-  writes the same `0.10` it always did when the app had not been touched.
+  writes whatever the package default is at the time it is generated.
 
 * **Shiny app: Indirectness now takes the subdomain path by default, which
   changes the exported bundle.** The four Core GRADE 5 PICO radios ship
@@ -262,8 +263,47 @@
   — check `domain_assessments` before comparing a rating against an earlier
   run. `.INCONSISTENCY_CAP_NOTE` is replaced by
   `.INCONSISTENCY_TWO_LEVEL_NOTE`, which states the departure in the notes
-  wherever the branch fires; the risk-of-bias one-level cap
-  (`.ROB_CAP_NOTE`) is untouched. See `SPEC.md` §5.2.
+  wherever the branch fires; the risk-of-bias one-level cap (`.ROB_CAP_NOTE`)
+  survives, narrowed, for the reasons in the next entry. See `SPEC.md` §5.2.
+
+* **Risk of bias rates down two levels when excluding the high-RoB studies
+  moves the pooled estimate across the null, and this deliberately departs from
+  Core GRADE 4.** This partly reverts 0.5.0, which capped *every* automated
+  risk-of-bias path at `"some_concerns"` (−1) on the grounds that Core GRADE 4
+  describes no two-level risk-of-bias downgrade — every leaf of its Fig 2 reads
+  "rate down" / "do not rate down", and the paper's only two-level move is
+  rating *up* observational evidence. That reading of the source is unchanged;
+  what changed is the conclusion drawn from it for one rule.
+
+  **Rule 5 of the direction-of-bias check** — the dominated branch, zones
+  differing *across* the null — now returns `"very_serious"` (−2). It is not
+  "the estimate moved when the high-RoB studies were dropped": that is rule 3
+  and rule 4, which still rate down one level and are unchanged. Rule 5 fires
+  only when the pooled estimate sits beyond the chosen threshold on one side of
+  the null and the estimate restricted to the low/some-concerns-RoB studies
+  sits beyond it on the *other*, so the direction of the effect is what the
+  high risk of bias studies produced, and reporting that body of evidence as
+  Moderate overstates it. `.ROB_TWO_LEVEL_NOTE` states the departure in the
+  notes wherever the branch fires.
+
+  **The two levels require a supplied threshold.** With `threshold = NULL` the
+  trivial zone collapses to `{0}`, so "opposite sides of the null" degrades to
+  "opposite signs", which two near-null estimates can satisfy by an arbitrarily
+  small movement. Rule 5 still fires there and still rates down, one level,
+  with `.ROB_SIGN_FLIP_NO_THRESHOLD_NOTE` saying which gate is missing.
+
+  Everything else keeps the 0.5.0 cap, and `.ROB_CAP_NOTE` is narrowed to say
+  so without claiming to cover the whole domain: rules 3 and 4, the
+  all-studies-high-RoB case (there is no restricted estimate there to have
+  landed anywhere, so it cannot borrow rule 5's reasoning), and the
+  not-assessable paths all still stop at −1.
+
+  **What changes in a rating.** An analysis that scored −1 on rule 5 now scores
+  −2, so a review that previously came out **Low** can now come out **Very
+  low**, and one that came out Moderate can come out Low — with no change to
+  the input data. Check `$domain_assessments` before comparing a rating against
+  an earlier run. To keep the old result, pass the scalar override
+  `rob = "some_concerns"` with `rob_rationale`. See `SPEC.md` §5.1.
 
 * **The decision flowcharts drop three things that were not decisions.** The
   Risk-of-Bias chart no longer opens with "Any study at high risk of bias?":
@@ -351,6 +391,152 @@
   `numeric` was always the count and is unchanged.
 
 ## New features
+
+* **Step 3 knows when it is rating a rare-event analysis, and says so — without
+  rating anything down for it.** When the reviewer accepts the rare-event
+  workflow, `state$ma` already *is* the sparse-data fit, so every domain was
+  already being rated on it; what was missing is that Step 3 never said which
+  method produced the estimate, never said whether the rating would survive a
+  different one, and ran three domain computations whose assumptions the data
+  had already broken. `grade_meta()` gains `rare_flow`,
+  `rare_one_arm_total_zero` and `rare_method` (all off by default, so nothing
+  changes for an analysis that never met the workflow), and under them:
+
+  - **The optimal information size switches to an event basis.** Core GRADE 2
+    Fig 4 compares participants, because participants are what limits an
+    ordinary trial. At a 0.5% event rate a "sufficiently large" participant
+    count carries a dozen events, and the OIS then reports a body of evidence
+    as adequately sized when nothing in it could have detected anything. The
+    same power calculation is compared against total events instead, and a new
+    `ois_basis` fact names the basis **on every path** — "83% of the OIS" is two
+    different claims on the two bases.
+  - **The fitted suite becomes a sensitivity analysis for the rating.** Step 2
+    already showed it as a sensitivity analysis for the *estimate*. Every
+    method is now asked Core GRADE 2's own question — does the 95% CI cross the
+    chosen threshold — and the Imprecision tab and the domain note report
+    unanimity, or name the disagreeing methods with their intervals.
+    Disagreement means the imprecision judgment rests on a method choice rather
+    than on the evidence, which is worth knowing and costs no new statistics.
+  - **The Inconsistency I² surrogate is withdrawn, not reinterpreted.** On
+    sparse binary data τ² is badly estimated and I² inherits that, so the
+    automated path reports *not assessable* and records **no I², τ² or Q at
+    all** — a caveat beside a number is read past and the number is not. The
+    manual flowchart and the scalar override are unchanged and are the routes
+    that still work.
+  - **Publication bias takes Core GRADE 4 Fig 5's k < 10 branch at any k.**
+    Egger's regression loses validity on sparse binary data, and Fig 5 already
+    has the branch for "Egger is not available to you". The wizard, the lit
+    chart and `assess_pubias()` route together, so the answer given at the
+    registry question is the answer that rates the domain. **No node is added
+    to Fig 5.**
+  - **One arm with no events at all** makes Imprecision *not assessable*, in
+    those words: there is no finite effect and no interval to compare with a
+    threshold.
+
+  **None of these rates anything down**, and no domain's decision rule changed:
+  Core GRADE has five domains and sparse data does not earn a sixth. The test
+  suite closes on exactly that assertion — turning the flag on over ordinary
+  data moves no judgment, no downgrade and no final certainty.
+
+  Two supporting changes travel with it. The rated object carries a `$rare`
+  record naming the method, so the Configuration tab can state where the
+  estimate came from and the bundle's `results.txt` prints it, together with
+  the statement that **no 0.5 continuity correction was applied** — the suite's
+  methods are correction-free by construction, and a correction that was never
+  applied otherwise leaves no trace at all. And the app's per-N display unit
+  gains 10,000 and 100,000, seeded from the control-arm event rate: at these
+  rates the Summary of Findings was printing `0 per 1,000` against `0 per
+  1,000` with a difference of `0 per 1,000`. The decision threshold follows the
+  same unit, because an effect and the threshold it is judged against on two
+  different scales is a failure mode this project has had once already.
+  (`R/rare_step3.R`, `SPEC.md` §4.5, `shiny/SPEC.md` §3.4.14.)
+
+* **The three publication-bias reference tabs each carry a status dot, and
+  none of them rates anything.** The funnel plot, the trim-and-fill funnel and
+  the missing-results (RoB-ME) table sit on a tabset, one at a time, so a
+  reviewer who never clicks past the first never learns that the other two
+  disagreed with the answer they had just given the wizard. Each tab title now
+  carries a marker saying what that tab's diagnostic found: 🟢 nothing to worry
+  about, 🟡 worth reading before moving on, 🔴 the strongest signal the tab can
+  give, and ⚪ **not computed**, with the reason as its tooltip. The fourth
+  state is deliberately not a colour — each of these diagnostics declines to
+  compute on exactly the sparse data where reporting bias is most likely, so
+  "not computed" painted green would read as "nothing found".
+
+  Two new algorithms sit behind them, both in the package rather than the app
+  so a test can hold them to a contract (`R/pubias_status.R`,
+  `R/pubias_missing.R`; `SPEC.md` §5.5b, `shiny/SPEC.md` §3.4.8a and §3.4.8b):
+
+  - **Trim-and-fill** reuses the risk-of-bias direction check
+    (`.assess_bias_direction()`), asked of the pair (original pooled effect,
+    trim-and-fill adjusted effect) instead of (whole body, low-RoB subset), so
+    `PMA_ROB_INFLATION_THRESHOLD` stays shared and the five rules stay in one
+    place. It runs on **whichever scale puts the null at zero** — the absolute
+    risk difference per 1,000 for a binary outcome, the internal scale for
+    MD / SMD / RoM. On a raw odds ratio, `|OR| = 2.0` and `|OR| = 0.5` are
+    equidistant from the null in fact and four-fold apart in the arithmetic,
+    which would make every zone and magnitude rule wrong for one of them. With
+    no usable baseline risk the dot is ⚪ rather than quietly falling back to
+    the internal scale.
+  - **Missing results** answers one question: how far from the observed pooled
+    effect would the missing studies have to lie before the conclusion
+    changes? The `m` missing studies are given one shared effect `δ` and an
+    imputed standard error borrowed from the observed studies as
+    `median(seTE·√n) / √n_j`; `tau²` is held at its observed value, and the
+    tipping point solves in closed form. Its ordered decision is the load-
+    bearing part: adding studies shrinks the pooled standard error, so a body
+    of evidence can cross the decision threshold on **precision alone**, with
+    the missing studies reporting exactly what the observed ones did. That case
+    is 🔴 and is asked before the magnitude comparison, which on its own would
+    have called it reassuring. `results_known` then acts as a direction
+    **gate** — three of its five labels imply which way the missing effect
+    lies, one unconstrained row makes the union everything, and an
+    all-`Not measured` table is capped at 🟡, because an outcome that was never
+    assessed cannot have been suppressed for what it showed.
+
+  **No dot value reaches `assess_pubias()` or `grade_meta()`.** Core GRADE 4
+  Fig 5 has no node for a funnel p value, for trim-and-fill or for missing
+  results, and the wizard's answers stay the only thing that rates the domain;
+  `test-pubias_status.R` and the app's `test-pubias-dots.R` are the standing
+  structural guards on that. The marker takes its own class
+  (`pma-tab-status`) and its own shape — a CSS-drawn rounded square — so it
+  cannot be confused with `pma-tab-mark`, the round glyph on the Step 3 domain
+  tabs one level up that means "opened, not yet confirmed". `pma-tab-mark` is
+  untouched.
+
+* **`sof_table()` gains `keep_effect_scale`, so a continuous outcome can be
+  shown as its own effect AND as a proportion of responders in one row.** Core
+  GRADE 6 recommends presenting the two together; pmatools offered them as an
+  either/or, and the Shiny app's own on-screen note conceded that the agreement
+  check Core GRADE 6 asks for was therefore out of reach. Passing
+  `convert_smd_to_or = TRUE, keep_effect_scale = TRUE` now puts both in **one
+  row** — no extra rows, no extra columns. Each arm cell holds the mean-scale
+  value on its first line(s) and the responder proportion on the last; the
+  Difference cell holds the standardised mean difference first and the
+  per-1000 risk difference second; and the arm headers become the
+  measure-neutral "With control" / "With intervention", since "Risk with
+  control (per 1,000)" would head a cell whose first line is a mean and whose
+  denominator applies to only half of it.
+
+  When the mean-scale half cannot be computed honestly — no usable control-arm
+  summaries, or an SMD with no reference SD to re-express it with — the row
+  **degrades to the responder-only presentation** rather than printing an empty
+  line or failing, and a footnote names the reason.
+
+  In the Shiny app this is the third option of the Configuration tab's
+  presentation radio ("Both, in one row … (what Core GRADE 6 recommends)"). The
+  default stays "The <sm> itself, on its own scale": "both" also demands a
+  control responder proportion the reviewer has to justify, and defaulting to a
+  presentation that demands an assumption is how the assumption stops being
+  examined. In a multi-outcome table the choice rides per row on
+  `"pmatools_display"` (`keep_effect_scale` joins `PMATOOLS_RESPONDER_FIELDS`),
+  so one outcome can show both scales beside another that shows only its
+  effect. `export_bundle()` takes the argument too, and the generated
+  `analysis.R` emits it.
+
+  **Both new arguments are back-compatible; this is not a `feat!:`.**
+  `keep_effect_scale` defaults to `FALSE`, `convert_smd_to_or` is unchanged,
+  and a call that does not name the new argument keeps the presentation it had.
 
 * **The Shiny app can put an outcome nobody reported into the Summary of
   Findings table.** `not_reported_outcome()` and `add_not_reported()` have been
@@ -675,6 +861,158 @@
 
 ## Behaviour changes
 
+* **Forest plots print `Mean` and `SD` to one decimal place, and the precision
+  is now adjustable.** `plot_forest()` gains `digits_mean` and `digits_sd`,
+  both defaulting to `1` and passed to `meta::forest()` as `digits.mean` /
+  `digits.sd`. Nothing passed them before, so `{meta}`'s own defaults applied:
+  `digits.mean = 2` and `digits.sd = 4`, i.e. an SD printed to twice the
+  precision of the mean it belongs to, in a column wide enough to squeeze the
+  forest itself. Neither is a precision any trial reports.
+
+  **This changes the rendered output of every continuous forest plot** — the
+  drawn one, the PDF in the export bundle and each of the Step 3 stratified
+  copies. It is not a breaking API change: no argument changes meaning, no call
+  has to be updated, and a caller who wants the old numbers passes
+  `digits_mean = 2, digits_sd = 4`. `NA`, a negative value or anything not a
+  length-1 finite number falls back to `1` rather than reaching
+  `meta::forest()`, for the same reason the `addrow_*` arguments are sanitised:
+  the retry that answers a `meta::forest()` error by stripping
+  `leftcols`/`leftlabs` would delete the very columns these digits describe. A
+  `digits.mean` / `digits.sd` passed through `...` still wins, and no longer
+  collides with the argument. Both are exposed in the app's "Forest plot
+  display" panel as **Mean decimals** and **SD decimals**.
+
+* **The Shiny app defaults a continuous outcome to `SMD`, not `MD`.** A review
+  pooling continuous outcomes at all is usually pooling several instruments
+  (PHQ-9, HAMD, BDI), and a mean difference across two scales is not a
+  quantity; `MD` remains one click away in the same radio. This is an app
+  default only — no package function changes, and a saved outcome keeps the
+  measure it was pooled with. Also fixes the neighbouring bug where changing
+  the mean column rebuilt that radio from bare codes, silently collapsing
+  `SMD (standardised mean difference)` back to `SMD`.
+
+* **A Summary of Findings row converted with Chinn's formula now reports an
+  absolute risk difference and a derived odds ratio.** This changes what two
+  columns say for anyone using `convert_smd_to_or = TRUE`; no argument changed,
+  so it is a behaviour change and not a breaking one.
+
+  The **Difference** column used to keep the pooled estimate in standard
+  deviation units — "0.49 fewer standard deviations (0.70 fewer to 0.27 fewer)"
+  — on the reasoning that the risk difference the two rates imply is not the
+  pooled continuous difference. It is not; but the column is headed "Absolute
+  effects (95% CI) — Difference" and sat between two cells reading "300 per
+  1000" and "772 per 1000", so an SD-unit string there was not an absolute
+  effect at all and did not subtract to the two numbers beside it. It now reads
+  "472 more per 1000 (393 more to 536 more)", built by the same formatter the
+  binary rows use, so the direction words, the CI ordering and the "per 1000"
+  label are identical for a converted row and a binary one.
+
+  The **Effect** column gains a second line, "Derived odds ratio 1.41 (0.85 to
+  2.35)" — `exp(SMD x pi / sqrt(3))`, which is what Chinn's formula emits. Not
+  the risk ratio: that is `p1 / p0` and exists only once the assumed control
+  proportion has been laid on top of the formula's output, so the odds ratio
+  puts one fewer assumption between the pooled estimate and the number on the
+  page. A second line and not a second column, because it is the same pooled
+  estimate read on another scale and a column would present it as an
+  independent result. It rides **under** the pooled estimate and never replaces
+  it — the column header is built from the effect measure, so a cell holding
+  only an odds ratio would sit beneath "Standardized mean difference", and the
+  estimate every domain was rated on would be absent from the table reporting
+  the certainty.
+
+  Everything derived here is DERIVED, not fitted, and the Chinn footnote now
+  says so and separates the two kinds: the odds ratio does not move with the
+  assumed control proportion, while the two arm rates and the risk difference
+  do, and it names that proportion.
+
+  Internally the three proportions the conversion produces are computed once by
+  a new internal `.chinn_rates()` rather than re-derived per cell, so the arm
+  cells, the difference and the odds ratio cannot drift apart.
+  `.format_ier_chinn()`'s output is byte-for-byte unchanged.
+
+* **A continuous outcome no longer shows a pooled control-arm mean, and the
+  Summary of Findings presented as "both" now takes two table rows.** This
+  changes the table for **every** continuous outcome, including ones that never
+  asked for the conversion.
+
+  A continuous meta-analysis routinely pools endpoint scores together with
+  change-from-baseline scores. The pooled contrast survives that; a pooled
+  control-arm *mean* does not, and neither does anything built on one. So
+  "With control" and "With intervention" are now **empty** for a continuous
+  outcome unless the Chinn conversion is active, in which case they hold the
+  responder rates and only those. The Difference column follows: for an SMD the
+  standard-deviation string is gone — it restated the Effect column and rested
+  on the same arm means — while for an MD the difference in the outcome's own
+  units stays, because that is the pooled contrast itself.
+
+  It also retires a mislabel. `pma_sof_unit()` returns "standard deviation
+  units" for an SMD, which is right for the Difference column it was written
+  for; the same value reached the arm cells, where a control mean already
+  re-expressed on the outcome's own scale printed as "13.89 standard deviation
+  units".
+
+  With the mean-scale content gone, `keep_effect_scale = TRUE` would have
+  rendered identically to the responder-only presentation, so it now splits the
+  outcome across **two table rows** instead of stacking lines in one: the
+  effect on its own scale above, the dichotomised reading below, with
+  "Outcome and follow-up", "No of participants", "Certainty of evidence" and
+  "Plain language summary" merged over the pair and a rule drawn between them.
+  `grade_table()` renders such a pair beside single-row outcomes without
+  disturbing the certainty colouring or the footnote markers, which are indexed
+  by row.
+
+* **Core GRADE 4 Fig 2's undominated branch now answers "similar or
+  substantially different magnitudes of effect?" with the same five-rule check
+  as the dominated one, which changes *which studies an analysis is run on*.**
+  This is the largest-consequence change in this release. When the branch
+  answers "substantially different", `grade_meta()` refits the meta-analysis on
+  the low risk of bias subset (`rob_refit = TRUE`, the default), so the answer
+  decides the pooled effect estimate, the rating target, the baseline risk,
+  every other domain's judgment and the Summary of Findings table. **A stored
+  analysis re-run under this release can therefore report a different pooled
+  effect, a different certainty rating and a different set of included studies,
+  with no change to the input data.** Compare `$rob_analysis_set` and
+  `$meta$studlab` against an earlier run before comparing anything downstream
+  of them.
+
+  What moved: the branch used to judge **magnitude alone** — a zone change, or
+  a relative change beyond `rob_inflation_threshold` in *either* direction,
+  with rule 1's trivial-zone exemption. It now reads the five-rule verdict:
+  rules 3, 4 and 5 (rate down) mean substantially different, rules 1 and 2 (do
+  not rate down) mean similar. Rule 3 is gated on `small_values`, so **the
+  direction gate now gates this branch too**: a shift past the inflation
+  threshold that runs *away* from the bias-favouring direction reaches rule 2
+  and is read as "similar". Fewer analyses are restricted to the low risk of
+  bias studies than in 0.5.0, and the analyses that stop being restricted are
+  exactly those whose *low*-RoB studies showed the larger effect.
+
+  **This departs from the source, and pmatools says so on every judgment that
+  answers the node.** Core GRADE 4 words that node symmetrically — "whether low
+  and high risk of bias studies suggest similar or substantially different
+  magnitudes of effect" — and names no direction, which is why 0.5.0 read it
+  symmetrically. The symmetric reading turns out to be worse rather than merely
+  different: under it one and the same pair of estimates is "substantially
+  different" on this branch of Fig 2 and "not substantially different" one node
+  away on the dominated branch, and nothing in the output says which answer the
+  body of evidence has. `.ROB_DIRECTIONAL_NODE_NOTE` carries the reasoning into
+  the domain `notes` on **both** leaves of the node, next to
+  `.ROB_CAP_NOTE`'s and `.INCONSISTENCY_TWO_LEVEL_NOTE`'s disclosures. A
+  reviewer who wants the symmetric reading can restrict the meta-analysis to
+  the low risk of bias studies by hand and rate the restricted analysis.
+
+  Rule 5's depth does not cross with its verdict: this branch rates down
+  nothing, so a rating rule of any depth reaches the same leaf. The code tests
+  the rule verdict against `"not_serious"` rather than enumerating rating
+  levels, so a level added to the check later cannot leak a −2 into a branch
+  whose leaves are "use all studies" and "use the low risk of bias studies".
+  The internal `magnitude_substantial` field of `.assess_bias_direction()`,
+  which existed only to hold the symmetric answer, is gone; `gate_note` is now
+  returned separately, because the two branches draw a different consequence
+  from a blocked direction gate. The `flow_path` vocabulary, the
+  `pma-rob-edge-magnitude-similar` / `-different` edges and the two leaves are
+  unchanged — the same picture, answered differently. See `SPEC.md` §5.1 Step
+  2b.
+
 * **The control-arm risk is supplied once, and `threshold_baseline`, `ois_p0`
   and `baseline_risk` now inherit it from one another.** All three name the
   same quantity — the control-arm event rate — and they feed three different
@@ -902,9 +1240,102 @@
   landed on "do not rate down" with no explanation. New fact key
   `ois_sd_source`; where the OIS is still unavailable, the Fig 4 path string
   now names the input that was missing.
+* Shiny app: the **overall Indirectness rating ships preselected** to *Not
+  serious*, alongside the four PICO radios that already did. Blank used to be
+  how a reviewer accepted the worst case of those four, which meant the answer
+  almost every reviewer gives was the one answer the screen refused to show.
+  The blank was also doing a second, invisible job — it was the rationale gate,
+  because "nothing selected" was a reliable proxy for "no override intended".
+  That proxy is gone with it, so the gate now compares the rating against the
+  fold itself and asks for a written reason only where the two genuinely
+  differ. A note under the radio says which of the two is rating the domain,
+  including the case preselection creates: a reviewer who downgrades one PICO
+  element and leaves the overall rating alone is rated on the fold, not on the
+  default, until they move the radio or explain it. **The certainty rating is
+  unchanged** on the bundled CBT-I sample, and the export gate is untouched —
+  a domain is confirmed by its checkbox and by nothing else, which is exactly
+  why a preselected widget cannot open it.
+
+* **The risk-of-bias figure follows Core GRADE 4 Fig 2's shape, and the
+  five direction-of-bias rules are no longer drawn as leaves.** Below "check
+  the direction of bias" the source has exactly two boxes and two leaves: risk
+  of bias may be responsible for the apparent effect, or for the apparent lack
+  of one, so rate down; there is an apparent effect and bias would have
+  decreased it, or there is no apparent effect and bias would have increased
+  it, so do not rate down. `inst/figures/rob.svg` now draws that structure,
+  with the five rules above it as the mechanism deciding which box is reached —
+  rules 1 and 2 the do-not-rate-down box, rules 3, 4, 5 and the unassessable
+  case the rate-down box, the correspondence `R/domain_rob.R` has always
+  documented. Enumerating the rules as six leaves, which the figure did up to
+  0.5.1, erased the source's shape and left the reader without the two
+  sentences that say what the branch means. Each rule box now states its
+  condition only; the verdict, and its depth, live on the leaf.
+
+  **No judgment, rule or threshold changed** — this is the drawing, the node
+  vocabulary and the routes. What a consumer of `flow_path` sees:
+
+  | id | change |
+  |---|---|
+  | `pma-rob-leaf-rule1`…`rule5`, `rulena` | unchanged, and still emitted; they are now the intermediate layer rather than leaves |
+  | `pma-rob-node-bias-responsible`, `pma-rob-edge-rules-responsible`, `pma-rob-edge-responsible-ratedown`, `pma-rob-leaf-ratedown` | new; appended to a dominated route that rates down |
+  | `pma-rob-node-bias-conservative`, `pma-rob-edge-rules-conservative`, `pma-rob-edge-conservative-noratedown`, `pma-rob-leaf-noratedown` | new; appended to a dominated route that does not |
+  | `pma-rob-edge-magnitude-notassessable` | new; the route for a comparison that could not be made |
+  | `pma-rob-edge-appreciable-no` | **deleted**, and never emitted again |
+
+  A dominated route therefore names both the rule that fired and the leaf it
+  reached, which is more than Fig 2 itself records. Rule 5's second level is
+  annotated on the single rate-down leaf rather than split off into a leaf of
+  its own: the source has two leaves, and splitting one to carry pmatools' −2
+  would move the drawing away from the source in the act of moving it closer.
+  `.ROB_TWO_LEVEL_NOTE` remains the full statement, in the notes a reader acts
+  on.
+
+  **The deleted edge was unreachable, and one of the two paths on it was
+  mislabelled.** "Is there appreciable evidence from the low risk of bias
+  studies?" can only be answered yes below the dominance gate: not dominating
+  leaves the low-risk studies more than 45% of the weight at the default gate
+  and more than 35% at the strictest gate Core GRADE 4 discusses, at or above
+  the "35 to 45%" the same paragraph calls appreciable. Both paths that used
+  the edge now take the yes edge to the same green leaf. `n_high == 0` was the
+  mislabelled one — evidence with no high-risk study is *entirely* low risk of
+  bias, the strongest possible yes — and it reaches the leaf through
+  `pma-rob-edge-magnitude-similar`, which is exact rather than convenient:
+  with nothing to exclude the restricted estimate *is* the pooled estimate. The
+  not-assessable path keeps a distinct id, because "the question could not be
+  asked" and "the question was asked and the answer was similar" are not the
+  same finding. Its domain note no longer opens "Low-RoB studies do not provide
+  appreciable evidence", a claim the dominance arithmetic contradicts; the rest
+  of the note, and the judgment, are unchanged.
+
+  **The figure carries no footnote any more.** "pmatools' operationalisation,
+  not a reproduction" was the only place *in the drawing* that said the five
+  rules and the −2 are pmatools' own, and the closer the figure gets to the
+  source the more that claim is needed — so it moved to the prose beside the
+  figure, in `?grade_flowcharts`, rather than disappearing. The `<desc>` still
+  carries it for a reader who meets the file alone. **The Shiny app's caption
+  does not carry it yet** — `pma_algorithm_source()` names the source figure
+  and the implementing function only — so an app reader currently meets the
+  redrawn chart with no disclosure beside it; that caption is a follow-up in
+  `shiny/`.
+  `.ROB_DIRECTIONAL_NODE_NOTE` and `.ROB_TWO_LEVEL_NOTE` are untouched: they
+  are in the exported judgment notes and were never what the footnote
+  duplicated. See `SPEC.md` §5.1a.
 
 ## Bug fixes
 
+* **The Shiny app's Run analysis button did nothing at all.** On a fresh
+  session the reviewer could load data, reach Step 2 with every required field
+  already filled from the sample defaults, press Run analysis, and get no
+  result, no message, no spinner and nothing in the log. `arm_assignment_ui` is
+  the only source of `experimental_label` and `control_label`, and it lives
+  inside the "Data mapping" accordion panel, which has been closed on build
+  since the sidebar began asking one question at a time. Shiny suspends a
+  hidden output, so the two selects were never created, `input$experimental_
+  label` stayed `NULL`, and the analysis reactive hit the one exit in it that
+  returned `NULL` without saying anything. Opening the panel by hand was the
+  only way through, and nothing on screen suggested it. The output now renders
+  regardless of visibility, and that exit reports unset or duplicated arms
+  instead of returning in silence.
 * Imprecision's large-effect note called every ratio-scale effect a "relative
   risk reduction", so a pooled odds ratio of 2.33 — an increase — was reported
   as "relative risk reduction 57%". The magnitude was right (the statistic is
@@ -1027,6 +1458,51 @@
   "Treatment" as the plain-language subject. The labels are now rendered onto
   the script's `grade_table()` call; ones left at their defaults are omitted, so
   a bundle that named no arms gets the script it always did.
+* Shiny app: accepting the automated Egger test left the publication-bias
+  flowchart looking unfinished. The chart above the wizard is lit from the live
+  answers rather than from the rated `flow_path`, and "Accept the automated
+  Egger test" carries an explicit sentinel value that matched neither `"yes"`
+  nor `"no"`, so the lit trail stopped dead at the funnel-asymmetry node and no
+  leaf ever lit — for the rest of the assessment. Egger's regression is now
+  computed once and read by both the callout and the chart, which lights the
+  leaf the p value chose. A test that could not run still stops the trail at
+  the node, because that leaf genuinely is undecided. Nothing that reaches
+  `grade_meta()` changes: the sentinel still means "let `assess_pubias()`
+  decide". Alongside it, the same callout is now rendered inside the wizard
+  question that asks about the p value, not only in the Funnel sub-tab two
+  clicks away.
+* Shiny app: the Indirectness worst-case fold ranked its levels against the
+  `"no"` / `"some_concerns"` / `"serious"` vocabulary that 0.5.1 replaced. Every
+  level the four PICO answers actually produce except `"serious"` missed that
+  table, so a set of answers containing a *No* (very serious indirectness)
+  folded to nothing and was reported as *not serious* when the app compared an
+  overall rating against it.
+* **Shiny app: a confirmation the reviewer has to tick now looks like one.**
+  The Configuration tab has two confirmations that gate its Next button, and
+  only one of them was boxed — `responder_p0_confirm` was a bare checkbox in a
+  column of numeric inputs and notes, so reviewers could not tell a click was
+  required of them. All seven Step 3 confirmations are now built by one shared
+  helper and carry a `REQUIRED` mark and a lifted border until they are ticked,
+  after which the box settles back to the muted treatment it always had.
+  **No gate moved**: the same boxes gate the same buttons under the same
+  conditions, and no judgment, note or export changes.
+* **Shiny app: the block that must be answered is now the heaviest one on its
+  tab.** The `REQUIRED` mark above did not settle the complaint it was meant
+  to, because the ranking was the problem and not the wording: measured on the
+  deployed app, the read-only threshold-equivalence summary sat on a solid
+  ground behind a 4px left accent while the confirmation gating the same tab's
+  Next carried a 1px translucent outline and a near-transparent wash — the
+  heaviest block on the Configuration tab was the one with nothing to answer.
+  A left accent on a filled ground now means "answer this" and nothing else
+  wears it: the confirmation boxes take the wizard question's own weight and
+  ground, and the two derived read-only blocks that borrowed it — the
+  threshold-equivalence summary and the Imprecision tab's absolute-scale
+  reading of the relative risk reduction — become body copy under the input
+  they are derived from, distinguished by position rather than by decoration.
+  Presentation only: no gate, no id and nothing that blocks Next changes.
+* Shiny app: the orientation modal expands the abbreviation before it uses it —
+  "a systematic review and meta-analysis (SR&MA)". The sentence after it has
+  always said `SR&MA`, which until now arrived undefined.
 
 # pmatools 0.5.0
 

@@ -27,6 +27,7 @@ export_bundle(x, ...)
   unit = NULL,
   sof_notes = NULL,
   convert_smd_to_or = FALSE,
+  keep_effect_scale = FALSE,
   baseline_risk = NULL,
   threshold_label = NULL,
   chinn_invert = FALSE,
@@ -90,6 +91,11 @@ Applies to \code{sof_table.docx} only, not to the certainty appendix.}
 \item{convert_smd_to_or}{Logical. Passed to \code{\link{sof_table}} for
 continuous-outcome dichotomisation.}
 
+\item{keep_effect_scale}{Logical (default \code{FALSE}). Passed to
+\code{\link{sof_table}}: shows the outcome on its own scale AND as a
+proportion of responders in one row. Only relevant when
+\code{convert_smd_to_or = TRUE}.}
+
 \item{baseline_risk}{Numeric in (0,1). Passed to \code{\link{sof_table}}
 when \code{convert_smd_to_or = TRUE}.}
 
@@ -129,7 +135,7 @@ silently dropped from the generated script. See SPEC.md.}
 \code{\link{plot_forest}} when rendering the bundled forest plot.
 Recognised names: \code{title}, \code{label_e}, \code{label_c}, \code{xlim},
 \code{favors_left}, \code{favors_right}, \code{show_n}, \code{show_events},
-\code{addrow_above}, \code{addrow_below}.}
+\code{addrow_above}, \code{addrow_below}, \code{digits_mean}, \code{digits_sd}.}
 
 \item{rob}{Optional character vector of per-study Risk-of-Bias labels
 (length \code{length(meta_obj$studlab)} or \code{meta_obj$k}). Required

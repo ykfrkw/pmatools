@@ -55,6 +55,15 @@
 #'   \code{xlab} row (see \code{.auto_addrow_below()}). \code{NA}, a
 #'   negative value, or anything not a length-1 finite number falls back to
 #'   that automatic derivation.
+#' @param digits_mean,digits_sd Number of decimal places printed in the
+#'   per-arm \code{Mean} and \code{SD} columns of a continuous outcome
+#'   (passed to \code{\link[meta]{forest}} as \code{digits.mean} /
+#'   \code{digits.sd}). Both default to \code{1}, which is deliberately not
+#'   the pair \code{\link[meta]{forest}} defaults to on its own (\code{2} and
+#'   \code{4}): those print an SD to twice the precision of the mean it
+#'   belongs to, and neither is the precision a trial reports. \code{NA}, a
+#'   negative value, or anything not a length-1 finite number falls back to
+#'   \code{1}. Ignored for an outcome that draws no mean/SD columns.
 #' @param ... Additional arguments passed to \code{\link[meta]{forest}}.
 #'
 #' @return Invisibly NULL. Side effect: draws on the active graphics device.
@@ -74,6 +83,8 @@ plot_forest <- function(meta_obj,
                         favors_right = NULL,
                         addrow_above = 0,
                         addrow_below = NULL,
+                        digits_mean  = 1L,
+                        digits_sd    = 1L,
                         ...) {
   if (!inherits(meta_obj, "meta")) {
     rlang::abort("plot_forest: meta_obj must be a meta-analysis object.")
@@ -100,6 +111,14 @@ plot_forest <- function(meta_obj,
        !is.finite(addrow_below) || addrow_below < 0)) {
     addrow_below <- NULL
   }
+
+  # Same reasoning as the addrow_* sanitisation above, and the same failure
+  # mode: meta::forest() rejects a non-numeric digit count, and the tryCatch
+  # retry further down answers an error by stripping leftcols/leftlabs - so a
+  # bad value here would delete the very Mean and SD columns it describes
+  # instead of surfacing itself.
+  digits_mean <- .forest_digits(digits_mean)
+  digits_sd   <- .forest_digits(digits_sd)
 
   dots <- list(...)
   if (is.null(addrow_below)) {
@@ -198,6 +217,17 @@ plot_forest <- function(meta_obj,
     addrows.below.overall = addrow_below,
     ...
   )
+  # Assigned after the list literal rather than inside it, because `...` is
+  # spliced into that literal: a caller passing `digits.mean =` straight
+  # through would give `args` two elements of that name and do.call() aborts
+  # with "matched by multiple actual arguments". Membership is tested on
+  # names(dots), not with `dots$digits.mean`, because `$` on a list matches
+  # partially and would let an unrelated `digits.meanwhile` suppress ours.
+  # An explicit pass-through wins over the argument, the way label.left /
+  # label.right already behave.
+  if (!"digits.mean" %in% names(dots)) args$digits.mean <- digits_mean
+  if (!"digits.sd"   %in% names(dots)) args$digits.sd   <- digits_sd
+
   if (!is.null(label_e))      args$label.e     <- label_e
   if (!is.null(label_c))      args$label.c     <- label_c
   if (!is.null(favors_left)  && nzchar(favors_left))  args$label.left  <- favors_left
@@ -399,6 +429,17 @@ PMA_FOREST_TITLE_CLEARANCE_IN <- 0.10
 # needed here.
 .auto_addrow_below <- function(has_favors = FALSE, has_xlab = FALSE) {
   2L + as.integer(isTRUE(has_favors)) + as.integer(isTRUE(has_xlab))
+}
+
+# One decimal-place count for a forest column, sanitised. A blank spinner in a
+# host application arrives here as NA, and a user can always type a negative
+# number into one; either reaching meta::forest() costs the data columns (see
+# the call site). The documented default answers both.
+.forest_digits <- function(x, default = 1L) {
+  if (is.null(x) || length(x) != 1L) return(default)
+  x <- suppressWarnings(as.numeric(x))
+  if (is.na(x) || !is.finite(x) || x < 0) return(default)
+  as.integer(x)
 }
 
 # TRUE when x is a length>=1 non-NA character-like scalar with content

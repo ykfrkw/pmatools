@@ -99,12 +99,13 @@
 #' name in the attribute aborts rather than being ignored.
 #'
 #' The same attribute carries how a continuous outcome is presented in
-#' `summary_of_findings.docx` / `.csv`: `convert_smd_to_or`, `baseline_risk`,
-#' `threshold_label` and `chinn_invert`, each the \code{\link{sof_table}}
-#' argument of the same name. \code{\link{grade_table}} reads them per row, so
-#' one outcome can be shown as a proportion of responders while another is
-#' shown as its effect, and the generated `analysis.R` re-stamps them onto the
-#' set it rebuilds.
+#' `summary_of_findings.docx` / `.csv`: `convert_smd_to_or`,
+#' `keep_effect_scale`, `baseline_risk`, `threshold_label` and `chinn_invert`,
+#' each the \code{\link{sof_table}} argument of the same name.
+#' \code{\link{grade_table}} reads them per row, so one outcome can be shown as
+#' a proportion of responders, another as both that and its own scale, and a
+#' third as its effect alone; the generated `analysis.R` re-stamps them onto
+#' the set it rebuilds.
 #'
 #' @return Character. Absolute path to the created ZIP file.
 #'
@@ -484,6 +485,15 @@ export_bundle.pmatools_set <- function(x,
 
 # Plain-text mirror of the summary table, one row per outcome and in set order.
 # Built from the same BMJ cell helpers as the .docx so the two cannot drift.
+#
+# ONE CSV row per outcome, including an outcome the .docx draws on two rows
+# because it shows both the effect and the proportion of responders. A merged
+# cell has no meaning in CSV, so a two-row rendering here would have to either
+# repeat the outcome name, the participant count and the certainty on both rows
+# -- which reads as two outcomes to anything that groups by name -- or leave
+# them blank, which reads as missing data. The row keeps its shape instead and
+# the two scales share a cell, separated by the space every other embedded
+# newline in this file is flattened to.
 .sof_set_dataframe <- function(set, per = 1000, prediction = FALSE,
                                label_intervention = "intervention") {
   outcomes <- .set_outcome_list(set)
@@ -519,11 +529,18 @@ export_bundle.pmatools_set <- function(x,
       ))
     }
 
-    arm <- responder[[nm]]$arm
+    arm   <- responder[[nm]]$arm
+    chinn <- if (is.null(arm)) NULL else {
+      args <- responder[[nm]]$args
+      list(baseline_risk     = args$baseline_risk,
+           chinn_invert      = isTRUE(args$chinn_invert),
+           keep_effect_scale = isTRUE(args$keep_effect_scale))
+    }
     v <- .bmj_row_values(nm, g, per = per, prediction = prediction,
                          follow_up = g$follow_up, unit = g$unit,
                          cer_str = arm$cer, ier_str = arm$ier,
-                         label_intervention = label_intervention)
+                         label_intervention = label_intervention,
+                         chinn = chinn)
     data.frame(
       order            = which(set$order == nm),
       outcome          = nm,
@@ -851,6 +868,7 @@ export_bundle.pmatools_set <- function(x,
       "attr(set$outcomes[[", lit(nm), "]], ", lit(PMATOOLS_DISPLAY_ATTR),
       ") <- list(\n",
       "  convert_smd_to_or = TRUE,\n",
+      "  keep_effect_scale = ", lit(isTRUE(args$keep_effect_scale)), ",\n",
       "  baseline_risk     = ", lit(args$baseline_risk), ",\n",
       "  threshold_label   = ", lit(args$threshold_label), ",\n",
       "  chinn_invert      = ", lit(isTRUE(args$chinn_invert)), "\n",

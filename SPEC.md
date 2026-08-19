@@ -313,6 +313,25 @@ plot_forest(
 
 Since v0.4 the signature also carries display arguments used by the export bundle: `threshold_lines`, `show_n`, `show_events`, `favors_left`, `favors_right`, `addrow_above`, `addrow_below`. `addrow_below = NULL` (the default) derives the bottom spacing from the drawn content so the heterogeneity text cannot overlap the x-axis band.
 
+**`digits_mean` / `digits_sd` (v0.5.1).** The decimal places printed in the
+per-arm `Mean` and `SD` columns of a continuous outcome, passed to
+`meta::forest()` as `digits.mean` / `digits.sd`. **Both default to `1`**, which
+is deliberately not `{meta}`'s own pair (`digits.mean = 2`, `digits.sd = 4`):
+those print an SD to twice the precision of the mean it belongs to, and a
+four-decimal SD column is wide enough to squeeze the forest itself. Neither is
+a precision any trial reports. The defaults therefore **change the rendered
+output of every continuous forest plot** — no argument changes meaning, and no
+call has to be updated.
+
+`NA`, a negative value, or anything that is not a length-1 finite number falls
+back to `1` rather than reaching `meta::forest()`, for the reason the
+`addrow_*` arguments are sanitised the same way: `meta::forest()` rejects the
+value, and the retry that answers an error by stripping `leftcols`/`leftlabs`
+would then delete the very columns these digits describe. A caller may still
+pass `digits.mean` / `digits.sd` through `...`; the explicit pass-through wins,
+and does not collide with the argument. Both are ignored for an outcome that
+draws no mean/SD columns.
+
 **`title` placement (v0.5.1).** The title is drawn on its own line(s) above the
 column headers, word-wrapped to the device width. It is **not** passed to
 `meta::forest()` as `smlab`: `{meta}` draws `smlab` inside the header row,
@@ -464,9 +483,37 @@ grade_meta(
   pubias_funnel_asymmetry          = NULL,
   pubias_rationale                 = NULL,   # REQUIRED with a scalar pubias_funnel_asymmetry
   pubias_unpublished               = NULL,
-  pubias_registry_complete         = NULL
+  pubias_registry_complete         = NULL,
+
+  # --- Rare events (shiny/SPEC.md §3.4.14) ---
+  rare_flow                        = FALSE,
+  rare_one_arm_total_zero          = FALSE,
+  rare_method                      = NULL    # recorded, never rated on
 ) -> S3 "pmatools" object
 ```
+
+**Rare events change three computations and no decision rule.** The two logical
+arguments are `rare_event_diagnostics()` fields, passed explicitly rather than
+re-detected here — a rating must not change because a detector's default
+threshold moved. Under `rare_flow`:
+
+| Domain | What changes | What does not |
+|---|---|---|
+| Imprecision | the OIS is computed and compared on **total events** rather than participants (`.calc_ois(event_basis = TRUE)`); the `ois_basis` fact names the basis on every path | Fig 4's rule. Whether the CI crosses the chosen threshold is still the question |
+| Inconsistency | the automated path reports **not assessable** and records **no I², τ² or Q**: τ² is badly estimated on sparse binary data and I² inherits it | the scalar override and the manual flowchart, which run first and are untouched |
+| Publication bias | Fig 5's Q2 answers "not feasible" at **any k**, so the assessment takes the branch k < 10 takes (`assess_pubias(rare_flow =)`) | Fig 5 itself. No node is added; Q1 and the registry short-circuit are unchanged |
+
+`rare_one_arm_total_zero` makes **Imprecision not assessable**: with no events
+in one arm anywhere there is no finite effect and no interval to compare with a
+threshold. **None of the four rates anything down.** Withdrawing an invalid
+computation cannot be grounds for a downgrade, and Core GRADE has no sixth
+domain for sparse data.
+
+`rare_method` is a `run_rare_ma()` method id. It is read by nothing that rates:
+it is recorded as `$rare` on the returned object (with the method label, the
+naming sentence, and `PMA_RARE_NO_CC_NOTE` — the statement that no 0.5
+continuity correction was applied), so the app can name the method where the
+rating is set up and `export_bundle()` can print it in `results.txt`.
 
 `threshold_scale` values:
 
@@ -771,6 +818,7 @@ sof_table(
   follow_up  = NULL,                      # v0.5.0: time frame, BMJ style
   unit       = NULL,                      # v0.5.0: unit of a continuous difference
   convert_smd_to_or = FALSE,
+  keep_effect_scale = FALSE,              # v0.6: both presentations in one row
   baseline_risk     = NULL,
   threshold_label   = NULL,
   chinn_invert      = FALSE,              # v0.4: flip SMD sign before Chinn
@@ -790,7 +838,11 @@ sof_table(
 
 **Analysis-set footnote.** When the rated analysis is a low-RoB refit (§5.1), the table carries a footnote saying so. `grade_table()` numbers the marker per row, so a table mixing analysis sets says which rows were restricted.
 
-**Arm-level columns for continuous outcomes [v0.5.1].** Both layouts previously drove their two arm cells off `baseline_risk`, which is meaningful only for a binary outcome with a relative effect measure, so a `metacont` object filled them with `-`. As of v0.5.1 the control cell is the **inverse-variance weighted mean of the control arms** (weights `n / SD²`, the reciprocal of the variance of each control mean) and the intervention cell is that value plus the pooled difference, its interval coming from the pooled difference alone. The control mean is pooled with fixed weights whatever model produced the effect estimate: honouring the parent model's `random` setting would need a τ² for the between-study distribution of arm-level means, a different quantity from the contrast-level τ² that model estimated. An **SMD** is multiplied by the pooled within-arm SD of the control arms (Cochrane Handbook 15.5.3.2) before being added, since SD units cannot be added to a mean on the original scale; the Difference column keeps the SMD in SD units and does **not** borrow the outcome's `unit` there. Both derivations are footnoted. In the GRADEpro layout the arm headers fall back to "With control" / "With intervention" when the cells hold means, because the rate wording and the `per` denominator would misdescribe them; **binary tables are byte-for-byte unchanged**. The Chinn dichotomisation keeps its own cells and its own footnote.
+**Arm-level columns for continuous outcomes: removed [v0.6].** A continuous meta-analysis routinely pools endpoint scores together with change-from-baseline scores. The pooled *contrast* survives that; a pooled *control-arm mean* does not, and neither does anything built on one. So a continuous outcome now shows **nothing** in "With control" and "With intervention" unless the Chinn conversion is active, in which case those cells hold the responder rates and only those. The Difference column follows the same rule: for `sm = "SMD"` the standard-deviation string is gone (it restated the Effect column and rested on the same arm means), while for `sm = "MD"` the difference in the outcome's own units **stays**, because that is the pooled contrast itself and mixing endpoint with change scores does not invalidate it.
+
+This also retired a mislabel. `pma_sof_unit()` returns `"standard deviation units"` for an SMD, which is right for the Difference column it was written for; the same value reached the arm cells, where a control mean already re-expressed on the outcome's own scale by the reference SD printed as *"13.89 standard deviation units"*.
+
+The rest of this note describes what those cells held **before v0.6** and is kept because the derivation still governs nothing else in the table. The control cell was the **inverse-variance weighted mean of the control arms** (weights `n / SD²`, the reciprocal of the variance of each control mean) and the intervention cell is that value plus the pooled difference, its interval coming from the pooled difference alone. The control mean is pooled with fixed weights whatever model produced the effect estimate: honouring the parent model's `random` setting would need a τ² for the between-study distribution of arm-level means, a different quantity from the contrast-level τ² that model estimated. An **SMD** is multiplied by the pooled within-arm SD of the control arms (Cochrane Handbook 15.5.3.2) before being added, since SD units cannot be added to a mean on the original scale; on this path — the outcome presented as its effect, `convert_smd_to_or = FALSE` — the Difference column keeps the SMD in SD units and does **not** borrow the outcome's `unit` there. Both derivations are footnoted. In the GRADEpro layout the arm headers fall back to "With control" / "With intervention" when the cells hold means, because the rate wording and the `per` denominator would misdescribe them; **binary tables are byte-for-byte unchanged**. The Chinn dichotomisation keeps its own cells and its own footnote, and takes the Difference column with it (below).
 
 **Per-domain rate-down footnotes [v0.5.1].** `sof_table()`, `grade_table()` (both layouts) and `evidence_profile()` render the structured domain facts of §4.15 as numbered footnotes for the domains that pulled the rating down, with the marker on the certainty cell — after the symbol in the GRADEpro layouts, and beside the domain name inside the BMJ "Due to serious risk of bias [1] …" sentence. In `grade_table()` these continue the same `[n]` register as the per-outcome analysis-set notes and name the outcome they belong to, so one footer never shows two different `[1]`s; the analysis-set and publication-bias sentences keep their existing numbering and wording.
 
@@ -826,14 +878,38 @@ When `convert_smd_to_or = TRUE`:
   p_e_hi      <- baseline_risk * or_hi / (1 + baseline_risk * (or_hi - 1))
   ```
 - SoF table shows: Outcome, k, N, Risk with &lt;control&gt; (X per `per`), Risk with &lt;intervention&gt; (Y per `per`, [Y_lo; Y_hi]), Effect (SMD ...), Certainty.
-- `chinn_invert = TRUE` flips the SMD sign before applying Chinn's formula, so a negative-is-better SMD yields OR > 1 in the dichotomised rate columns.
+- `chinn_invert = TRUE` flips the SMD sign before applying Chinn's formula, so a negative-is-better SMD yields OR > 1 in the dichotomised rate columns. The CI bounds are swapped with the sign, so `or_lower ≤ or_upper` and the reported interval is never backwards.
 - Adds a footer note row: *"Continuous outcome dichotomized via Chinn's formula (log OR = SMD × π/√3). Control event rate user-specified{{; threshold: <threshold_label>}}."*
+
+**The three proportions are computed once [v0.6].** `.chinn_rates(meta_obj, baseline_risk, invert)` returns `p1` / `p1_lo` / `p1_hi` and the odds-ratio triple they came from, or `NULL` when any ingredient is missing. Three cells of the row are functions of exactly those numbers — both arm cells and the Difference — and the derived odds ratio comes from the same call, so each of them re-deriving the conversion is how they end up disagreeing after one is edited. `.format_ier_chinn()` is a formatter over it and its output is unchanged.
+
+**The Difference column is an absolute risk difference [v0.6].** On the converted path it reports what the two arm cells differ by, per `per` patients, in the same wording as every other absolute difference in the table: *"472 more per 1000 (393 more to 536 more)"*. It is built from `.difference_string()` with the same arguments the binary branch uses, so the direction words ("fewer" / "more", chosen per value from its own sign), the low-to-high CI ordering and the `per` label are identical for a converted row and a binary one.
+
+Before v0.6 this column kept the pooled estimate in standard deviation units, on the reasoning that the implied risk difference is not the pooled continuous difference. It is not — but the column is headed "Absolute effects (95% CI) — Difference" and sits between two cells reading "300 per 1000" and "772 per 1000", so an SD-unit string there was not an absolute effect and did not subtract to the two numbers beside it. That the difference is derived rather than fitted is a footnote's job, not a reason to print a different quantity.
+
+**The Effect column gains the derived odds ratio [v0.6].** A second line under the pooled estimate: *"Derived odds ratio 1.41 (0.85 to 2.35)"* — `exp(SMD × π/√3)` straight from `.chinn_rates()`, with bounds from the same triple. A second line and not a second column: it is the same pooled estimate read on another scale, and a column would present it as an independent result. Rendered in both layouts, with the layout's own CI separator.
+
+**Why the odds ratio and not the risk ratio.** A risk ratio is `p1 / p0`, which exists only after the assumed control proportion has been laid on top of the formula's output; the odds ratio *is* the formula's output and moves with nothing but the pooled estimate. Printing it puts one fewer assumption between the estimate and the number on the page. The footnote draws the line explicitly: the odds ratio does not depend on the assumed proportion, while the two arm rates and the Difference column's risk difference do.
+
+**It rides UNDER the pooled estimate, never in place of it.** The Effect column's header is built from `meta_obj$sm`, so a cell holding only the derived odds ratio would sit beneath a heading reading "Standardized mean difference (95% CI)" — and the estimate every domain was rated on would be missing from the table that reports the certainty. The single-row and two-row presentations therefore differ in **layout only**: `"responder"` stacks the two lines in one cell, `"both"` puts them on two rows. The content is identical.
+
+**Everything here is DERIVED, and the footnote says so.** `.chinn_note()` states that the derived quantities come from the pooled estimate through Chinn's formula rather than from a fit and carry its logistic latent-variable assumption, and it separates the two kinds: the derived **odds ratio** comes from the formula alone and does **not** move with the assumed control responder proportion, whereas the two arm rates and the Difference column's absolute risk difference do — and it names that proportion. In a combined table the proportion can differ per row, so it is named in the per-row note (§4.9) instead.
+
+**`keep_effect_scale = TRUE` splits the outcome across two table rows [v0.6].** Read only when `convert_smd_to_or = TRUE`. This is the presentation Core GRADE 6 recommends. One outcome stays **one logical row**, rendered as **two table rows** so the two readings can be told apart at a glance:
+
+- the **top** row is the effect on its own scale: the pooled estimate in the Effect cell, the three absolute-effect cells empty (an MD keeps its own-units difference here);
+- the **bottom** row is the dichotomised reading: the derived odds ratio, the two responder rates and the per-`per` absolute risk difference;
+- the columns that do not split — "Outcome and follow-up", "No of participants", "Certainty of evidence" and "Plain language summary" — are **`vmerge`d** across the pair, so the outcome still reads as one row and its certainty cell is coloured once;
+- a rule is drawn between the two rows, in the weight the table already uses for its body borders;
+- `"effect"` and `"responder"` stay single-row: the top row alone and the bottom row alone, except that the single-row `"responder"` cell stacks the pooled estimate and the derived odds ratio together (see above — the odds ratio never replaces the estimate).
+
+This must survive `grade_table()`, where a `"both"` outcome sits beside single-row `"effect"` and `"responder"` outcomes and the certainty colouring, the footnote markers and the row striping are all indexed by row. That mix is tested explicitly.
 
 When `convert_smd_to_or = FALSE` (default), behavior is identical to v0.1.0.
 
-**The conversion is a presentation, not a rating input.** `convert_smd_to_or` reaches `sof_table()` and `grade_table()` and nothing else — `grade_meta()` never sees it, and Imprecision is rated on the SMD/MD against `threshold_cont` whichever way this argument is set. The package default is and stays `FALSE`; as of the Shiny app's `input$sof_presentation` radio the app default matches it, where the app previously defaulted the conversion on.
+**The conversion is a presentation, not a rating input.** `convert_smd_to_or` and `keep_effect_scale` reach `sof_table()` and `grade_table()` and nothing else — `grade_meta()` never sees them, and Imprecision is rated on the SMD/MD against `threshold_cont` whichever way they are set. Both package defaults are and stay `FALSE`; as of the Shiny app's `input$sof_presentation` radio the app default matches them, where the app previously defaulted the conversion on.
 
-**Per-row, in a combined table [v0.5.1].** `sof_table()` takes the four arguments above, which is right for a table of one row. `grade_table()` — the only Summary of Findings a multi-outcome bundle carries — reads the same four **per row** off each rated object's `"pmatools_display"` attribute (§4.8, `PMATOOLS_RESPONDER_FIELDS`), so one continuous outcome can be shown as responders while another is shown as its effect and a binary one is untouched. They ride on the attribute rather than in `grade_meta_multi()`'s `common` / `per_outcome` because `grade_meta()` takes none of them and its own `baseline_risk` means the control-arm event rate, not the proportion of control patients who respond. Details in §4.9.
+**Per-row, in a combined table [v0.5.1, five fields as of v0.6].** `sof_table()` takes the arguments above, which is right for a table of one row. `grade_table()` — the only Summary of Findings a multi-outcome bundle carries — reads the same five **per row** off each rated object's `"pmatools_display"` attribute (§4.8, `PMATOOLS_RESPONDER_FIELDS`), so one continuous outcome can be shown as responders, another as both that and its own scale, a third as its effect alone, and a binary one is untouched. A `keep_effect_scale` row and an unconverted row share the same columns without either changing what the other prints. They ride on the attribute rather than in `grade_meta_multi()`'s `common` / `per_outcome` because `grade_meta()` takes none of them and its own `baseline_risk` means the control-arm event rate, not the proportion of control patients who respond. Details in §4.9.
 
 ### 4.7 `chinn_smd_to_or()` [new helper, exported]
 
@@ -1042,7 +1118,7 @@ Directory names carry the set order as a zero-padded numeric prefix. A non-ASCII
 
 **Per-outcome display arguments [v0.5.1].** `rob`, `forest_display`, `forest_display_rob`, `rare`, `rare_forest_display` and `pubias_missing_df` describe **one analysis**. A set built by `grade_meta_multi()` in one call can answer for all of them at once; a set assembled outcome by outcome (which is what the Shiny app does) cannot. Such a caller attaches them to each rated object as the `"pmatools_display"` attribute — a named list holding any of `forest_display`, `forest_display_rob`, `rare`, `rare_forest_display`, `pubias_missing_df` — and this method reads them per outcome, falling back to the argument of the same name for an outcome that carries none. The same arrangement already lets `follow_up` / `unit` differ per row (§4.6, `.display_arg_from_outcomes()`).
 
-The same attribute also carries **how a continuous outcome is presented** in `summary_of_findings.docx` / `.csv`: `convert_smd_to_or`, `baseline_risk`, `threshold_label` and `chinn_invert`, each the `sof_table()` argument of the same name (`PMATOOLS_RESPONDER_FIELDS`). `grade_table()` reads them per row (§4.9). They are not `grade_meta_multi()` arguments: `grade_meta()` takes none of them, and its own `baseline_risk` is a different quantity.
+The same attribute also carries **how a continuous outcome is presented** in `summary_of_findings.docx` / `.csv`: `convert_smd_to_or`, `keep_effect_scale`, `baseline_risk`, `threshold_label` and `chinn_invert`, each the `sof_table()` argument of the same name (`PMATOOLS_RESPONDER_FIELDS`). `grade_table()` reads them per row (§4.9). They are not `grade_meta_multi()` arguments: `grade_meta()` takes none of them, and its own `baseline_risk` is a different quantity.
 
 An unrecognised name in the attribute **aborts**, and so does an attribute that is not a fully named list. A misspelt field is read by nothing, so the artifact it was meant to shape would be written as if it had never been supplied — the same silent-drop failure `grade_args` name checking exists to prevent (§4.8.1).
 
@@ -1103,6 +1179,9 @@ g <- grade_meta(
   pubias_small_industry   = "{{pubias_small_industry}}",
   pubias_funnel_asymmetry = {{pubias_funnel_expr}},
   pubias_unpublished      = {{pubias_unpub_expr}},
+  rare_flow               = {{rare_flow_arg}},
+  rare_one_arm_total_zero = {{rare_one_arm_zero_arg}},
+  rare_method             = {{rare_method_arg}},
   outcome_name            = "{{outcome_name}}"
 )
 
@@ -1247,9 +1326,11 @@ grade_report(
 
 Passing a `pmatools_set` uses the set's `order` for the row order and its `primary` for grouping; the named-list API is unchanged. In the BMJ style, per-outcome `follow_up` / `unit` recorded by `grade_meta_multi()` are picked up automatically, and a table mixing effect measures keeps a generic Effect header plus a footnote pointing at the per-cell measure names.
 
-**Presenting a continuous outcome as a proportion of responders, per row [v0.5.1].** `grade_table()` has no `convert_smd_to_or` argument, because the answer is not one per table. It reads `convert_smd_to_or`, `baseline_risk`, `threshold_label` and `chinn_invert` off each rated object's `"pmatools_display"` attribute (§4.6, §4.8) and applies them **row by row**, in both layouts. A converted row's two arm columns hold the dichotomised rates with the same `.format_cer()` / `.format_ier_chinn()` numbers `sof_table()` produces, marked `*`; its Difference column keeps the continuous estimate, and the arm-derivation footnote is not written for it. In the GRADEpro layout a converted row counts as a *rate* row for the arm-header vote, since its cells hold event rates again.
+**Presenting a continuous outcome as a proportion of responders, per row [v0.5.1].** `grade_table()` has no `convert_smd_to_or` argument, because the answer is not one per table. It reads `convert_smd_to_or`, `keep_effect_scale`, `baseline_risk`, `threshold_label` and `chinn_invert` off each rated object's `"pmatools_display"` attribute (§4.6, §4.8) and applies them **row by row**, in both layouts. A converted row's two arm columns hold the dichotomised rates with the same `.format_cer()` / `.format_ier_chinn()` numbers `sof_table()` produces, marked `*`; its Difference column holds the per-`per` risk difference between them and its Effect column the pooled estimate with the derived odds ratio under it, again identical to `sof_table()`'s. A row asking for `keep_effect_scale` takes two table rows, with everything that does not split merged over the pair. In the GRADEpro layout a responder-only row counts as a *rate* row for the arm-header vote, since its cells hold event rates again.
 
-The `*` footnote explaining Chinn's formula is written **once when at least one row used the conversion, and not at all when none did**. It omits the direction and the threshold that `sof_table()`'s single-row version weaves in, because a combined table can hold rows converted in opposite directions against different thresholds; each converted row states its own on a following line keyed by outcome name (`[Depression] Responder presentation: OR direction inverted (OR > 1 = treatment better). Threshold definition: …`), the same shape as the per-outcome publication-bias sentences of the same footer.
+A `keep_effect_scale` row behaves exactly as it does in `sof_table()`: two lines per arm cell, two lines in the Difference cell, the measure-neutral arm headers, the arm-derivation footnote written for it after all, and the responder-only degradation with its own reason keyed to the row. Rows presented differently share the columns without either changing what the other prints — a `keep_effect_scale` row next to an unconverted row leaves the unconverted row's Effect, Difference and arm cells byte-for-byte what a table of that row alone would print.
+
+The `*` footnote explaining Chinn's formula is written **once when at least one row used the conversion, and not at all when none did**. It omits the direction, the assumed responder proportion and the threshold that `sof_table()`'s single-row version weaves in, because a combined table can hold rows converted in opposite directions, against different proportions and different thresholds; each converted row states its own on a following line keyed by outcome name (`[Depression] Responder presentation: OR direction inverted (OR > 1 = treatment better). Assumed control responder proportion: 0.3. Threshold definition: …`), the same shape as the per-outcome publication-bias sentences of the same footer. A `keep_effect_scale` row adds that its arm columns hold two scales.
 
 **A row that cannot be converted falls back; it does not take the table down.** `sof_table()` **aborts** when `convert_smd_to_or = TRUE` and the summary measure is not SMD/MD or `baseline_risk` is not in (0, 1) — its table *is* that row, so with the conversion refused there is nothing left to render, and that behaviour is unchanged. In `grade_table()` the same conditions (plus a missing pooled estimate) leave the row in its **unconverted** presentation and add the reason to the numbered per-row register, so the marker sits on the outcome name: *"The responder presentation was asked for but could not be applied: …. This row shows the unconverted presentation instead."* One outcome must not cost the reviewer the whole document. A row can therefore carry more than one `[n]` marker — the analysis-set note and this one — and `disp()` renders them as `Mortality [1][2]`.
 
@@ -1504,20 +1585,34 @@ If the weight share cannot be computed the count share is used and the notes say
 | 2 | `za == zl`, non-trivial, inflation ≤ `rob_inflation_threshold` | `"not_serious"` |
 | 3 | `za == zl`, non-trivial, inflation > `rob_inflation_threshold` | `"serious"` (−1) |
 | 4 | `za != zl`, no sign flip across null | `"serious"` (−1) |
-| 5 | `za != zl`, sign flip (`above` ↔ `below`) | `"serious"` (−1) |
+| 5 | `za != zl`, sign flip (`above` ↔ `below`), threshold supplied | `"very_serious"` (−2) |
+| 5 | `za != zl`, sign flip (`above` ↔ `below`), no threshold supplied | `"serious"` (−1) |
 
-Rule 5 rated down **two** levels up to v0.4. Since v0.5.0 every automated risk-of-bias path is capped at one level: Core GRADE 4 describes no two-level risk-of-bias downgrade (every leaf of Fig 2 reads "rate down" / "do not rate down"), and `.ROB_CAP_NOTE` is appended to the judgment note wherever the cap bites. `"very_serious"` stays reachable only through the scalar `rob` override, which requires `rob_rationale`.
+**Rule 5 rates down two levels, and that departs from the source.** Core GRADE 4 describes no two-level risk-of-bias downgrade: every leaf of Fig 2 reads "rate down" / "do not rate down", and the only "two levels" in the paper is about rating *up* observational evidence. Rule 5 rated down two up to v0.4; v0.5.0 capped it at one on exactly that reading; the cap is retracted for this one rule.
 
-`inflation_ratio = (|TE_all| - |TE_low|) / |TE_low|` is evaluated **only** when the shift runs in the bias-favouring direction implied by `small_values`; a deflation in that direction never triggers a downgrade. `small_values` is required (§4.5.1a), so the direction is always the reviewer's declared one: the `|TE_all| > |TE_low|` fallback that stood in for it up to v0.5.0 — and the warning saying that the fallback had decided the downgrade — are gone. When the direction gate blocks a downgrade that the inflation threshold would otherwise have caused, the notes say so explicitly, including the direction reasoning, so readers do not conclude the threshold was ignored (v0.4.0).
+The reasoning, stated here rather than hidden because the source says otherwise: rule 5 is not "the estimate moved when the high-RoB studies were dropped" — that is rule 3 and rule 4, which still rate down one level and are unchanged. Rule 5 fires only when the pooled estimate sits beyond the chosen threshold on one side of the null and the estimate restricted to the low/some-concerns-RoB studies sits beyond it on the *other*. The direction of the effect is then something the high-RoB studies produced, and reporting such a body of evidence as moderate certainty overstates it. `.ROB_TWO_LEVEL_NOTE` states the departure in the judgment note wherever the branch fires, so no reader meets the −2 without the reasoning.
 
-When `threshold_internal` is NULL/NA/≤ 0 the trivial zone collapses to `{0}`, so only rule 5 can fire.
+**The two-level result requires a supplied threshold.** Without one the trivial zone collapses to `{0}` (below), so "opposite sides of the null" degrades to "opposite signs", which two near-null estimates can satisfy by an arbitrarily small movement — precisely the noise the ±Threshold zones exist to exclude. On that path rule 5 still fires, and still rates down, but one level, with `.ROB_SIGN_FLIP_NO_THRESHOLD_NOTE` saying why and how to reach −2.
 
-**Step 2b — dominated = No.** **This branch never rates the domain down.** It decides which studies the analysis should use:
+Every other automated risk-of-bias path still stops at `"serious"` (−1) — rules 3 and 4, the all-studies-high-RoB case, and the not-assessable bails — and `.ROB_CAP_NOTE` is appended where that cap bites. The scalar `rob` override, which requires `rob_rationale`, remains the way to record a judgment the flowchart does not reach, in either direction.
 
-| "Substantial difference between high- and low-RoB estimates?" | `analysis_set` |
-|---|---|
-| Yes (a zone change, i.e. rule 4/5, or a bias-favouring inflation beyond `rob_inflation_threshold`) | `"low_only"` |
-| No | `"all"` |
+`inflation_ratio = (|TE_all| - |TE_low|) / |TE_low|` is evaluated **only** when the shift runs in the bias-favouring direction implied by `small_values`; a deflation in that direction never triggers a downgrade. `small_values` is required (§4.5.1a), so the direction is always the reviewer's declared one: the `|TE_all| > |TE_low|` fallback that stood in for it up to v0.5.0 — and the warning saying that the fallback had decided the downgrade — are gone. When the direction gate blocks a downgrade that the inflation threshold would otherwise have caused, the notes say so explicitly, including the direction reasoning, so readers do not conclude the threshold was ignored (v0.4.0). The gate applies to **both** branches of Fig 2, because Step 2b reads this same rule verdict — see below.
+
+When `threshold_internal` is NULL/NA/≤ 0 the trivial zone collapses to `{0}`, so rule 5 is the only zone-change rule that can fire — and, per the paragraph above, it rates down one level rather than two on that path.
+
+**Step 2b — dominated = No.** **This branch never rates the domain down.** It decides which studies the analysis should use, and it decides it with **the same five-rule check as Step 2a** — the verdict is read as a leaf rather than as a downgrade:
+
+| Rule reached by the Step 2a check | "Similar or substantially different magnitudes of effect?" | `analysis_set` |
+|---|---|---|
+| 3, 4, 5 (rate down) | substantially different | `"low_only"` |
+| 1, 2 (do not rate down) | similar | `"all"` |
+| none — the check bailed out (`rule` is `NA`) | never asked; the route takes the magnitude node's third edge, `pma-rob-edge-magnitude-notassessable`, to the same leaf as *similar* (§5.1a) | `"all"` |
+
+Two consequences follow from reading the rule verdict and both are load-bearing.
+
+**The `small_values` direction gate gates this branch too (current development version).** A shift beyond `rob_inflation_threshold` that does not run in the bias-favouring direction reaches rule 2, so it is now **similar** where it used to be substantially different, and the analysis keeps every study where it used to be restricted to the low-RoB ones. **This departs from the source, deliberately.** Core GRADE 4 words the node symmetrically — "whether low and high risk of bias studies suggest similar or substantially different magnitudes of effect" — and names no direction; pmatools answers it directionally because the symmetric reading makes one and the same pair of estimates "substantially different" on this branch of Fig 2 and "not substantially different" one node away on the dominated branch, with nothing in the output to say which answer the body of evidence has. `.ROB_DIRECTIONAL_NODE_NOTE` states the departure in the notes on **both** leaves of the node, so no reader meets the verdict without the reasoning. Up to and including v0.5.0 the branch judged magnitude alone (a zone change, or `|relative change| > rob_inflation_threshold` in either direction, with rule 1's trivial-zone exemption).
+
+**Rule 5's depth does not cross with its verdict.** The branch has no levels to rate down, only a leaf to pick, so every rating rule collapses onto `"low_only"`. The code tests the rule verdict against `"not_serious"` rather than enumerating the rating levels, which is what keeps a level added to the check later from leaking a `-2` into a branch whose leaves are "use all studies" / "use the low risk of bias studies".
 
 Consequence (breaking in v0.5.0): a body of evidence in which a *minority* of the weight is at high risk of bias can no longer be downgraded for risk of bias.
 
@@ -1526,6 +1621,90 @@ Consequence (breaking in v0.5.0): a body of evidence in which a *minority* of th
 The object then carries `$meta` (rated analysis), `$meta_full` (all studies), `$rob_analysis_set` and `$rob_refit` — see §4.5.
 
 **Two index spaces, one mapping.** The Fig 2 maths runs in **k-space** (length `meta_obj$k`, the estimable studies), whereas `rob_overrides` keys and `update.meta(subset = )` live in **studlab space** (length `meta_obj$studlab`). The two differ whenever {meta} drops a study from the pool — a trial with missing results, a double-zero trial under `method = "Inverse"`. `R/domain_rob.R` resolves the mapping **once per `assess_rob()` call** in `.rob_alignment()`, and `.rob_expand()` / `.rob_contract()` move vectors between the spaces, so nothing re-derives it. The resolver never guesses: it tries `length(studlab) == k`, then `!is.na(TE)`, then `is.finite(TE)`, and unless one of them reproduces exactly `k` rows it returns `NULL` and the caller keeps its existing abort/skip behaviour. `attr(<rob domain row>, "high_idx")` is studlab-aligned, which is what `update.meta(subset = )` needs.
+
+### 5.1a Risk of bias — the drawing (`inst/figures/rob.svg`)
+
+The figure is not decoration: `.flowchart_rob()` emits a `flow_path` fact naming
+the node ids the assessment traversed, `shiny/www/flowchart.js` lights them, and
+`?grade_flowcharts` renders the same file unlit. `.ROB_FIG2_NODE_IDS`
+(`R/domain_rob.R`) and `tests/testthat/test-flowchart-nodes.R` hold the constant
+and the SVG to a 1:1 correspondence in both directions, so a branch added
+without being drawn fails the build. **That safety net means the SVG, the
+constant and every `flow_path` emit site move in one commit or none.**
+
+**The figure follows the source's shape, and the five rules are not leaves.**
+Below "Check the direction of bias" Core GRADE 4 Fig 2 has exactly two boxes and
+two leaves: risk of bias may be responsible for the apparent effect *or* for the
+apparent lack of one → **rate down**; there is an apparent effect and bias would
+have decreased it *or* there is no apparent effect and bias would have increased
+it → **do not rate down**. pmatools draws that structure. The five direction
+rules sit **above** those boxes as the mechanism deciding which one is reached —
+rules 1–2 land on the do-not-rate-down box, rules 3–5 on the rate-down box, the
+correspondence `R/domain_rob.R` has always documented. Enumerating the rules as
+six leaves, which the figure did up to this change, erased the source's shape
+and left the reader without the two sentences that explain what the branch
+means.
+
+**Rule 5's second level is an annotation on the single red leaf, not a leaf of
+its own.** The source's leaves are two — "rate down" and "do not rate down" —
+and splitting the red one to carry pmatools' −2 would move the drawing away from
+the source in the act of moving it closer. The leaf therefore stays single and
+carries the note; §5.1's `.ROB_TWO_LEVEL_NOTE` remains the full statement in
+prose, so the reader who acts on the judgment always meets the reasoning even
+though the figure only flags it.
+
+**The "appreciable evidence = no" edge is deleted, because it is unreachable.**
+Reaching the non-dominated branch at all means `w_high < rob_dominant_threshold`
+(default 0.55), hence a low-RoB weight share above 0.45; Core GRADE 4 puts the
+appreciable threshold at 35–45%. Across the whole range the source discusses —
+up to a 65% dominance threshold, leaving a 35% low-RoB share — the answer is
+always yes, so the node keeps its question and loses its second answer.
+
+Two `flow_path` emit sites used that edge and both re-route to the **green leaf**
+through `edge-appreciable-yes`:
+
+| case | why it was on the "no" edge | where it goes |
+|---|---|---|
+| `n_high == 0` | mislabelled: with no high-RoB study the evidence is *entirely* low-RoB, which is the strongest possible yes | the yes edge, correcting the route as well as the drawing |
+| `!assessable` (the high-vs-low comparison cannot be made) | the magnitude question was never asked | the yes edge, **keeping its own edge id** |
+
+The not-assessable route keeps a distinct id rather than being folded into
+`edge-magnitude-similar`: "the question could not be asked" and "the question was
+asked and the answer was similar" reach the same leaf but are not the same
+finding, and `flow_path` is the record of which one happened. The distinction
+lives in the id and in the notes, not in a shape the source does not have.
+
+**Node ids are added, never replaced.** `pma-rob-leaf-rule1`…`rule5`, `rulena`
+stay as the intermediate layer and the two source leaves get new ids, so a lit
+path shows both which rule fired and which leaf it reached — more than the
+source figure records, without changing what the figure looks like. The layer
+below the rules is `pma-rob-node-bias-responsible` →
+`pma-rob-leaf-ratedown` (rules 3, 4, 5 and the unassessable case) and
+`pma-rob-node-bias-conservative` → `pma-rob-leaf-noratedown` (rules 1 and 2),
+each reached by an edge of its own (`pma-rob-edge-rules-responsible` /
+`-conservative`, `pma-rob-edge-responsible-ratedown` /
+`pma-rob-edge-conservative-noratedown`). The verdict is tested against
+`"not_serious"` rather than by enumerating the rating levels, so a level added
+to the five-rule check later cannot need a third leaf on a figure whose source
+has two. The not-assessable route's own id is
+`pma-rob-edge-magnitude-notassessable`.
+
+**The figure carries no footnote, and the prose beside it carries the claim.**
+The "pmatools' operationalisation, not a reproduction" footnote is removed. It
+was the only place *in the drawing* that said the five rules and the −2 are
+pmatools' own, and the closer the figure gets to the source the more that claim
+is needed — so it moves to the prose beside the figure rather than disappearing.
+In the package that prose is `?grade_flowcharts`, which states it for all four
+figures and marks this one as the figure that no longer says it itself; the
+`<desc>` keeps it too, for a reader who meets the file alone.
+`.ROB_DIRECTIONAL_NODE_NOTE` and `.ROB_TWO_LEVEL_NOTE` are unaffected: they are
+in the exported judgment notes and were never what the footnote duplicated.
+
+In the app the claim rides on `pma_algorithm_source()`, whose
+`PMA_FLOWCHART_FIGS` entry for this domain gains a `departure` sentence
+appended to the provenance line. Only a chart that departs from its source
+carries one — the other three say nothing extra — so the sentence stays a
+signal rather than boilerplate under every figure.
 
 ### 5.2 Inconsistency — BMJ Core GRADE 3 flowchart (v0.2)
 
@@ -1853,6 +2032,26 @@ What the trim-and-fill computation does supply is one of the numbers that answer
 - **Rule 1 of §5.1 has no counterpart** — this comparison is given no threshold, so a pair of near-null estimates can report a large percentage. `.pubias_trimfill_line()` prints both estimates beside the percentage so a reader can see that is what happened, and labels the whole sentence "reference only, rates nothing".
 - Unassessable inputs (either estimate non-finite, or `|TE_adjusted|` at or below 1e-9) return `assessable = FALSE` and are reported as *not assessable*, never as *no concern*. An unrecognised `small_values` is an error.
 
+### 5.5b Publication bias — the reference-tab status dots (0.5.1)
+
+The same principle as §5.5a, applied to three diagnostics rather than one. A host application that shows the funnel plot, the trim-and-fill funnel and a missing-results table on separate tabs shows the reviewer one of them at a time, and a reviewer who never opens the other two never learns they disagreed. `R/pubias_status.R` and `R/pubias_missing.R` supply a one-glyph verdict per tab. **None of them rates anything**: no value returned here reaches `assess_pubias()` or `grade_meta()`, and `test-pubias_status.R` is the standing structural guard on that.
+
+```r
+.pubias_funnel_dot(p, feasible, k_ok, rare_flow, alpha, strong_alpha)
+.pubias_trimfill_scale(te_original, te_adjusted, sm, binary, baseline_risk,
+                       threshold_abs1000, threshold_internal, p1_from_ratio)
+.pubias_trimfill_dot(...)          # the same formals, plus small_values, k_ok
+.pubias_missing_tipping(...)       # -> list(step, state, reason, delta_star,
+.pubias_missing_dot(...)           #         se_new, capped)
+# every *_dot() -> list(state, reason); state is one of PMA_PUBIAS_DOT_STATES
+```
+
+- **Four states, and the fourth is not a colour.** `PMA_PUBIAS_DOT_STATES` is `c("green", "amber", "red", "unknown")`. Each of these diagnostics declines to compute on exactly the sparse data where reporting bias is most likely, so "not computed" rendered as a colour would read as "nothing found". Every `"unknown"` carries the reason in `$reason`, for the caller to show as a tooltip.
+- **Funnel** — Egger's p in three bands: 🟢 at `p >= alpha`, 🟡 at `strong_alpha <= p < alpha`, 🔴 at `p < strong_alpha`. `alpha` is a formal because the host already names 0.05 for the sentence it prints under the funnel; `strong_alpha` (`PMA_PUBIAS_EGGER_STRONG_ALPHA`, 0.01) exists only on the dot. `rare_flow` is checked **before** `k_ok`: below k = 10 Egger is underpowered, whereas on sparse binary data it is invalid, and letting an invalid p value paint a 🔴 is what the ordering avoids.
+- **Trim-and-fill** — `.assess_bias_direction()` (§5.1) called on the pair (original, adjusted), with the adjusted effect passed as a single-element low-RoB pool of unit standard error so that its inverse-variance mean *is* that effect. A call, not a copy: `PMA_ROB_INFLATION_THRESHOLD` and the five rules stay in one place. `not_serious` → 🟢, one level → 🟡, two levels → 🔴, `rule = NA` → ⚪.
+- **The comparison runs on a scale whose null is zero** — absolute risk difference per 1,000 for a binary outcome, the internal scale for MD / SMD / RoM. `|OR| = 2.0` and `|OR| = 0.5` are equidistant from the null in fact and four-fold apart on the raw measure, so every zone and magnitude rule would be wrong for one of them. `.pubias_trimfill_scale()` owns the decision; the event-rate map is **injected** rather than reimplemented (the host already owns one), and with none supplied a binary outcome is ⚪ rather than silently converted. No baseline risk is ⚪ for the same reason: a silent scale change is what the split exists to prevent.
+- **Missing results** — the tipping-point algorithm, fully specified in `shiny/SPEC.md` §3.4.8a. Assume the `m` missing studies share one effect `δ`, hold `tau^2` at its observed value, and solve `δ* = (W_tot*(T ± 1.96*se_new) − W_obs*TE_obs) / W_miss` in closed form. Six ordered steps, of which the order is the load-bearing part: `δ = TE_obs` changing the conclusion on precision alone is 🔴 and must be asked before the magnitude comparison, which on its own would call that case reassuring.
+
 ### 5.6 Structured domain facts (v0.5.1)
 
 The container is **domain-agnostic**: `.fact(key, label, value, numeric = NA)` builds one row, `.facts(...)` binds the non-`NULL` ones into a tibble, and the assessors attach it to their `make_domain_row(facts = )`. `grade_meta()` collects the non-`NULL` results into `$domain_facts`, keyed by domain name; a domain that records nothing is simply absent from the list. Reached with `domain_facts()` (§4.15).
@@ -1993,7 +2192,7 @@ instead.
 |---|---|
 | test-rating_target.R | Core GRADE 2 Fig 2 target derivation, manual override + mandatory rationale, `threshold_type` entry gate |
 | test-imprecision.R | Fig 4 paths (§5.5), CI-ratio rules, OIS branch reachability |
-| test-rob_flowchart.R | Core GRADE 4 Fig 2 (§5.1): dominance gate, the 5 zone rules, `analysis_set`, refit propagation |
+| test-rob_flowchart.R | Core GRADE 4 Fig 2 (§5.1): dominance gate, the 5 zone rules, `analysis_set`, refit propagation, and Step 2b's rule → leaf mapping (each rule's leaf and `flow_path`, the direction gate reading a shift as "similar", rule 5 leaking no depth, the departure disclosure on both leaves) |
 | test-domain_rob.R | inflation threshold boundaries, `rob_some_concerns`, `rob_overrides`, the `small_values` direction gate deciding rule 2 vs rule 3 (§4.5.1a) |
 | test-indirectness_subdomains.R | PICO table normalisation, worst-case rollup, scalar override |
 | test-sof_bmj.R | BMJ SoF layout, Difference column, plain language summaries |
@@ -2017,6 +2216,8 @@ instead.
 | test-domain_rob.R (extended) | the k-space / studlab-space alignment (§5.1): refit and `rob_overrides` when {meta} drops a study; unresolvable alignment keeps the skip-with-a-warning behaviour |
 | test-sof_bmj.R (extended) | arm-level columns for continuous outcomes: the IV-weighted control mean, the SMD × pooled-SD rescale, the two derivation footnotes, and binary tables left unchanged; §4.6: an overridden domain's footnote leads with the reviewer's rationale, a domain with no facts gets one at all, an automatic rating's footnote is unchanged, and `.parse_override_note()` reads the head rather than inferring from `auto` |
 | test-pubias_trimfill.R | §5.5a: the orientation of the comparison (original vs adjusted, and the mirror case under each `small_values`), the shared threshold and its strict `>`, magnitude-only comparison without `small_values`, unassessable inputs reported as such rather than as "no concern", the printed sentence, and a source guard that `assess_pubias()` does not read any of it |
+| test-pubias_status.R | §5.5b: Egger's three bands and both boundaries; every ⚪ path on the funnel and the trim-and-fill dots, including rare-event data checked ahead of the k gate; the absolute-risk scale for a binary outcome and the untouched internal scale for a continuous one; the shared `PMA_ROB_INFLATION_THRESHOLD` bracketed on both sides; and the structural guard that no rating path in the package calls a dot function |
+| test-pubias_missing.R | §5.5b / `shiny/SPEC.md` §3.4.8a: each of the six ordered outcomes, with step 3 (precision alone) shown firing where step 6 alone would have said 🟢; the direction gate firing and not firing; the union rule when one row is unconstrained; the `Not measured` cap as a ceiling and never a floor; the `c_med / sqrt(n)` imputation and its blank-`n` fallback; and every ⚪ path |
 
 ---
 
@@ -2034,6 +2235,8 @@ instead.
 | `sof_table(convert_smd_to_or = TRUE, baseline_risk = NULL)` | abort with informative message |
 | `grade_table()` row asking for the responder presentation that cannot support it (non-SMD/MD `sm`, `baseline_risk` outside (0, 1), no pooled estimate) | the row keeps its unconverted presentation; the reason is a numbered per-row footnote; the table still renders (§4.9) |
 | `grade_table()` where every row asked for the conversion and none could take it | no Chinn footnote at all — it would describe a conversion no cell went through |
+| `sof_table(convert_smd_to_or = TRUE, keep_effect_scale = TRUE)` on an SMD whose control arms carry no usable SD | arm cells and Difference cell both fall back to the responder-only presentation; a footnote names the reason; no error and no empty cell (§4.6) |
+| `grade_table()` holding a `keep_effect_scale` row and an unconverted row | both render in the shared columns; neither row's cells change from what a table of that row alone would print (§4.9) |
 | `export_bundle` to non-writable directory | abort with file-system error |
 | `export_bundle` with `include = c("data")` only | ZIP contains only `data_long.csv`; no analysis.R |
 | `export_bundle(ma = m, grade = g, ...)` (legacy named call) | works; deprecation warning once per session (§4.8.1a) |

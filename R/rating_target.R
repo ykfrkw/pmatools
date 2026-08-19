@@ -320,3 +320,25 @@ RATING_TARGET_LABELS <- c(
     )
   )
 }
+
+# The threshold the Imprecision domain was ACTUALLY rated against, recovered
+# from a rated object.
+#
+# Every branch above sets threshold_for_imprecision to 0 for the
+# non-null-effect target and to threshold_internal for the other two, so the
+# recovery is that one rule and nothing else. It lives here, beside the rule,
+# because a caller that re-derived it from `threshold_internal` alone would ask
+# a different question of the same evidence - which is exactly what the
+# rare-event method sensitivity must not do (shiny/SPEC.md 3.4.14: every method
+# is asked "the same threshold-crossing question the primary was asked").
+#
+# Returns 0 when the object carries no usable threshold, which is what a
+# null-threshold rating means.
+.rated_threshold_for_imprecision <- function(g) {
+  if (identical(g$rating_target, "non_null_effect")) return(0)
+  thr <- g$threshold_internal
+  if (is.null(thr) || length(thr) != 1L || !is.finite(thr) || thr <= 0) {
+    return(0)
+  }
+  as.numeric(thr)
+}

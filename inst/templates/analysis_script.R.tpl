@@ -72,6 +72,9 @@ g <- grade_meta(
   pubias_unpublished      = {{pubias_unpub_arg}},
   pubias_registry_complete = {{pubias_registry_arg}},
   pubias_rationale        = {{pubias_rationale_arg}},
+  rare_flow               = {{rare_flow_arg}},
+  rare_one_arm_total_zero = {{rare_one_arm_zero_arg}},
+  rare_method             = {{rare_method_arg}},
   outcome_name            = "{{outcome_name}}"
 )
 

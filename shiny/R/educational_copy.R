@@ -26,12 +26,15 @@ EDU_COPY <- list(
   intro_modal = list(
     title = "Before you start",
     body  = htmltools::HTML(paste0(
+      # The abbreviation is expanded here, in the first sentence, because the
+      # next one uses it: "SR&MA" arriving undefined is the reader's first
+      # encounter with the whole activity the app sits inside.
       "<p><strong>Statistical pooling is only a small part of a systematic ",
-      "review. A high-quality SR&amp;MA also needs a detailed, prespecified ",
-      "and pre-registered protocol (e.g., on PROSPERO, OSF or other ",
-      "platforms), a comprehensive search, dual independent screening and ",
-      "data extraction, and risk-of-bias assessment - all completed BEFORE ",
-      "the analysis.</strong></p>",
+      "review and meta-analysis (SR&amp;MA). A high-quality SR&amp;MA also ",
+      "needs a detailed, prespecified and pre-registered protocol (e.g., on ",
+      "PROSPERO, OSF or other platforms), a comprehensive search, dual ",
+      "independent screening and data extraction, and risk-of-bias ",
+      "assessment - all completed BEFORE the analysis.</strong></p>",
       "<p>This app handles the pooling and Core GRADE certainty steps; make ",
       "sure the upstream review work is in place first.</p>"
     )),
@@ -126,13 +129,14 @@ EDU_COPY <- list(
   # bodies: it was a recitation of what Core GRADE 6 ranks, and the reviewer
   # answers nothing with it.
   config_tab = list(
-    # The two presentations are an either/or (input$sof_presentation), so Core
-    # GRADE 6's recommendation to print them side by side is still out of
-    # reach. What the choice does NOT touch is the rating, and a reviewer
-    # picking between them here has every reason to think it might.
+    # The third option prints the two presentations on two rows of one
+    # outcome, so Core GRADE 6's agreement check is reachable and the old "not
+    # side by side" caveat is no longer true. What none of the three touches is
+    # the rating, and a reviewer picking between them here has every reason to
+    # think it might.
     continuous_departure = paste0(
-      "Offered as a choice, not side by side, so Core GRADE 6's agreement ",
-      "check is unavailable; read magnitude cautiously. Neither choice ",
+      "Core GRADE 6 recommends showing the effect and the responder ",
+      "proportion together; the third option does that. None of the three ",
       "changes the rating."
     ),
     chinn_caveat = paste0(

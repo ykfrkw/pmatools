@@ -78,7 +78,7 @@ test_that("the responder presentation is banked with the outcome it describes", 
   expect_false("convert_smd_to_or" %in%
                  names(attr(effect_route, PMATOOLS_DISPLAY_ATTR, exact = TRUE)))
 
-  # state$display$convert is the guarded boolean, so all four travel together.
+  # state$display$convert is the guarded boolean, so all five travel together.
   responder <- pma_bank_export_material(
     g, display = list(convert = TRUE, baseline_risk = 0.2,
                       threshold_label = ">=50% drop in PHQ-9",
@@ -88,7 +88,28 @@ test_that("the responder presentation is banked with the outcome it describes", 
   expect_equal(d$baseline_risk, 0.2)
   expect_equal(d$threshold_label, ">=50% drop in PHQ-9")
   expect_true(d$chinn_invert)
+  expect_false(d$keep_effect_scale)
   expect_true(all(names(d) %in% PMATOOLS_DISPLAY_ATTR_FIELDS))
+})
+
+test_that("the both-scales choice is banked beside the conversion, never alone", {
+  g <- fake_outcome("Depression")
+
+  both <- pma_bank_export_material(
+    g, display = list(convert = TRUE, keep_effect_scale = TRUE,
+                      baseline_risk = 0.2, chinn_invert = TRUE))
+  d <- attr(both, PMATOOLS_DISPLAY_ATTR, exact = TRUE)
+  expect_true(d$convert_smd_to_or)
+  expect_true(d$keep_effect_scale)
+  expect_true("keep_effect_scale" %in% PMATOOLS_RESPONDER_FIELDS)
+
+  # A row shown as its own effect carries neither: keep_effect_scale is read
+  # only on a converting row, and stamping it alone would ask grade_table()
+  # for both scales of a conversion that never ran.
+  effect_route <- pma_bank_export_material(
+    g, display = list(convert = FALSE, keep_effect_scale = TRUE))
+  expect_false("keep_effect_scale" %in%
+                 names(attr(effect_route, PMATOOLS_DISPLAY_ATTR, exact = TRUE)))
 })
 
 test_that("export data binds each outcome's own rows under its own name", {

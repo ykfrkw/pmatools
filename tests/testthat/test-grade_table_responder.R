@@ -86,13 +86,14 @@ test_that("one converted row, one binary row and one unconverted row coexist", {
     expect_match(cer[2], "^300 per 1,?000$")
     expect_no_match(ier[2], "\\*")
 
-    # Row 3 is the same continuous outcome shown as itself: arm-level means.
-    expect_match(cer[3], "^[0-9.]+$")
-    expect_no_match(ier[3], "\\*")
+    # Row 3 is the same continuous outcome shown as itself, and a continuous
+    # outcome has nothing to put in these two columns.
+    expect_identical(cer[3], "")
+    expect_identical(ier[3], "")
   }
 })
 
-test_that("the converted row's rates are Chinn's, not the arm means", {
+test_that("the converted row's rates are Chinn's, and nothing else fills them", {
   outcomes <- list(
     "Depression"  = stamp_responder(mk_continuous("Depression"),
                                     baseline_risk = 0.30),
@@ -107,9 +108,11 @@ test_that("the converted row's rates are Chinn's, not the arm means", {
   expect_identical(.body_col(ft, 4)[1], .body_col(solo, 4))
   expect_identical(.body_col(ft, 5)[1], .body_col(solo, 5))
 
-  # And the arm-derivation footnote still describes the row that still needs
-  # it, not the converted one.
-  expect_match(.footer_text(ft), "inverse-variance weighted mean", fixed = TRUE)
+  # The unconverted continuous row leaves both cells empty, and no footnote
+  # explains a derivation the table no longer performs.
+  expect_identical(.body_col(ft, 4)[2], "")
+  expect_no_match(.footer_text(ft), "inverse-variance weighted mean",
+                  fixed = TRUE)
 })
 
 test_that("two rows converted in opposite directions each state their own", {

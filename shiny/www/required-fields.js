@@ -64,6 +64,22 @@
     if (!panel || panel.classList.contains('show')) return;
     if (panel.dataset && panel.dataset.pmaRevealed === '1') return;
     if (panel.dataset) panel.dataset.pmaRevealed = '1';
+
+    // Through Bootstrap's own Collapse API, not by adding `show` by hand. The
+    // Step 2 accordion is `multiple = FALSE`, which makes bslib put
+    // `data-bs-parent` on every .accordion-collapse; closing the sibling that
+    // is currently open is Bootstrap's job, and it only happens for a panel
+    // Bootstrap itself opened. A hand-added class left two panels open at
+    // once - the state the accordion exists to prevent.
+    //
+    // The manual toggle survives as a fallback because this file must degrade
+    // rather than throw: bootstrap's JS bundle is loaded by bslib, not by us,
+    // and a page that ever ships without it would otherwise lose the required
+    // -field marks entirely over a ReferenceError here.
+    if (window.bootstrap && window.bootstrap.Collapse) {
+      window.bootstrap.Collapse.getOrCreateInstance(panel).show();
+      return;
+    }
     panel.classList.add('show');
     // Navigate to the toggle through the item rather than by id: bslib
     // generates the panel id at render time and it needs escaping in a

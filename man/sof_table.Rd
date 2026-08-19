@@ -13,6 +13,7 @@ sof_table(
   follow_up = NULL,
   unit = NULL,
   convert_smd_to_or = FALSE,
+  keep_effect_scale = FALSE,
   baseline_risk = NULL,
   threshold_label = NULL,
   chinn_invert = FALSE,
@@ -59,7 +60,21 @@ object uses \code{sm = "SMD"} or \code{"MD"}, the "Risk with control" /
 "Risk with intervention" columns display dichotomised event rates derived via Chinn's
 formula (\eqn{\log OR = SMD \times \pi / \sqrt{3}}). Requires
 \code{baseline_risk} (numeric in (0,1)) representing the proportion
-of control patients meeting the threshold of clinical interest.}
+of control patients meeting the threshold of clinical interest. The
+Difference and Effect columns follow the arm columns onto that scale; see
+"Absolute effects on the responder path" below.}
+
+\item{keep_effect_scale}{(v0.6) Logical, only read when
+\code{convert_smd_to_or = TRUE}. \code{FALSE} (default) presents the
+outcome as responder proportions alone. \code{TRUE} presents \emph{both}
+in one row, which is what Core GRADE 6 recommends: each arm cell holds the
+outcome on its own scale on the first line and the responder proportion on
+the second, and the Difference cell holds the standardised mean difference
+first and the per-\code{per} risk difference second. No extra rows and no
+extra columns. When the arm-level means cannot be computed honestly (no
+usable control-arm summaries, or no reference SD to re-express an SMD
+with), the row degrades to the responder-only presentation and a footnote
+names the reason.}
 
 \item{baseline_risk}{Numeric in (0,1), required when
 \code{convert_smd_to_or = TRUE}. Otherwise inherited from the
@@ -104,10 +119,31 @@ it. With \code{sm = "SMD"} the pooled difference is in standard deviation
 units and is re-expressed on the outcome's own scale by multiplying it by
 the pooled within-arm SD of the control arms (Cochrane Handbook 15.5.3.2)
 before it is added, which assumes the control arms share one scale; the
-Difference column stays in standard deviation units. Both derivations are
-stated in a table footnote. The headers become "With control" / "With
-intervention" in this case, since the rate wording and the \code{per}
-denominator would misdescribe a mean.
+Difference column reports the standardised mean difference itself, in
+standard deviation units. Both derivations are stated in a table footnote.
+The headers become "With control" / "With intervention" in this case, since
+the rate wording and the \code{per} denominator would misdescribe a mean.
+}
+
+\section{Absolute effects on the responder path}{
+
+With \code{convert_smd_to_or = TRUE} the arm columns hold responder
+proportions, and the three cells beside them are derived from the same two
+numbers -- the assumed control proportion and the pooled estimate:
+\itemize{
+\item the Difference column is the \strong{absolute risk difference}
+between the two proportions, per \code{per} patients, worded like every
+other absolute difference in the table ("177 more per 1000 (72 more to
+271 more)"). It is not the pooled effect in standard deviation units:
+a Difference column reading in SD units beside two columns reading in
+responders per 1000 is not an absolute effect at all, which is what the
+column is for;
+\item the Effect column gains a second line, "Derived risk ratio r
+(lo to hi)", the ratio of the two proportions;
+\item both are DERIVED, not fitted: they inherit Chinn's logistic
+latent-variable assumption and move with the assumed control proportion.
+The footnote says so and names the proportion used.
+}
 }
 
 \section{Plain language summaries -- one adverb per certainty level}{

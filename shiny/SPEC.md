@@ -134,9 +134,13 @@ state <- reactiveValues(
     # from input$sof_presentation only after sm and the proportion have been
     # checked -- never a raw mirror of the radio. Named `convert` because it
     # is not the radio; it is what reaches sof_table(convert_smd_to_or =).
-    # All four are banked ON each outcome as it is saved (§3.4.10a), because
+    # All five are banked ON each outcome as it is saved (§3.4.10a), because
     # they describe one ROW of the Summary of Findings, not the table.
     convert            = FALSE,
+    # The second half of the three-way radio: TRUE only on "both", and only
+    # ever written from the same guarded reactive as `convert`, so a row that
+    # is not converting can never carry it.
+    keep_effect_scale  = FALSE,
     baseline_risk      = NULL,
     chinn_invert       = FALSE,
     threshold_label    = NULL,
@@ -192,10 +196,16 @@ body with `showModal(modalDialog(...))`, **once per session**, before the
 reviewer touches anything.
 
 It carries the one claim in the app that is about the work *around* the
-analysis: statistical pooling is a small part of a systematic review, which
-also needs a prespecified and pre-registered protocol, a comprehensive search,
-dual independent screening and extraction, and risk-of-bias assessment, all
-completed before the analysis.
+analysis: statistical pooling is a small part of a systematic review and
+meta-analysis (SR&MA), which also needs a prespecified and pre-registered
+protocol, a comprehensive search, dual independent screening and extraction,
+and risk-of-bias assessment, all completed before the analysis.
+
+**The first sentence names the whole activity, then abbreviates it.** It reads
+"a systematic review and meta-analysis (SR&MA)", not "a systematic review":
+the modal is the one place the app says what the reviewer is doing, and the
+sentences after it already use `SR&MA`, so the expansion has to come first or
+the abbreviation arrives undefined.
 
 Two rules:
 
@@ -343,14 +353,52 @@ The title, and nothing else. See §3.2.2.
 
 #### 3.3.3 Inputs (sidebar)
 
-One `pma_card("Model configuration")` holding a `bslib::accordion(multiple = TRUE)` of four panels, then a sticky action bar.
+One `pma_card("Model configuration")` holding a `bslib::accordion(multiple = FALSE)` of four panels, then a sticky action bar.
 
 | Panel (`value`) | Contents | Open on build |
 |---|---|---|
 | Outcome (`outcome`) | `outcome_name`, `small_values`, `outcome_type`, `outcome_follow_up`, `outcome_unit` (continuous only) | always |
-| Data mapping (`mapping`) | `col_studlab`, `col_treat`, `arm_assignment_ui`, `col_n`, `col_event` (binary) / `col_mean` + `col_sd` (continuous) | while `state$ma` is NULL |
+| Data mapping (`mapping`) | `col_studlab`, `col_treat`, `arm_assignment_ui`, `col_n`, `col_event` (binary) / `col_mean` + `col_sd` (continuous) | never |
 | Model details (`model`) | `sm_bin` / `sm_cont_ui`, `model`, `method`, `method_tau`, `random_ci`, `incr` | never |
 | Subgroup (`subgroup`) | `subgroup_col`, `subgroup_order_ui` | never |
+
+- **Exactly one panel is open at a time** (`multiple = FALSE`), and on arrival
+  it is Outcome — the only panel holding something no default can supply.
+  Opening another closes it, so the sidebar is never taller than the question
+  being answered and the sticky action bar stays in view. The open state no
+  longer depends on `state$ma`: Data mapping used to open alongside Outcome
+  until a pooled object existed, which made the two together longer than a
+  laptop viewport on the very first visit.
+- **`arm_assignment_ui` MUST carry `outputOptions(suspendWhenHidden = FALSE)`.**
+  It is the only source of `experimental_label` and `control_label`, it lives in
+  a panel that is never open on build, and the `ma` reactive bails on NULL arm
+  labels. Under Shiny's default the closed panel suspends the output, the two
+  selects are never created, and Run analysis does nothing at all — no result,
+  no message, no log. The other two `uiOutput`s in closed panels do not need the
+  exemption and do not have it: `sm_cont` falls back to `run_ma()`'s own default
+  and `subgroup_order` is guarded on `NULL`, so neither can stop an analysis.
+- **No exit from the `ma` reactive is silent once the reviewer has asked for a
+  run.** The arm-label guard used to `return(NULL)` saying nothing, which is
+  what turned the suspension above into an app with an inert button. It now
+  names what is wrong — arms unset, or the same arm value picked twice — under
+  the same `!auto || clicked` condition the required-fields branch uses, so a
+  first page load stays quiet and a reviewer who pressed Run analysis never
+  gets nothing back.
+- **`multiple = FALSE` is load-bearing for `www/required-fields.js`.** It is
+  what puts `data-bs-parent` on every `.accordion-collapse`, and that attribute
+  is how Bootstrap closes the open sibling. The reveal in §3.3.6 therefore goes
+  through `bootstrap.Collapse.getOrCreateInstance(panel).show()`; adding the
+  `show` class by hand bypasses the sibling-closing and leaves two panels open.
+  The hand toggle survives only as a fallback for a page without Bootstrap's
+  JS bundle, because that file must degrade rather than throw.
+- **The six column-mapping selects are selectize widgets**, not
+  `selectize = FALSE`. A native `<select>` is token-styled while closed, but its
+  open list is drawn by the operating system, outside the document, and no rule
+  in `www/shadcn.css` can reach it — so those six changed appearance at exactly
+  the moment they were being read. `subgroup_col`, `sample_dataset` and
+  `rare_primary_method` stay native. The server fills all of them with
+  `updateSelectInput()`, which preserves the current selection for either
+  flavour.
 
 - **Outcome type is identity, not mapping.** `outcome_type` sits in the
   Outcome panel: it says what kind of thing is being rated, and decides which
@@ -382,13 +430,18 @@ One `pma_card("Model configuration")` holding a `bslib::accordion(multiple = TRU
   `hakn` as `NULL` / `TRUE` / `FALSE`. `auto` is `run_ma()`'s own `k >= 3`
   rule, so the default run is byte-for-byte what it was before the control
   existed.
-- **Data mapping's open state is decided at build time from `state$ma`**, not
-  from the selects themselves — the selects are populated by the server
-  *after* this UI is built, so at build time they are all blank whatever the
-  data holds. A non-NULL `state$ma` is proof the mapping resolved, so the
-  panel stays shut on every return trip from Step 3. A select that is blank
-  when the reviewer actually asks for an analysis is handled from the other
-  end, by `www/required-fields.js` (§3.3.6).
+- **A blank mapping select cannot be caught at build time** — the selects are
+  populated by the server *after* this UI is built, so at build time they are
+  all blank whatever the data holds. One that is still blank when the reviewer
+  actually asks for an analysis is handled from the other end, by
+  `www/required-fields.js` (§3.3.6), which opens the panel holding it.
+- **The continuous summary measure defaults to `SMD`**, in
+  `output$sm_cont_ui` and in the observer that hides `RoM` when the mean column
+  holds a non-positive value. A review pooling continuous outcomes at all is
+  usually pooling several instruments (PHQ-9, HAMD, BDI), and a mean difference
+  across two scales is not a quantity; `MD` stays one click away. Both places
+  build the radio with `pma_spelled_choices()`, so changing the mean column
+  cannot silently strip the spelled-out labels the bullet above requires.
 - **Every input id is unchanged by the restructure.** Step 3 reads most of
   these off `input$` directly, so a rename is silent everywhere else;
   `tests/testthat/test-step2-layout.R` asserts each id renders.
@@ -425,8 +478,28 @@ Below the tabset: the collapsible **"Forest plot display"** panel, built by the
 single `pma_forest_display_panel(prefix)` in `R/ui_helpers.R` and shared with
 each of the four Step 3 domain tabs (`prefix = NULL` gives Step 2's unprefixed
 ids). It holds the title, the two arm labels, the two "Favors …" labels, the
-x-min / x-max overrides, the two blank-row spinners and the per-arm column
-checkbox.
+x-min / x-max overrides, the two blank-row spinners, the Mean / SD decimal
+spinners and the per-arm column checkbox.
+
+- **`digits_mean` / `digits_sd` both default to 1**, matching
+  `plot_forest()`'s own defaults (SPEC.md §4.3) rather than `{meta}`'s 2 and 4.
+  They are coerced by `pma_forest_digits()` before they leave the app: a blank
+  field is `NA`, and `NA` reaching `meta::forest()` costs the Mean and SD
+  columns rather than raising. Only a continuous outcome draws those columns,
+  but the two fields are shown unconditionally — the panel is shared with the
+  Step 3 tabs, and a control that appears and disappears with the outcome type
+  is harder to find than one that is inert.
+
+- **The blank-row spinners default to 1 above and 0 below.** Above = 1
+  reproduces the blank row `meta::forest()` draws on its own. Below = 0 is
+  tighter than `plot_forest()`'s own default, which is `NULL` = derive from the
+  drawn content (SPEC.md §4.3): `.auto_addrow_below()` reserves 2–4 rows for the
+  axis band, the Favors labels and the xlab, and that clearance is whitespace
+  most forests do not need. Clearing the field sends `NULL` and restores the
+  derived spacing, which is the fix when the heterogeneity text lands on the
+  x-axis — most likely with the per-arm columns hidden. `pma_addrow_below()`
+  does the coercion; `0` is a real answer to it and only a blank, a negative or
+  a non-number becomes `NULL`.
 
 - **Layout is `.pma-display-grid`**, four columns. A child that needs the whole
   row carries `.pma-span-4` (title, the blank-row hint, the checkbox); a child
@@ -484,8 +557,10 @@ flag per id: an id dropped from the list would keep its last mark rather than
 lose it when the outcome type changes.
 
 Because §3.3.3's accordion can hide a blank select, `required-fields.js` also
-**opens the panel** containing one — but only when `armed`, and only once per
-panel per DOM build. Before the reviewer has asked for an analysis the panel
+**opens the panel** containing one — through
+`bootstrap.Collapse.getOrCreateInstance(panel).show()`, so the panel that is
+currently open closes with it (§3.3.3), and only when `armed`, and only once
+per panel per DOM build. Before the reviewer has asked for an analysis the panel
 state is theirs, and every mapping select is legitimately blank for the first
 few hundred milliseconds of each build while the server populates it; opening
 on that would fight the user and flash on every return from Step 3. The
@@ -784,6 +859,186 @@ Resulting judgment: {{judgment}}
 - `radioButtons("pubias_unpublished", "Are unpublished studies documented in registries or FDA?", c("No" = "no", "Yes" = "yes", "Unsure" = ""))` *(k < 10 only)*
 - `selectInput("pubias_override", "Override Publication bias judgment", same options)`
 
+#### 3.4.8a Missing results (RoB-ME) — the status dot's algorithm
+
+Built in 0.5.1 as `.pubias_missing_tipping()` / `.pubias_missing_dot()`
+(`R/pubias_missing.R`) — in the package, not the app, so the arithmetic below
+is unit-tested against this section rather than only rendered.
+
+The dot on the RoB-ME tab (§3.4.12's tabset) answers one question: **how far
+from the observed pooled effect would the missing studies have to lie before the
+conclusion changes?** Far means the missing evidence cannot overturn the result;
+near means it can. Nothing here rates the domain — RoB-ME is not part of the
+Core GRADE algorithm and the tab already says so.
+
+**Inputs.** `state$pubias_missing` (`studlab`, `n`, `results_known`, `source`)
+and `state$ma`. The threshold `T` is the Core GRADE threshold already chosen for
+the outcome (null or MID, §3.4.10a); no second threshold is introduced.
+
+**Imputing a missing study's standard error.** Borrow from the observed studies
+rather than assuming an SD, a control-group risk or an allocation ratio — none
+of which exist for every effect measure:
+
+```
+c_med = median(seTE_i * sqrt(n_i))     over observed studies
+se_j  = c_med / sqrt(n_j)              n_j blank -> median(seTE_i)
+```
+
+`se ∝ 1/sqrt(n)` holds for SMD, MD, log OR and log RR alike, so one formula
+covers every measure the app pools. This is the reviewer's "assume the same SD"
+generalised to measures that have no SD.
+
+**The tipping point is closed-form.** Assume the `m` missing studies share one
+effect `δ`, and **hold `tau2` at its observed value** — placing every missing
+study at a single `δ` would otherwise shrink it artificially, which flatters the
+result:
+
+```
+W_obs = 1/seTE_pooled^2
+w_j   = 1/(se_j^2 + tau2)          W_miss = sum(w_j)
+TE_new(δ) = (W_obs*TE_obs + W_miss*δ) / (W_obs + W_miss)
+se_new    = 1/sqrt(W_obs + W_miss)          -- independent of δ
+```
+
+`se_new` not depending on `δ` is what makes this cheap enough to redraw on every
+edit of the table: the interval's width is constant, `TE_new` is linear in `δ`,
+and the crossing solves directly as
+`δ* = (W_tot*(T ± 1.96*se_new) − W_obs*TE_obs) / W_miss`. No root-finding.
+
+**Ordered decision, cheapest and most decisive first:**
+
+```
+1. m = 0                                            -> 🟢
+2. no prediction interval (tau2 = 0, k < 3) or
+   se imputation impossible                         -> ⚪
+3. δ = TE_obs already changes the conclusion        -> 🔴  (precision alone)
+4. no δ changes the conclusion                      -> 🟢  (cannot be overturned)
+5. direction gate: δ* outside the suspected region  -> 🟢
+6. magnitude: δ* against the intervals below        -> 🔴 / 🟡 / 🟢
+```
+
+**Steps 3 and 4 MUST precede step 6.** Adding studies shrinks `se_new`, so a
+body of evidence can cross the threshold on precision alone, with the missing
+studies reporting exactly what the observed ones did; step 6 asked on its own
+would call that case reassuring.
+
+**"The conclusion", precisely, and when step 4 can fire.** The conclusion is
+which side of `T` the pooled 95% interval lies on: `above` when
+`TE − 1.96*se > +T`, `below` when `TE + 1.96*se < −T`, `spans` otherwise. Both
+the observed and the new conclusion are read with `1.96*se`, never off the
+reported confidence limits — a Hartung-Knapp interval is wider than `1.96*se`,
+and comparing one against the other would report a change that came from the
+quantile rather than from the missing studies. The reported limits are used at
+step 6 only, where the CI is a *region* `δ*` is judged against rather than a
+decision rule.
+
+Step 4 is a guard, and fires only when `W_miss = 0`. `TE_new` is affine and
+increasing in `δ` and covers the whole real line, and each conclusion is an
+interval in `TE_new`, so a finite `δ*` exists whenever the missing studies
+carry any weight at all. Studies too imprecise to carry any leave
+`TE_new(δ) = TE_obs` for every `δ`, which is the one case in which the
+conclusion genuinely cannot be overturned — 🟢, not ⚪, because the model gave
+an answer rather than failing to run. The step keeps its place in the order
+regardless: step 6 divides by `W_miss` too, and an infinity compared against
+the prediction interval would come out 🟢 by accident rather than by reasoning.
+
+**Step 6 is anchored on the prediction interval, not on a fixed effect size.**
+
+| `δ*` lies | dot | reading |
+|---|---|---|
+| inside the pooled 95% CI | 🔴 | an ordinary missing result changes the conclusion |
+| outside the CI, inside the 95% prediction interval | 🟡 | a plausible missing result changes it |
+| outside the prediction interval, or unreachable | 🟢 | only a study unlike any observed changes it |
+
+A fixed cutoff in SMD units was considered and rejected: SMD does not exist for
+a binary outcome, so it cannot be the app's one rule. The prediction interval is
+already computed, needs no cutoff, and works on whatever scale the model was fit
+on. It is conservative in the safe direction — `δ*` is the *mean* of `m` studies
+but is judged against the spread of a single one, which errs toward 🔴.
+
+**Step 5 makes direction a gate, not a second scale.** `results_known` records
+*why* a result is missing, which is what RoB-ME is actually about, and three of
+its five labels also imply *which way* the missing effect lies. With the null at
+0 (log scale for ratio measures) and `s = sign(TE_obs)`:
+
+| `results_known` | mechanism | suspected region for `δ` |
+|---|---|---|
+| Not measured | none | unconstrained, but step 6 **caps at 🟡** |
+| Reported but data not extractable | unknown | unconstrained |
+| Measured but not reported (suspect P > 0.05) | present | null-ward, `δ*s < TE_obs*s` |
+| Measured but not reported (suspect P < 0.05) | present | further out, `δ*s > TE_obs*s` |
+| Measured but not reported (opposite direction) | present | `δ*s < 0` |
+| free text | unknown | unconstrained |
+
+Take the **union** across rows. One unconstrained row makes the union everything
+and the gate never fires, which is the conservative answer and the right one:
+an unconstrained row means no direction can be ruled out.
+
+The gate earns its place on cases like this one: the missing results are
+suspected null-ward, but `δ*` is further from the null than the observed effect.
+Nothing the missing studies could plausibly report moves the conclusion **in the
+direction they are suspected of lying**, so the dot is 🟢 whatever its magnitude
+would have said. This is the direction-of-bias step of the Risk of bias
+flowchart, asked of missing evidence instead of high-RoB evidence.
+
+**`Not measured` is capped at 🟡 and nothing else is.** An outcome that was never
+assessed cannot have been suppressed for what it showed, so its absence is
+incompleteness rather than bias, and incompleteness does not earn the strongest
+warning the tab can give. `Reported but data not extractable` — the label
+auto-seeded onto every NA-TE row, and therefore the most common one — is
+deliberately **not** capped: "not significant, data not shown" is textbook
+selective reporting and the label cannot rule it out. The default behaviour is
+therefore magnitude-driven, which is what the dot is for.
+
+The cap applies only when **every** row is `Not measured`. One row with any
+other label is a row whose absence could be selective, and capping the whole
+dot because that row shares a table with never-assessed outcomes would suppress
+exactly the warning the tab exists to give. The cap is also a ceiling and never
+a floor: it turns 🔴 into 🟡 and touches nothing else.
+
+#### 3.4.8b The scale the trim-and-fill comparison runs on
+
+The direction-of-bias rules measure magnitude as `|TE|` and zones as `±T`, both
+of which mean "distance from the null" **only on a scale whose null is zero**.
+Reading the original-versus-adjusted comparison off the raw summary measure
+would break that for every ratio: an odds ratio's null is 1, so `|OR| = 2.0` and
+`|OR| = 0.5` — equidistant from the null in fact — come out four-fold apart.
+
+**So the comparison runs on whichever scale puts the null at zero, and for a
+binary outcome that is the absolute risk difference the app already computes.**
+
+| outcome | scale the check runs on | why |
+|---|---|---|
+| binary (OR, RR, and any measure on a `metabin`) | absolute risk difference per 1,000 at the outcome's baseline risk `p0` | null is 0, and it is the scale the reviewer's threshold is already stated in |
+| continuous difference measures (MD, SMD) | the internal scale unchanged | already a difference with the null at 0 |
+| RoM | the internal (log) scale | a ratio on a continuous outcome has no event rate to convert to; log puts its null at 0 |
+
+No new arithmetic is introduced for the binary row. `step3_ard_equivalence()` /
+`step3_p1_from_ratio()` already convert an effect to an event rate at `p0`, the
+absolute difference is `p1 − p0`, and `step3_threshold_suggestions()` already
+carries the threshold as `absolute1000` (`threshold_abs_state()` is where it is
+stored). The check therefore compares two absolute risk
+differences against a threshold stated in the same units, which is also the form
+the Configuration tab shows the reviewer (§3.4.10a) — the dot and the number the
+reviewer read are on one scale, not two.
+
+Built in 0.5.1 as `.pubias_trimfill_scale()` (`R/pubias_status.R`). It owns the
+**decision** — which scale, and when the answer is ⚪ — and the event-rate map
+is **injected**: `step3_p1_from_ratio()` lives in the app, and a second copy in
+the package is exactly the pair of implementations that drift. With no map
+supplied a binary outcome is ⚪, never converted by a guess. A measure already
+stated as an absolute difference (`RD` / `ARD`) needs no map, only the change of
+unit to per 1,000.
+
+`PMA_ROB_INFLATION_THRESHOLD` is unchanged and still shared: it is a *ratio* of
+magnitudes, so it transfers to any scale whose null is zero without being
+restated.
+
+**Where no baseline risk is available** — a `metabin` whose control arm gives no
+usable `p0`, or a reviewer who has cleared it — the dot is ⚪ rather than falling
+back to the internal scale. A silent scale change is what this section exists to
+prevent.
+
 #### 3.4.9 Final certainty summary
 
 Below the accordion, a `pma-card` with:
@@ -802,18 +1057,21 @@ Below the accordion, a `pma-card` with:
 
 Rendered by `.responder_block()` (`R/step3_threshold.R`), **below** the Decision threshold section on the continuous branch of `output$threshold_panel`. The order is load-bearing: the threshold drives the rating, the presentation does not, and the old order — conversion first — read as though converting were a step on the way to a rating.
 
-- `radioButtons("sof_presentation", "How should the Summary of Findings table present this outcome?", c("The <sm> itself, on its own scale" = "effect", "The proportion of responders, converted with Chinn's formula (Core GRADE 6 option 2)" = "responder"), selected = "effect")` *— SMD/MD outcomes only; other measures get a note saying the conversion is undefined for them and no radio at all.*
-- **`"effect"` is the default.** The premise that a continuous outcome must be dichotomised before it can be rated is false here: `convert_smd_to_or` reaches `sof_table()` only, `grade_meta()` never sees it, and Imprecision is rated on the SMD/MD against `threshold_cont` either way. The Decision threshold section says so on screen. The conversion previously defaulted **on**, which read as the primary route.
-- If `sof_presentation == "responder"`:
+- `radioButtons("sof_presentation", "How should the Summary of Findings table present this outcome?", c("The <sm> itself, on its own scale" = "effect", "The proportion of responders, converted with Chinn's formula (Core GRADE 6 option 2)" = "responder", "Both, on two rows of one outcome: the <sm> on its own scale above and the proportion of responders below (what Core GRADE 6 recommends)" = "both"), selected = "both")` *— SMD/MD outcomes only; other measures get a note saying the conversion is undefined for them and no radio at all.* The default is `"both"` because that is the pairing Core GRADE 6 recommends. It commits every continuous outcome to a responder proportion, and therefore to the `responder_p0_confirm` gate below: the Configuration tab's Next stays shut until the reviewer confirms the app-convention proportion or replaces it with a rationale. That is deliberate — the assumption is examined once per outcome rather than defaulted past.
+- **`"both"` is the presentation Core GRADE 6 recommends**, and it is what the two-way version of this radio could not offer: the block used to concede that pmatools showed one presentation at a time and that Core GRADE 6's agreement check was therefore out of reach. It maps to `sof_table(convert_smd_to_or = TRUE, keep_effect_scale = TRUE)` — one outcome rendered as two table rows, the effect above and the dichotomised reading below, with the columns that do not split merged over the pair (`SPEC.md` §4.6).
+- **`"both"` is the default.** The premise that a continuous outcome must be dichotomised before it can be *rated* is still false — `convert_smd_to_or` reaches `sof_table()` only, `grade_meta()` never sees it, and Imprecision is rated on the SMD/MD against `threshold_cont` whichever of the three is chosen, which the Decision threshold section says on screen. What changed is the answer to the objection that `"both"` demands a responder proportion the reviewer has to justify: the demand is not silent. The proportion seeds to `RESPONDER_P0_DEFAULT` and the Configuration tab's Next stays shut until the reviewer confirms it or replaces it with a rationale, in a box that reads REQUIRED until it is ticked. The assumption is examined once per outcome instead of being defaulted past — which is what the old `"effect"` default achieved only by never raising it.
+- If `sof_presentation` is `"responder"` **or** `"both"` — both run the conversion, so both need the same inputs, and a `conditionalPanel` testing only `'responder'` would leave a reviewer on `"both"` with no way to enter the proportion:
   - `numericInput("baseline_risk_chinn", "Proportion of control patients meeting the threshold of clinical interest", value = RESPONDER_P0_DEFAULT (0.20), min = 0.01, max = 0.99)`, gating Next until it is confirmed or replaced-with-a-rationale. The two `conditionalPanel`s compare against the **constant**, not the seed: what obliges a rationale is departing from the app convention.
-  - `textAreaInput("responder_p0_rationale", ...)` when the default is replaced; `checkboxInput("responder_p0_confirm", ...)` when it is not.
+  - `textAreaInput("responder_p0_rationale", ...)` when the default is replaced; `pma_confirm_checkbox("responder_p0_confirm", ...)` when it is not. It is built with the **shared confirmation box** (§3.4.13), not a bare `checkboxInput()`: this is the Configuration tab's second Next gate and has to look like the first one. It stays where it is — between `EDU_COPY$config_tab$responder_default` and `threshold_label` — because it and the rationale textarea are the two arms of one `conditionalPanel` pair, so the box reads as the alternative to justifying a change, which is what it is.
   - `textInput("threshold_label", "Definition of the threshold of clinical interest (free text)")`
   - `output$chinn_direction_echo` — `chinn_invert` is derived from the Step 2 direction answer, not asked again.
+**The threshold-equivalence summary is not a question and must stop looking like one.** The block under the threshold input that reads `Increase: 156 per 1,000 -> 206 per 1,000, equivalent OR 1.404` (and its decrease mirror) is derived entirely from the number typed directly above it: there is nothing in it to answer. It used to carry a left accent on a filled ground — the wizard-question costume — which is what made a reviewer read it as one more question in the same column as Publication bias's. It is body copy under its input, per §3.4.13, and the accent it gave up went to `threshold_confirm`, which is the thing on that tab that genuinely has to be answered.
+
 - `output$responder_p0_badge` renders `confirmed` / `unconfirmed assumption` beside the section heading, and **nothing at all** on the `"effect"` route, where there is no assumption to confirm.
 - `input$sof_presentation` is registered in `PMA_OUTCOME_INPUT_IDS$configuration` (`R/ui_helpers.R`), so a change of outcome clears it. An id missing from that list is an id whose stale answer survives an outcome change.
-- `responder_mode()` in `step3_server()` is the single definition of "the responder route was chosen"; the Next gate, `sof_convert_args()` and the `state$display$convert` mirror all read it rather than the input.
+- `responder_mode()` in `step3_server()` is the single definition of "the responder route was chosen" and is TRUE for `"responder"` and `"both"` alike; the Next gate, `sof_convert_args()` and the `state$display$convert` mirror all read it rather than the input. `keep_effect_scale_mode()` beside it decodes the one question that separates the two, and is read only by `sof_convert_args()`.
 
-**The choice is banked with the outcome, and it reaches the ZIP.** All four values — `convert_smd_to_or`, `baseline_risk`, `threshold_label`, `chinn_invert` — reach `state$display` and are stamped onto the rated object by `pma_bank_export_material()` in `.store_outcome()`, under the `"pmatools_display"` attribute pmatools already reads per outcome. Three of them are written by the `sof_convert_args()` observer in `step3_server()`; `threshold_label` is left to app.R's display observer, which already mirrors the raw input. **One key, one writer**: a second observer writing `state$display$threshold_label` with a different answer invalidates the first forever — the session never goes idle again and no output updates. `threshold_label` needs no guard of its own, because nothing reads it unless `state$display$convert` is `TRUE`, and that is the guarded value. `grade_table()` picks them up **per row**, so the Step 4 preview and the root `summary_of_findings.docx` of the bundle both show the presentation the reviewer chose, and two continuous outcomes in one review can be presented differently. Only the responder route stamps anything: an outcome shown as its effect carries no field at all, so nothing reads as a decision that was never made. A row whose conversion cannot be applied falls back to the unconverted presentation with the reason footnoted rather than failing the export (`SPEC.md` §4.9).
+**The choice is banked with the outcome, and it reaches the ZIP.** All five values — `convert_smd_to_or`, `keep_effect_scale`, `baseline_risk`, `threshold_label`, `chinn_invert` — reach `state$display` and are stamped onto the rated object by `pma_bank_export_material()` in `.store_outcome()`, under the `"pmatools_display"` attribute pmatools already reads per outcome. Four of them are written by the `sof_convert_args()` observer in `step3_server()`; `threshold_label` is left to app.R's display observer, which already mirrors the raw input. **One key, one writer**: a second observer writing `state$display$threshold_label` with a different answer invalidates the first forever — the session never goes idle again and no output updates. `threshold_label` needs no guard of its own, because nothing reads it unless `state$display$convert` is `TRUE`, and that is the guarded value. `grade_table()` picks them up **per row**, so the Step 4 preview and the root `summary_of_findings.docx` of the bundle both show the presentation the reviewer chose, and two continuous outcomes in one review can be presented differently. Only the routes that convert stamp anything: an outcome shown as its effect carries no field at all, so nothing reads as a decision that was never made. `keep_effect_scale` is stamped alongside `convert_smd_to_or`, never instead of it, so a banked outcome cannot ask for both scales without asking for the conversion that supplies one of them. A row whose conversion cannot be applied falls back to the unconverted presentation with the reason footnoted rather than failing the export (`SPEC.md` §4.9).
 
 #### 3.4.11 Information design — what is open, what is collapsed, what was deleted
 
@@ -974,11 +1232,13 @@ value, closing the window between a rebuild and the rebuilt radio reporting in,
 during which the domains would otherwise be rated against the opposite
 convention.
 
-**The per-N display unit.** `radioButtons("per", …)` offers 100 or 1,000 and is
-backed by the `display_per_state()` reactiveVal, seeded under `isolate()` and
-synced back with `.sync_widget()` — the same machinery the threshold values use,
-because a statically declared radio would push its default back on every
-3 → 2 → 3 round trip.
+**The per-N display unit.** `radioButtons("per", …)` offers the units in
+`STEP3_PER_UNITS` — 100, 1,000, 10,000 and 100,000, with the labels built by
+`step3_per_choices()` — and is backed by the `display_per_state()` reactiveVal,
+seeded under `isolate()` and synced back with `.sync_widget()` — the same
+machinery the threshold values use, because a statically declared radio would
+push its default back on every 3 → 2 → 3 round trip. The two large units exist
+for rare events (§3.4.14) and are seeded there; the default is 1,000.
 
 **Internal storage stays per-1,000.** `threshold_abs_state()`,
 `threshold_baseline_state()`, `.threshold_grade_args()` and `ois_p0_value()`
@@ -1022,8 +1282,37 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
 
 - **Q2 is not a question.** k decides it (`.pubias_effective_k()`), so it is
   reported as a one-line automatic step under the chart, never a screen.
-- **The reviewer sees no question numbers (0.5.1).** `PUBIAS_NODE_TITLES`, the
-  three wizard `h5()` headings and `step3_pubias_k_line()` state the question
+- **Every node is one card, and the four nodes agree with each other.** Each
+  node's body is wrapped in a single `div(class = "pma-wizard-question")` built
+  by one local helper inside `output$pubias_wizard`. Before that each returned
+  a bare `tagList()`, so the live question — the only thing on the tab that can
+  be answered — looked exactly like the reference plots below it and the
+  override `<details>` below those. The CSS (`www/shadcn.css`) is a
+  `hsl(var(--primary))` left accent on a `hsl(var(--muted))` ground, an accent
+  no other block on the tab uses.
+  - **The question is the heading; the widget's label is `NULL`.** Two nodes
+    used to carry a second, differently worded question string in the widget
+    label, and one labelled its select `"Your answer"`. Where there were two
+    wordings the better one survives as the heading and the other is deleted,
+    not merged.
+  - **The three radio groups are `inline = FALSE`.** Two of them have option
+    labels that are whole sentences. Q3 stays a `selectInput` — four options,
+    one of which is the `"egger"` sentinel.
+  - **A progress line sits above the heading**, from
+    `step3_pubias_question_line(node, path)` (`R/step3_threshold.R`, pure and
+    unit-tested), where `path` is `step3_pubias_reachable()`. `"result"` is not
+    counted: it is the verdict, not a question. The **total is printed only
+    once `"result"` has joined the reachable path**, i.e. once the answers
+    settle the route — before that the reviewer's own next answer decides
+    whether the wizard ends here or runs to three questions, so a total taken
+    from the path so far would always equal the current index and would tell
+    every reviewer they were on the last question. Until then the line reads
+    `"Question 2"` with no total. This does not reinstate Fig 5's `Q1`–`Q4`
+    numbering (below): it counts the questions on the route the reviewer is
+    actually walking, which is the thing the figure's numbers never named.
+- **The reviewer sees no *Figure 5* question numbers (0.5.1).**
+  `PUBIAS_NODE_TITLES`, the four wizard `h5()` headings and
+  `step3_pubias_k_line()` state the question
   and drop the `Q1` / `Q2` / `Q3` / `Q4` prefix, and `inst/figures/pubias.svg`
   drops it too. The numbering is Core GRADE 4 Fig 5's, but the chart puts a
   pmatools node between Q1 and Q2, so on screen it numbered neither the source
@@ -1034,7 +1323,7 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
   decides anything (0.5.1, breaking).** `pubias_registry_complete = "yes"`
   ("reporting bias is unlikely; do not rate down") is the pmatools
   short-circuit and is forwarded to `grade_meta()`. `"no"` ("reporting bias is
-  plausible; go on to the Figure 5 nodes") is sent as `NULL` and decides
+  possible; go on to the Figure 5 nodes") is sent as `NULL` and decides
   nothing on its own. Two things went with that:
   - the app-level post-override that rewrote a `"no"` into a forced rate-down 1
     **regardless of the remaining nodes** is deleted. Core GRADE 4 Fig 5 has no
@@ -1054,6 +1343,19 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
   `NULL`, which is what "let the algorithm decide" means to `assess_pubias()`.
   In particular it must not be routed through `.override_or_ignore()`, which
   would demand a rationale for declining to override.
+- **Egger's test is computed once, by `pubias_egger()`, and read three times.**
+  The reactive returns `list(feasible =, p =, asymmetric =)`; `feasible` is
+  `FALSE` below `k = 10`, where the test is not run at all, which is a
+  different state from a test that ran and produced no p value.
+  `.pubias_egger_callout()` renders it as the colour-coded callout — a plain
+  function, not a `renderUI`, because Shiny binds one output to one place in
+  the DOM and the callout appears **twice**: under the Funnel sub-tab it is
+  computed from, and inside the **q3 wizard node**, beside the question that
+  asks the reviewer to accept or reject that very number. It used to be
+  computed inline inside `output$pubias_egger_result`, which is why the
+  flowchart could not read it. The single tier is `p < STEP3_EGGER_ALPHA`
+  (0.05); the `p < 0.01` → `"very_serious"` tier pmatools 0.5 removed is not
+  coming back.
 - **Advancing happens on answer.** One `observeEvent` per input clears
   `pubias_reopen`; the derivation moves on by itself. No `updateTabsetPanel`,
   no manual Next.
@@ -1080,8 +1382,21 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
     node keys (`q1` / `extra` / `q3` / `q4`) into the figure's ids, which are
     a different vocabulary — `extra` is the pmatools registry node, and the k
     gate is the figure's `q2`, which the wizard never asks.
-  - One answer stops the trail at a node rather than a leaf, because no leaf is
-    decided yet: `"egger"` hands Q3 to a p value the function does not have.
+  - **Accepting the automated test lights the chart.** `"egger"` is an answer
+    ("I looked, and I accept the test"), so the leaf it reaches is decided —
+    by a p value the *caller* holds. `step3_pubias_flow_ids()` takes it as
+    `egger_asymmetric` (logical or `NULL`), supplied at the call site from
+    `pubias_egger()$asymmetric`, and resolves the sentinel to `"yes"` / `"no"`
+    before matching. The function stays pure and side-effect free, which is
+    what keeps it unit-testable. `NULL` or `NA` — the test was infeasible or
+    failed — still stops the trail at `pma-pubias-node-q3`, because then no
+    leaf genuinely is decided; a test that could not run is not a symmetric
+    funnel. Until 0.5.1 the sentinel always stopped there, so a reviewer who
+    accepted Egger saw a chart that looked unfinished for the rest of the
+    assessment.
+  - **This changes nothing that reaches `grade_meta()`.** The sentinel is still
+    mapped to `NULL` (above): `"egger"` means "let `assess_pubias()` decide",
+    and lighting the chart is a display concern.
   - **`"no"` on the registry node lights the k gate and the edge out of it.**
     That node is the one the reviewer is never asked about, so lighting the
     node alone would show the chart stopping at an unanswered question; the
@@ -1100,6 +1415,50 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
   only toggles `display`, so the outputs are built once and survive every
   switch. `pubias_missing_editor` keeps
   `outputOptions(suspendWhenHidden = FALSE)`.
+  - **Each tab title carries a status dot, and the dot rates nothing.** A
+    reviewer who never opens a tab never learns that its diagnostic disagreed
+    with the answer they gave the wizard, and these three are reference material
+    precisely because Core GRADE 4 Fig 5 has no node for any of them. The dot is
+    a nudge toward looking, not an input: no dot reaches `assess_pubias()` or
+    `grade_meta()`, and the wizard's answers stay the only thing that rates the
+    domain.
+    - **It must not be the domain tabs' mark.** The Step 3 domain tabs already
+      carry `pma-tab-mark` — a `●` meaning "opened, not yet confirmed", i.e.
+      *the reviewer's progress*. These dots mean *what a diagnostic found*, on a
+      tabset nested inside one of those tabs, so one glyph would carry two
+      unrelated meanings a few pixels apart. The status dot takes its own class
+      and its own shape; `pma-tab-mark` is untouched. Rendered by
+      `pma_tab_status_dot()` (`R/ui_helpers.R`, class `pma-tab-status`) into a
+      `uiOutput` slot on each tab title, and drawn by `www/shadcn.css` as a
+      **rounded square** — a shape, not only a colour, so the two markers never
+      read as the same thing whatever the font does. Drawn in CSS rather than
+      written as a glyph for the reason `pma_wizard_nav()` gives about HTML
+      entities: an empty element with a class cannot arrive mojibaked.
+    - **The three algorithms live in the package** (`R/pubias_status.R`,
+      `R/pubias_missing.R`), not in the app: they are arithmetic a test should
+      hold to a contract, and the app is the wiring. A tag list title leaves
+      `tabPanel` with no string to derive a `value` from, so all three reference
+      tabs state their own — the same consequence `.tab_title()` met on the
+      domain tabs.
+    - **Four states, and the fourth is not a colour.** 🟢 / 🟡 / 🔴 say what the
+      diagnostic found; ⚪ says it was never computed, with the reason as its
+      tooltip. Three colours alone make "not computed" read as "nothing wrong",
+      which is backwards for every tab here: each one declines to compute on
+      exactly the sparse data where reporting bias is most likely.
+    - **Funnel** is Egger's p — 🟢 at `p >= 0.05`, 🟡 at `0.01 <= p < 0.05`, 🔴 at
+      `p < 0.01`, ⚪ when Egger did not run. It does not run below the existing
+      `k >= 10` gate, **and it does not run on rare-event data**: Egger loses
+      validity on sparse binary data, so a `rare_flow` from
+      `rare_event_diagnostics()` forces ⚪ rather than letting an invalid
+      p-value paint a 🔴.
+    - **Missing results (RoB-ME)** is the tipping-point algorithm in §3.4.8a.
+    - **Trim-and-fill** is the direction-of-bias verdict read off the pair
+      (original pooled effect, trim-and-fill adjusted effect): `not_serious` is
+      🟢, one level is 🟡, two levels is 🔴, and the panel's existing `k >= 10`
+      gate is ⚪. It is the same check the Risk of bias tab runs on the low-RoB
+      subset, so the 20% figure stays `PMA_ROB_INFLATION_THRESHOLD` and is not
+      duplicated here. It runs on the absolute risk scale for a binary outcome —
+      see §3.4.8b, which is also what makes ⚪ reachable without a baseline risk.
   - The tabset is **not gated on a wizard node**. All three are computable the
     moment `state$ma` exists and all three are reference material rather than
     answers; gating them meant the funnel appeared only at `q3` and the RoB-ME
@@ -1182,19 +1541,56 @@ Configuration tab"* sentence is now the tab's own name as a link, built by
 so three copies of one `actionLink` id would collide.
 
 **Indirectness: the default is on screen.** All four PICO radios are
-**preselected to `"yes"`** (0.5.1). Leaving them blank used to send
-`indirectness = "no"` to `grade_meta()` while the screen showed four unanswered
-questions — the domain scored no downgrade silently. Preselection makes that
-default visible and leaves the reviewer to downgrade the elements they have
-concerns about.
+**preselected to `"yes"`** (0.5.1), and so is the **overall rating**, to
+`STEP3_INDIR_DEFAULT_LEVEL` (`"not_serious"`, `R/step3_threshold.R`). Leaving
+them blank used to send `indirectness = "no"` to `grade_meta()` while the
+screen showed four unanswered questions — the domain scored no downgrade
+silently. Preselection makes that default visible and leaves the reviewer to
+downgrade the elements they have concerns about.
 
 The **judgment is unchanged** and this is verified, not assumed:
 `indir_subdomains()` now returns four rows instead of `NULL`, so `grade_obj()`
 takes the *subdomain* path rather than the scalar one; `indir_worst_case()`
-folds four `"yes"` answers to `"no"`; and the override-rationale logic compares
-`input$indirectness` against `indir_worst %||% "no"`, which is the same value it
-compared against before. Rated on the bundled CBT-I sample, certainty, all five
-domain judgments and every downgrade are identical either way.
+folds four `"yes"` answers to `"not_serious"`; and the override-rationale logic
+compares `input$indirectness` against that same fold, which is the same value
+it compared against before. Rated on the bundled CBT-I sample, certainty, all
+five domain judgments and every downgrade are identical either way.
+
+**The overall rating's blank carried two jobs, and only one of them was
+visible.** It was how a reviewer accepted the fold, and — because "nothing
+selected" was a reliable proxy for "no override intended" — it was also the
+rationale gate (`conditionalPanel("(input.indirectness || '') != ''")`).
+Preselecting removes the proxy, so the gate now compares the rating against
+the fold itself:
+
+- `step3_indir_worst_case(levels)` folds the answered subdomain levels by
+  severity, and `step3_indir_rationale_required(overall, worst)` is TRUE only
+  when the two differ (`R/step3_threshold.R`, both pure and unit-tested). An
+  unanswered overall demands nothing; a fold of nothing reads as
+  `STEP3_INDIR_DEFAULT_LEVEL`. `grade_obj()`, the rationale
+  `conditionalPanel` and the note below the radio all read the same function,
+  so the three cannot disagree.
+- The `conditionalPanel` is gated on `output.indir_override_active`, not on a
+  JavaScript expression: the fold is four radios mapped through
+  `STEP3_INDIR_ANSWER_TO_LEVEL` and then reduced by severity, which the client
+  cannot compute.
+- `output$indir_override_note` states **which of the two is in force** — a
+  restatement of the fold, an override that is rated because a reason was
+  written, or an override that is *not yet* rated because none has been. That
+  last case is the one preselection creates: a reviewer who downgrades a PICO
+  element leaves the overall radio reading "Not serious" over a fold of
+  "Serious", and `grade_obj()` drops a rationale-less override, so the fold is
+  what rates the domain until they either move the radio or explain it.
+- **`indir_worst_case()` used to fold against a dead vocabulary.** Its severity
+  table spelled the levels `"no"` / `"some_concerns"` / `"serious"`, which
+  0.5.1 replaced; every level the PICO answers produce except `"serious"`
+  missed it, so four answers containing a `"No"` (very serious) folded to
+  `NULL` and were reported as `"not_serious"`. It ranks the current levels now.
+
+The **completeness gate is untouched by any of this.** A domain is confirmed by
+its checkbox and nothing else (`pma_domain_confirmations()`, §3.4.13), which is
+precisely why a preselected widget cannot open the export gate for an outcome
+nobody has looked at.
 
 One downstream effect is real, and is the reason this is a breaking change:
 `grade$indirectness_subdomains` is now populated for every outcome, so
@@ -1260,6 +1656,152 @@ open; the rest of Display options collapses. The Heimke CER/EER recommendation
 is now `PMA_SOF_CER_EER_NOTE`, written into the SoF footer by
 `pma_sof_add_notes()`, so it travels into the exported .docx — which it never
 did as page text.
+
+#### 3.4.14 Rare events in Step 3
+
+**The gap is not that Step 3 rates the wrong number.** When the reviewer accepts
+the rare-event workflow, `state$ma` already *is* `state$rare$primary` — the
+sparse-data fit, `BB_CR` by default — so every domain is rated on it. The gap is
+that Step 3 does not know it: it never says which method produced the estimate,
+never says the rating would survive a different one, and runs three domain
+computations whose assumptions the data has already broken.
+
+**The governing rule: rare mode changes what is computed and what is said, and
+never changes a rating by itself.** Core GRADE has five domains and sparse data
+does not earn a sixth; what it earns is arithmetic that is valid on the data at
+hand and a record of how much the answer depended on a method choice. Every
+change below is either a correction to a computation or a fact added to the
+record — none of them moves a judgment on their own.
+
+**What Step 3 reads.** `state$rare_diagnostics` (the `pma_rare_diagnostics`
+object), `state$rare_mode_active`, `state$rare_primary_method`, and
+`state$rare` — the whole fitted suite, not just the primary. The suite is the
+part that matters most and was used for nothing after Step 2.
+
+Two reactives in `step3_server()` gate everything below: `.rare_active()` is
+`state$rare_mode_active && state$rare_diagnostics$rare_flow`, and
+`.rare_one_arm_zero()` adds `one_arm_total_zero`. **Both conditions are
+required.** A dataset can trip `rare_flow` and still be rated on the regular
+analysis, because the Step 2 checkbox lets the reviewer decline the workflow;
+nothing here applies to a rating made on the regular fit.
+
+Three arguments carry the facts into the package —
+`grade_meta(rare_flow =, rare_one_arm_total_zero =, rare_method =)` — and they
+are on `PMA_GRADE_ARGS_EXPORTED` and in `analysis_script.R.tpl`, because a
+script that omitted them would re-run the same data and report a different
+rating. `grade_meta()` records them back on the object as `$rare`, which is
+what `pma_outcome_grade_args()` recovers them from for a set assembled out of
+banked outcomes.
+
+**1. The method is named, once, where the rating is set up.**
+`.rare_method_block()` (`R/step3_threshold.R`) opens the Configuration tab —
+above the control-group risk, because it qualifies every number under it — and
+states that the pooled estimate comes from the rare-event workflow, which
+method produced it, and the study/event counts behind it. The method id reaches
+`grade_meta(rare_method =)`, which stamps `$rare$method` /
+`$rare$method_statement` onto the rated object, so it is banked with the
+outcome and `.write_results_txt()` prints it in the bundle as
+`[ Analysis method - rare events ]`. A reader of the Summary of Findings cannot
+otherwise tell a beta-binomial estimate from an inverse-variance one.
+
+**2. Imprecision: the rule is unchanged, the information size and the
+sensitivity are not.** Whether the confidence interval crosses the threshold
+stays exactly Core GRADE's question.
+
+- **The optimal information size switches to an event basis.** An OIS in
+  participants is the wrong denominator when the events are what is scarce; with
+  a 0.5% event rate a "sufficiently large" participant count can carry a dozen
+  events. Under `rare_flow` `.calc_ois(event_basis = TRUE)` returns the event
+  count the same power calculation implies, `.compute_ois_pct()` compares total
+  events with it, and the **`ois_basis` fact names the basis on every path** —
+  "83% of the OIS" is two different claims on the two bases. An explicit
+  `ois_n` override puts the comparison back on participants and the fact says
+  so. Rating against a participant-based OIS on sparse data is not a stricter
+  reading of Core GRADE, it is a wrong one.
+- **The suite becomes a sensitivity analysis for the rating, not just for the
+  estimate.** `rare_suite_crossing()` (`R/rare_step3.R`) asks every method in
+  `state$rare` the same crossing question the primary was asked — against
+  `.rated_threshold_for_imprecision()`, which is the threshold the rating
+  actually used and not `threshold_internal`, or the sensitivity would answer a
+  different question. `rare_suite_crossing_note()` reports unanimity, or names
+  the disagreeing methods with their intervals; `output$impre_rare_sensitivity`
+  renders it on the tab and `grade_obj()` appends the same sentence to the
+  Imprecision domain note, so the export carries it. Computed app-side, like the
+  threshold note, because a fitted suite cannot travel through `analysis.R`.
+  This costs no new statistics — every fit already exists.
+- **One arm with no events at all** (`one_arm_total_zero`) has no finite odds
+  ratio and no interval to compare with a threshold. `assess_imprecision()`
+  returns before it reads the CI, with `IMPRECISION NOT ASSESSABLE` in those
+  words and no downgrade, and the domain's confirmation is what carries the
+  reviewer's decision.
+
+**3. Inconsistency: the I² proxy is withdrawn, not reinterpreted.** The
+automated path uses I² as a statistical proxy for Core GRADE 3's first question.
+On sparse data τ² is badly estimated and I² inherits that, so under `rare_flow`
+`assess_inconsistency()` takes a path before the automated one and reports
+`NOT ASSESSABLE BY THE AUTOMATED PATH` — **recording no I², τ² or Q at all**,
+because a caveat beside a number is read past and the number is not. No
+downgrade follows: an unusable statistic is not grounds for one. The scalar
+override and the manual flowchart run first and are unchanged, and they are the
+routes that still work; `incon_confirm_na` is the existing gate and needs no new
+mechanism.
+
+**4. Publication bias: rare data takes the k < 10 route, whatever k is.** Egger's
+test loses validity on sparse binary data, and Core GRADE 4 Fig 5 already has a
+branch for "Egger is not available to you" — the one k < 10 takes, which asks
+about registries and unpublished studies instead. `step3_pubias_statistical(k,
+rare_flow)` returns `FALSE` under `rare_flow` at any k, which routes the wizard,
+the breadcrumb, the lit chart and `step3_pubias_k_line()` together;
+`assess_pubias(rare_flow =)` gates its own Q2 the same way, so the answer the
+reviewer gives at Q4 is the answer that rates the domain. The funnel status dot
+is ⚪ (§3.4.12), unchanged. This adds no node to Fig 5; it routes to one the
+figure already has, for the reason the figure already has it.
+
+**5. Absolute effects: one denominator per outcome, chosen from the data.** The
+per-N unit is already reviewer-selectable and already flows through one
+formatter to every string in Step 3 and into `sof_table()`
+(`step3_per_label()` / `display_per_state()`), so what was needed is a better
+default and two more units. `STEP3_PER_UNITS` gains 10,000 and 100,000, and
+`step3_rare_per_seed(event_rate_c)` picks the **smallest** unit at which the
+control-arm event rate still rounds to a whole event — never below the 1,000
+default, since 100 is the coarser unit and would make the problem worse.
+
+The seeding observer applies it **once per detection episode, and only while
+the unit is still the default**: the display unit is a property of the review
+rather than of the outcome (see `display_per_state()`), so a reviewer who has
+chosen a unit does not have it taken back on the next recompute. A one-off
+notification says what changed and where to change it.
+
+> **Assumption, stated.** The seed reads `event_rate_c`, the **control-arm**
+> rate, as this section names — not `min(event_rate_c, event_rate_e)`. It is
+> the rate every absolute number on Step 3 is already built from (the baseline
+> risk, the threshold's conversion, the "with intervention" row), so seeding
+> from anything else would put the unit and the arithmetic on different
+> footings. When the intervention arm is the rarer one its risk can still round
+> to zero at the seeded unit; the reviewer can raise the unit by hand.
+
+**The threshold moves with it.** The decision threshold is stated in the same
+per-N unit, and it must be the same one, for the reason §3.4.8b gives about
+trim-and-fill: an effect and the threshold it is judged against on two different
+scales is the failure mode this app has already had once. This needs no code of
+its own — the threshold is stored per-1,000 and displayed through
+`step3_to_per()`, so it follows whatever unit the seed picks. That is what "one
+denominator per outcome" buys.
+
+**6. The continuity correction needs no Step 3 change, only a record.** The
+`incr` input is Step 2's, and the suite's methods are correction-free by
+construction. What Step 3 owes the reader is the statement that no 0.5 was added
+— a 0.5 correction biases toward the null and would otherwise be an invisible
+assumption behind every downstream number. It is `PMA_RARE_NO_CC_NOTE`
+(`R/rare_step3.R`), printed in the Configuration block and on the object as
+`$rare$no_cc_note`, from where the bundle's `results.txt` prints it too.
+
+**Not done, deliberately:** no rare-event domain, no automatic downgrade for
+sparse data, and no change to any domain's decision rule. Sparse data makes an
+estimate harder to trust, and Core GRADE already has the domain for that.
+`tests/testthat/test-rare_step3.R` closes with the assertion that says so:
+turning `rare_flow` on over ordinary data moves no domain judgment, no
+downgrade and no final certainty.
 
 ### 3.5 Step 4 — Export
 
@@ -1567,7 +2109,94 @@ rationale, *or* the checkbox. Two things were wrong with it.
 
 Configuration keeps one extra condition, and only it: `config_blockers()` must
 be empty. That gate is about values being *set* — three of the five domains are
-judged against the threshold — so a tick alone will not do.
+judged against the threshold — so a tick alone will not do. One member of
+`config_blockers()` is itself a tick: `responder_p0_confirm`, on the responder
+route (§3.4.10a). So the Configuration tab carries **two** confirmations that
+gate its Next, and they are built the same way.
+
+**Every confirmation is built by `pma_confirm_checkbox()` (`R/ui_helpers.R`),
+and looks unfinished until it is ticked.** The helper is shared rather than
+local because `responder_p0_confirm` is rendered from `R/step3_threshold.R`
+and the other six from `step3_ui()` in `R/step3_grade.R`; a closure inside
+`step3_ui()` — which is what this was until it moved — is unreachable from the
+first, and the consequence shipped: one gate boxed, one gate rendered as a
+bare `checkboxInput()` in a column of numeric inputs and notes, with nothing
+saying a click was required. `PMA_OUTCOME_CONFIRM_IDS` is the canonical list of
+all seven, and `test-confirm-checkbox.R` asserts against the **built UI** that
+the boxed set and that list are the same set, so a confirmation added as a
+bare checkbox fails rather than ships.
+
+**A left accent on a filled ground means "answer this", and nothing else on a
+tab may wear it.** The accent is the wizard question's (§3.4.12): a
+`hsl(var(--primary))` left border on a `hsl(var(--muted))` ground. A read-only
+block that borrows the shape is read as a question, and a required block that
+is lighter than the read-only blocks around it is read as optional — the tab
+then teaches the reviewer the opposite of what it means, and no amount of
+wording inside either block undoes it.
+
+**The rule is about the `--primary` accent, not about every left accent.** The
+app has a second, older vocabulary — the alert and status palette, amber and
+green and red on their own tinted grounds — worn by `output$config_status`, the
+incomplete-certainty banner, the stale-analysis and rare-event banners, the
+Egger callout and `.pma-analysis-set`. Those say "notice this state", they are
+read-only by design, and they are none of this rule's business: a reviewer never
+mistakes an amber notice for a question. Only `--primary` on `--muted` is
+reserved, which is what the test enforces — it rejects the primary colour
+specifically rather than any 4px border, so a status block cannot fail it and a
+question-costumed read-only block cannot pass.
+
+What the Configuration tab shipped before this rule, measured on the deployed
+app: the read-only threshold-equivalence summary sat on a solid
+`rgb(245,245,245)` ground behind a **4px** left accent, while `.pma-confirm`
+around `threshold_confirm` — the gate that actually blocks Next — had a
+near-transparent `rgba(15,23,41,0.05)` ground and a **1px** translucent border.
+The heaviest block on the tab was the one with nothing to answer and the
+lightest the one that had to be answered. That is why the REQUIRED pill added
+with the shared helper did not settle the question the reviewer raised: the
+pill was never the problem, the ranking was.
+
+The rule is therefore two-directional, and both halves ship together:
+
+- **Every required answer carries the same treatment, and it outranks every
+  read-only block on its tab.** `.pma-confirm` gets the accent — the same left
+  border weight and ground the wizard question uses — so "must be answered"
+  looks identical wherever it appears, on Step 2's fields and Step 3's seven
+  confirmations alike.
+- **Derived read-only summaries lose the accent and the ground.** They are
+  body copy under the input they are derived from, distinguished by position
+  rather than by decoration. Two wore the costume and both moved:
+  `output$threshold_equiv`, the threshold-equivalence summary §3.4.10a names,
+  and `output$ois_rrr_equiv`, which reads the Imprecision tab's relative risk
+  reduction back on the absolute scale. Neither takes an answer.
+
+The rule is enforced on the source, not on a screenshot: `.pma-confirm`'s left
+border is asserted to be no lighter than `.pma-wizard-question`'s, and no block
+in `R/step3_grade.R` may pair a 4px `#0f172a` left border with a filled ground
+(`test-confirm-checkbox.R`). The publication-bias callouts are deliberately not
+covered by the second half — `.pubias_egger_callout()` accents in the judgment's
+own green or amber, which is the status vocabulary, not the question's.
+
+Two visual states, both in `www/shadcn.css`, no JavaScript and no server round
+trip:
+
+| state | treatment |
+|---|---|
+| unticked | an uppercase `REQUIRED` pill above the label, a **4px `--primary` left accent on a `--muted` ground** — the wizard question's own weight and ground — inside a 1px `--primary` outline. An outstanding action, legible before anything has been pressed |
+| ticked | the muted dashed border these boxes have always had; the `border` shorthand drops the accent, because an answered box must stop claiming "answer this". The pill greys to `--muted` rather than being removed, so the box does not change height and drag the Next button out from under the cursor |
+
+The pill reuses the vocabulary of Step 2's `.pma-required-unset` mark
+(§3.3.6): same radius, same type. It sits at `--primary` rather than Step 2's
+armed `--destructive` because there is no "armed" tier here — these boxes are
+static markup with nothing to arm on, and a permanently red box would destroy
+the never-red-on-a-fresh-page property the two-tier scheme exists for.
+**Unticked is the base rule** and `:has(input:checked)` is what quietens it, so
+a browser without `:has()` degrades to "always looks required" rather than
+"always looks done"; only the second of those can let a reviewer walk past a
+gate believing it cleared.
+
+This is a legibility change only. `responder_p0_confirmed()`,
+`config_blockers()` and `pma_domain_confirmations()` are untouched: the same
+clicks are required, they just look required.
 
 **Every Next is gated; nothing else is.** `output$grade_nav_<key>` renders the
 Back/Next pair of each domain tab from `STEP3_DOMAIN_NAVS`, and the Next is

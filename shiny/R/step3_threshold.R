@@ -88,8 +88,54 @@ step3_blocked_message <- function(blocked) {
 # two export arguments move. That is what keeps a reviewer's switch from 1,000
 # to 100 from silently re-scaling a threshold they already justified in
 # writing.
-STEP3_PER_UNITS <- c(100L, 1000L)
+# Two of these four are for rare events. Core GRADE 7 presents absolute
+# effects per 1,000, which is the right unit for an outcome that happens; it is
+# the wrong one for an outcome that does not. At a control-arm event rate of
+# 0.05% the table prints "0 per 1,000" against "0 per 1,000" and a difference
+# of "0 per 1,000" - three zeros where the whole finding should be - so the
+# unit has to be able to grow with the rarity of the event
+# (shiny/SPEC.md 3.4.14).
+#
+# Ascending, and read in order by step3_rare_per_seed(): the seed is the
+# SMALLEST unit at which the control-arm risk still has a figure to show.
+STEP3_PER_UNITS <- c(100L, 1000L, 10000L, 100000L)
 STEP3_PER_DEFAULT <- 1000L
+
+# Labels for the radio, built from the units rather than written out beside
+# them: a unit added above and not here would be silently unofferable.
+step3_per_choices <- function(units = STEP3_PER_UNITS) {
+  stats::setNames(
+    as.character(units),
+    sprintf("%s patients", format(units, big.mark = ",", scientific = FALSE,
+                                  trim = TRUE)))
+}
+
+# The per-N unit a rare-event analysis should OPEN on.
+#
+# `event_rate_c` is rare_event_diagnostics()'s control-arm event rate, which is
+# the rate every absolute number on Step 3 is built from - the baseline risk,
+# the threshold's conversion, and the "with intervention" row of the Summary of
+# Findings. Pick the smallest offered unit at which that rate still rounds to a
+# whole event, so the smaller of the two arm risks keeps a significant figure
+# instead of collapsing to zero.
+#
+# Never smaller than the default: a rare outcome is not a reason to move from
+# 1,000 to 100, and the reviewer's own choice is honoured by the caller (see
+# the seeding observer in step3_grade.R), which only applies this while the
+# unit is still the default.
+step3_rare_per_seed <- function(event_rate_c, default = STEP3_PER_DEFAULT,
+                                units = STEP3_PER_UNITS) {
+  default <- step3_per_unit(default)
+  if (is.null(event_rate_c) || length(event_rate_c) != 1L ||
+      !is.numeric(event_rate_c) || !is.finite(event_rate_c) ||
+      event_rate_c <= 0) {
+    return(default)
+  }
+  candidates <- sort(units[units >= default])
+  ok <- candidates[event_rate_c * candidates >= 1]
+  if (!length(ok)) return(max(candidates))
+  min(ok)
+}
 
 # A radioButtons() value arrives as a character. sof_table() wants a number,
 # and validation is cheap enough to do at every boundary.
@@ -159,6 +205,70 @@ step3_per_unit_label <- function(per = STEP3_PER_DEFAULT) {
 }
 
 # --------------------------------------------------------------------------
+# Indirectness: the worst-case fold, and when a rationale is owed
+# --------------------------------------------------------------------------
+# The overall Indirectness radio ships PRESELECTED to STEP3_INDIR_DEFAULT_LEVEL
+# (step3_grade.R). Before that it shipped blank, and blank was the way a
+# reviewer said "accept the fold of the four PICO answers" - so the rationale
+# gate could key on "is anything selected at all?" and be right. Preselecting
+# turns that blank into a real answer, and a gate that still asked "is anything
+# selected?" would demand a written reason for a default nobody chose.
+#
+# So the gate has to compare the overall rating against the fold itself, which
+# is what these two do. Pure, and therefore testable without a session: the
+# server reactives are only the wiring that maps the four radios onto levels.
+STEP3_INDIR_DEFAULT_LEVEL <- "not_serious"
+
+# Severity order of the GRADE levels a fold can produce. Written out rather
+# than derived from .grade_level_downgrade(), because this file is sourced
+# before the vendored package and must not depend on it.
+#
+# The previous ordering vector spelled the levels "no" / "some_concerns" /
+# "serious", which is the vocabulary 0.5.1 replaced. Every level the PICO
+# answers actually produce ("not_serious" / "serious" / "very_serious") missed
+# it, so a fold over four answers containing a "No" (very serious) returned
+# NULL and the domain was reported as folding to "not serious".
+STEP3_INDIR_LEVEL_SEVERITY <- c(
+  not_serious       = 0L,
+  serious           = 1L,
+  very_serious      = 2L,
+  extremely_serious = 3L
+)
+
+# The most severe of the levels the answered subdomains map to, or NULL when
+# nothing recognisable was answered. Mirrors .indirectness_worst_case() in
+# R/domain_indirectness.R, so the app can tell a restatement of the automatic
+# judgment from a real override without a second grade_meta() call.
+step3_indir_worst_case <- function(levels) {
+  if (is.null(levels) || !length(levels)) return(NULL)
+  levels <- as.character(levels)
+  known  <- names(STEP3_INDIR_LEVEL_SEVERITY)
+  levels <- levels[!is.na(levels) & levels %in% known]
+  if (!length(levels)) return(NULL)
+  unname(levels[which.max(STEP3_INDIR_LEVEL_SEVERITY[levels])])
+}
+
+# TRUE when the overall rating on screen departs from the fold and therefore
+# owes a written reason. An unanswered overall owes nothing, and neither does
+# one that restates the fold - which is exactly the case the preselected
+# default lands in while all four PICO answers are "Yes".
+step3_indir_rationale_required <- function(overall, worst = NULL) {
+  overall <- if (is.null(overall) || length(overall) != 1L || is.na(overall)) {
+    ""
+  } else {
+    as.character(overall)
+  }
+  if (!nzchar(overall)) return(FALSE)
+  auto <- if (is.null(worst) || length(worst) != 1L || is.na(worst) ||
+              !nzchar(as.character(worst))) {
+    STEP3_INDIR_DEFAULT_LEVEL
+  } else {
+    as.character(worst)
+  }
+  !identical(overall, auto)
+}
+
+# --------------------------------------------------------------------------
 # Publication bias: which Fig 5 node is being asked
 # --------------------------------------------------------------------------
 # DERIVED from the answers, never stored as a free-running cursor. Changing an
@@ -168,7 +278,9 @@ step3_per_unit_label <- function(per = STEP3_PER_DEFAULT) {
 # The chain below is assess_pubias()'s own evaluation order
 # (R/domain_pubias.R): Q1 first and terminal on "yes"; then the pmatools
 # registry-coverage input, terminal only on "yes" (which short-circuits the
-# package); then the k gate, which is computed and never asked; then Q3 or Q4.
+# package); then Fig 5's Q2 feasibility gate, which is computed and never asked
+# (the study count, or a rare-event analysis - see
+# step3_pubias_statistical()); then Q3 or Q4.
 #
 # `reopen` is a breadcrumb click. It wins over the derivation, and only for a
 # node that is actually reachable - so re-opening Q1 and answering "yes" does
@@ -194,13 +306,27 @@ STEP3_PUBIAS_USE_EGGER <- "egger"
   if (!.pubias_answered(v)) "" else as.character(v)[1]
 }
 
+# Egger's verdict as the answer the Q3 node would have carried, so the chart
+# can be lit from it. NA is what an infeasible or failed test reports, and it
+# has to read as "no answer" rather than as FALSE - a test that could not run
+# is not a symmetric funnel.
+.pubias_egger_answer <- function(egger_asymmetric) {
+  if (is.null(egger_asymmetric) || length(egger_asymmetric) != 1L ||
+      !is.logical(egger_asymmetric) || is.na(egger_asymmetric)) {
+    return("")
+  }
+  if (isTRUE(egger_asymmetric)) "yes" else "no"
+}
+
 step3_pubias_node <- function(small_industry = NULL,
                               registry_complete = NULL,
                               funnel_asymmetry = NULL,
                               unpublished = NULL,
                               k = 0L,
-                              reopen = NULL) {
-  path <- step3_pubias_reachable(small_industry, registry_complete, k)
+                              reopen = NULL,
+                              rare_flow = FALSE) {
+  path <- step3_pubias_reachable(small_industry, registry_complete, k,
+                                 rare_flow = rare_flow)
   if (!is.null(reopen) && length(reopen) == 1L && !is.na(reopen) &&
       as.character(reopen) %in% path) {
     return(as.character(reopen))
@@ -215,8 +341,9 @@ step3_pubias_node <- function(small_industry = NULL,
   # decides nothing by itself and falls through to the Figure 5 nodes.
   if (identical(.pubias_chr(registry_complete), "yes")) return("result")
 
-  # Q2 is not a question - k decides it. See step3_pubias_k_line().
-  if (isTRUE(step3_pubias_statistical(k))) {
+  # Q2 is not a question - k and the sparsity of the data decide it. See
+  # step3_pubias_k_line().
+  if (isTRUE(step3_pubias_statistical(k, rare_flow))) {
     if (!.pubias_answered(funnel_asymmetry)) return("q3")
   } else {
     if (!.pubias_answered(unpublished)) return("q4")
@@ -226,7 +353,17 @@ step3_pubias_node <- function(small_industry = NULL,
 
 # Q2, computed. k >= 10 routes to the statistical branch, below it to the
 # registry question. Same rule as assess_pubias().
-step3_pubias_statistical <- function(k) {
+#
+# `rare_flow` is the SECOND way the answer can be "not feasible", and it is
+# the same answer rather than a new one. Fig 5's Q2 asks whether a statistical
+# analysis is feasible; k < 10 is the usual reason it is not, and sparse binary
+# data is the other - Egger's regression of the effect on its standard error
+# couples the two through the cell counts and acquires a false-positive rate
+# that has nothing to do with publication bias. So a rare-event analysis takes
+# the branch the figure already draws for "Egger is not available to you",
+# whatever k is. NO NODE IS ADDED to Fig 5 (shiny/SPEC.md 3.4.14).
+step3_pubias_statistical <- function(k, rare_flow = FALSE) {
+  if (isTRUE(rare_flow)) return(FALSE)
   k <- suppressWarnings(as.numeric(k))
   if (length(k) != 1L || is.na(k)) return(FALSE)
   k >= 10
@@ -236,15 +373,41 @@ step3_pubias_statistical <- function(k) {
 # Names the step rather than numbering it: the wizard prints no question
 # numbers, because the chart beside it puts a pmatools node between Fig 5's
 # Q1 and Q2 and the numbering matched neither.
-step3_pubias_k_line <- function(k) {
+#
+# The rare-event line names k as well as the reason, because a reviewer looking
+# at 14 studies and a registry question needs to see that the study count was
+# not what decided it.
+step3_pubias_k_line <- function(k, rare_flow = FALSE) {
   k <- suppressWarnings(as.numeric(k))
   if (length(k) != 1L || is.na(k)) k <- 0
-  if (step3_pubias_statistical(k)) {
+  if (step3_pubias_statistical(k, rare_flow)) {
     sprintf("Statistical analysis feasible - k = %g >= 10, funnel / Egger", k)
+  } else if (isTRUE(rare_flow)) {
+    sprintf(paste0("Statistical analysis not feasible - rare-event analysis ",
+                   "(k = %g); Egger's test loses validity on sparse binary ",
+                   "data, so Figure 5's registry route is taken"), k)
   } else {
     sprintf("Statistical analysis not feasible - k = %g < 10, registry route",
             k)
   }
+}
+
+# "Question 2 of 3" for the node now on screen, or NULL for anything that is
+# not a question (the terminal "result", or a node the current answers have
+# taken off the path).
+#
+# The TOTAL is only printed once the answers settle the route, i.e. once
+# "result" has joined the reachable path. Before that the reviewer's own next
+# answer decides whether two more questions follow - Q1 = "yes" ends the wizard
+# after one - so a total taken from the path so far would always equal the
+# current index and would tell every reviewer they were on the last question.
+step3_pubias_question_line <- function(node, path) {
+  if (is.null(node) || length(node) != 1L || is.na(node)) return(NULL)
+  questions <- setdiff(as.character(path), "result")
+  at <- match(as.character(node), questions)
+  if (is.na(at)) return(NULL)
+  if (!"result" %in% as.character(path)) return(sprintf("Question %d", at))
+  sprintf("Question %d of %d", at, length(questions))
 }
 
 # The nodes the CURRENT answers put on the path, in wizard order. Drives the
@@ -253,7 +416,8 @@ step3_pubias_k_line <- function(k) {
 # longer reaches.
 step3_pubias_reachable <- function(small_industry = NULL,
                                    registry_complete = NULL,
-                                   k = 0L) {
+                                   k = 0L,
+                                   rare_flow = FALSE) {
   out <- "q1"
   if (!.pubias_answered(small_industry)) return(out)
   if (identical(.pubias_chr(small_industry), "yes")) return(c(out, "result"))
@@ -262,7 +426,7 @@ step3_pubias_reachable <- function(small_industry = NULL,
   if (identical(.pubias_chr(registry_complete), "yes")) {
     return(c(out, "result"))
   }
-  c(out, if (step3_pubias_statistical(k)) "q3" else "q4", "result")
+  c(out, if (step3_pubias_statistical(k, rare_flow)) "q3" else "q4", "result")
 }
 
 # The figure ids the answers so far have LIT, for the chart that sits above the
@@ -283,14 +447,22 @@ step3_pubias_reachable <- function(small_industry = NULL,
 # started", and lighting the entry node before the reviewer has touched it
 # would say the opposite.
 #
-# One answer stops the trail at a node rather than a leaf, because the leaf is
-# genuinely not decided yet: STEP3_PUBIAS_USE_EGGER defers Q3 to the automated
-# test, whose p value this function does not have.
+# STEP3_PUBIAS_USE_EGGER is an answer, not a blank: it says "I looked, and I
+# accept the automated test". It used to stop the trail at pma-pubias-node-q3
+# because this function had no p value, so a reviewer who accepted Egger saw a
+# chart that looked unfinished for the rest of the assessment.
+# `egger_asymmetric` is that p value's verdict, passed in by the caller (the
+# reactive that runs metabias() for the callout) rather than computed here -
+# the function stays pure and side-effect free, which is what makes it
+# unit-testable. NULL or NA still stops at the node, because then the leaf
+# genuinely is not decided.
 step3_pubias_flow_ids <- function(small_industry = NULL,
                                   registry_complete = NULL,
                                   funnel_asymmetry = NULL,
                                   unpublished = NULL,
-                                  k = 0L) {
+                                  k = 0L,
+                                  egger_asymmetric = NULL,
+                                  rare_flow = FALSE) {
   if (!.pubias_answered(small_industry)) return(character(0))
 
   ids <- "pma-pubias-node-q1"
@@ -305,13 +477,17 @@ step3_pubias_flow_ids <- function(small_industry = NULL,
     return(c(ids, "pma-pubias-edge-registry-yes",
              "pma-pubias-leaf-nodown-registry"))
   }
-  # "no" carries on down the chart. The k gate below it is computed rather
+  # "no" carries on down the chart. The Q2 gate below it is computed rather
   # than asked, so lighting its node AND the edge out of it is the only way
-  # the reviewer sees which branch the study count chose for them.
+  # the reviewer sees which branch was chosen for them - by the study count,
+  # or, on a rare-event analysis, by the sparsity of the data.
   ids <- c(ids, "pma-pubias-edge-registry-no", "pma-pubias-node-q2")
-  if (step3_pubias_statistical(k)) {
+  if (step3_pubias_statistical(k, rare_flow)) {
     ids <- c(ids, "pma-pubias-edge-q2-yes", "pma-pubias-node-q3")
     asymmetry <- .pubias_chr(funnel_asymmetry)
+    if (identical(asymmetry, STEP3_PUBIAS_USE_EGGER)) {
+      asymmetry <- .pubias_egger_answer(egger_asymmetric)
+    }
     if (identical(asymmetry, "yes")) {
       return(c(ids, "pma-pubias-edge-q3-yes", "pma-pubias-leaf-down1-q3"))
     }
@@ -762,6 +938,56 @@ RESPONDER_P0_DEFAULT <- 0.20
     text)
 }
 
+# ----- Configuration tab: which analysis is being rated ------------------
+# FIRST on the tab when the rare-event workflow is in force, above the
+# control-group risk, because it qualifies everything under it: state$ma IS
+# state$rare$primary in that mode, so all five domains are already rated on a
+# sparse-data fit and Step 3 said so nowhere. A reader of the Summary of
+# Findings cannot tell a beta-binomial estimate from an inverse-variance one -
+# both arrive as an odds ratio with a 95% interval, and only one of them is
+# valid on data this sparse.
+#
+# It is a statement, not a question. Nothing here is answered, nothing here
+# rates anything, and the method is changed where it was chosen (Step 2).
+#
+# `diag` is the pma_rare_diagnostics object; NULL is tolerated so the block
+# still renders from the method alone.
+.rare_method_block <- function(method_id, effect_scale = "OR", diag = NULL) {
+  statement <- rare_method_statement(method_id, effect_scale)
+  if (is.na(statement)) {
+    statement <- paste0(
+      "The pooled estimate rated below comes from the rare-event workflow, ",
+      "not from the regular pairwise analysis.")
+  }
+  rate <- if (is.list(diag)) diag$event_rate_overall else NULL
+  counts <- if (is.list(diag) && length(rate) == 1L && is.finite(rate)) {
+    sprintf(paste0("%d of %d studies have events in both arms; %d have a ",
+                   "zero-event arm; %d events in total, at an overall event ",
+                   "rate of %.2f%%."),
+            diag$both_arms_events_k %||% 0L, diag$k %||% 0L,
+            diag$zero_cell_k %||% 0L, diag$total_events %||% 0L,
+            100 * rate)
+  } else {
+    NULL
+  }
+  .config_section(
+    htmltools::tagList("Analysis being rated",
+                       .warn_badge("rare-event workflow")),
+    htmltools::p(style = "margin: 0 0 0.5rem;",
+                 htmltools::strong(statement)),
+    if (!is.null(counts)) .config_note(counts),
+    # Core GRADE says nothing about continuity corrections, and that is
+    # precisely why this has to be said: a 0.5 added to each cell of a
+    # zero-event study biases the estimate toward the null, and its ABSENCE
+    # leaves no trace anywhere in the output.
+    .config_note(PMA_RARE_NO_CC_NOTE),
+    .config_note(
+      "Change the method in Step 2, where the sensitivity suite and its ",
+      "forest plot are. It is recorded on this outcome and travels into the ",
+      "exported record.")
+  )
+}
+
 .source_badge <- function(src) {
   if (identical(src, "core_grade_6")) {
     return(.ok_badge("source: Core GRADE 6"))
@@ -772,17 +998,19 @@ RESPONDER_P0_DEFAULT <- 0.20
 # ----- Configuration tab: responder conversion block (continuous) ------
 # Core GRADE 6 ranks three presentations of a continuous outcome and
 # recommends the mean difference and the responder proportion together.
-# This app implements the responder proportion only, through Chinn's formula
-# rather than Core GRADE 6's own procedure. Both departures are still stated
-# on screen; the recitation of what Core GRADE 6 ranks
+# The responder proportion is still derived through Chinn's formula rather than
+# Core GRADE 6's own procedure, and that departure is stated on screen; the
+# recitation of what Core GRADE 6 ranks
 # (EDU_COPY$config_tab$continuous_intro) is not, because a reviewer answered
 # nothing with it.
 #
-# The two presentations are offered as an either/or (input$sof_presentation),
-# defaulting to the effect itself. NEITHER changes the certainty rating: the
-# conversion reaches sof_table() and nothing else, while Imprecision is rated
-# on the SMD/MD against the threshold set in the section rendered just above
-# this block.
+# The presentations are offered as a three-way choice (input$sof_presentation),
+# defaulting to the effect itself: the effect, the responder proportion, or
+# both together, which is the pairing Core GRADE 6 recommends and which used to
+# be unavailable here - the block offered an either/or and said so. NONE of the
+# three changes the certainty rating: the conversion reaches sof_table() and
+# nothing else, while Imprecision is rated on the SMD/MD against the threshold
+# set in the section rendered just above this block.
 #
 # `p0` is the seed for the proportion box, passed in by the caller from the
 # reactiveVal that owns it - the widget must not re-assert the constant on
@@ -818,22 +1046,40 @@ RESPONDER_P0_DEFAULT <- 0.20
       shiny::uiOutput("responder_p0_badge", inline = TRUE)),
     .config_note(EDU_COPY$config_tab$continuous_departure),
     .config_note(EDU_COPY$config_tab$chinn_caveat),
-    # A two-way radio rather than a tick-box, and defaulting to the effect
-    # itself. The conversion used to be on by default, which read as though
-    # the rating REQUIRED a binary presentation. It does not: grade_meta()
-    # never sees the conversion, Imprecision is rated on the SMD/MD against
-    # the threshold below either way, and this choice only reaches
-    # sof_table(). Presenting the two as an explicit either/or says so.
+    # A radio rather than a tick-box. The conversion used to be a checkbox that
+    # was on by default, which read as though the rating REQUIRED a binary
+    # presentation. It does not: grade_meta() never sees the conversion,
+    # Imprecision is rated on the SMD/MD against the threshold below either
+    # way, and this choice only reaches sof_table(). Presenting the options as
+    # an explicit choice says so, and the choice is still on screen either way.
+    #
+    # 'both' is the default because it is what Core GRADE 6 recommends. It does
+    # cost the reviewer a responder proportion they have to stand behind, and
+    # that is the argument the other way -- a default that demands an
+    # assumption is how the assumption stops being examined. What answers it is
+    # that the demand is not silent: the proportion defaults to the app
+    # convention and the Configuration tab's Next stays shut until the reviewer
+    # either confirms that figure or replaces it with a reason, in a box that
+    # says REQUIRED until it is ticked (pma_confirm_checkbox()). The assumption
+    # is examined once per outcome, by construction.
     shiny::radioButtons("sof_presentation",
       "How should the Summary of Findings table present this outcome?",
       choices = stats::setNames(
-        c("effect", "responder"),
+        c("effect", "responder", "both"),
         c(sprintf("The %s itself, on its own scale", sm),
           paste0("The proportion of responders, converted with Chinn's ",
-                 "formula (Core GRADE 6 option 2)"))),
-      selected = "effect"),
+                 "formula (Core GRADE 6 option 2)"),
+          sprintf(paste0("Both, on two rows of one outcome: the %s on its own ",
+                         "scale above and the proportion of responders below ",
+                         "(what Core GRADE 6 recommends)"), sm))),
+      selected = "both"),
+    # Every input below belongs to the responder conversion, which both
+    # 'responder' and 'both' run. Testing only 'responder' would leave a
+    # reviewer on 'both' with no way to enter the proportion the conversion
+    # cannot proceed without.
     shiny::conditionalPanel(
-      "input.sof_presentation == 'responder'",
+      paste0("input.sof_presentation == 'responder' || ",
+             "input.sof_presentation == 'both'"),
       shiny::numericInput("baseline_risk_chinn",
         paste0("Proportion of control patients meeting the threshold of ",
                "clinical interest"),
@@ -856,12 +1102,17 @@ RESPONDER_P0_DEFAULT <- 0.20
             "reduction criterion in the three trials that reported it; ",
             "taken from the placebo arm of Jones 2019."))
       ),
+      # The other half of the pair above, and a gate on the Configuration
+      # tab's Next exactly as `threshold_confirm` is - so it is built with the
+      # same pma_confirm_checkbox() rather than a bare checkboxInput(). As a
+      # bare box it read as one more note in a column of notes, which is the
+      # whole reason reviewers walked past it and then could not find what was
+      # holding the Next button shut.
       shiny::conditionalPanel(
         sprintf("input.baseline_risk_chinn == %s", RESPONDER_P0_DEFAULT),
-        shiny::checkboxInput("responder_p0_confirm",
+        pma_confirm_checkbox("responder_p0_confirm",
           paste0("I have considered this rate and accept 20 percent ",
-                 "(200 per 1,000) for this outcome"),
-          value = FALSE)
+                 "(200 per 1,000) for this outcome"))
       ),
       shiny::textInput("threshold_label",
         "Definition of the threshold of clinical interest (free text)",

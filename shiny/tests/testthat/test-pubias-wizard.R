@@ -227,12 +227,136 @@ test_that("the terminal answers light their leaves", {
 })
 
 test_that("an answer that decides no leaf stops the trail at a node", {
-  # Accepting the automated Egger test hands Q3 to a p value this function
-  # does not have, so the chart lights the node and waits.
+  # Accepting the automated Egger test hands Q3 to a p value this function is
+  # not given here, so the chart lights the node and waits. Supplied, the same
+  # answer reaches a leaf - see the egger_asymmetric tests at the foot of this
+  # file.
   ids <- step3_pubias_flow_ids(small_industry = "no",
                                registry_complete = "no",
                                funnel_asymmetry = STEP3_PUBIAS_USE_EGGER,
                                k = 14)
+  expect_identical(ids[length(ids)], "pma-pubias-node-q3")
+})
+
+# --------------------------------------------------------------------------
+# "Question 2 of 3": where the reviewer is in the wizard
+# --------------------------------------------------------------------------
+# One question on screen answers "what am I being asked" and never answered
+# "how many of these are there". The count comes from the reachable path, so
+# it can only ever name questions the current answers actually reach.
+
+test_that("the total waits until the answers settle the route", {
+  # Q1 unanswered: the reviewer's own next answer decides whether the wizard
+  # ends here (Q1 = "yes") or runs to three questions. Printing "of 1" would
+  # be a claim the answers have not made.
+  expect_identical(
+    step3_pubias_question_line("q1", step3_pubias_reachable()),
+    "Question 1")
+
+  # Same at the second question, for the same reason: "yes" ends it here.
+  expect_identical(
+    step3_pubias_question_line(
+      "extra", step3_pubias_reachable(small_industry = "no")),
+    "Question 2")
+})
+
+test_that("every reachable path numbers its own questions", {
+  # The two terminal-on-"yes" short circuits: one question, then the result.
+  expect_identical(
+    step3_pubias_question_line(
+      "q1", step3_pubias_reachable(small_industry = "yes")),
+    "Question 1 of 1")
+  expect_identical(
+    step3_pubias_question_line(
+      "extra", step3_pubias_reachable(small_industry = "no",
+                                      registry_complete = "yes")),
+    "Question 2 of 2")
+
+  # The two full routes. Q2 is computed rather than asked, so it is not
+  # counted: the reviewer answers three questions on either branch.
+  stat <- step3_pubias_reachable(small_industry = "no",
+                                 registry_complete = "no", k = 14)
+  expect_identical(step3_pubias_question_line("q1", stat), "Question 1 of 3")
+  expect_identical(step3_pubias_question_line("extra", stat),
+                   "Question 2 of 3")
+  expect_identical(step3_pubias_question_line("q3", stat), "Question 3 of 3")
+
+  registry <- step3_pubias_reachable(small_industry = "no",
+                                     registry_complete = "no", k = 4)
+  expect_identical(step3_pubias_question_line("q4", registry),
+                   "Question 3 of 3")
+})
+
+test_that("anything that is not a question on this path has no line", {
+  full <- step3_pubias_reachable(small_industry = "no",
+                                 registry_complete = "no", k = 14)
+  # The terminal node is never numbered - it is the verdict, not a question.
+  expect_null(step3_pubias_question_line("result", full))
+  # q4 is on the branch these answers did not take.
+  expect_null(step3_pubias_question_line("q4", full))
+  expect_null(step3_pubias_question_line(NULL, full))
+  expect_null(step3_pubias_question_line(NA_character_, full))
+})
+
+# --------------------------------------------------------------------------
+# Accepting Egger's test lights the chart
+# --------------------------------------------------------------------------
+# "egger" is an ANSWER ("I looked, and I accept the automated test"), so the
+# leaf it reaches is decided - by a p value the caller holds. It used to stop
+# the trail dead at pma-pubias-node-q3, and a reviewer who accepted the test
+# saw a chart that looked unfinished for the rest of the assessment.
+
+test_that("the Egger sentinel reaches the leaf its p value chose", {
+  base <- list(small_industry = "no", registry_complete = "no",
+               funnel_asymmetry = STEP3_PUBIAS_USE_EGGER, k = 14)
+
+  ids <- do.call(step3_pubias_flow_ids,
+                 c(base, list(egger_asymmetric = TRUE)))
+  expect_identical(ids[(length(ids) - 1L):length(ids)],
+                   c("pma-pubias-edge-q3-yes", "pma-pubias-leaf-down1-q3"))
+
+  ids <- do.call(step3_pubias_flow_ids,
+                 c(base, list(egger_asymmetric = FALSE)))
+  expect_identical(ids[(length(ids) - 1L):length(ids)],
+                   c("pma-pubias-edge-q3-no", "pma-pubias-leaf-nodown-q3"))
+
+  # No p value - the test was infeasible or failed - is not the same claim as
+  # a symmetric funnel, so the trail stops at the node exactly as before.
+  for (unknown in list(NULL, NA)) {
+    ids <- do.call(step3_pubias_flow_ids,
+                   c(base, list(egger_asymmetric = unknown)))
+    expect_identical(ids[length(ids)], "pma-pubias-node-q3")
+  }
+  # Omitting the argument entirely is the same as not knowing it.
+  ids <- do.call(step3_pubias_flow_ids, base)
+  expect_identical(ids[length(ids)], "pma-pubias-node-q3")
+})
+
+test_that("a visual override ignores Egger's verdict entirely", {
+  # The regression guard on the two literal answers: a reviewer who looked at
+  # the funnel and overrode the test must not have the test's own p value put
+  # back under them.
+  base <- list(small_industry = "no", registry_complete = "no", k = 14)
+
+  for (answer in c("yes", "no")) {
+    leaf <- if (identical(answer, "yes")) {
+      "pma-pubias-leaf-down1-q3"
+    } else {
+      "pma-pubias-leaf-nodown-q3"
+    }
+    for (egger in list(NULL, TRUE, FALSE, NA)) {
+      ids <- do.call(step3_pubias_flow_ids,
+                     c(base, list(funnel_asymmetry = answer,
+                                  egger_asymmetric = egger)))
+      expect_identical(ids[(length(ids) - 1L):length(ids)],
+                       c(paste0("pma-pubias-edge-q3-", answer), leaf))
+    }
+  }
+
+  # And an unanswered Q3 stays unanswered however the automated test came out:
+  # the sentinel is what says the reviewer looked and accepted it.
+  ids <- do.call(step3_pubias_flow_ids,
+                 c(base, list(egger_asymmetric = TRUE)))
   expect_identical(ids[length(ids)], "pma-pubias-node-q3")
 })
 

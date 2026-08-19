@@ -444,9 +444,12 @@ w_high >= rob_dominant_threshold ?
 │           bias could account for the effect / its absence → rate down
 │           bias would under-estimate the effect             → do not rate down
 └── no  → appreciable evidence from low-RoB studies?
-          substantial difference between the high- and low-RoB estimates?
-            ├── yes → do not rate down; use low risk of bias studies only
-            └── no  → do not rate down; use all studies
+          similar or substantially different magnitudes of effect?
+          (the same 5-rule decision, read as a leaf instead of a downgrade)
+            ├── rule 3/4/5 → substantially different
+            │                do not rate down; use low risk of bias studies only
+            └── rule 1/2   → similar
+                             do not rate down; use all studies
 ```
 
 The non-dominated branch **never rates the domain down**. When it lands on
@@ -487,7 +490,8 @@ Rule 1: same trivial zone                                         → no
 Rule 2: same non-trivial zone, inflation ≤ 20%                    → no
 Rule 3: same non-trivial zone, bias-favouring inflation > 20%     → serious (−1)
 Rule 4: zone differs without sign flip                            → serious (−1)
-Rule 5: zone differs with sign flip (above ↔ below)               → serious       (−2)
+Rule 5: zone differs with sign flip (above ↔ below)               → very_serious (−2)
+        …with no Threshold supplied                               → serious (−1)
 ```
 
 `inflation_ratio = (|TE_all| − |TE_low|) / |TE_low|` is evaluated only when the
@@ -571,7 +575,10 @@ direction.
 **Fallback when Threshold is not supplied** (`threshold = NULL`): the trivial
 zone collapses to `{0}`, so only sign flips can change zones. The algorithm
 reduces to a sign-flip check (rule 5 vs rule 2/3); rule 1 and rule 4 cannot
-fire.
+fire. Rule 5 then rates down **one** level rather than two, and says why —
+without a Threshold to clear, "opposite sides of the null" means only that the
+two estimates carry opposite signs, which two near-null estimates can satisfy
+by an arbitrarily small movement.
 
 **Dominance gate: deprecation retracted.** `rob_dominant_threshold` was
 deprecated in v0.3.1 ("accepted but ignored"), on the reasoning that the
@@ -584,19 +591,45 @@ names (the earlier `0.60` matched neither). (The CI-overlap and CI-significance
 branches removed in v0.3.1 stay removed; they really are subsumed by the
 zone comparison.)
 
-**Substantial difference is judged on magnitude alone.** On the non-dominated
+**Both branches are decided by the same five rules.** On the non-dominated
 branch the figure asks "whether low and high risk of bias studies suggest
-similar or **substantially different magnitudes of effect**" — a symmetric
-question. The `small_values` direction gate therefore applies only to the
-dominated branch, whose node is explicitly "check direction of bias". A body of
-evidence whose *low*-RoB studies show the larger effect is a substantial
-difference too.
+similar or **substantially different magnitudes of effect**", and pmatools
+answers it with the rule verdict it already has: rules 3, 4 and 5 mean
+substantially different (restrict the analysis to the low-RoB studies), rules 1
+and 2 mean similar (keep every study). Nothing on that branch rates down, so
+rule 5's depth plays no part there.
 
-**No automatic two-level downgrade.** Every leaf of Fig 2 reads "rate down" /
-"do not rate down", and Core GRADE 4 describes no two-level risk-of-bias
-downgrade. The automated flowchart therefore stops at `serious` (−1),
-including the sign-flip rule and the all-studies-high-RoB case. Use the scalar
-`rob = "very_serious"` (with `rob_rationale`) when −2 is genuinely warranted.
+That means the `small_values` direction gate applies to both branches: a shift
+past `rob_inflation_threshold` that does not run in the bias-favouring
+direction reaches rule 2 and is read as *similar*. **This departs from the
+source deliberately.** The node is worded symmetrically and names no direction,
+but under the symmetric reading one and the same pair of estimates is
+"substantially different" on this branch of Fig 2 and "not substantially
+different" one node away on the dominated branch, and nothing in the output
+says which answer the body of evidence has. The departure is stated in the
+domain `notes` on both leaves of the node. Up to and including v0.5.0 pmatools
+did read the node symmetrically; a reviewer who wants that reading can restrict
+the meta-analysis to the low-RoB studies by hand and rate the restricted
+analysis.
+
+**One automatic two-level downgrade, and it is a departure.** Every leaf of
+Fig 2 reads "rate down" / "do not rate down", and Core GRADE 4 describes no
+two-level risk-of-bias downgrade — the only "two levels" in the paper is about
+rating *up* observational evidence. **Rule 5 rates down two anyway.** It fires
+only when the pooled estimate sits beyond the Threshold on one side of the null
+and the estimate restricted to the low-RoB studies sits beyond it on the
+*other*: the direction of the effect is then what the high-RoB studies
+produced, and moderate certainty would overstate the evidence. Every judgment
+on that branch says so in its notes.
+
+Everything else still stops at `serious` (−1): rules 3 and 4, the
+all-studies-high-RoB case (no restricted estimate exists there to have landed
+anywhere), and the not-assessable paths. So does rule 5 itself when no
+Threshold was supplied — the trivial zone then collapses to `{0}`, and
+"opposite sides of the null" no longer requires either estimate to be
+appreciably away from it. Use the scalar `rob = "very_serious"` (with
+`rob_rationale`) to record −2 where the flowchart does not reach it, and
+`rob = "some_concerns"` to record −1 where it does.
 
 **Study-level overrides.** A single study's classification can be corrected
 without rebuilding the vector. Both arguments are named character vectors
@@ -1655,10 +1688,33 @@ is that value plus the pooled difference, its interval coming from the pooled
 difference alone; an SMD is multiplied by the pooled within-arm SD of the
 control arms (Cochrane Handbook 15.5.3.2) first, since SD units cannot be added
 to a mean on the original scale. Both derivations are footnoted, the Difference
-column keeps the SMD in SD units, and binary tables are unchanged. In the
-GRADEpro layout the arm headers fall back to "With control" / "With
+column keeps the SMD in SD units on this path, and binary tables are unchanged.
+In the GRADEpro layout the arm headers fall back to "With control" / "With
 intervention" when the cells hold means, because the rate wording and the `per`
 denominator would misdescribe them.
+
+**Absolute effects on the responder path** (v0.6). When
+`convert_smd_to_or = TRUE` fills the arm columns with responder proportions,
+the two cells beside them follow onto the same scale. The Difference column
+reports the absolute risk difference between the proportions — "472 more per
+1000 (393 more to 536 more)", in the same wording as every other absolute
+difference in the table — instead of the pooled estimate in SD units, which sat
+in a column headed "Absolute effects" without being one and did not subtract to
+the two numbers beside it. The Effect column gains a second line, "Derived risk
+ratio 2.57 (2.31 to 2.79)". Both are **derived**, not fitted: they carry
+Chinn's logistic latent-variable assumption and move with the assumed control
+proportion, and the footnote says so and names the proportion.
+
+**Both presentations in one row** (v0.6). Core GRADE 6 recommends showing the
+effect and the responder proportion together. `keep_effect_scale = TRUE`
+alongside `convert_smd_to_or = TRUE` does that in **one row** — no extra rows,
+no extra columns: each arm cell holds the mean-scale value on its first line(s)
+and the responder proportion on the last, the Difference cell holds the SMD
+first and the per-1000 risk difference second, and the arm headers become the
+measure-neutral "With control" / "With intervention". When the mean-scale half
+cannot be computed honestly (an SMD with no usable reference SD, say), the row
+degrades to the responder-only presentation and a footnote names the reason.
+In a multi-outcome table the choice is read per row off `"pmatools_display"`.
 
 **Per-domain rate-down footnotes** (v0.5.1) come from `domain_facts()`: the
 domains that pulled the rating down carry a numbered marker on the certainty

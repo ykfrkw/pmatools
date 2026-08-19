@@ -198,6 +198,53 @@ pma_tab_mark <- function(confirmed, visited) {
   NULL
 }
 
+# The status marker on a publication-bias REFERENCE tab (funnel,
+# trim-and-fill, missing results). `dot` is the list(state =, reason =) the
+# package's .pubias_funnel_dot() / .pubias_trimfill_dot() /
+# .pubias_missing_dot() return.
+#
+# It is deliberately NOT pma_tab_mark(). That mark is a filled dot glyph
+# meaning "the reviewer has opened this tab, and has not yet confirmed the
+# domain" - their PROGRESS. These mean "the diagnostic on this tab found X",
+# and they sit on a tabset nested inside one of the tabs the progress mark is
+# on, so one glyph a few pixels from the other would carry two unrelated
+# meanings. This marker therefore takes its own class and its own shape: a
+# CSS-drawn rounded square, not a round glyph, so the two never read as the
+# same thing whatever the font does.
+#
+# Drawn in CSS rather than written as a character for the reason
+# pma_wizard_nav() gives about HTML entities: the deploy bundle's encoding is
+# not guaranteed, and an empty element with a class cannot arrive mojibaked.
+#
+# NOTHING here rates anything. The dot's value never reaches assess_pubias()
+# or grade_meta(); it is a nudge toward opening a tab the reviewer would
+# otherwise skip.
+PMA_STATUS_DOT_LABELS <- c(
+  green   = "No concern found",
+  amber   = "Worth a look",
+  red     = "Concern found",
+  unknown = "Not computed"
+)
+
+pma_tab_status_dot <- function(dot) {
+  if (is.null(dot)) return(NULL)
+  state <- dot$state
+  if (is.null(state) || length(state) != 1L ||
+      !state %in% names(PMA_STATUS_DOT_LABELS)) {
+    return(NULL)
+  }
+  reason <- dot$reason %||% ""
+  label  <- unname(PMA_STATUS_DOT_LABELS[[state]])
+  htmltools::span(
+    class = paste0("pma-tab-status pma-tab-status-", state),
+    # The tooltip is the whole point of the "unknown" state: a marker that
+    # says "not computed" without saying why is worse than no marker.
+    title = reason,
+    role  = "img",
+    `aria-label` = if (nzchar(reason)) paste0(label, ": ", reason) else label
+  )
+}
+
 # Comma-separated actionLinks, one per domain key, each jumping to the Step 3
 # tab that clears it. `id_prefix` separates the Step 3 and Step 4 copies: both
 # can exist in one session and Shiny input ids have to be unique. The observers
@@ -328,6 +375,10 @@ pma_outcome_display <- function(display = list(), pubias_missing = NULL,
   if (!isTRUE(display$convert)) return(out)
   c(out, list(
     convert_smd_to_or = TRUE,
+    # Banked alongside the conversion, never instead of it: grade_table() reads
+    # it only on a row that converts, and a row banked without it renders as
+    # responder proportions alone - which is what the reviewer chose.
+    keep_effect_scale = isTRUE(display$keep_effect_scale),
     baseline_risk     = display$baseline_risk,
     threshold_label   = display$threshold_label,
     chinn_invert      = isTRUE(display$chinn_invert)
@@ -506,6 +557,19 @@ pma_outcome_grade_args <- function(g) {
   }
   if (!is.null(field("baseline_risk"))) {
     recovered$baseline_risk <- field("baseline_risk")
+  }
+  # A rare-event rating re-run without these three is a DIFFERENT rating on the
+  # same data: the OIS goes back to a participant basis, Inconsistency reads an
+  # I2 the analysis withdrew, and the publication-bias wizard takes the Egger
+  # branch. grade_meta() records them on the object as $rare, so they can be
+  # recovered here for a set assembled out of banked outcomes.
+  rare <- field("rare")
+  if (is.list(rare) && isTRUE(rare$flow)) {
+    recovered$rare_flow <- TRUE
+    recovered$rare_one_arm_total_zero <- isTRUE(rare$one_arm_total_zero)
+    if (is.character(rare$method) && length(rare$method) == 1L) {
+      recovered$rare_method <- rare$method
+    }
   }
   recovered <- recovered[!vapply(recovered, is.null, logical(1))]
   # The specs win: they are the arguments the app actually passed, recorded
@@ -789,6 +853,36 @@ pma_clear_outcome_confirmations <- function(session) {
   invisible(NULL)
 }
 
+# The widget every id in PMA_OUTCOME_CONFIRM_IDS is built with (output gate
+# W4-A). Ticking one is the ONE thing that confirms its domain
+# (pma_domain_confirmations()), so it is also what un-greys the Next button
+# below it.
+#
+# This lives here, and not as a closure inside step3_ui() where it started,
+# because the Configuration tab renders its confirmations from TWO files:
+# `threshold_confirm` and the five `*_confirm_na` boxes come from step3_ui()
+# in R/step3_grade.R, but `responder_p0_confirm` comes from .responder_block()
+# in R/step3_threshold.R, which a closure in step3_ui() cannot reach. The
+# consequence of that unreachability shipped: the responder confirmation was a
+# bare checkboxInput() sitting in a column of numeric inputs and notes, and
+# reviewers could not tell it was a click they had to make - while the boxed
+# `threshold_confirm` two screens down, gating the same Next button, read
+# plainly as a gate. Two gates on one tab must not look like one gate and one
+# note, so there is one implementation and every call site uses it.
+#
+# The eyebrow is a real element rather than a CSS `content:` string so that
+# the class alone is enough for a test to prove a confirmation was rendered
+# through this helper. www/shadcn.css paints the UNTICKED state as the base
+# rule and quietens it under :has(input:checked); see the long comment there
+# for why that direction and not the other.
+pma_confirm_checkbox <- function(id, label = "I have reviewed this domain") {
+  htmltools::div(
+    class = "pma-confirm",
+    htmltools::span(class = "pma-confirm-eyebrow", "Required"),
+    shiny::checkboxInput(id, label, value = FALSE, width = "100%")
+  )
+}
+
 # ----- Putting an answer back after Step 3 is rebuilt ----------------------
 # app.R renders output$step_body from step3_ui() on every entry, so leaving
 # Step 3 and coming back destroys every widget on it and builds it again from
@@ -898,7 +992,14 @@ PMA_GRADE_ARGS_EXPORTED <- c(
   "threshold", "threshold_scale", "threshold_baseline",
   "ois_p0", "ois_rrr", "ois_sd", "ois_events", "ois_n",
   "pubias_small_industry", "pubias_funnel_asymmetry", "pubias_rationale",
-  "pubias_unpublished", "pubias_registry_complete"
+  "pubias_unpublished", "pubias_registry_complete",
+  # The rare-event facts change three computations (the OIS basis, the
+  # Inconsistency I2 surrogate, the Fig 5 route), so a script that omitted them
+  # would re-run the same data and report a different rating. The single-outcome
+  # template recovers them from the rated object as a fallback; the
+  # multi-outcome one renders per_outcome and nothing else, so they have to be
+  # declared here as well.
+  "rare_flow", "rare_one_arm_total_zero", "rare_method"
 )
 
 # Only the arguments the app actually set are emitted. Before pmatools 0.5.1
@@ -1344,8 +1445,10 @@ pma_judgment_label <- function(judgment) {
 # lands in the same rationale gate every other override does.
 #
 # `include_blank` is the "(no override)" entry the four selectInputs need and
-# the Indirectness radio does not (there, leaving the group unselected is how
-# the reviewer accepts the automatic worst-case fold).
+# the Indirectness radio does not. That radio ships PRESELECTED to
+# STEP3_INDIR_DEFAULT_LEVEL, so it has no blank to offer: accepting the
+# automatic worst-case fold is now a rating that equals it, not an empty
+# group, and step3_indir_rationale_required() is what tells the two apart.
 pma_judgment_choices <- function(include_blank = TRUE,
                                  blank_label = "(no override)") {
   out <- c("Not serious (-0)"       = "not_serious",
@@ -1524,10 +1627,22 @@ pma_facts_list <- function(facts, keys = NULL, max_rows = 6L) {
 # One table so the caption under the chart and the roxygen in R/flowcharts.R
 # cannot drift into naming different functions.
 PMA_FLOWCHART_FIGS <- list(
+  # `departure` is where a chart says what in it is NOT the source's. It exists
+  # because the Fig 2 drawing lost its footnote when it was redrawn to the
+  # source's shape (SPEC.md 5.1a): the closer the picture gets to the paper, the
+  # more the reader needs telling which parts are ours, and the figure itself is
+  # no longer the place that tells them. Omit the field for a chart that departs
+  # from its source in nothing.
   "Risk of bias"     = list(fig = "rob",
                             fn  = "assess_rob()",
                             file = "R/domain_rob.R",
-                            src = "Core GRADE 4 Fig 2"),
+                            src = "Core GRADE 4 Fig 2",
+                            departure = paste(
+                              "The five direction-of-bias rules between the",
+                              "direction question and its two outcomes are",
+                              "pmatools' operationalisation, not the source's;",
+                              "rule 5 rates down two levels, which Core GRADE 4",
+                              "never does.")),
   "Inconsistency"    = list(fig = "incon",
                             fn  = "assess_inconsistency()",
                             file = "R/domain_inconsistency.R",
@@ -1613,8 +1728,11 @@ pma_flowchart <- function(figkey, on_ids = character(0), caption = NULL,
 pma_algorithm_source <- function(domain) {
   spec <- PMA_FLOWCHART_FIGS[[domain]]
   if (is.null(spec)) return(NULL)
-  sprintf("%s, as implemented by %s in %s of the pmatools package.",
-          spec$src, spec$fn, spec$file)
+  provenance <- sprintf(
+    "%s, as implemented by %s in %s of the pmatools package.",
+    spec$src, spec$fn, spec$file)
+  if (is.null(spec$departure)) return(provenance)
+  paste(provenance, spec$departure)
 }
 
 # The flow_path fact, split into ids. `facts` is a domain_facts() tibble or
@@ -1899,23 +2017,42 @@ pma_forest_display_panel <- function(prefix = NULL) {
       #    (pma_addrow_above() has always treated blank as 1). Rendered with 0
       #    the pooled "Random effects model" row butts straight up against the
       #    last study row.
-      #  * below is left blank = automatic, because plot_forest()'s
-      #    .auto_addrow_below() is what keeps the heterogeneity line clear of
-      #    the x-axis band and the Favors labels; typing 0 switches that
-      #    heuristic off.
+      #  * below = 0, which is tighter than what plot_forest() derives on its
+      #    own. Blank still means automatic and still reaches
+      #    .auto_addrow_below(), which reserves 2 to 4 rows for the axis band,
+      #    the Favors labels and the xlab; that heuristic buys clearance the
+      #    plot usually does not need, and it bought it by adding whitespace
+      #    to every forest. 0 gives the room back. If the heterogeneity text
+      #    ends up sitting on the x-axis - most likely with the per-arm
+      #    columns hidden - clearing this field restores the old behaviour.
       htmltools::p(class = "pma-card-subtitle pma-span-4",
         paste0("Blank rows around the pooled result. If the ",
                "heterogeneity text overlaps the x-axis - most ",
                "likely once the per-arm columns are hidden - use ",
                "these to move it up or down. Above: 0 removes the ",
-               "blank row before the pooled result. Below: blank ",
-               "= automatic.")),
+               "blank row before the pooled result. Below: clear ",
+               "the field for automatic spacing.")),
       htmltools::div(class = "pma-span-2",
         shiny::numericInput(addrows[["above"]], "Blank rows above pooled result",
                             value = 1, min = 0, step = 1, width = "100%")),
       htmltools::div(class = "pma-span-2",
         shiny::numericInput(addrows[["below"]], "Blank rows below pooled result",
-                            value = NA, min = 0, step = 1, width = "100%")),
+                            value = 0, min = 0, step = 1, width = "100%")),
+
+      # Decimal places in the per-arm Mean and SD columns. Both default to 1
+      # here and in plot_forest(), rather than to {meta}'s own 2 and 4: an SD
+      # printed to twice the precision of its mean is not what any trial
+      # reports, and the four-decimal SD column was wide enough to squeeze the
+      # forest itself. Only meaningful for a continuous outcome; shown
+      # unconditionally all the same, because the panel is shared with the
+      # Step 3 tabs and a control that appears and disappears with the outcome
+      # type is harder to find than one that is simply inert.
+      htmltools::div(class = "pma-span-2",
+        shiny::numericInput(.id("digits_mean"), "Mean decimals",
+                            value = 1, min = 0, step = 1, width = "100%")),
+      htmltools::div(class = "pma-span-2",
+        shiny::numericInput(.id("digits_sd"), "SD decimals",
+                            value = 1, min = 0, step = 1, width = "100%")),
 
       # One checkbox, not two: plot_forest() keeps show_n and show_events as
       # separate arguments (correct for a library), but there is no case where
@@ -1970,6 +2107,17 @@ pma_addrow_below <- function(x) {
 # Same for "blank rows above the pooled result", where there is no auto mode;
 # a blank field falls back to the historical default of one row.
 pma_addrow_above <- function(x, default = 1) {
+  if (is.null(x) || length(x) != 1) return(default)
+  x <- suppressWarnings(as.numeric(x))
+  if (is.na(x) || !is.finite(x) || x < 0) return(default)
+  x
+}
+
+# Same again for the Mean / SD decimal-place spinners, where a blank field also
+# has no auto mode: plot_forest() would receive NA, meta::forest() would reject
+# it, and its caller's error retry drops the data columns rather than reporting
+# the bad value - so the fallback has to happen before the value leaves here.
+pma_forest_digits <- function(x, default = 1) {
   if (is.null(x) || length(x) != 1) return(default)
   x <- suppressWarnings(as.numeric(x))
   if (is.na(x) || !is.finite(x) || x < 0) return(default)
@@ -2476,16 +2624,21 @@ pma_sof_follow_up <- function(x) {
   if (grepl("^follow[ -]?up", x, ignore.case = TRUE)) x else paste0("Follow-up: ", x)
 }
 
-# Unit for the Difference column of a continuous outcome.
+# Unit for the Difference column of a continuous outcome, and for nothing else.
 #
 # The unit the reviewer typed describes the measurement scale, so it is the
-# right label for a mean difference. A standardized mean difference is not on
-# that scale, so its difference is labelled in standard deviation units
-# whatever the reviewer typed; a ratio measure has no unit at all (the
-# difference is printed "per 1000") and gets NULL.
+# right label for a mean difference, which is on that scale. Everything else
+# gets NULL: an SMD's Difference cell is empty as of v0.6 (a standard-deviation
+# string there only restates the Effect column), and a ratio measure has no
+# unit at all, its difference being printed "per 1000".
+#
+# This used to return "standard deviation units" for an SMD, and the same value
+# reached sof_table()'s `unit`, which then labelled the ARM columns with it: a
+# control mean already re-expressed on the outcome's own scale printed as
+# "13.89 standard deviation units". Those columns are gone, so the mislabel
+# went with them, and `unit` now has exactly one destination.
 pma_sof_unit <- function(g, unit = NULL) {
   sm <- as.character((g$meta$sm %||% "")[1])
-  if (identical(sm, "SMD")) return("standard deviation units")
   if (!identical(sm, "MD")) return(NULL)
   if (is.null(unit) || length(unit) != 1L || is.na(unit)) return(NULL)
   unit <- trimws(as.character(unit))

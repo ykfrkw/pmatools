@@ -281,24 +281,35 @@ test_that(".responder_block() seeds the proportion box from its argument", {
                   "baseline_risk_chinn")
 })
 
-test_that(".responder_block() offers a two-way choice defaulting to the effect", {
-  # The presentation is an either/or, not a tick-box that is on to start with:
-  # the rating never sees the conversion, so the plain SMD/MD is the default.
+test_that(".responder_block() offers a three-way choice defaulting to both", {
+  # The presentation is a choice, not a tick-box that is on to start with, and
+  # the rating never sees the conversion whichever way it goes. The default is
+  # the pairing Core GRADE 6 recommends; what keeps its responder proportion
+  # from being defaulted past is the responder_p0_confirm gate, not a quieter
+  # default here.
   html <- as.character(.responder_block("SMD"))
   expect_match(html, 'name="sof_presentation"')
   expect_no_match(html, "convert_smd_to_or")
-  expect_match(html, 'value="effect"[^>]*checked="checked"')
+  expect_match(html, 'value="both"[^>]*checked="checked"')
+  expect_no_match(html, 'value="effect"[^>]*checked="checked"')
   expect_no_match(html, 'value="responder"[^>]*checked="checked"')
-  # Both options are named, and the effect option names the measure.
+  # All three options are named, and the two that name the measure do.
   expect_match(html, "The SMD itself", fixed = TRUE)
   expect_match(html, "Chinn", fixed = TRUE)
+  expect_match(html, 'value="both"')
+  expect_match(html, "Both, on two rows of one outcome: the SMD on its own scale",
+               fixed = TRUE)
+  expect_match(html, "what Core GRADE 6 recommends", fixed = TRUE)
   expect_match(as.character(.responder_block("MD")), "The MD itself",
                fixed = TRUE)
 
-  # Everything the responder route needs hangs off the radio, not the box.
+  # Everything the responder route needs hangs off the radio, not the box, and
+  # fires for BOTH converting choices: a panel testing only 'responder' would
+  # leave a reviewer on 'both' with no way to enter the proportion.
   # htmltools escapes the quotes in the conditionalPanel expression.
   expect_match(html, "input.sof_presentation == &#39;responder&#39;",
                fixed = TRUE)
+  expect_match(html, "input.sof_presentation == &#39;both&#39;", fixed = TRUE)
   expect_no_match(html, "input.convert_smd_to_or")
 
   # A measure with no conversion offers no choice at all.
