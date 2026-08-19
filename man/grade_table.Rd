@@ -43,8 +43,8 @@ If \code{NULL} (default), no grouping header is added — except for a
 \item{show_domains}{Logical (default \code{TRUE}). Add domain symbol columns.
 Ignored by the \code{"bmj"} style, which has no domain columns.}
 
-\item{per}{Denominator for SoF rate columns. \code{1000} (default) or
-\code{100}.}
+\item{per}{Denominator for SoF rate columns. \code{1000} (default); any
+positive denominator is accepted (see \code{\link{sof_table}}).}
 
 \item{prediction}{Logical (default \code{FALSE}); when \code{TRUE}, the
 95 percent prediction interval is shown in the Effect column.}

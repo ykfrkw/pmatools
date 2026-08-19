@@ -390,9 +390,13 @@ step3_ui <- function(state = NULL) {
                 "Some concerns count as low risk of bias"            = "low"),
               selected = rob_some_concerns_default),
             htmltools::p(class = "pma-card-subtitle",
-              paste0("Core GRADE 4 leaves this boundary open, so it is a ",
-                     "review decision. Unrated studies follow the same ",
-                     "side."))
+              paste0("Core GRADE 4 rates risk of bias from a two-way split: ",
+                     "the studies are sorted into low and high risk of bias, ",
+                     "and Fig 2 asks whether the high risk of bias group ",
+                     "dominates the evidence. RoB 2 returns three judgments, ",
+                     "so \"some concerns\" has to be assigned to one of the ",
+                     "two sides before that question can be asked. A study ",
+                     "with no rating follows the same side."))
           ),
           shiny::uiOutput("threshold_block_rob"),
           shiny::uiOutput("rob_evaluation"),
@@ -1542,10 +1546,6 @@ step3_server <- function(input, output, session, state) {
         # step = 1 and a whole-number grid: an event rate is a count of
         # patients, and "15.6 per 100" is not one.
         min = 0, max = step3_per_unit(per), step = 1),
-      .config_note(
-        "Converts the absolute threshold to the analysis scale, and seeds ",
-        "the Optimal Information Size. Replace it if you have a better ",
-        "estimate."),
       # Same pattern as the domain-tab overrides: replacing an automated
       # value requires a written justification (Core GRADE transparency).
       shiny::conditionalPanel(
@@ -1571,18 +1571,19 @@ step3_server <- function(input, output, session, state) {
     step3_entries()
     .config_section(
       "Presentation of event rates",
-      # Built from STEP3_PER_UNITS rather than written out here: the two large
-      # units exist for rare events (shiny/SPEC.md 3.4.14) and a unit added
-      # there but not here would be unofferable.
+      # Two units for an ordinary analysis, four for a rare-event one. The
+      # labels are built from the units rather than written out here, so a
+      # unit added to the constants but not here would be unofferable
+      # (shiny/SPEC.md 3.4.14). Note step3_per_units_offered() keeps the unit
+      # currently in force in the list even when the analysis is no longer
+      # rare: a radio that does not offer its own selected value shows no
+      # selection and pushes a different unit back on the next rebuild.
       shiny::radioButtons("per", "Report event rates per",
-        choices = step3_per_choices(),
+        choices = step3_per_choices(
+          step3_per_units_offered(rare = .rare_active(),
+                                  selected = shiny::isolate(display_per_state()))),
         selected = as.character(shiny::isolate(display_per_state())),
         inline = TRUE),
-      .config_note(
-        "One setting for the whole app - display only, never what is ",
-        "computed. Values are entered as whole events in the unit chosen ",
-        "here. The decision threshold moves with it, so an outcome always has ",
-        "one denominator."),
       if (.rare_active()) {
         .config_note(
           "Seeded from the control-arm event rate because this is a ",
@@ -1822,15 +1823,15 @@ step3_server <- function(input, output, session, state) {
         style = "margin-top: 0.35rem;",
         sprintf("On other scales, the increase side is RR %.3f / OR %.3f.",
                 eq$rr_up, eq$or_up)),
-      htmltools::div(
-        style = paste0("margin-top: 0.35rem; font-style: italic; ",
-                       "color: hsl(var(--muted-foreground));"),
-        ln$alg),
-      if (length(ln$approx)) {
+      # Only when the requested direction could not be honoured. The
+      # derivation that used to sit here is gone (see .equiv_lines()); this is
+      # the one sentence of it that reports something the reviewer cannot work
+      # out from the two lines above.
+      if (length(ln$caveat)) {
         htmltools::div(
           style = paste0("margin-top: 0.35rem; font-style: italic; ",
                          "color: hsl(var(--muted-foreground));"),
-          ln$approx)
+          ln$caveat)
       }
     )
   })
@@ -1867,8 +1868,8 @@ step3_server <- function(input, output, session, state) {
         head = sprintf(
           "Absolute threshold: %s at a control-group risk of %s",
           step3_per_label(ta, per), step3_per_label(tb, per)),
-        lines = c(ln$up, ln$dn, ln$alg),
-        approx = ln$approx))
+        lines = c(ln$up, ln$dn),
+        approx = ln$caveat))
     }
     th <- threshold_state()
     if (!is.finite(th)) {
@@ -4150,7 +4151,7 @@ step3_server <- function(input, output, session, state) {
     pma_sof_unit(g, state$outcome_unit)
   })
 
-  # Core GRADE 6's rare-event trap: the Difference and "With intervention"
+  # Core GRADE 6's rare-event trap: the Difference and "With <intervention>"
   # columns are both derived by applying the pooled relative effect to a
   # baseline risk, which misleads when events are rare. Computed from the
   # analysis itself, against the risk the table is actually drawn on (the
@@ -4158,7 +4159,8 @@ step3_server <- function(input, output, session, state) {
   sof_rare_alert <- shiny::reactive({
     g <- grade_obj()
     if (is.null(g)) return(NULL)
-    pma_rare_event_alert(g, baseline_risk = sof_convert_args()$baseline_risk)
+    pma_rare_event_alert(g, baseline_risk = sof_convert_args()$baseline_risk,
+                         labels = pma_arm_labels(state))
   })
 
   output$sof_preview <- shiny::renderUI({
@@ -4170,12 +4172,19 @@ step3_server <- function(input, output, session, state) {
       if (identical(why$kind, "idle")) return(htmltools::p(why$text))
       return(.alert_box("No Summary of Findings table. ", why$text))
     }
+    # The reviewer's own arm words, from the same resolver Step 4 uses. Without
+    # them this preview rendered "With intervention" and a Box 1 subject of
+    # "Treatment" while the combined table one step later rendered the arm
+    # values picked in Step 2 -- one table, two vocabularies.
+    arms <- pma_arm_labels(state)
     args <- c(
       list(x          = g,
            # Core GRADE 6 layout for every SoF the app renders or exports;
            # see PMA_SOF_STYLE in ui_helpers.R for why it is not an option.
            style      = PMA_SOF_STYLE,
            palette    = PMA_SOF_PALETTE,
+           label_intervention = arms$intervention,
+           label_control      = arms$control,
            # The reactiveVal, not input$per: the radio lives on the
            # Configuration tab and is rebuilt with the step body, so the
            # state is the only thing that survives a 3 -> 2 -> 3 round trip.
@@ -4191,8 +4200,8 @@ step3_server <- function(input, output, session, state) {
     alert <- sof_rare_alert()
     # All three notes go into the flextable footer as well as onto the page,
     # so they travel into the exported .docx.
-    ft <- pma_sof_add_notes(ft, c(alert$note, PMA_SOF_CER_EER_NOTE,
-                                  PMA_SOF_LIMITATIONS_NOTE))
+    ft <- pma_sof_add_notes(ft, c(alert$note, pma_sof_cer_eer_note(arms),
+                                  pma_sof_limitations_note(arms)))
     htmltools::tagList(
       pma_rare_event_banner(alert),
       pma_sof_scroller(

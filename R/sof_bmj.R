@@ -327,11 +327,10 @@
 
   # Box 1's placeholder is "Treatment"; a caller-supplied arm label replaces
   # it, but the package default ("intervention") is not a sentence subject.
-  pl_tx <- if (identical(label_intervention, "intervention")) {
-    "Treatment"
-  } else {
-    label_intervention
-  }
+  # .arm_subject() (R/sof_table.R) is that rule, shared with the footnotes
+  # below so the subject of one sentence cannot drift from the subject of
+  # another.
+  pl_tx <- .arm_subject(label_intervention, "Treatment")
 
   nf <- .bmj_number_format("bmj")
 
@@ -537,15 +536,16 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
 # a baseline risk. A table whose rows are all continuous outcomes drops that
 # sentence, since nothing in it was computed that way.
 .bmj_base_note <- function(label_intervention = "intervention",
-                           prediction = FALSE, rate_arms = TRUE) {
+                           prediction = FALSE, rate_arms = TRUE,
+                           label_control = "control") {
   paste0(
     .PMA_CORE_GRADE_FOOTNOTE, " ",
     "CI = confidence interval.",
     if (prediction) " PrI = 95 percent prediction interval." else "",
     if (rate_arms) paste0(
       " Absolute effects: the ", label_intervention, "-arm rate and the ",
-      "difference are computed from the control-arm (baseline) risk and the ",
-      "pooled relative effect.") else ""
+      "difference are computed from the ", label_control, "-arm (baseline) ",
+      "risk and the pooled relative effect.") else ""
   )
 }
 
@@ -623,7 +623,8 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
 
   ft <- flextable::add_footer_lines(
     ft, values = .bmj_base_note(label_intervention, prediction,
-                                rate_arms = isTRUE(vals$has_rates)))
+                                rate_arms = isTRUE(vals$has_rates),
+                                label_control = label_control))
 
   for (i in seq_along(fact_notes)) {
     ft <- flextable::add_footer_lines(
@@ -648,7 +649,9 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
     ft <- flextable::add_footer_lines(
       ft, values = .chinn_note(invert = isTRUE(chinn_invert),
                                threshold_label = threshold_label,
-                               baseline_risk = baseline_for_display))
+                               baseline_risk = baseline_for_display,
+                               label_intervention = label_intervention,
+                               label_control = label_control))
   }
 
   if (has_plain) {
@@ -826,7 +829,8 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
     ft, values = .bmj_base_note(
       label_intervention, prediction,
       rate_arms = any(vapply(rated_vals, function(v) isTRUE(v$has_rates),
-                             logical(1)))))
+                             logical(1))),
+      label_control = label_control))
 
   # What "Not reported" means, stated once for the table however many such rows
   # it has.
@@ -857,7 +861,8 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
     }
   }
 
-  ft <- .add_responder_notes(ft, responder, converted_nms)
+  ft <- .add_responder_notes(ft, responder, converted_nms,
+                             label_intervention, label_control)
 
   if (has_plain) {
     ft <- flextable::add_footer_lines(ft, values = .bmj_plain_language_note())

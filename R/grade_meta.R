@@ -34,9 +34,9 @@
 #'   assessment). Default \code{NULL}.
 #' @param rob_some_concerns (v0.5) How studies rated \code{"some concerns"}
 #'   are folded into the binary low/high classification that Core GRADE 4
-#'   Fig 2 operates on. \code{"low"} (default, previous behaviour) or
-#'   \code{"high"}. Changing it changes which studies count toward the
-#'   high-RoB weight share and therefore the dominance gate. Only used when
+#'   Fig 2 operates on. \code{"high"} (default as of 0.5.1) or \code{"low"}
+#'   (the default up to 0.5.1). Changing it changes which studies count toward
+#'   the high-RoB weight share and therefore the dominance gate. Only used when
 #'   \code{rob} is a vector or column name.
 #'
 #'   \strong{Core GRADE 4 does not define this fold.} The phrase "some
@@ -55,6 +55,16 @@
 #'   impossible to resolve". Whichever value you pass here is your own
 #'   operational choice, and it is worth recording it alongside the item-count
 #'   rule your review actually used.
+#'
+#'   \strong{The default moved to \code{"high"} in 0.5.1.} Since the source
+#'   settles nothing, the default is pmatools' choice and it is now the
+#'   conservative one: \code{"some concerns"} is the judgment RoB 2 returns for
+#'   a study it declines to call low risk of bias, so folding it low asserts
+#'   the one thing the assessment would not. It also matches the first of the
+#'   three worked boundaries above, and the Shiny app, which has offered
+#'   \code{"high"} as its default since the control existed. A rating made
+#'   before 0.5.1 without this argument reproduces only if you now pass
+#'   \code{rob_some_concerns = "low"} explicitly.
 #' @param rob_overrides (v0.5) Optional named character vector of study-level
 #'   Risk-of-Bias overrides keyed on \code{meta_obj$studlab}, e.g.
 #'   \code{c("Smith 2020" = "high")}. Values accept the same vocabulary as
@@ -617,7 +627,7 @@ grade_meta <- function(meta_obj,
                        study_design                     = c("RCT", "obs"),
                        rob                              = NULL,
                        rob_rationale                    = NULL,
-                       rob_some_concerns                = c("low", "high"),
+                       rob_some_concerns                = c("high", "low"),
                        rob_overrides                    = NULL,
                        rob_override_rationale           = NULL,
                        rob_dominant_threshold           = 0.55,

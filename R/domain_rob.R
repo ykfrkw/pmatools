@@ -7,10 +7,21 @@
 # --------------------------------------------------------------------------
 # Step 0. Binary classification of each study
 #
-#   rob_some_concerns = "low"  (default) : {not_serious, serious} -> low
-#                                          {very_serious}         -> high
-#   rob_some_concerns = "high"           : {not_serious}          -> low
+#   rob_some_concerns = "high" (default) : {not_serious}          -> low
 #                                          {serious, very_serious} -> high
+#   rob_some_concerns = "low"            : {not_serious, serious} -> low
+#                                          {very_serious}         -> high
+#
+#   THE DEFAULT IS "high" as of 0.5.1, and it was "low" before. Two reasons,
+#   and neither is that the source settles it (it does not -- see PROVENANCE
+#   below). First, "some concerns" is the judgment RoB 2 gives a study it
+#   cannot call low risk of bias; folding it low asserts the one thing the
+#   assessment declined to say. Second, of Core GRADE 4's three worked
+#   examples for the low/high boundary, the one it states first calls a trial
+#   high risk of bias "if at least one item was rated as high risk of bias" --
+#   the reading a some-concerns study most often meets. The old default made
+#   the more permissive choice silently, and it disagreed with the app, which
+#   has offered "high" as its default since the control existed.
 #
 #   PROVENANCE: the binary verdict is Core GRADE 4's (verbatim: "For
 #   simplicity, however, Core GRADE users can assess the overall risk of bias
@@ -288,13 +299,6 @@ PMA_ROB_INFLATION_THRESHOLD <- 0.20
   "pma-rob-node-dominance",
   "pma-rob-edge-dominance-yes",
   "pma-rob-node-direction",
-  "pma-rob-edge-direction-rules",
-  "pma-rob-leaf-rule1",
-  "pma-rob-leaf-rule2",
-  "pma-rob-leaf-rule3",
-  "pma-rob-leaf-rule4",
-  "pma-rob-leaf-rule5",
-  "pma-rob-leaf-rulena",
   "pma-rob-edge-rules-responsible",
   "pma-rob-node-bias-responsible",
   "pma-rob-edge-responsible-ratedown",
@@ -309,7 +313,6 @@ PMA_ROB_INFLATION_THRESHOLD <- 0.20
   "pma-rob-node-magnitude",
   "pma-rob-edge-magnitude-similar",
   "pma-rob-leaf-all",
-  "pma-rob-edge-magnitude-notassessable",
   "pma-rob-edge-magnitude-different",
   "pma-rob-leaf-lowonly"
 )
@@ -412,8 +415,9 @@ PMA_ROB_INFLATION_THRESHOLD <- 0.20
 #' @param rob Scalar GRADE level, per-study vector, or column name in
 #'   `meta_obj$data`.
 #' @param meta_obj A `meta::metagen`-like object.
-#' @param rob_some_concerns `"low"` (default) or `"high"`: which side of the
+#' @param rob_some_concerns `"high"` (default) or `"low"`: which side of the
 #'   binary low/high classification `"serious"` studies are folded into.
+#'   The default was `"low"` up to 0.5.1.
 #' @param rob_overrides Named character vector of study-level Risk-of-Bias
 #'   overrides, keyed on `meta_obj$studlab`. Every key needs a matching
 #'   rationale in `rob_override_rationale`.
@@ -465,7 +469,7 @@ PMA_ROB_INFLATION_THRESHOLD <- 0.20
 #'   `update.meta(subset = )`, or `NULL`).
 #' @noRd
 assess_rob <- function(rob, meta_obj,
-                       rob_some_concerns       = "low",
+                       rob_some_concerns       = "high",
                        rob_overrides           = NULL,
                        rob_override_rationale  = NULL,
                        rob_dominant_threshold  = 0.55,
@@ -663,7 +667,7 @@ assess_rob <- function(rob, meta_obj,
 # Binary low/high fold of the normalised levels. Shared by .flowchart_rob()
 # (which classifies the pooled studies) and assess_rob() (which classifies the
 # studies {meta} dropped, so that "high_idx" is complete in studlab space).
-.rob_high_levels <- function(some_concerns_as = "low") {
+.rob_high_levels <- function(some_concerns_as = "high") {
   high_levels <- c("very_serious", "extremely_serious")
   if (identical(some_concerns_as, "high")) {
     high_levels <- c(high_levels, "serious")
@@ -686,7 +690,11 @@ assess_rob <- function(rob, meta_obj,
 }
 
 .check_rob_some_concerns <- function(x) {
-  if (is.null(x)) return("low")
+  # NULL is "not supplied", and the default it resolves to moved from "low" to
+  # "high" in 0.5.1 (see the Step 0 block at the top of this file). This is the
+  # single place that decides it: assess_rob() and grade_meta() both route
+  # through here, so the two cannot drift.
+  if (is.null(x)) return("high")
   x <- as.character(x)[1]
   if (!x %in% c("low", "high")) {
     rlang::abort(paste0(
@@ -825,7 +833,7 @@ assess_rob <- function(rob, meta_obj,
                            inflation_threshold = PMA_ROB_INFLATION_THRESHOLD,
                            small_values,
                            threshold_internal = NULL,
-                           some_concerns_as = "low",
+                           some_concerns_as = "high",
                            override_notes = NULL) {
 
   # Binary low/high classification, on levels .normalize_rob_levels() has
@@ -1095,14 +1103,7 @@ assess_rob <- function(rob, meta_obj,
       },
       as.numeric(dir$rule)
     )
-    # The rule number picks the box in the intermediate layer; an unassessable
-    # direction has its own.
-    rule_leaf <- if (is.na(dir$rule)) {
-      "pma-rob-leaf-rulena"
-    } else {
-      paste0("pma-rob-leaf-rule", dir$rule)
-    }
-    # ... and the verdict picks which of Fig 2's two boxes, and which of its two
+    # The verdict picks which of Fig 2's two boxes, and which of its two
     # leaves, that rule reaches. Tested against "not_serious" rather than by
     # enumerating the rating levels, for the same reason the undominated branch
     # below is: a level added to the check later must not need a third leaf on
@@ -1128,12 +1129,17 @@ assess_rob <- function(rob, meta_obj,
         tbl_note
       ),
       facts    = .facts(f_high, f_weight, f_shift, f_branch,
+                        # The rule number is NOT in this path. The figure no
+                        # longer draws the five rules -- they are the
+                        # mechanism, not a shape Fig 2 has -- so there is no id
+                        # to name. f_branch above carries the number, and
+                        # carries it AS a number, so nothing that reported
+                        # which rule fired has stopped being able to.
                         .flow_path_fact(c(
                           "pma-rob-node-dominance",
                           "pma-rob-edge-dominance-yes",
                           "pma-rob-node-direction",
-                          "pma-rob-edge-direction-rules",
-                          rule_leaf, rule_tail)))
+                          rule_tail)))
     ), analysis_set = "all", high_idx = high_idx))
   }
 
@@ -1216,21 +1222,23 @@ assess_rob <- function(rob, meta_obj,
     as.numeric(dir$rule)
   )
 
-  # "Not assessable" is a third answer to the magnitude node, on its own edge.
-  # It used to be routed through the appreciable node's "no" edge, on the
-  # reading that a comparison that cannot be made is an absence of appreciable
-  # low-RoB evidence; that edge is gone, because below the dominance gate the
-  # low-RoB weight share always clears the source's 35-45% and the answer is
-  # always yes. What the old route was really recording is that the magnitude
-  # question was never asked, and that is what the distinct edge id records
-  # now. It is deliberately NOT folded into "similar": the two reach the same
-  # leaf but are not the same finding, and flow_path is the record of which one
-  # happened.
+  # "Not assessable" shares the "similar" edge. Both mean the low risk of bias
+  # studies are analysed and nothing is rated down, and the figure draws one
+  # arrow labelled "Similar/Not assessable" for the pair: a second arrow to the
+  # same box asked the reader to hold a distinction the drawing then made
+  # nothing of. Which of the two happened is still recorded -- in f_branch
+  # above, which says "similar magnitudes of effect" or "direction of bias not
+  # assessable" in as many words, and in the domain notes beside it.
+  #
+  # (It used to route through the appreciable node's "no" edge, on the reading
+  # that a comparison that cannot be made is an absence of appreciable low-RoB
+  # evidence. That edge is gone: below the dominance gate the low-RoB weight
+  # share always clears the source's 35-45% and the answer is always yes.)
   flow_ids <- c("pma-rob-node-dominance", "pma-rob-edge-dominance-no",
                 "pma-rob-node-appreciable", "pma-rob-edge-appreciable-yes",
                 "pma-rob-node-magnitude")
   flow_ids <- if (!assessable) {
-    c(flow_ids, "pma-rob-edge-magnitude-notassessable", "pma-rob-leaf-all")
+    c(flow_ids, "pma-rob-edge-magnitude-similar", "pma-rob-leaf-all")
   } else if (substantial) {
     c(flow_ids, "pma-rob-edge-magnitude-different", "pma-rob-leaf-lowonly")
   } else {

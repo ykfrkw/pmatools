@@ -273,15 +273,23 @@ test_that("Indirectness records no facts, and that is on purpose", {
   expect_null(domain_facts(.cases()$rob_dominated, "Indirectness"))
 })
 
-test_that("the risk-of-bias path names the rule the direction check applied", {
+test_that("the rule the direction check applied is a fact, not a drawn id", {
+  # It used to be both: the figure carried six numbered rule boxes and
+  # flow_path named the one that fired. The boxes are gone -- the rules are the
+  # mechanism, not a shape Core GRADE 4 Fig 2 has -- so the only place the rule
+  # number is reported is fig2_branch, which is the place a reader can act on
+  # it (the domain notes, the Summary of Findings footnote, the Evidence
+  # Profile). Losing it from BOTH would be the regression this guards against.
   g <- .cases()$rob_dominated
   ids <- .flow_path(g, "Risk of bias")
   f   <- domain_facts(g, "Risk of bias")
   rule <- f$numeric[f$key == "fig2_branch"]
-  expect_true(any(grepl("^pma-rob-leaf-rule", ids)))
-  if (!is.na(rule)) {
-    expect_true(paste0("pma-rob-leaf-rule", rule) %in% ids)
-  }
+
+  expect_false(any(grepl("^pma-rob-leaf-rule", ids)))
+  expect_false(is.na(rule))
+  expect_true(rule %in% 1:5)
+  expect_match(f$value[f$key == "fig2_branch"],
+               sprintf("direction-of-bias rule %d", rule))
 })
 
 test_that("publication bias records k, and Egger's p when it ran", {
@@ -391,23 +399,30 @@ test_that("the risk-of-bias vocabulary is fully reachable", {
   expect_identical(setdiff(.vocab$rob, seen), character(0))
 })
 
-test_that("a dominated path names both the rule and the leaf it reached", {
-  # The rule boxes are an intermediate layer, not leaves: below "check the
-  # direction of bias" the figure draws the source's two boxes and two leaves,
-  # and the rules decide which one is reached. A path that stopped at the rule
-  # would light a column of boxes and no conclusion.
+test_that("a dominated path reaches one of Fig 2's two conclusions", {
+  # Below "check the direction of bias" the figure draws the source's two
+  # boxes and two leaves, and the rules decide which one is reached without
+  # being drawn themselves. Each path lights exactly one of the two, never
+  # both, and never stops at the direction node with no conclusion.
   down <- .rob_flow(c("no", "very_serious", "very_serious", "very_serious"),
                     c(-0.60, -3.00, -3.10, -2.90), threshold = 0.5)   # rule 3
   stay <- .rob_flow(c("no", "very_serious", "very_serious", "very_serious"),
                     c(-1.00, -1.02, -1.01, -1.03), threshold = 0.5)   # rule 2
 
-  expect_true(all(c("pma-rob-leaf-rule3", "pma-rob-node-bias-responsible",
+  expect_true(all(c("pma-rob-node-direction",
+                    "pma-rob-edge-rules-responsible",
+                    "pma-rob-node-bias-responsible",
                     "pma-rob-leaf-ratedown") %in% down))
   expect_false("pma-rob-leaf-noratedown" %in% down)
 
-  expect_true(all(c("pma-rob-leaf-rule2", "pma-rob-node-bias-conservative",
+  expect_true(all(c("pma-rob-node-direction",
+                    "pma-rob-edge-rules-conservative",
+                    "pma-rob-node-bias-conservative",
                     "pma-rob-leaf-noratedown") %in% stay))
   expect_false("pma-rob-leaf-ratedown" %in% stay)
+
+  # No rule box survives on either path.
+  expect_false(any(grepl("^pma-rob-leaf-rule", c(down, stay))))
 })
 
 test_that("nothing is drawn or emitted on the deleted appreciable 'no' edge", {
@@ -558,4 +573,69 @@ test_that("inst/figures and man/figures are byte-identical", {
                     "data-raw/build_figures.R")
     )
   }
+})
+
+# --------------------------------------------------------------------------
+# What the 0.5.1 redraw removed, and where it went instead
+# --------------------------------------------------------------------------
+
+test_that("the rule leaves are gone from the drawing and from the vocabulary", {
+  # Core GRADE 4 Fig 2 has two boxes and two leaves below the direction
+  # question. The five rules are the mechanism that picks a box, not an
+  # alternative to it, and drawing them as a column of six numbered leaves put
+  # six verdicts on the page where the source has two sentences.
+  #
+  # The RULES are unchanged -- .assess_bias_direction() still numbers them and
+  # still decides the judgment. Only the drawing changed, and with it what
+  # flow_path is able to name.
+  skip_if(is.na(.fig_dir), "inst/figures not available in this layout")
+  drawn <- .svg_ids(file.path(.fig_dir, "rob.svg"))
+  gone  <- c(paste0("pma-rob-leaf-rule", 1:5), "pma-rob-leaf-rulena",
+             "pma-rob-edge-direction-rules")
+  for (id in gone) {
+    expect_false(id %in% drawn,      info = id)
+    expect_false(id %in% .vocab$rob, info = id)
+  }
+
+  # And the rule number is still recorded -- on the fact, which is what the
+  # domain notes, the SoF footnote and the Evidence Profile read.
+  g <- .cases()$rob_dominated
+  f <- domain_facts(g, "Risk of bias")
+  expect_true(is.finite(f$numeric[f$key == "fig2_branch"]))
+  expect_match(f$value[f$key == "fig2_branch"], "direction-of-bias rule",
+               fixed = TRUE)
+})
+
+test_that("the magnitude node has one edge for similar and not assessable", {
+  # Both answers already reached pma-rob-leaf-all and rated down neither way.
+  # Two arrows into one box showed a reader two routes, not two meanings; the
+  # meanings are in the notes and in fig2_branch, where a reader acts on them.
+  skip_if(is.na(.fig_dir), "inst/figures not available in this layout")
+  drawn <- .svg_ids(file.path(.fig_dir, "rob.svg"))
+  expect_false("pma-rob-edge-magnitude-notassessable" %in% drawn)
+  expect_false("pma-rob-edge-magnitude-notassessable" %in% .vocab$rob)
+
+  svg <- paste(readLines(file.path(.fig_dir, "rob.svg"), warn = FALSE),
+               collapse = "\n")
+  expect_match(svg, ">Similar/Not assessable<", fixed = TRUE)
+  expect_false(grepl(">Not assessable<", svg, fixed = TRUE))
+})
+
+test_that("the rate-down leaf says only 'Rate down'", {
+  # The source's two leaves are two phrases and pmatools' now match them. Rule
+  # 5's second level is stated in .ROB_TWO_LEVEL_NOTE, in the notes of every
+  # judgment on that branch, in the <desc>, and in the app's figure caption --
+  # so it is disclosed wherever the judgment is, which the leaf text was not.
+  skip_if(is.na(.fig_dir), "inst/figures not available in this layout")
+  svg <- paste(readLines(file.path(.fig_dir, "rob.svg"), warn = FALSE),
+               collapse = "\n")
+  leaf <- regmatches(
+    svg, regexpr('(?s)<g id="pma-rob-leaf-ratedown".*?</g>', svg,
+                 perl = TRUE))
+  expect_length(gregexpr("<tspan", leaf)[[1L]], 1L)
+  expect_match(leaf, ">Rate down<", fixed = TRUE)
+  expect_false(grepl("or 2 on rule 5", svg, fixed = TRUE))
+
+  # Still disclosed to a reader who meets the file alone.
+  expect_match(svg, "two-level risk-of-bias downgrade", fixed = TRUE)
 })

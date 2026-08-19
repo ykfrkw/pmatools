@@ -185,28 +185,14 @@ step4_server <- function(input, output, session, state) {
   n_stale_outcomes  <- shiny::reactive(
     sum(pma_outcomes_stale(saved_outcomes(), current_signature())))
 
-  # Arm labels for the "Risk with ..." column headers. Reuse the Step 2 arm
-  # values when they exist so the combined table speaks the same
-  # Intervention / Control vocabulary as the rest of the wizard.
-  .arm_labels <- function() {
-    # state, not input: Step 2's widgets no longer exist by the time this step
-    # is on screen, so the inputs read NULL and both headers fell back to the
-    # generic wording.
-    e <- state$arm_e
-    c_ <- state$arm_c
-    list(
-      intervention = if (!is.null(e) && length(e) == 1 && nzchar(e)) e else "intervention",
-      control      = if (!is.null(c_) && length(c_) == 1 && nzchar(c_)) c_ else "control"
-    )
-  }
-
   # One rare-event alert per saved outcome (Core GRADE 6). NULL entries are
   # dropped, so an empty list means nothing in the table is rare.
   combined_rare_alerts <- shiny::reactive({
     outs <- rated_outcomes()
     if (length(outs) == 0) return(list())
     alerts <- lapply(names(outs), function(nm) {
-      pma_rare_event_alert(outs[[nm]], label = nm)
+      pma_rare_event_alert(outs[[nm]], label = nm,
+                           labels = pma_arm_labels(state))
     })
     alerts[!vapply(alerts, is.null, logical(1))]
   })
@@ -221,7 +207,7 @@ step4_server <- function(input, output, session, state) {
     # table is gone: two controls for one property is one too many.
     primary <- intersect(state$sof_primary %||% character(0), names(outs))
     if (length(primary) == 0) primary <- NULL
-    arms <- .arm_labels()
+    arms <- pma_arm_labels(state)
     tryCatch({
       ft <- grade_table(
         outs,
@@ -240,7 +226,7 @@ step4_server <- function(input, output, session, state) {
       )
       notes <- c(vapply(combined_rare_alerts(), function(a) a$note,
                         character(1)),
-                 PMA_SOF_LIMITATIONS_NOTE)
+                 pma_sof_limitations_note(arms))
       pma_sof_add_notes(ft, notes)
     },
       error = function(e) {
@@ -382,13 +368,14 @@ step4_server <- function(input, output, session, state) {
   # outcomes being exported rather than from combined_rare_alerts(), so the
   # single rating on screen gets its alert too.
   .export_sof_notes <- function(outs) {
+    arms   <- pma_arm_labels(state)
     outs   <- pma_rated_outcomes(outs)
     alerts <- lapply(names(outs), function(nm) {
-      pma_rare_event_alert(outs[[nm]], label = nm)
+      pma_rare_event_alert(outs[[nm]], label = nm, labels = arms)
     })
     alerts <- alerts[!vapply(alerts, is.null, logical(1))]
     c(vapply(alerts, function(a) a$note, character(1)),
-      PMA_SOF_LIMITATIONS_NOTE)
+      pma_sof_limitations_note(arms))
   }
 
   # Gate the Download button on Steps 2-3 being complete. Without this,
@@ -528,7 +515,7 @@ step4_server <- function(input, output, session, state) {
         include <- input$include %||% PMA_EXPORT_INCLUDE_DEFAULT
 
         outs <- .export_outcomes()
-        arms <- .arm_labels()
+        arms <- pma_arm_labels(state)
 
         # export_bundle() renders every plot, writes the tables and docx
         # report, and zips them in one vendored call, so the bulk of the

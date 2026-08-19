@@ -83,7 +83,8 @@ grade_report <- function(outcomes,
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
   out_paths <- character(0)
 
-  md_content <- .build_report_md(outcomes, primary, title, show_domains, per, prediction)
+  md_content <- .build_report_md(outcomes, primary, title, show_domains, per,
+                                 prediction, label_intervention, label_control)
 
   for (fmt in format) {
     base_path <- file.path(output_dir, paste0(output_file, ".", fmt))
@@ -132,7 +133,9 @@ grade_report <- function(outcomes,
 # Markdown report builder
 # --------------------------------------------------------------------------
 .build_report_md <- function(outcomes, primary, title, show_domains,
-                              per = 1000, prediction = FALSE) {
+                              per = 1000, prediction = FALSE,
+                              label_intervention = "intervention",
+                              label_control = "control") {
   nms <- names(outcomes)
   if (is.null(nms)) nms <- vapply(outcomes, function(g) g$outcome_name, character(1))
 
@@ -152,7 +155,8 @@ grade_report <- function(outcomes,
     "",
     "*See Word/HTML output for the full color-coded flextable.*",
     "",
-    .md_sof_table(outcomes, primary, nms, prim_lbl, sec_lbl, per, prediction),
+    .md_sof_table(outcomes, primary, nms, prim_lbl, sec_lbl, per, prediction,
+                  label_intervention, label_control),
     "",
     "## Domain-by-Domain Rationale",
     ""
@@ -232,7 +236,9 @@ grade_report <- function(outcomes,
 # Plain-text SoF table for Markdown
 # --------------------------------------------------------------------------
 .md_sof_table <- function(outcomes, primary, nms, prim_lbl, sec_lbl,
-                           per = 1000, prediction = FALSE) {
+                           per = 1000, prediction = FALSE,
+                           label_intervention = "intervention",
+                           label_control = "control") {
   per_str <- format(per, big.mark = ",", scientific = FALSE)
 
   # A continuous outcome leaves the two arm columns empty, so the header drops
@@ -242,11 +248,16 @@ grade_report <- function(outcomes,
     .sof_arm_cells(g$meta, g$baseline_risk, per)
   })
   cont_any <- any(vapply(arms, function(a) isTRUE(a$continuous), logical(1)))
+  # Same arm words as every other output. The .docx branch has threaded the
+  # two labels through grade_table() since they existed; this branch never
+  # received them, so a review whose arms were "CBT-I" and "placebo" got a
+  # markdown table headed "Intervention rate" over its own numbers.
   arm_hdr  <- if (cont_any) {
-    "| With control | With intervention "
+    paste0("| With ", label_control, " | With ", label_intervention, " ")
   } else {
-    paste0("| Control rate (per ", per_str,
-           ") | Intervention rate (per ", per_str, ") ")
+    paste0("| ", .arm_label_cap(label_control), " rate (per ", per_str,
+           ") | ", .arm_label_cap(label_intervention), " rate (per ",
+           per_str, ") ")
   }
   hdr <- paste0("| Outcome | k | N ", arm_hdr, "| Effect (95% CI) | Certainty |")
   sep <- "|---|---|---|---|---|---|---|"
