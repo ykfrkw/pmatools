@@ -4,7 +4,7 @@
 
 **Public URL:** https://yuki-furukawa.shinyapps.io/pmatools/
 **Deployment:** shinyapps.io (account: `yuki-furukawa`, appId: `17697029`)
-**App version:** 3.1.0 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9)
+**App version:** 3.2.0 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9)
 
 ---
 
@@ -2779,7 +2779,12 @@ the two cannot share a harness.
 | file | field | what it versions |
 |---|---|---|
 | `../DESCRIPTION` | `Version:` | the pmatools package. The real one. |
-| `shiny/DESCRIPTION` | `Version:` | this app's wizard/UI work — currently 3.1.0 |
+| `shiny/DESCRIPTION` | `Version:` | this app's wizard/UI work |
+
+Neither number is restated here. `shiny/DESCRIPTION` is the field of record and
+the header at the top of this file mirrors it; a copy in this table would be a
+third place to forget, which is exactly how the header itself sat at 3.1.0 for
+five days after the field moved to 3.2.0.
 
 The app's version tracks separately because the two artifacts change for
 different reasons, and rsconnect ignores the field entirely (§2.1). It is not
