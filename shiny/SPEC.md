@@ -1232,11 +1232,13 @@ value, closing the window between a rebuild and the rebuilt radio reporting in,
 during which the domains would otherwise be rated against the opposite
 convention.
 
-**The per-N display unit.** `radioButtons("per", …)` offers 100 or 1,000 and is
-backed by the `display_per_state()` reactiveVal, seeded under `isolate()` and
-synced back with `.sync_widget()` — the same machinery the threshold values use,
-because a statically declared radio would push its default back on every
-3 → 2 → 3 round trip.
+**The per-N display unit.** `radioButtons("per", …)` offers the units in
+`STEP3_PER_UNITS` — 100, 1,000, 10,000 and 100,000, with the labels built by
+`step3_per_choices()` — and is backed by the `display_per_state()` reactiveVal,
+seeded under `isolate()` and synced back with `.sync_widget()` — the same
+machinery the threshold values use, because a statically declared radio would
+push its default back on every 3 → 2 → 3 round trip. The two large units exist
+for rare events (§3.4.14) and are seeded there; the default is 1,000.
 
 **Internal storage stays per-1,000.** `threshold_abs_state()`,
 `threshold_baseline_state()`, `.threshold_grade_args()` and `ois_p0_value()`
@@ -1657,9 +1659,6 @@ did as page text.
 
 #### 3.4.14 Rare events in Step 3
 
-> **Status: specified, not yet built.** Step 3 currently contains no reference
-> to the rare-event workflow at all.
-
 **The gap is not that Step 3 rates the wrong number.** When the reviewer accepts
 the rare-event workflow, `state$ma` already *is* `state$rare$primary` — the
 sparse-data fit, `BB_CR` by default — so every domain is rated on it. The gap is
@@ -1677,13 +1676,33 @@ record — none of them moves a judgment on their own.
 **What Step 3 reads.** `state$rare_diagnostics` (the `pma_rare_diagnostics`
 object), `state$rare_mode_active`, `state$rare_primary_method`, and
 `state$rare` — the whole fitted suite, not just the primary. The suite is the
-part that matters most and is currently used for nothing after Step 2.
+part that matters most and was used for nothing after Step 2.
 
-**1. The method is named, once, where the rating is set up.** The Configuration
-tab states that the pooled estimate comes from the rare-event workflow and which
-method produced it, and the method id is stamped onto the banked outcome so the
-exported record carries it. A reader of the Summary of Findings cannot otherwise
-tell a beta-binomial estimate from an inverse-variance one.
+Two reactives in `step3_server()` gate everything below: `.rare_active()` is
+`state$rare_mode_active && state$rare_diagnostics$rare_flow`, and
+`.rare_one_arm_zero()` adds `one_arm_total_zero`. **Both conditions are
+required.** A dataset can trip `rare_flow` and still be rated on the regular
+analysis, because the Step 2 checkbox lets the reviewer decline the workflow;
+nothing here applies to a rating made on the regular fit.
+
+Three arguments carry the facts into the package —
+`grade_meta(rare_flow =, rare_one_arm_total_zero =, rare_method =)` — and they
+are on `PMA_GRADE_ARGS_EXPORTED` and in `analysis_script.R.tpl`, because a
+script that omitted them would re-run the same data and report a different
+rating. `grade_meta()` records them back on the object as `$rare`, which is
+what `pma_outcome_grade_args()` recovers them from for a set assembled out of
+banked outcomes.
+
+**1. The method is named, once, where the rating is set up.**
+`.rare_method_block()` (`R/step3_threshold.R`) opens the Configuration tab —
+above the control-group risk, because it qualifies every number under it — and
+states that the pooled estimate comes from the rare-event workflow, which
+method produced it, and the study/event counts behind it. The method id reaches
+`grade_meta(rare_method =)`, which stamps `$rare$method` /
+`$rare$method_statement` onto the rated object, so it is banked with the
+outcome and `.write_results_txt()` prints it in the bundle as
+`[ Analysis method - rare events ]`. A reader of the Summary of Findings cannot
+otherwise tell a beta-binomial estimate from an inverse-variance one.
 
 **2. Imprecision: the rule is unchanged, the information size and the
 sensitivity are not.** Whether the confidence interval crosses the threshold
@@ -1692,57 +1711,97 @@ stays exactly Core GRADE's question.
 - **The optimal information size switches to an event basis.** An OIS in
   participants is the wrong denominator when the events are what is scarce; with
   a 0.5% event rate a "sufficiently large" participant count can carry a dozen
-  events. When `rare_flow` is set the OIS seed is computed on total events and
-  the panel says which basis it used. Rating against a participant-based OIS on
-  sparse data is not a stricter reading of Core GRADE, it is a wrong one.
+  events. Under `rare_flow` `.calc_ois(event_basis = TRUE)` returns the event
+  count the same power calculation implies, `.compute_ois_pct()` compares total
+  events with it, and the **`ois_basis` fact names the basis on every path** —
+  "83% of the OIS" is two different claims on the two bases. An explicit
+  `ois_n` override puts the comparison back on participants and the fact says
+  so. Rating against a participant-based OIS on sparse data is not a stricter
+  reading of Core GRADE, it is a wrong one.
 - **The suite becomes a sensitivity analysis for the rating, not just for the
-  estimate.** For each method in `state$rare`, ask the same crossing question the
-  primary was asked, and report whether the answer is unanimous. Unanimity is a
-  fact worth having; disagreement means the imprecision judgment rests on the
-  method choice and the reviewer is told which methods disagree and by how much.
+  estimate.** `rare_suite_crossing()` (`R/rare_step3.R`) asks every method in
+  `state$rare` the same crossing question the primary was asked — against
+  `.rated_threshold_for_imprecision()`, which is the threshold the rating
+  actually used and not `threshold_internal`, or the sensitivity would answer a
+  different question. `rare_suite_crossing_note()` reports unanimity, or names
+  the disagreeing methods with their intervals; `output$impre_rare_sensitivity`
+  renders it on the tab and `grade_obj()` appends the same sentence to the
+  Imprecision domain note, so the export carries it. Computed app-side, like the
+  threshold note, because a fitted suite cannot travel through `analysis.R`.
   This costs no new statistics — every fit already exists.
 - **One arm with no events at all** (`one_arm_total_zero`) has no finite odds
-  ratio and no interval to compare with a threshold. Imprecision is
-  not-assessable, said in those words, and the domain's confirmation is what
-  carries the reviewer's decision.
+  ratio and no interval to compare with a threshold. `assess_imprecision()`
+  returns before it reads the CI, with `IMPRECISION NOT ASSESSABLE` in those
+  words and no downgrade, and the domain's confirmation is what carries the
+  reviewer's decision.
 
 **3. Inconsistency: the I² proxy is withdrawn, not reinterpreted.** The
 automated path uses I² as a statistical proxy for Core GRADE 3's first question.
 On sparse data τ² is badly estimated and I² inherits that, so under `rare_flow`
-the proxy reports not-assessable rather than a number the reviewer would read as
-evidence. The manual flowchart is unchanged and is the route that still works;
-`incon_confirm_na` is the existing gate and needs no new mechanism.
+`assess_inconsistency()` takes a path before the automated one and reports
+`NOT ASSESSABLE BY THE AUTOMATED PATH` — **recording no I², τ² or Q at all**,
+because a caveat beside a number is read past and the number is not. No
+downgrade follows: an unusable statistic is not grounds for one. The scalar
+override and the manual flowchart run first and are unchanged, and they are the
+routes that still work; `incon_confirm_na` is the existing gate and needs no new
+mechanism.
 
 **4. Publication bias: rare data takes the k < 10 route, whatever k is.** Egger's
 test loses validity on sparse binary data, and Core GRADE 4 Fig 5 already has a
 branch for "Egger is not available to you" — the one k < 10 takes, which asks
-about registries and unpublished studies instead. Under `rare_flow` the wizard
-takes that branch at any k, and the funnel status dot is ⚪ (§3.4.12). This adds
-no node to Fig 5; it routes to one the figure already has, for the reason the
-figure already has it.
+about registries and unpublished studies instead. `step3_pubias_statistical(k,
+rare_flow)` returns `FALSE` under `rare_flow` at any k, which routes the wizard,
+the breadcrumb, the lit chart and `step3_pubias_k_line()` together;
+`assess_pubias(rare_flow =)` gates its own Q2 the same way, so the answer the
+reviewer gives at Q4 is the answer that rates the domain. The funnel status dot
+is ⚪ (§3.4.12), unchanged. This adds no node to Fig 5; it routes to one the
+figure already has, for the reason the figure already has it.
 
 **5. Absolute effects: one denominator per outcome, chosen from the data.** The
 per-N unit is already reviewer-selectable and already flows through one
 formatter to every string in Step 3 and into `sof_table()`
-(`step3_per_label()` / `display_per_state()`), so nothing new is needed but a
-better default: under `rare_flow`, seed the unit from the control-arm event rate
-so the smaller of the two arm risks still has a significant figure, instead of
-defaulting to 1,000 and printing `0 per 1,000` against `0 per 1,000`.
+(`step3_per_label()` / `display_per_state()`), so what was needed is a better
+default and two more units. `STEP3_PER_UNITS` gains 10,000 and 100,000, and
+`step3_rare_per_seed(event_rate_c)` picks the **smallest** unit at which the
+control-arm event rate still rounds to a whole event — never below the 1,000
+default, since 100 is the coarser unit and would make the problem worse.
+
+The seeding observer applies it **once per detection episode, and only while
+the unit is still the default**: the display unit is a property of the review
+rather than of the outcome (see `display_per_state()`), so a reviewer who has
+chosen a unit does not have it taken back on the next recompute. A one-off
+notification says what changed and where to change it.
+
+> **Assumption, stated.** The seed reads `event_rate_c`, the **control-arm**
+> rate, as this section names — not `min(event_rate_c, event_rate_e)`. It is
+> the rate every absolute number on Step 3 is already built from (the baseline
+> risk, the threshold's conversion, the "with intervention" row), so seeding
+> from anything else would put the unit and the arithmetic on different
+> footings. When the intervention arm is the rarer one its risk can still round
+> to zero at the seeded unit; the reviewer can raise the unit by hand.
 
 **The threshold moves with it.** The decision threshold is stated in the same
 per-N unit, and it must be the same one, for the reason §3.4.8b gives about
 trim-and-fill: an effect and the threshold it is judged against on two different
-scales is the failure mode this app has already had once.
+scales is the failure mode this app has already had once. This needs no code of
+its own — the threshold is stored per-1,000 and displayed through
+`step3_to_per()`, so it follows whatever unit the seed picks. That is what "one
+denominator per outcome" buys.
 
 **6. The continuity correction needs no Step 3 change, only a record.** The
 `incr` input is Step 2's, and the suite's methods are correction-free by
 construction. What Step 3 owes the reader is the statement that no 0.5 was added
 — a 0.5 correction biases toward the null and would otherwise be an invisible
-assumption behind every downstream number.
+assumption behind every downstream number. It is `PMA_RARE_NO_CC_NOTE`
+(`R/rare_step3.R`), printed in the Configuration block and on the object as
+`$rare$no_cc_note`, from where the bundle's `results.txt` prints it too.
 
 **Not done, deliberately:** no rare-event domain, no automatic downgrade for
 sparse data, and no change to any domain's decision rule. Sparse data makes an
 estimate harder to trust, and Core GRADE already has the domain for that.
+`tests/testthat/test-rare_step3.R` closes with the assertion that says so:
+turning `rare_flow` on over ordinary data moves no domain judgment, no
+downgrade and no final certainty.
 
 ### 3.5 Step 4 — Export
 

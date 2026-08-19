@@ -558,6 +558,19 @@ pma_outcome_grade_args <- function(g) {
   if (!is.null(field("baseline_risk"))) {
     recovered$baseline_risk <- field("baseline_risk")
   }
+  # A rare-event rating re-run without these three is a DIFFERENT rating on the
+  # same data: the OIS goes back to a participant basis, Inconsistency reads an
+  # I2 the analysis withdrew, and the publication-bias wizard takes the Egger
+  # branch. grade_meta() records them on the object as $rare, so they can be
+  # recovered here for a set assembled out of banked outcomes.
+  rare <- field("rare")
+  if (is.list(rare) && isTRUE(rare$flow)) {
+    recovered$rare_flow <- TRUE
+    recovered$rare_one_arm_total_zero <- isTRUE(rare$one_arm_total_zero)
+    if (is.character(rare$method) && length(rare$method) == 1L) {
+      recovered$rare_method <- rare$method
+    }
+  }
   recovered <- recovered[!vapply(recovered, is.null, logical(1))]
   # The specs win: they are the arguments the app actually passed, recorded
   # beside the grade_meta() call that used them.
@@ -979,7 +992,14 @@ PMA_GRADE_ARGS_EXPORTED <- c(
   "threshold", "threshold_scale", "threshold_baseline",
   "ois_p0", "ois_rrr", "ois_sd", "ois_events", "ois_n",
   "pubias_small_industry", "pubias_funnel_asymmetry", "pubias_rationale",
-  "pubias_unpublished", "pubias_registry_complete"
+  "pubias_unpublished", "pubias_registry_complete",
+  # The rare-event facts change three computations (the OIS basis, the
+  # Inconsistency I2 surrogate, the Fig 5 route), so a script that omitted them
+  # would re-run the same data and report a different rating. The single-outcome
+  # template recovers them from the rated object as a fallback; the
+  # multi-outcome one renders per_outcome and nothing else, so they have to be
+  # declared here as well.
+  "rare_flow", "rare_one_arm_total_zero", "rare_method"
 )
 
 # Only the arguments the app actually set are emitted. Before pmatools 0.5.1

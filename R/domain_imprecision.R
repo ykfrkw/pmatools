@@ -130,6 +130,41 @@
 #     ois_sd は利用者が入力しなければ NULL のままだった。結果として連続
 #     アウトカムの OIS は黙って計算不能になっていた。ois_sd 未指定時は
 #     compute_pooled_sd() から導出し、導出した旨を note に書く。
+#
+# RARE EVENTS (`rare_flow`; shiny/SPEC.md 3.4.14)
+# ------------------------------------------------
+# Two corrections, and NOTHING else. Fig 4's rule is untouched: whether the
+# confidence interval crosses the chosen threshold stays exactly Core GRADE 2's
+# question, and sparse data earns no automatic downgrade of its own.
+#
+#   1. The OIS switches to an EVENT basis. Core GRADE 2 Fig 4 compares
+#      participants ("N=number of participants") because that is the quantity
+#      that limits an ordinary trial. When the events are what is scarce it is
+#      the wrong denominator: at a 0.5% event rate a "sufficiently large"
+#      participant count can carry a dozen events, and the OIS then reports a
+#      body of evidence as adequately sized when nothing in it could have
+#      detected anything. `.calc_ois()` already computes the implied event
+#      count alongside the participant target; under `rare_flow` that count
+#      becomes the target and `.compute_ois_pct()` compares total events with
+#      it. The basis is named in the notes and in the "ois_basis" fact, because
+#      an OIS percentage means two different things on the two bases.
+#
+#      This is not a stricter reading of Core GRADE 2. It is the reading that
+#      is arithmetically meaningful on data the paper's example does not cover.
+#
+#   2. `rare_one_arm_total_zero` makes the domain NOT ASSESSABLE. With no
+#      events at all in one arm across every study there is no finite odds
+#      ratio and no interval to compare with a threshold, so Fig 4 has no
+#      question to answer. The row records "not_serious" - no automatic
+#      downgrade, per the governing rule - and says in those words that the
+#      domain was not assessed. The reviewer's own confirmation is what carries
+#      the decision from there.
+
+# The judgment recorded when a domain could not be assessed at all. NOT a
+# verdict of "no concern": it is the absence of one, and the note beside it
+# says so. Named because Inconsistency withdraws its own automated path on the
+# same data and must record the same thing (R/domain_inconsistency.R).
+PMA_NOT_ASSESSABLE_JUDGMENT <- "not_serious"
 
 assess_imprecision <- function(meta_obj,
                                outcome_type       = "relative",
@@ -164,7 +199,13 @@ assess_imprecision <- function(meta_obj,
                                # would risk a second, divergent resolution.
                                rating_target      = NULL,
                                threshold_type     = NULL,
-                               threshold_for_imprecision = NULL) {
+                               threshold_for_imprecision = NULL,
+                               # Rare-event corrections; see the file header.
+                               # Both default off, so nothing changes for an
+                               # analysis that never met the rare-event
+                               # workflow.
+                               rare_flow          = FALSE,
+                               rare_one_arm_total_zero = FALSE) {
   # Validated here as well as at grade_meta()'s entry gate: an assessor called
   # directly is a caller too, and a lenient one would re-open the guessing hole
   # the gate exists to close. The formal carries no default so that the
@@ -173,6 +214,32 @@ assess_imprecision <- function(meta_obj,
   # "argument is missing".
   if (missing(small_values)) small_values <- NULL
   .check_small_values(small_values)
+
+  # One arm with no events at all: Fig 4 has nothing to evaluate. Returned
+  # before the CI is even read, because the interval that exists in such a fit
+  # is an artefact of whichever sparse-data model produced it rather than a
+  # range the threshold can be compared with.
+  if (isTRUE(rare_one_arm_total_zero)) {
+    return(make_domain_row(
+      domain   = "Imprecision",
+      judgment = PMA_NOT_ASSESSABLE_JUDGMENT,
+      auto     = TRUE,
+      notes    = paste0(
+        "IMPRECISION NOT ASSESSABLE: one arm has no events at all, in any ",
+        "study. There is no finite odds ratio and no confidence interval to ",
+        "compare with the threshold, so Core GRADE 2 Fig 4's question cannot ",
+        "be asked. No downgrade is applied automatically - that would be a ",
+        "rating derived from a computation that did not happen. Judge the ",
+        "domain yourself and record it with imprecision = <level> plus ",
+        "imprecision_rationale, or confirm the domain as it stands."
+      ),
+      facts    = .facts(
+        .fact("imprecision_assessable", "Imprecision assessable",
+              "no - one arm has no events at all"),
+        .fact("rare_flow", "Rare-event analysis", "yes")
+      )
+    ))
+  }
 
   if (isTRUE(meta_obj$random)) {
     lower <- meta_obj$lower.random
@@ -400,10 +467,17 @@ assess_imprecision <- function(meta_obj,
   }
 
   # OIS auto-calculation (explicit ois_events/ois_n take precedence)
+  #
+  # `event_basis` is the rare-event correction: the same power calculation,
+  # compared against total events rather than total participants. It applies
+  # only to the binary branch, because the continuous OIS has no event count
+  # to switch to.
+  ois_event_basis <- isTRUE(rare_flow) && identical(outcome_type, "relative")
   ois_calc_note <- ""
   if (is.null(ois_events) && is.null(ois_n)) {
     auto_ois <- .calc_ois(outcome_type, ois_alpha, ois_beta,
-                          ois_p0, ois_p1, ois_delta, ois_sd)
+                          ois_p0, ois_p1, ois_delta, ois_sd,
+                          event_basis = ois_event_basis)
     # `.calc_ois()` returns type = "n" for binary outcomes too (Core GRADE 2
     # Fig 4 compares participants, not events).
     if (!is.null(auto_ois)) {
@@ -613,6 +687,33 @@ assess_imprecision <- function(meta_obj,
       },
       ois_pct
     ),
+    # Which denominator the percentage above is a percentage OF. Recorded on
+    # every path, not only the rare one: "83% of the OIS" is two different
+    # claims on the two bases, and a reader who has to infer which one from the
+    # prose is one step away from comparing them.
+    # `ois_info$unit` and not `ois_event_basis`: an explicit ois_n override
+    # puts the comparison back on participants whatever the data looks like,
+    # and the fact has to describe what was actually compared.
+    .fact("ois_basis", "Optimal information size basis",
+          if (identical(ois_info$unit, "events")) {
+            if (isTRUE(ois_event_basis)) {
+              paste0("total events (rare-event analysis: an OIS in ",
+                     "participants is the wrong denominator when the events ",
+                     "are what is scarce)")
+            } else {
+              "total events (an events target was supplied by the caller)"
+            }
+          } else if (identical(ois_info$unit, "N")) {
+            "total participants (Core GRADE 2 Fig 4: 'N=number of participants')"
+          } else {
+            "not applicable - no OIS was computed"
+          }),
+    if (isTRUE(rare_flow)) {
+      .fact("rare_flow", "Rare-event analysis",
+            paste0("yes - the estimate comes from the rare-event workflow, ",
+                   "and the OIS is computed on an event basis. Fig 4's rule ",
+                   "is unchanged."))
+    } else NULL,
     if (ois_p1_derived) {
       .fact("ois_target_rate", "OIS alternative event rate",
             sprintf("%.4f (%s on a control-group risk of %.4f) -- %s",
@@ -753,7 +854,14 @@ assess_imprecision <- function(meta_obj,
 }
 
 .calc_ois <- function(outcome_type, ois_alpha, ois_beta,
-                      ois_p0, ois_p1, ois_delta, ois_sd) {
+                      ois_p0, ois_p1, ois_delta, ois_sd,
+                      # Binary only. FALSE returns the participant target Core
+                      # GRADE 2 Fig 4 compares against; TRUE returns the event
+                      # count the same calculation implies, which is the
+                      # denominator that means something when the events are
+                      # what is scarce (see the rare-event section of the file
+                      # header).
+                      event_basis = FALSE) {
   # Defensive: treat NA as NULL (Shiny may pass NA from blank numericInput)
   if (!is.null(ois_p0)    && (length(ois_p0)    == 0 || is.na(ois_p0)))    ois_p0    <- NULL
   if (!is.null(ois_p1)    && (length(ois_p1)    == 0 || is.na(ois_p1)))    ois_p1    <- NULL
@@ -777,7 +885,21 @@ assess_imprecision <- function(meta_obj,
     total_events <- ceiling(2 * n_arm * p_bar)
     # Core GRADE 2 Fig 4 compares PARTICIPANTS with the OIS ("N=number of
     # participants"), so the binary OIS is returned as a target sample size.
-    # The implied event count is reported alongside it for information.
+    # The implied event count is reported alongside it for information -- and
+    # under `event_basis` the two swap roles, because on sparse data the
+    # participant count is the figure that misleads.
+    if (isTRUE(event_basis)) {
+      formula_str <- sprintf(
+        paste0("OIS on an EVENT basis (rare-event analysis): p0=%.4f, ",
+               "p1=%.4f, alpha=%.2f, beta=%.2f -> target %d events (the same ",
+               "power calculation implies %d participants; Core GRADE 2 Fig 4 ",
+               "compares participants, which is the wrong denominator when ",
+               "the events are what is scarce)"),
+        ois_p0, ois_p1, ois_alpha, ois_beta, total_events, total_n
+      )
+      return(list(type = "events", value = total_events,
+                  formula = formula_str))
+    }
     formula_str  <- sprintf(
       paste0("OIS: p0=%.3f, p1=%.3f, alpha=%.2f, beta=%.2f -> target N=%d ",
              "participants (implies ~%d events; Core GRADE 2 Fig 4 compares ",

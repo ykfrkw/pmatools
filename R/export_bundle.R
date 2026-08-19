@@ -643,6 +643,24 @@ export_bundle.meta <- function(x,
   writeLines(grade_print, con)
   writeLines("", con)
 
+  # How the pooled estimate was produced, when that is not the ordinary
+  # pairwise fit. Above the domain notes, because it qualifies all five of
+  # them: every domain below was rated on this estimate, and a reader who
+  # takes it for an inverse-variance one reads the whole block wrong.
+  if (is.list(grade$rare) && isTRUE(grade$rare$flow)) {
+    writeLines("[ Analysis method - rare events ]", con)
+    for (line in c(grade$rare$method_statement, grade$rare$no_cc_note,
+                   if (isTRUE(grade$rare$one_arm_total_zero)) paste0(
+                     "One arm has no events at all across every study, so ",
+                     "Imprecision could not be assessed; see its domain note ",
+                     "below."))) {
+      if (!is.null(line) && !is.na(line) && nzchar(line)) {
+        writeLines(strwrap(line, width = 78), con)
+      }
+    }
+    writeLines("", con)
+  }
+
   writeLines("[ Domain notes ]", con)
   d <- grade$domain_assessments
   for (i in seq_len(nrow(d))) {
@@ -865,6 +883,25 @@ export_bundle.meta <- function(x,
       .arg_lit(grade_args[["pubias_registry_complete", exact = TRUE]], fallback = "NULL"),
     pubias_rationale_arg      =
       .arg_lit(grade_args[["pubias_rationale", exact = TRUE]],         fallback = "NULL"),
+    # The rare-event facts change three computations, so a script that omitted
+    # them would reproduce a different rating on the same data. The fallbacks
+    # read the RATED OBJECT rather than defaulting to FALSE: a bundle exported
+    # without grade_args must still reproduce the rating it describes, which is
+    # the bug small_values had.
+    rare_flow_arg    = .arg_lit(
+      grade_args[["rare_flow", exact = TRUE]],
+      fallback = if (isTRUE(grade$rare$flow)) "TRUE" else "FALSE"),
+    rare_one_arm_zero_arg = .arg_lit(
+      grade_args[["rare_one_arm_total_zero", exact = TRUE]],
+      fallback = if (isTRUE(grade$rare$one_arm_total_zero)) "TRUE" else "FALSE"),
+    rare_method_arg  = .arg_lit(
+      grade_args[["rare_method", exact = TRUE]],
+      fallback = if (is.character(grade$rare$method) &&
+                     length(grade$rare$method) == 1L) {
+        shQuote(grade$rare$method)
+      } else {
+        "NULL"
+      }),
     outcome_name     = grade$outcome_name,
     per              = per,
     sof_style        = style,

@@ -88,8 +88,54 @@ step3_blocked_message <- function(blocked) {
 # two export arguments move. That is what keeps a reviewer's switch from 1,000
 # to 100 from silently re-scaling a threshold they already justified in
 # writing.
-STEP3_PER_UNITS <- c(100L, 1000L)
+# Two of these four are for rare events. Core GRADE 7 presents absolute
+# effects per 1,000, which is the right unit for an outcome that happens; it is
+# the wrong one for an outcome that does not. At a control-arm event rate of
+# 0.05% the table prints "0 per 1,000" against "0 per 1,000" and a difference
+# of "0 per 1,000" - three zeros where the whole finding should be - so the
+# unit has to be able to grow with the rarity of the event
+# (shiny/SPEC.md 3.4.14).
+#
+# Ascending, and read in order by step3_rare_per_seed(): the seed is the
+# SMALLEST unit at which the control-arm risk still has a figure to show.
+STEP3_PER_UNITS <- c(100L, 1000L, 10000L, 100000L)
 STEP3_PER_DEFAULT <- 1000L
+
+# Labels for the radio, built from the units rather than written out beside
+# them: a unit added above and not here would be silently unofferable.
+step3_per_choices <- function(units = STEP3_PER_UNITS) {
+  stats::setNames(
+    as.character(units),
+    sprintf("%s patients", format(units, big.mark = ",", scientific = FALSE,
+                                  trim = TRUE)))
+}
+
+# The per-N unit a rare-event analysis should OPEN on.
+#
+# `event_rate_c` is rare_event_diagnostics()'s control-arm event rate, which is
+# the rate every absolute number on Step 3 is built from - the baseline risk,
+# the threshold's conversion, and the "with intervention" row of the Summary of
+# Findings. Pick the smallest offered unit at which that rate still rounds to a
+# whole event, so the smaller of the two arm risks keeps a significant figure
+# instead of collapsing to zero.
+#
+# Never smaller than the default: a rare outcome is not a reason to move from
+# 1,000 to 100, and the reviewer's own choice is honoured by the caller (see
+# the seeding observer in step3_grade.R), which only applies this while the
+# unit is still the default.
+step3_rare_per_seed <- function(event_rate_c, default = STEP3_PER_DEFAULT,
+                                units = STEP3_PER_UNITS) {
+  default <- step3_per_unit(default)
+  if (is.null(event_rate_c) || length(event_rate_c) != 1L ||
+      !is.numeric(event_rate_c) || !is.finite(event_rate_c) ||
+      event_rate_c <= 0) {
+    return(default)
+  }
+  candidates <- sort(units[units >= default])
+  ok <- candidates[event_rate_c * candidates >= 1]
+  if (!length(ok)) return(max(candidates))
+  min(ok)
+}
 
 # A radioButtons() value arrives as a character. sof_table() wants a number,
 # and validation is cheap enough to do at every boundary.
@@ -232,7 +278,9 @@ step3_indir_rationale_required <- function(overall, worst = NULL) {
 # The chain below is assess_pubias()'s own evaluation order
 # (R/domain_pubias.R): Q1 first and terminal on "yes"; then the pmatools
 # registry-coverage input, terminal only on "yes" (which short-circuits the
-# package); then the k gate, which is computed and never asked; then Q3 or Q4.
+# package); then Fig 5's Q2 feasibility gate, which is computed and never asked
+# (the study count, or a rare-event analysis - see
+# step3_pubias_statistical()); then Q3 or Q4.
 #
 # `reopen` is a breadcrumb click. It wins over the derivation, and only for a
 # node that is actually reachable - so re-opening Q1 and answering "yes" does
@@ -275,8 +323,10 @@ step3_pubias_node <- function(small_industry = NULL,
                               funnel_asymmetry = NULL,
                               unpublished = NULL,
                               k = 0L,
-                              reopen = NULL) {
-  path <- step3_pubias_reachable(small_industry, registry_complete, k)
+                              reopen = NULL,
+                              rare_flow = FALSE) {
+  path <- step3_pubias_reachable(small_industry, registry_complete, k,
+                                 rare_flow = rare_flow)
   if (!is.null(reopen) && length(reopen) == 1L && !is.na(reopen) &&
       as.character(reopen) %in% path) {
     return(as.character(reopen))
@@ -291,8 +341,9 @@ step3_pubias_node <- function(small_industry = NULL,
   # decides nothing by itself and falls through to the Figure 5 nodes.
   if (identical(.pubias_chr(registry_complete), "yes")) return("result")
 
-  # Q2 is not a question - k decides it. See step3_pubias_k_line().
-  if (isTRUE(step3_pubias_statistical(k))) {
+  # Q2 is not a question - k and the sparsity of the data decide it. See
+  # step3_pubias_k_line().
+  if (isTRUE(step3_pubias_statistical(k, rare_flow))) {
     if (!.pubias_answered(funnel_asymmetry)) return("q3")
   } else {
     if (!.pubias_answered(unpublished)) return("q4")
@@ -302,7 +353,17 @@ step3_pubias_node <- function(small_industry = NULL,
 
 # Q2, computed. k >= 10 routes to the statistical branch, below it to the
 # registry question. Same rule as assess_pubias().
-step3_pubias_statistical <- function(k) {
+#
+# `rare_flow` is the SECOND way the answer can be "not feasible", and it is
+# the same answer rather than a new one. Fig 5's Q2 asks whether a statistical
+# analysis is feasible; k < 10 is the usual reason it is not, and sparse binary
+# data is the other - Egger's regression of the effect on its standard error
+# couples the two through the cell counts and acquires a false-positive rate
+# that has nothing to do with publication bias. So a rare-event analysis takes
+# the branch the figure already draws for "Egger is not available to you",
+# whatever k is. NO NODE IS ADDED to Fig 5 (shiny/SPEC.md 3.4.14).
+step3_pubias_statistical <- function(k, rare_flow = FALSE) {
+  if (isTRUE(rare_flow)) return(FALSE)
   k <- suppressWarnings(as.numeric(k))
   if (length(k) != 1L || is.na(k)) return(FALSE)
   k >= 10
@@ -312,11 +373,19 @@ step3_pubias_statistical <- function(k) {
 # Names the step rather than numbering it: the wizard prints no question
 # numbers, because the chart beside it puts a pmatools node between Fig 5's
 # Q1 and Q2 and the numbering matched neither.
-step3_pubias_k_line <- function(k) {
+#
+# The rare-event line names k as well as the reason, because a reviewer looking
+# at 14 studies and a registry question needs to see that the study count was
+# not what decided it.
+step3_pubias_k_line <- function(k, rare_flow = FALSE) {
   k <- suppressWarnings(as.numeric(k))
   if (length(k) != 1L || is.na(k)) k <- 0
-  if (step3_pubias_statistical(k)) {
+  if (step3_pubias_statistical(k, rare_flow)) {
     sprintf("Statistical analysis feasible - k = %g >= 10, funnel / Egger", k)
+  } else if (isTRUE(rare_flow)) {
+    sprintf(paste0("Statistical analysis not feasible - rare-event analysis ",
+                   "(k = %g); Egger's test loses validity on sparse binary ",
+                   "data, so Figure 5's registry route is taken"), k)
   } else {
     sprintf("Statistical analysis not feasible - k = %g < 10, registry route",
             k)
@@ -347,7 +416,8 @@ step3_pubias_question_line <- function(node, path) {
 # longer reaches.
 step3_pubias_reachable <- function(small_industry = NULL,
                                    registry_complete = NULL,
-                                   k = 0L) {
+                                   k = 0L,
+                                   rare_flow = FALSE) {
   out <- "q1"
   if (!.pubias_answered(small_industry)) return(out)
   if (identical(.pubias_chr(small_industry), "yes")) return(c(out, "result"))
@@ -356,7 +426,7 @@ step3_pubias_reachable <- function(small_industry = NULL,
   if (identical(.pubias_chr(registry_complete), "yes")) {
     return(c(out, "result"))
   }
-  c(out, if (step3_pubias_statistical(k)) "q3" else "q4", "result")
+  c(out, if (step3_pubias_statistical(k, rare_flow)) "q3" else "q4", "result")
 }
 
 # The figure ids the answers so far have LIT, for the chart that sits above the
@@ -391,7 +461,8 @@ step3_pubias_flow_ids <- function(small_industry = NULL,
                                   funnel_asymmetry = NULL,
                                   unpublished = NULL,
                                   k = 0L,
-                                  egger_asymmetric = NULL) {
+                                  egger_asymmetric = NULL,
+                                  rare_flow = FALSE) {
   if (!.pubias_answered(small_industry)) return(character(0))
 
   ids <- "pma-pubias-node-q1"
@@ -406,11 +477,12 @@ step3_pubias_flow_ids <- function(small_industry = NULL,
     return(c(ids, "pma-pubias-edge-registry-yes",
              "pma-pubias-leaf-nodown-registry"))
   }
-  # "no" carries on down the chart. The k gate below it is computed rather
+  # "no" carries on down the chart. The Q2 gate below it is computed rather
   # than asked, so lighting its node AND the edge out of it is the only way
-  # the reviewer sees which branch the study count chose for them.
+  # the reviewer sees which branch was chosen for them - by the study count,
+  # or, on a rare-event analysis, by the sparsity of the data.
   ids <- c(ids, "pma-pubias-edge-registry-no", "pma-pubias-node-q2")
-  if (step3_pubias_statistical(k)) {
+  if (step3_pubias_statistical(k, rare_flow)) {
     ids <- c(ids, "pma-pubias-edge-q2-yes", "pma-pubias-node-q3")
     asymmetry <- .pubias_chr(funnel_asymmetry)
     if (identical(asymmetry, STEP3_PUBIAS_USE_EGGER)) {
@@ -864,6 +936,56 @@ RESPONDER_P0_DEFAULT <- 0.20
                    "color: hsl(var(--muted-foreground)); ",
                    "white-space: nowrap; margin-left: 0.4rem;"),
     text)
+}
+
+# ----- Configuration tab: which analysis is being rated ------------------
+# FIRST on the tab when the rare-event workflow is in force, above the
+# control-group risk, because it qualifies everything under it: state$ma IS
+# state$rare$primary in that mode, so all five domains are already rated on a
+# sparse-data fit and Step 3 said so nowhere. A reader of the Summary of
+# Findings cannot tell a beta-binomial estimate from an inverse-variance one -
+# both arrive as an odds ratio with a 95% interval, and only one of them is
+# valid on data this sparse.
+#
+# It is a statement, not a question. Nothing here is answered, nothing here
+# rates anything, and the method is changed where it was chosen (Step 2).
+#
+# `diag` is the pma_rare_diagnostics object; NULL is tolerated so the block
+# still renders from the method alone.
+.rare_method_block <- function(method_id, effect_scale = "OR", diag = NULL) {
+  statement <- rare_method_statement(method_id, effect_scale)
+  if (is.na(statement)) {
+    statement <- paste0(
+      "The pooled estimate rated below comes from the rare-event workflow, ",
+      "not from the regular pairwise analysis.")
+  }
+  rate <- if (is.list(diag)) diag$event_rate_overall else NULL
+  counts <- if (is.list(diag) && length(rate) == 1L && is.finite(rate)) {
+    sprintf(paste0("%d of %d studies have events in both arms; %d have a ",
+                   "zero-event arm; %d events in total, at an overall event ",
+                   "rate of %.2f%%."),
+            diag$both_arms_events_k %||% 0L, diag$k %||% 0L,
+            diag$zero_cell_k %||% 0L, diag$total_events %||% 0L,
+            100 * rate)
+  } else {
+    NULL
+  }
+  .config_section(
+    htmltools::tagList("Analysis being rated",
+                       .warn_badge("rare-event workflow")),
+    htmltools::p(style = "margin: 0 0 0.5rem;",
+                 htmltools::strong(statement)),
+    if (!is.null(counts)) .config_note(counts),
+    # Core GRADE says nothing about continuity corrections, and that is
+    # precisely why this has to be said: a 0.5 added to each cell of a
+    # zero-event study biases the estimate toward the null, and its ABSENCE
+    # leaves no trace anywhere in the output.
+    .config_note(PMA_RARE_NO_CC_NOTE),
+    .config_note(
+      "Change the method in Step 2, where the sensitivity suite and its ",
+      "forest plot are. It is recorded on this outcome and travels into the ",
+      "exported record.")
+  )
 }
 
 .source_badge <- function(src) {

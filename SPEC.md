@@ -483,9 +483,37 @@ grade_meta(
   pubias_funnel_asymmetry          = NULL,
   pubias_rationale                 = NULL,   # REQUIRED with a scalar pubias_funnel_asymmetry
   pubias_unpublished               = NULL,
-  pubias_registry_complete         = NULL
+  pubias_registry_complete         = NULL,
+
+  # --- Rare events (shiny/SPEC.md §3.4.14) ---
+  rare_flow                        = FALSE,
+  rare_one_arm_total_zero          = FALSE,
+  rare_method                      = NULL    # recorded, never rated on
 ) -> S3 "pmatools" object
 ```
+
+**Rare events change three computations and no decision rule.** The two logical
+arguments are `rare_event_diagnostics()` fields, passed explicitly rather than
+re-detected here — a rating must not change because a detector's default
+threshold moved. Under `rare_flow`:
+
+| Domain | What changes | What does not |
+|---|---|---|
+| Imprecision | the OIS is computed and compared on **total events** rather than participants (`.calc_ois(event_basis = TRUE)`); the `ois_basis` fact names the basis on every path | Fig 4's rule. Whether the CI crosses the chosen threshold is still the question |
+| Inconsistency | the automated path reports **not assessable** and records **no I², τ² or Q**: τ² is badly estimated on sparse binary data and I² inherits it | the scalar override and the manual flowchart, which run first and are untouched |
+| Publication bias | Fig 5's Q2 answers "not feasible" at **any k**, so the assessment takes the branch k < 10 takes (`assess_pubias(rare_flow =)`) | Fig 5 itself. No node is added; Q1 and the registry short-circuit are unchanged |
+
+`rare_one_arm_total_zero` makes **Imprecision not assessable**: with no events
+in one arm anywhere there is no finite effect and no interval to compare with a
+threshold. **None of the four rates anything down.** Withdrawing an invalid
+computation cannot be grounds for a downgrade, and Core GRADE has no sixth
+domain for sparse data.
+
+`rare_method` is a `run_rare_ma()` method id. It is read by nothing that rates:
+it is recorded as `$rare` on the returned object (with the method label, the
+naming sentence, and `PMA_RARE_NO_CC_NOTE` — the statement that no 0.5
+continuity correction was applied), so the app can name the method where the
+rating is set up and `export_bundle()` can print it in `results.txt`.
 
 `threshold_scale` values:
 
@@ -1151,6 +1179,9 @@ g <- grade_meta(
   pubias_small_industry   = "{{pubias_small_industry}}",
   pubias_funnel_asymmetry = {{pubias_funnel_expr}},
   pubias_unpublished      = {{pubias_unpub_expr}},
+  rare_flow               = {{rare_flow_arg}},
+  rare_one_arm_total_zero = {{rare_one_arm_zero_arg}},
+  rare_method             = {{rare_method_arg}},
   outcome_name            = "{{outcome_name}}"
 )
 

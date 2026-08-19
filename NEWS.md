@@ -392,6 +392,65 @@
 
 ## New features
 
+* **Step 3 knows when it is rating a rare-event analysis, and says so — without
+  rating anything down for it.** When the reviewer accepts the rare-event
+  workflow, `state$ma` already *is* the sparse-data fit, so every domain was
+  already being rated on it; what was missing is that Step 3 never said which
+  method produced the estimate, never said whether the rating would survive a
+  different one, and ran three domain computations whose assumptions the data
+  had already broken. `grade_meta()` gains `rare_flow`,
+  `rare_one_arm_total_zero` and `rare_method` (all off by default, so nothing
+  changes for an analysis that never met the workflow), and under them:
+
+  - **The optimal information size switches to an event basis.** Core GRADE 2
+    Fig 4 compares participants, because participants are what limits an
+    ordinary trial. At a 0.5% event rate a "sufficiently large" participant
+    count carries a dozen events, and the OIS then reports a body of evidence
+    as adequately sized when nothing in it could have detected anything. The
+    same power calculation is compared against total events instead, and a new
+    `ois_basis` fact names the basis **on every path** — "83% of the OIS" is two
+    different claims on the two bases.
+  - **The fitted suite becomes a sensitivity analysis for the rating.** Step 2
+    already showed it as a sensitivity analysis for the *estimate*. Every
+    method is now asked Core GRADE 2's own question — does the 95% CI cross the
+    chosen threshold — and the Imprecision tab and the domain note report
+    unanimity, or name the disagreeing methods with their intervals.
+    Disagreement means the imprecision judgment rests on a method choice rather
+    than on the evidence, which is worth knowing and costs no new statistics.
+  - **The Inconsistency I² surrogate is withdrawn, not reinterpreted.** On
+    sparse binary data τ² is badly estimated and I² inherits that, so the
+    automated path reports *not assessable* and records **no I², τ² or Q at
+    all** — a caveat beside a number is read past and the number is not. The
+    manual flowchart and the scalar override are unchanged and are the routes
+    that still work.
+  - **Publication bias takes Core GRADE 4 Fig 5's k < 10 branch at any k.**
+    Egger's regression loses validity on sparse binary data, and Fig 5 already
+    has the branch for "Egger is not available to you". The wizard, the lit
+    chart and `assess_pubias()` route together, so the answer given at the
+    registry question is the answer that rates the domain. **No node is added
+    to Fig 5.**
+  - **One arm with no events at all** makes Imprecision *not assessable*, in
+    those words: there is no finite effect and no interval to compare with a
+    threshold.
+
+  **None of these rates anything down**, and no domain's decision rule changed:
+  Core GRADE has five domains and sparse data does not earn a sixth. The test
+  suite closes on exactly that assertion — turning the flag on over ordinary
+  data moves no judgment, no downgrade and no final certainty.
+
+  Two supporting changes travel with it. The rated object carries a `$rare`
+  record naming the method, so the Configuration tab can state where the
+  estimate came from and the bundle's `results.txt` prints it, together with
+  the statement that **no 0.5 continuity correction was applied** — the suite's
+  methods are correction-free by construction, and a correction that was never
+  applied otherwise leaves no trace at all. And the app's per-N display unit
+  gains 10,000 and 100,000, seeded from the control-arm event rate: at these
+  rates the Summary of Findings was printing `0 per 1,000` against `0 per
+  1,000` with a difference of `0 per 1,000`. The decision threshold follows the
+  same unit, because an effect and the threshold it is judged against on two
+  different scales is a failure mode this project has had once already.
+  (`R/rare_step3.R`, `SPEC.md` §4.5, `shiny/SPEC.md` §3.4.14.)
+
 * **The three publication-bias reference tabs each carry a status dot, and
   none of them rates anything.** The funnel plot, the trim-and-fill funnel and
   the missing-results (RoB-ME) table sit on a tabset, one at a time, so a

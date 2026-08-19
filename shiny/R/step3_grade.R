@@ -636,6 +636,12 @@ step3_ui <- function(state = NULL) {
           # carried is stated at the override further down, where it is
           # actionable.
           shiny::uiOutput("impre_evaluation"),
+          # Rare events only, and NULL otherwise. The suite Step 2 fitted is
+          # asked Core GRADE 2's own question here - one answer per method -
+          # so the reviewer can see whether the imprecision judgment survives
+          # the choice of method. It reports; it rates nothing
+          # (shiny/SPEC.md 3.4.14).
+          shiny::uiOutput("impre_rare_sensitivity"),
           .inputs_details(open = TRUE, title = "Inputs for this domain",
             shiny::conditionalPanel(
               "input.outcome_type == 'binary'",
@@ -1186,7 +1192,65 @@ step3_server <- function(input, output, session, state) {
   # never opens it.
   .fresh <- function(id) identical(.answer_gen[[id]], state$outcome_gen)
 
+  # ----- Rare events: the three facts Step 3 reads -------------------------
+  # state$ma IS state$rare$primary while the rare-event workflow is on
+  # (step2_ma.R), so every domain is already rated on the sparse-data fit.
+  # These are what let Step 3 know it, and they are read straight off the
+  # state Step 2 already keeps rather than re-diagnosed here - a second
+  # rare_event_diagnostics() call is a second chance for the two to disagree.
+  #
+  # Both conditions are required: a dataset can trip `rare_flow` and still be
+  # rated on the regular analysis, because the reviewer can decline the
+  # workflow with the Step 2 checkbox. Nothing below applies to a rating made
+  # on the regular fit.
+  .rare_active <- shiny::reactive({
+    isTRUE(state$rare_mode_active) &&
+      isTRUE(state$rare_diagnostics$rare_flow)
+  })
+  .rare_one_arm_zero <- shiny::reactive({
+    .rare_active() && isTRUE(state$rare_diagnostics$one_arm_total_zero)
+  })
+
   shiny::observeEvent(state$ma, { .seed_thresholds() }, ignoreNULL = TRUE)
+
+  # ----- Rare events: seed the per-N display unit --------------------------
+  # Core GRADE 7 presents absolute effects per 1,000, which prints "0 per
+  # 1,000" against "0 per 1,000" at a control-arm risk of 0.05%. The unit is
+  # therefore seeded from the control-arm event rate, so the smaller of the two
+  # arm risks keeps a figure to show (step3_rare_per_seed()).
+  #
+  # Once per detection episode, and only while the unit is still the default:
+  # the display unit is a property of the review rather than of the outcome
+  # (see display_per_state()), so a reviewer who has chosen 100 or 100,000 must
+  # not have it taken back on the next recompute. `rare_per_seeded` re-arms
+  # when the diagnostics go non-rare, exactly as step2_ma.R's auto-rerun
+  # default does.
+  #
+  # The decision threshold needs no seeding of its own: it is stored per 1,000
+  # and displayed through step3_to_per(), so it moves to whatever unit this
+  # picks. That is the point of there being one denominator per outcome
+  # (shiny/SPEC.md 3.4.14, and 3.4.8b for what two scales cost).
+  rare_per_seeded <- shiny::reactiveVal(FALSE)
+  shiny::observe({
+    if (!.rare_active()) {
+      shiny::isolate(rare_per_seeded(FALSE))
+      return()
+    }
+    if (isTRUE(shiny::isolate(rare_per_seeded()))) return()
+    shiny::isolate(rare_per_seeded(TRUE))
+    if (!identical(shiny::isolate(display_per_state()), STEP3_PER_DEFAULT)) {
+      return()
+    }
+    seeded <- step3_rare_per_seed(state$rare_diagnostics$event_rate_c)
+    if (identical(seeded, STEP3_PER_DEFAULT)) return()
+    display_per_state(seeded)
+    shiny::showNotification(
+      sprintf(paste0("Event rates are now reported per %s patients: at this ",
+                     "control-arm event rate, per 1,000 would print 0 against ",
+                     "0. Change it on the Configuration tab."),
+              format(seeded, big.mark = ",", scientific = FALSE, trim = TRUE)),
+      id = "pma_rare_per_seeded", type = "message", duration = 8)
+  })
   # Pooled control-group risk. One computation, cached in a reactive, feeding
   # BOTH the Configuration threshold baseline and the Imprecision OIS p0, so
   # the two can no longer disagree. Previously each site recomputed a crude
@@ -1507,14 +1571,24 @@ step3_server <- function(input, output, session, state) {
     step3_entries()
     .config_section(
       "Presentation of event rates",
+      # Built from STEP3_PER_UNITS rather than written out here: the two large
+      # units exist for rare events (shiny/SPEC.md 3.4.14) and a unit added
+      # there but not here would be unofferable.
       shiny::radioButtons("per", "Report event rates per",
-        choices = c("100 patients" = "100", "1,000 patients" = "1000"),
+        choices = step3_per_choices(),
         selected = as.character(shiny::isolate(display_per_state())),
         inline = TRUE),
       .config_note(
         "One setting for the whole app - display only, never what is ",
         "computed. Values are entered as whole events in the unit chosen ",
-        "here.")
+        "here. The decision threshold moves with it, so an outcome always has ",
+        "one denominator."),
+      if (.rare_active()) {
+        .config_note(
+          "Seeded from the control-arm event rate because this is a ",
+          "rare-event analysis: per 1,000 would print 0 against 0 at this ",
+          "rate. Change it here if you prefer another unit.")
+      }
     )
   })
   shiny::outputOptions(output, "per_panel", suspendWhenHidden = FALSE)
@@ -1607,6 +1681,13 @@ step3_server <- function(input, output, session, state) {
 
     if (is_binary) {
       htmltools::tagList(
+        # Above the control-group risk on purpose: it qualifies every number
+        # below it. See .rare_method_block().
+        if (.rare_active()) {
+          .rare_method_block(state$rare_primary_method,
+                             state$rare$effect_scale %||% sm,
+                             state$rare_diagnostics)
+        },
         .control_risk_block(per),
         shiny::uiOutput("direction_echo"),
         .config_section(
@@ -2413,6 +2494,18 @@ step3_server <- function(input, output, session, state) {
       # is sent as NULL rather than "no" so the domain note does not report an
       # answered registry question the flowchart then ignored.
       pubias_registry_complete = if (identical(pubias_rc, "yes")) "yes" else NULL,
+      # ----- Rare events (shiny/SPEC.md 3.4.14) -------------------------
+      # Three facts about the analysis, not three new rules. They switch the
+      # OIS to an event basis, withdraw the Inconsistency I2 surrogate, and
+      # send Fig 5 down its k < 10 branch; no domain rates down because of
+      # them, and no domain's decision rule changes. Passed only when the
+      # reviewer actually accepted the workflow - a dataset that trips
+      # rare_flow and is then rated on the regular fit is an ordinary rating.
+      rare_flow    = .rare_active(),
+      rare_one_arm_total_zero = .rare_one_arm_zero(),
+      # Recorded, never read by anything that rates: it is what lets the
+      # exported record name the method the estimate came from.
+      rare_method  = if (.rare_active()) state$rare_primary_method else NULL,
       outcome_name = state$outcome_name %||% "Outcome"
     )
 
@@ -2495,6 +2588,35 @@ step3_server <- function(input, output, session, state) {
         g$domain_assessments$notes[idx] <-
           sub(stale, fresh, g$domain_assessments$notes[idx], fixed = TRUE)
       }
+    }
+
+    # ----- Rare events: the suite as a sensitivity analysis FOR THE RATING --
+    # Step 2 already shows the suite as a sensitivity analysis for the
+    # ESTIMATE. Core GRADE 2 asks a different question of it - does the
+    # interval cross the chosen threshold - and every fit that could answer it
+    # already exists, so asking costs no new statistics.
+    #
+    # Appended app-side rather than passed into grade_meta(), for the reason
+    # the threshold note above is: the fitted suite is a live object that
+    # cannot travel through a reproducibility script, while the sentence it
+    # produces is a domain note like any other and reaches results.txt with the
+    # rest of them. `rare_suite_crossing()` is in R/rare_step3.R, pure and
+    # unit-tested; nothing here decides anything.
+    #
+    # Skipped when Imprecision is not assessable at all: there is no primary
+    # answer for the other methods to agree or disagree with.
+    if (!is.null(g) && .rare_active() && !.rare_one_arm_zero() &&
+        inherits(state$rare, "pma_rare_meta")) {
+      thr_impre <- .rated_threshold_for_imprecision(g)
+      cross <- rare_suite_crossing(state$rare, thr_impre)
+      note  <- rare_suite_crossing_note(cross, thr_impre)
+      if (!is.na(note)) {
+        g$domain_assessments <- step3_append_domain_note(
+          g$domain_assessments, "Imprecision", note)
+      }
+      # Carried on the object so the Imprecision tab can render the same
+      # comparison it just described, without recomputing it.
+      g$rare$crossing <- cross
     }
 
     if (!is.null(g)) {
@@ -2932,9 +3054,16 @@ step3_server <- function(input, output, session, state) {
   # The two questions the deleted ci_diff / threshold_side widgets used to
   # ask are exactly what these facts report, so the reviewer can see what
   # they were answered with.
+  # "i2_assessable" and "rare_flow" are the only two facts the domain records
+  # on a rare-event analysis, where the I2 surrogate is withdrawn rather than
+  # reported (R/domain_inconsistency.R). They are named here because
+  # pma_facts_list() shows the keys it is given and nothing else, so a list
+  # asking only for the zone tally and the statistics would render an empty
+  # Evaluation on exactly the analysis that most needs to say why.
   output$incon_evaluation  <- shiny::renderUI(
     .domain_evaluation("Inconsistency",
-                       keys = c("zone_decision", "zone_counts", "i2", "tau2",
+                       keys = c("i2_assessable", "rare_flow",
+                                "zone_decision", "zone_counts", "i2", "tau2",
                                 "q_pvalue")))
   output$impre_evaluation  <- shiny::renderUI(
     .domain_evaluation("Imprecision"))
@@ -2944,6 +3073,54 @@ step3_server <- function(input, output, session, state) {
                 "pubias_evaluation")) {
     shiny::outputOptions(output, .id, suspendWhenHidden = FALSE)
   }
+
+  # ----- Imprecision: the rare-event method sensitivity -------------------
+  # One row per fitted method, each answering the question Core GRADE 2 asks
+  # the primary. Body copy under the verdict it qualifies, not a bordered
+  # block: only something that must be ANSWERED wears the accent
+  # (shiny/SPEC.md 3.4.13), and there is nothing to answer here.
+  #
+  # The comparison is computed in grade_obj() and carried on the rated object,
+  # so the sentence on screen and the sentence in the exported domain note are
+  # the same sentence.
+  output$impre_rare_sensitivity <- shiny::renderUI({
+    g <- grade_obj()
+    if (is.null(g) || !is.list(g$rare)) return(NULL)
+    cross <- g$rare$crossing
+    if (is.null(cross) || !cross$k_methods) return(NULL)
+    thr <- .rated_threshold_for_imprecision(g)
+    tab <- cross$table
+    answers <- cross$answers
+    .row <- function(i) {
+      a <- answers[[i]]
+      htmltools::div(
+        style = "margin-top: 0.15rem;",
+        htmltools::span(
+          style = if (identical(tab$method_id[i], g$rare$method)) {
+            "font-weight: 600;"
+          } else "",
+          sprintf("%s%s: %s %.2f (95%% CI %.2f to %.2f) - %s",
+                  tab$label[i],
+                  if (identical(tab$method_id[i], g$rare$method)) " (primary)"
+                  else "",
+                  cross$effect_scale, tab$estimate[i], tab$ci_low[i],
+                  tab$ci_high[i],
+                  if (is.na(a)) "no answer"
+                  else if (a) "crosses" else "does not cross")))
+    }
+    htmltools::div(
+      style = paste0("padding: 0.15rem 0 0.35rem; margin: 0.25rem 0 0.75rem; ",
+                     "font-size: 0.85rem;"),
+      htmltools::h5("Does the rating survive the method?",
+                    style = "margin: 0 0 0.25rem; font-size: 0.95rem;"),
+      htmltools::div(
+        style = "font-style: italic; color: hsl(var(--muted-foreground));",
+        rare_suite_crossing_note(cross, thr)),
+      lapply(seq_len(nrow(tab)), .row)
+    )
+  })
+  shiny::outputOptions(output, "impre_rare_sensitivity",
+                       suspendWhenHidden = FALSE)
 
   # Whether Core GRADE 3's Step 3 question is live: the automated zone tally
   # reached the opposite-sides branch, which is the only place a credible
@@ -3183,7 +3360,11 @@ step3_server <- function(input, output, session, state) {
       funnel_asymmetry  = input$pubias_funnel_asymmetry,
       unpublished       = input$pubias_unpublished,
       k                 = pubias_k(),
-      reopen            = pubias_reopen()
+      reopen            = pubias_reopen(),
+      # Fig 5's Q2 has two ways to answer "not feasible", and the wizard has to
+      # take the same one assess_pubias() does, or the reviewer answers a
+      # question the rating then ignores.
+      rare_flow         = .rare_active()
     )
   })
 
@@ -3246,14 +3427,15 @@ step3_server <- function(input, output, session, state) {
           # forwarded to grade_meta() (see grade_obj()): "egger" means "let
           # assess_pubias() decide", and lighting the chart is a display
           # concern that must not change what is rated.
-          egger_asymmetric  = pubias_egger()$asymmetric),
+          egger_asymmetric  = pubias_egger()$asymmetric,
+          rare_flow         = .rare_active()),
         caption = pma_algorithm_source("Publication bias")),
       # The chart's second node is the k gate, which is computed rather than
       # asked, so the chart can light the branch but cannot print the number
       # it turned on. It used to be a breadcrumb line; it belongs under the
       # picture of the node it decides.
       htmltools::div(class = "pma-crumb pma-crumb-auto",
-                     step3_pubias_k_line(pubias_k()))
+                     step3_pubias_k_line(pubias_k(), .rare_active()))
     )
   })
   shiny::outputOptions(output, "pubias_flowchart", suspendWhenHidden = FALSE)
@@ -3268,7 +3450,7 @@ step3_server <- function(input, output, session, state) {
     node <- pubias_node()
     path <- step3_pubias_reachable(input$pubias_small_industry,
                                    input$pubias_registry_complete,
-                                   pubias_k())
+                                   pubias_k(), .rare_active())
     .answered <- function(nd) {
       v <- switch(nd,
         q1    = input$pubias_small_industry,
@@ -3297,8 +3479,9 @@ step3_server <- function(input, output, session, state) {
     if (is.null(state$ma)) return(htmltools::p("Run analysis first."))
     node <- pubias_node()
     k    <- pubias_k()
+    rare <- .rare_active()
     path <- step3_pubias_reachable(input$pubias_small_industry,
-                                   input$pubias_registry_complete, k)
+                                   input$pubias_registry_complete, k, rare)
 
     # ONE container for every node. Each node used to return a bare tagList,
     # so the live question - the only thing on the tab that can be answered -
@@ -3407,9 +3590,18 @@ step3_server <- function(input, output, session, state) {
       return(.question(
         "Unpublished studies documented?",
         htmltools::p(class = "pma-card-subtitle",
-          sprintf(paste0("Egger's test is unreliable at k = %d, so Figure 5 ",
-                         "routes here. Documented unpublished trials rate ",
-                         "down 1."), k)),
+          if (rare) {
+            # k is named as well as the reason: a reviewer looking at 14
+            # studies and a registry question needs to see that the study
+            # count was not what sent them here.
+            sprintf(paste0("Egger's test loses validity on sparse binary ",
+                           "data, so Figure 5 routes here even at k = %d. ",
+                           "Documented unpublished trials rate down 1."), k)
+          } else {
+            sprintf(paste0("Egger's test is unreliable at k = %d, so Figure 5 ",
+                           "routes here. Documented unpublished trials rate ",
+                           "down 1."), k)
+          }),
         shiny::radioButtons("pubias_unpublished", NULL,
           choices = c("No" = "no", "Yes" = "yes"),
           selected = character(0), inline = FALSE)

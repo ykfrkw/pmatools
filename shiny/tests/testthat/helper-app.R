@@ -57,8 +57,15 @@ PMA_APP_ROOT <- local({
 # `not_reported_outcome()` decide which saved rows survive normalisation, and
 # an app-side re-implementation of that class check is exactly the drift the
 # other three entries are here to prevent.
+# R/rare_step3.R and R/rare_events.R ride along for the same reason as the
+# four above: the Configuration tab's rare-event block (.rare_method_block()
+# in R/step3_threshold.R) prints rare_method_statement() and
+# PMA_RARE_NO_CC_NOTE verbatim, and .rare_method_label() reads the method
+# labels off .rare_method_specs() so the app and the fitted suite cannot name
+# the same method two ways. Without them a test of that block would fail on a
+# missing object rather than on wrong copy.
 for (.stem in c("utils.R", "multi_outcome.R", "data_ingest.R",
-                "not_reported.R")) {
+                "not_reported.R", "rare_events.R", "rare_step3.R")) {
   for (.f in c(file.path(PMA_APP_ROOT, "R", "_pmatools", .stem),
                file.path(dirname(PMA_APP_ROOT), "R", .stem))) {
     if (file.exists(.f)) {

@@ -102,6 +102,27 @@
 #
 # I^2 / tau^2 / Q statistics are always shown in notes but never drive the
 # judgment beyond the Step 1 gate above.
+#
+# RARE EVENTS (`rare_flow`; shiny/SPEC.md 3.4.14)
+# ------------------------------------------------
+# The automated Step 1 gate is WITHDRAWN, not reinterpreted with a different
+# cut-off. I^2 is 100 * (tau^2 / (tau^2 + s^2)); on sparse binary data tau^2 is
+# badly estimated -- the within-study variances it is compared against are
+# themselves unstable, and zero-event arms contribute no information at all --
+# so I^2 inherits that instability. A number carrying that much error is worse
+# than no number, because a reviewer reads it as evidence.
+#
+# So under `rare_flow` the automated path reports NOT ASSESSABLE and records
+# no I^2 / tau^2 / Q at all. It does not report them "with a caveat": the
+# caveat would be read past and the number would not.
+#
+# What it does NOT do is rate anything down. Withdrawing an invalid statistic
+# cannot be grounds for a downgrade, and the conservative "serious" that the
+# neighbouring not-assessable branch applies (study-level TEs unavailable)
+# would be exactly that. The manual flowchart is unchanged and is the route
+# that still works on this data: it asks the reviewer to look at the forest
+# plot, which is what Core GRADE 3's Step 1 always was. In the app,
+# `incon_confirm_na` is the gate that makes the reviewer answer for it.
 
 # --------------------------------------------------------------------------
 # Flowchart node vocabulary (inst/figures/incon.svg)
@@ -214,7 +235,11 @@ assess_inconsistency <- function(meta_obj,
                                  inconsistency_threshold_side     = NULL,
                                  inconsistency_subgroup_explained = NULL,
                                  threshold_chosen                 = NULL,
-                                 rationale                        = NULL) {
+                                 rationale                        = NULL,
+                                 # Rare-event withdrawal of the I^2 gate; see
+                                 # the file header. Defaults off, so nothing
+                                 # changes for an ordinary analysis.
+                                 rare_flow                        = FALSE) {
 
   # ----- Statistics (always computed for notes) -----
   i2_pct <- if (!is.null(meta_obj$I2) && !is.na(meta_obj$I2)) {
@@ -364,6 +389,42 @@ assess_inconsistency <- function(meta_obj,
   # branch has always told the reviewer to supply it. Until v0.5.1 that advice
   # was a no-op: answering it switched the whole domain onto the manual path,
   # which then demanded inconsistency_threshold_side as well.
+  # ----- Path C0: the automated path has no valid Step 1 on sparse data -----
+  # Reached only after Paths A and B have declined it, so a scalar override and
+  # the manual flowchart both still work exactly as they did. See the
+  # rare-events section of the file header for why the statistics are dropped
+  # rather than reported with a warning attached.
+  if (isTRUE(rare_flow)) {
+    return(make_domain_row(
+      domain   = "Inconsistency",
+      judgment = "not_serious",
+      auto     = TRUE,
+      notes    = paste0(
+        "INCONSISTENCY NOT ASSESSABLE BY THE AUTOMATED PATH: this is a ",
+        "rare-event analysis, and the I2 surrogate for Core GRADE 3 Step 1 is ",
+        "not valid on sparse binary data -- tau2 is badly estimated there and ",
+        "I2 inherits that, so the statistic is withdrawn rather than reported ",
+        "with a caveat. I2, tau2 and Cochran's Q are deliberately not shown ",
+        "for this analysis. No downgrade is applied automatically: an ",
+        "unusable statistic is not grounds for one. Core GRADE 3's Step 1 is ",
+        "a visual judgment in any case ('Core GRADE relies on the visual ",
+        "inspection of forest plots'), so inspect plot_forest() and supply ",
+        "inconsistency_ci_diff / inconsistency_threshold_side to rate the ",
+        "domain, or record a scalar judgment with inconsistency = <level> ",
+        "plus inconsistency_rationale."
+      ),
+      # No stat facts, for the reason the note gives. The path stops at the
+      # Step 1 node: the question was reached and could not be answered, so no
+      # edge out of it is lit.
+      facts    = .facts(
+        .fact("i2_assessable", "I-squared usable as a Step 1 surrogate",
+              "no - rare-event analysis"),
+        .fact("rare_flow", "Rare-event analysis", "yes"),
+        .flow_path_fact("pma-incon-node-step1")
+      )
+    ))
+  }
+
   .auto_inconsistency(meta_obj, i2_pct, stat_note, threshold_chosen,
                       stat_facts = stat_facts,
                       inconsistency_subgroup_explained =
