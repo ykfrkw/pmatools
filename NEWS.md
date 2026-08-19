@@ -2,6 +2,26 @@
 
 ## Breaking changes
 
+* **`rob_some_concerns` now defaults to `"high"`, not `"low"`.** Studies rated
+  `"some concerns"` are folded into the **high** risk-of-bias group unless you
+  say otherwise, which changes the high-RoB weight share, the Core GRADE 4
+  Fig 2 dominance gate, and therefore the risk-of-bias judgment and any
+  certainty rating that follows from it. **A rating made before 0.5.1 without
+  this argument reproduces only if you now pass `rob_some_concerns = "low"`
+  explicitly.** `export_bundle()`'s generated `analysis.R` renders the value it
+  actually rated with, so an existing bundle is unaffected.
+
+  Core GRADE 4 settles nothing here — the phrase "some concerns" does not occur
+  in it, and it declines to fix the low/high boundary at all ("may be an issue
+  that will be impossible to resolve") — so the default is pmatools' own choice,
+  and it is now the conservative one. `"some concerns"` is the judgment RoB 2
+  returns for a study it declines to call low risk of bias; folding it low
+  asserts the one thing the assessment would not. It also matches the first of
+  the three worked boundaries Core GRADE 4 quotes, and the Shiny app, which has
+  offered `"high"` as its default since the control existed. The two disagreed
+  until now, so a rating reproduced by calling the package directly could differ
+  from the one the app had shown.
+
 * **Eight ids leave the risk-of-bias `flow_path` vocabulary, because the
   drawing no longer has them.** `.ROB_FIG2_NODE_IDS` drops
   `pma-rob-leaf-rule1` … `rule5`, `pma-rob-leaf-rulena`,

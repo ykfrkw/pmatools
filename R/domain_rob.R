@@ -7,10 +7,21 @@
 # --------------------------------------------------------------------------
 # Step 0. Binary classification of each study
 #
-#   rob_some_concerns = "low"  (default) : {not_serious, serious} -> low
-#                                          {very_serious}         -> high
-#   rob_some_concerns = "high"           : {not_serious}          -> low
+#   rob_some_concerns = "high" (default) : {not_serious}          -> low
 #                                          {serious, very_serious} -> high
+#   rob_some_concerns = "low"            : {not_serious, serious} -> low
+#                                          {very_serious}         -> high
+#
+#   THE DEFAULT IS "high" as of 0.5.1, and it was "low" before. Two reasons,
+#   and neither is that the source settles it (it does not -- see PROVENANCE
+#   below). First, "some concerns" is the judgment RoB 2 gives a study it
+#   cannot call low risk of bias; folding it low asserts the one thing the
+#   assessment declined to say. Second, of Core GRADE 4's three worked
+#   examples for the low/high boundary, the one it states first calls a trial
+#   high risk of bias "if at least one item was rated as high risk of bias" --
+#   the reading a some-concerns study most often meets. The old default made
+#   the more permissive choice silently, and it disagreed with the app, which
+#   has offered "high" as its default since the control existed.
 #
 #   PROVENANCE: the binary verdict is Core GRADE 4's (verbatim: "For
 #   simplicity, however, Core GRADE users can assess the overall risk of bias
@@ -404,8 +415,9 @@ PMA_ROB_INFLATION_THRESHOLD <- 0.20
 #' @param rob Scalar GRADE level, per-study vector, or column name in
 #'   `meta_obj$data`.
 #' @param meta_obj A `meta::metagen`-like object.
-#' @param rob_some_concerns `"low"` (default) or `"high"`: which side of the
+#' @param rob_some_concerns `"high"` (default) or `"low"`: which side of the
 #'   binary low/high classification `"serious"` studies are folded into.
+#'   The default was `"low"` up to 0.5.1.
 #' @param rob_overrides Named character vector of study-level Risk-of-Bias
 #'   overrides, keyed on `meta_obj$studlab`. Every key needs a matching
 #'   rationale in `rob_override_rationale`.
@@ -457,7 +469,7 @@ PMA_ROB_INFLATION_THRESHOLD <- 0.20
 #'   `update.meta(subset = )`, or `NULL`).
 #' @noRd
 assess_rob <- function(rob, meta_obj,
-                       rob_some_concerns       = "low",
+                       rob_some_concerns       = "high",
                        rob_overrides           = NULL,
                        rob_override_rationale  = NULL,
                        rob_dominant_threshold  = 0.55,
@@ -655,7 +667,7 @@ assess_rob <- function(rob, meta_obj,
 # Binary low/high fold of the normalised levels. Shared by .flowchart_rob()
 # (which classifies the pooled studies) and assess_rob() (which classifies the
 # studies {meta} dropped, so that "high_idx" is complete in studlab space).
-.rob_high_levels <- function(some_concerns_as = "low") {
+.rob_high_levels <- function(some_concerns_as = "high") {
   high_levels <- c("very_serious", "extremely_serious")
   if (identical(some_concerns_as, "high")) {
     high_levels <- c(high_levels, "serious")
@@ -678,7 +690,11 @@ assess_rob <- function(rob, meta_obj,
 }
 
 .check_rob_some_concerns <- function(x) {
-  if (is.null(x)) return("low")
+  # NULL is "not supplied", and the default it resolves to moved from "low" to
+  # "high" in 0.5.1 (see the Step 0 block at the top of this file). This is the
+  # single place that decides it: assess_rob() and grade_meta() both route
+  # through here, so the two cannot drift.
+  if (is.null(x)) return("high")
   x <- as.character(x)[1]
   if (!x %in% c("low", "high")) {
     rlang::abort(paste0(
@@ -817,7 +833,7 @@ assess_rob <- function(rob, meta_obj,
                            inflation_threshold = PMA_ROB_INFLATION_THRESHOLD,
                            small_values,
                            threshold_internal = NULL,
-                           some_concerns_as = "low",
+                           some_concerns_as = "high",
                            override_notes = NULL) {
 
   # Binary low/high classification, on levels .normalize_rob_levels() has

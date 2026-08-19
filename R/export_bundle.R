@@ -744,7 +744,7 @@ export_bundle.meta <- function(x,
     study_design     = grade$study_design,
     rob_arg          = .arg_lit(grade_args[["rob", exact = TRUE]],           fallback = "NULL"),
     rob_rationale_arg = .arg_lit(grade_args[["rob_rationale", exact = TRUE]], fallback = "NULL"),
-    rob_some_concerns = grade_args[["rob_some_concerns", exact = TRUE]][["value"]] %||% "low",
+    rob_some_concerns = grade_args[["rob_some_concerns", exact = TRUE]][["value"]] %||% "high",
     rob_overrides_arg = .named_chr_lit(grade_args[["rob_overrides", exact = TRUE]]),
     rob_override_rationale_arg =
       .named_chr_lit(grade_args[["rob_override_rationale", exact = TRUE]]),

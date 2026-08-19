@@ -381,7 +381,7 @@ The two-group fold is not a second implementation: `.rob_analysis_strata()` maps
 
 Both levels are always present in the factor, even when one is empty, so the subgroup rows do not reorder as the boundary moves.
 
-**Why this exists.** With the four descriptive strata the plot splits studies four ways beside a judgment made on two, so under the common `rob_some_concerns = "high"` setting the figure and the evaluation printed next to it disagree. Any caller that shows the plot alongside a rating should pass the same value it passed to `grade_meta()`. `NULL` keeps the pre-0.5.1 behaviour exactly, so this is an additive change.
+**Why this exists.** With the four descriptive strata the plot splits studies four ways beside a judgment made on two, so under the default `rob_some_concerns = "high"` setting the figure and the evaluation printed next to it disagree. Any caller that shows the plot alongside a rating should pass the same value it passed to `grade_meta()`. `NULL` keeps the pre-0.5.1 behaviour exactly, so this is an additive change.
 
 Folding at the call site (handing pre-collapsed labels to `rob`) is **not** supported: `rob_strata()` warns on any label outside its vocabulary and buckets it to `"unknown"`.
 
@@ -434,7 +434,7 @@ grade_meta(
   # --- Risk of bias (Core GRADE 4 Fig 2; §5.1) ---
   rob                              = NULL,   # per-study vector, or scalar override
   rob_rationale                    = NULL,   # REQUIRED with a scalar `rob`
-  rob_some_concerns                = c("low", "high"),  # which side "some concerns" folds into
+  rob_some_concerns                = c("high", "low"), # which side "some concerns" folds into
   rob_overrides                    = NULL,   # named chr vector keyed on studlab
   rob_override_rationale           = NULL,   # named chr vector, one per override (REQUIRED)
   rob_dominant_threshold           = 0.55,   # weight share for the Fig 2 dominance gate (`>=`)
@@ -1595,8 +1595,21 @@ These five rules are the implementation of Fig 2's "check direction of bias" nod
 
 | `rob_some_concerns` | low | high |
 |---|---|---|
-| `"low"` (default) | `not_serious`, `serious` | `very_serious`, `extremely_serious` |
-| `"high"` | `not_serious` | `serious`, `very_serious`, `extremely_serious` |
+| `"high"` (default since 0.5.1) | `not_serious` | `serious`, `very_serious`, `extremely_serious` |
+| `"low"` (the default up to 0.5.1) | `not_serious`, `serious` | `very_serious`, `extremely_serious` |
+
+**The default is `"high"`, and it is pmatools' choice rather than the source's.**
+Core GRADE 4 defines no fold — the phrase "some concerns" does not occur in it,
+and it declines to settle the low/high boundary at all ("may be an issue that
+will be impossible to resolve"). So the default is a decision this package has
+to make, and it is now the conservative one: `"some concerns"` is what RoB 2
+returns for a study it declines to call low risk of bias, and folding it low
+asserts the one thing the assessment would not. It also matches the first of
+the three worked boundaries Core GRADE 4 quotes ("if at least one item was
+rated as high risk of bias"), and the Shiny app, which has offered `"high"` as
+its default since the control existed — the two disagreed until 0.5.1.
+`.check_rob_some_concerns(NULL)` is the single place that resolves it, so
+`assess_rob()` and `grade_meta()` cannot drift.
 
 `rob_overrides` (named by `studlab`) are applied **before** the fold; each override requires a rationale, and a key matching no study label aborts rather than being silently ignored.
 

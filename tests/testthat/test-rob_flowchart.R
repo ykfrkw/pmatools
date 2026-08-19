@@ -38,13 +38,15 @@ quiet_grade <- function(...) suppressWarnings(grade_meta(...))
 # ---- B-1: binary classification is configurable ---------------------------
 
 test_that("rob_some_concerns folds 'some concerns' into the chosen side", {
-  # Weights 30 / 35 / 35: with the default fold the high group is study 1
-  # alone (30%); folding 'some concerns' high adds study 2 (65%), which flips
-  # the dominance gate.
+  # Weights 30 / 35 / 35: folding 'some concerns' LOW leaves the high group as
+  # study 1 alone (30%); folding it HIGH adds study 2 (65%), which flips the
+  # dominance gate. Both sides are passed explicitly here; the default is the
+  # subject of the test below.
   m <- mk(te = c(0.8, 0.8, 0.02), w = c(30, 35, 35))
   rob <- c("very_serious", "some_concerns", "no")
 
-  g_low <- quiet_grade(m, rob = rob, small_values = "undesirable",
+  g_low <- quiet_grade(m, rob = rob, rob_some_concerns = "low",
+                       small_values = "undesirable",
                        threshold = 1.05, threshold_scale = "ratio")
   g_high <- quiet_grade(m, rob = rob, rob_some_concerns = "high",
                         small_values = "undesirable",
@@ -59,6 +61,32 @@ test_that("rob_some_concerns folds 'some concerns' into the chosen side", {
   expect_match(rob_row(g_high)$notes, "dominated: yes", fixed = TRUE)
   expect_match(rob_row(g_high)$notes,
                "'some concerns' folded into the high risk group", fixed = TRUE)
+})
+
+test_that("the default folds 'some concerns' HIGH", {
+  # Changed in 0.5.1; it was "low". Core GRADE 4 settles nothing here (see the
+  # PROVENANCE block in R/domain_rob.R), so the default is pmatools' own
+  # choice, and it is now the conservative one: "some concerns" is what RoB 2
+  # returns for a study it declines to call low risk of bias, and folding it
+  # low asserts the one thing the assessment would not.
+  #
+  # This is a rating change for any caller who omitted the argument, which is
+  # why it is pinned here rather than left to the explicit-value test above.
+  m <- mk(te = c(0.8, 0.8, 0.02), w = c(30, 35, 35))
+  rob <- c("very_serious", "some_concerns", "no")
+
+  g <- quiet_grade(m, rob = rob, small_values = "undesirable",
+                   threshold = 1.05, threshold_scale = "ratio")
+
+  expect_match(rob_row(g)$notes,
+               "'some concerns' folded into the high risk group", fixed = TRUE)
+  expect_match(rob_row(g)$notes, "65% by weight", fixed = TRUE)
+  expect_match(rob_row(g)$notes, "dominated: yes", fixed = TRUE)
+
+  # And the one place that decides it agrees, so assess_rob() and grade_meta()
+  # cannot drift apart.
+  expect_identical(pmatools:::.check_rob_some_concerns(NULL), "high")
+  expect_true("serious" %in% pmatools:::.rob_high_levels())
 })
 
 test_that("rob_some_concerns rejects anything but 'low' / 'high'", {
@@ -779,7 +807,7 @@ test_that("the reproducibility script defaults are valid R", {
   )
   script <- paste(readLines(out), collapse = "\n")
 
-  expect_match(script, 'rob_some_concerns       = "low"', fixed = TRUE)
+  expect_match(script, 'rob_some_concerns       = "high"', fixed = TRUE)
   expect_match(script, "rob_overrides           = NULL", fixed = TRUE)
   expect_match(script, "rob_override_rationale  = NULL", fixed = TRUE)
   expect_match(script, "rob_refit               = TRUE", fixed = TRUE)
