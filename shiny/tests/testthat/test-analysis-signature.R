@@ -1,8 +1,8 @@
-# pma_analysis_signature() (R/ui_helpers.R) decides what counts as a DIFFERENT
-# outcome, and therefore when the app throws away a finished Step 3 assessment.
-# Both failure directions are expensive: too eager and a reviewer loses work
-# for correcting a typo, too lax and answers given for one outcome are exported
-# as though they were given for another.
+# pma_analysis_signature() (R/outcome_provenance.R) decides what counts as a
+# DIFFERENT outcome, and therefore when the app throws away a finished Step 3
+# assessment. Both failure directions are expensive: too eager and a reviewer
+# loses work for correcting a typo, too lax and answers given for one outcome
+# are exported as though they were given for another.
 
 .fake_ma <- function(studlab = c("Alpha 2020", "Beta 2021"),
                      event.e = c(10, 20), n.e = c(50, 60),

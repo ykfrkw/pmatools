@@ -1,5 +1,5 @@
 # The app's display vocabulary and the shared domain-evaluation shape
-# (R/ui_helpers.R).
+# (R/judgment_display.R), plus the Step 2 mapping helpers (R/column_roles.R).
 #
 # The bug these pin down: the badge used to print "No concern" / "Some
 # concerns" / "Serious" from a hand-written switch, while the Evidence Profile

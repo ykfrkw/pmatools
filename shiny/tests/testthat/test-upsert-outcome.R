@@ -1,4 +1,4 @@
-# pma_upsert_outcome() (R/ui_helpers.R) - which row a banked outcome lands in.
+# pma_upsert_outcome() (R/outcome_bank.R) - which row a banked outcome lands in.
 #
 # There is no Save button: an outcome is re-banked on every recompute once its
 # six domains are confirmed (shiny/SPEC.md 3.4.14). So "which row is this?"

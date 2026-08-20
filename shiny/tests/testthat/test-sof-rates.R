@@ -1,4 +1,4 @@
-# Event rates and the Core GRADE 6 rare-event alert (R/ui_helpers.R).
+# Event rates and the Core GRADE 6 rare-event alert (R/sof_display.R).
 #
 # Core GRADE 6 names two bands - "event rates <2% and most problematic <1%" -
 # and the app has to fire on the right one. The boundaries are half-open, so

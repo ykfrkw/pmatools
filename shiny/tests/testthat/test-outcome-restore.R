@@ -1,4 +1,5 @@
-# Putting Step 3's answers back after app.R rebuilds the step (R/ui_helpers.R).
+# Putting Step 3's answers back after app.R rebuilds the step
+# (R/outcome_provenance.R).
 #
 # app.R renders output$step_body from step3_ui() on every entry, so leaving
 # Step 3 and returning destroys every widget on it. Without this the reviewer
