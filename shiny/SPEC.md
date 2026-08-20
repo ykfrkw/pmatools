@@ -82,7 +82,13 @@ shiny/
 │   ├── step3_pubias.R             # publication-bias wizard server half (bare ids, no NS)
 │   ├── step3_threshold.R          # decision-threshold + presentation helpers
 │   ├── step4_export.R             # export/download module
-│   ├── ui_helpers.R               # shadcn-style component helpers (card, badge, stepper)
+│   ├── ui_helpers.R               # shadcn-style chrome only (card, banner, stepper)
+│   ├── outcome_bank.R             # multi-outcome bank: uid, upsert, export set, modals
+│   ├── outcome_provenance.R       # signatures, staleness, per-outcome input registry
+│   ├── judgment_display.R         # certainty badges, verdicts, Core GRADE flowcharts
+│   ├── plot_panels.R              # forest / funnel display panels and autofill
+│   ├── column_roles.R             # detected columns, Step 2 required fields, analysis set
+│   ├── sof_display.R              # Summary of Findings presentation + rare-event alert
 │   ├── educational_copy.R         # American English copy as named-list constants
 │   └── _pmatools/                 # GENERATED: staged copy of ../R, plus VERSION
 ├── _pmatools_inst/                # GENERATED: staged copy of ../inst
@@ -518,7 +524,7 @@ Tabset with 3 tabs:
 - **Text results** — `verbatimTextOutput("ma_summary")` showing `summary(state$ma)`.
 
 Below the tabset: the collapsible **"Forest plot display"** panel, built by the
-single `pma_forest_display_panel(prefix)` in `R/ui_helpers.R` and shared with
+single `pma_forest_display_panel(prefix)` in `R/plot_panels.R` and shared with
 each of the four Step 3 domain tabs (`prefix = NULL` gives Step 2's unprefixed
 ids). It holds the title, the two arm labels, the two "Favors …" labels, the
 x-min / x-max overrides, the two blank-row spinners, the Mean / SD decimal
@@ -585,7 +591,7 @@ Not a screen; see §3.2.5.
 
 #### 3.3.6 Required fields — two visual tiers
 
-`PMA_STEP2_REQUIRED` (`R/ui_helpers.R`) names the two fields Step 2 cannot
+`PMA_STEP2_REQUIRED` (`R/column_roles.R`) names the two fields Step 2 cannot
 proceed without: `outcome_name` and `small_values`. Which of them is still
 blank is decided by the pure `pma_step2_required_unset()`, so the rule is
 testable without a session; `www/required-fields.js` paints it.
@@ -718,7 +724,7 @@ no dropdown type; its factor/selectize support belongs to column *filters*.
 The Publication bias tab reaches its vocabulary with a `<datalist>` bolted to
 that injected input (§3.4.8), but a datalist is autocomplete and still accepts
 anything typed, which is the failure this control exists to remove. So the
-column is built by `pma_study_level_select()` (`R/ui_helpers.R`), rendered with
+column is built by `pma_study_level_select()` (`R/judgment_display.R`), rendered with
 `escape =` naming every *other* column, and left out of `editable`. One
 delegated `change` handler, emitted once per Step 3 body by
 `pma_study_level_script()`, calls `Shiny.setInputValue()` with the row index
@@ -1091,7 +1097,7 @@ Below the accordion, a `pma-card` with:
 - "Why this rating?" expandable showing per-domain judgment + 1-line justification
 - Embedded SoF preview rendered from `pmatools::sof_table()` via `htmltools_value(ft)`,
   called with the review's own arm labels, resolved by `pma_arm_labels(state)`
-  (`R/ui_helpers.R`) from `state$arm_e` / `state$arm_c`. **One resolver, two
+  (`R/sof_display.R`) from `state$arm_e` / `state$arm_c`. **One resolver, two
   steps:** it was a closure inside `step4_server()` until 0.5.1, so this preview
   showed `With control` and a Core GRADE 6 Box 1 subject of `Treatment` one screen
   before Step 4's combined table showed the reviewer's own words. The rare-event
@@ -1136,7 +1142,7 @@ the one the pooled effect lies on is the silent exit §2.3 forbids.
 
 
 - `output$responder_p0_badge` renders `confirmed` / `unconfirmed assumption` beside the section heading, and **nothing at all** on the `"effect"` route, where there is no assumption to confirm.
-- `input$sof_presentation` is registered in `PMA_OUTCOME_INPUT_IDS$configuration` (`R/ui_helpers.R`), so a change of outcome clears it. An id missing from that list is an id whose stale answer survives an outcome change.
+- `input$sof_presentation` is registered in `PMA_OUTCOME_INPUT_IDS$configuration` (`R/outcome_provenance.R`), so a change of outcome clears it. An id missing from that list is an id whose stale answer survives an outcome change.
 - `responder_mode()` in `step3_server()` is the single definition of "the responder route was chosen" and is TRUE for `"responder"` and `"both"` alike; the Next gate, `sof_convert_args()` and the `state$display$convert` mirror all read it rather than the input. `keep_effect_scale_mode()` beside it decodes the one question that separates the two, and is read only by `sof_convert_args()`.
 
 **The choice is banked with the outcome, and it reaches the ZIP.** All five values — `convert_smd_to_or`, `keep_effect_scale`, `baseline_risk`, `threshold_label`, `chinn_invert` — reach `state$display` and are stamped onto the rated object by `pma_bank_export_material()` in `.store_outcome()`, under the `"pmatools_display"` attribute pmatools already reads per outcome. Four of them are written by the `sof_convert_args()` observer in `step3_server()`; `threshold_label` is left to app.R's display observer, which already mirrors the raw input. **One key, one writer**: a second observer writing `state$display$threshold_label` with a different answer invalidates the first forever — the session never goes idle again and no output updates. `threshold_label` needs no guard of its own, because nothing reads it unless `state$display$convert` is `TRUE`, and that is the guarded value. `grade_table()` picks them up **per row**, so the Step 4 preview and the root `summary_of_findings.docx` of the bundle both show the presentation the reviewer chose, and two continuous outcomes in one review can be presented differently. Only the routes that convert stamp anything: an outcome shown as its effect carries no field at all, so nothing reads as a decision that was never made. `keep_effect_scale` is stamped alongside `convert_smd_to_or`, never instead of it, so a banked outcome cannot ask for both scales without asking for the conversion that supplies one of them. A row whose conversion cannot be applied falls back to the unconverted presentation with the reason footnoted rather than failing the export (`SPEC.md` §4.9).
@@ -1172,7 +1178,7 @@ and it hides that sentence from the reviewer who needed it.
 **One evaluation shape on every domain tab.** Each tab replaced its raw
 `verbatimTextOutput("<domain>_notes")` under the heading "Evaluation" with
 `pma_domain_verdict()` / `pma_facts_list()` / `pma_flowchart_details()`
-(`R/ui_helpers.R`):
+(`R/judgment_display.R`):
 
 1. the verdict, one line, in Core GRADE's own words plus the downgrade;
 2. the numbers behind it, 3–6 rows of a `<dl>` read from `domain_facts()`;
@@ -1971,7 +1977,7 @@ output$download_zip <- downloadHandler(
 )
 ```
 
-`arms` is `pma_arm_labels(state)` (`R/ui_helpers.R`), shared with the Step 3
+`arms` is `pma_arm_labels(state)` (`R/sof_display.R`), shared with the Step 3
 preview (§3.4.9). It was a closure inside `step4_server()` until 0.5.1, which
 is exactly why the two disagreed: Step 3's preview could not call it.
 
@@ -1986,7 +1992,7 @@ Step 3 banks an outcome:
 | `pmatools_display` | `pma_outcome_display()` | `export_bundle.pmatools_set()`: `forest_display`, `forest_display_rob`, `rare`, `rare_forest_display`, `pubias_missing_df` (SPEC.md §4.8.3) |
 | `pma_outcome_source` | `pma_outcome_source()` | the app itself: the data the outcome was rated on and the arm values it was pooled with |
 
-`pma_export_set()` (`R/ui_helpers.R`) assembles the set from the banked
+`pma_export_set()` (`R/outcome_bank.R`) assembles the set from the banked
 outcomes:
 
 - **`data`** is every outcome's own data, bound row-wise with an `outcome`
@@ -2126,7 +2132,7 @@ back to Step 2: `input$add_next_outcome` opens
 | *Record it as not reported* | `add_outcome_not_reported` | opens `pma_not_reported_modal()` — outcome name, follow-up, reason |
 
 Submitting the second modal (`not_reported_save`) runs
-`pma_not_reported_entry()` (`R/ui_helpers.R`, pure and unit tested), which
+`pma_not_reported_entry()` (`R/outcome_bank.R`, pure and unit tested), which
 trims the name, refuses a blank one and refuses one already in
 `names(state$outcomes)` — *an outcome is either rated or not reported, not
 both*, the same rule `add_not_reported()` enforces, reached before the reviewer
@@ -2176,7 +2182,7 @@ analysis actually took highlighted**. Indirectness has no flowchart; Core GRADE 
 Table 2 is a gradient, and its `indir_subdomain_table` stays the visual.
 
 Three renderings of the same file, all through `pma_flowchart()` in
-`R/ui_helpers.R`:
+`R/judgment_display.R`:
 
 | where | `on_ids` | why |
 |---|---|---|
@@ -2393,7 +2399,7 @@ naive version banks the wrong row:
 **Identity is a uid, not the name.** `state$outcome_uid` is minted by
 `begin_new_outcome()` (and at session start, for the first outcome), stamped
 onto the stored object as `attr(g, "pma_outcome_uid")`, and
-`pma_upsert_outcome(outcomes, name, g, uid)` (`R/ui_helpers.R`, pure and unit
+`pma_upsert_outcome(outcomes, name, g, uid)` (`R/outcome_bank.R`, pure and unit
 tested) drops any existing row carrying that uid before inserting under the
 *current* display name. So **renaming an outcome in Step 2 renames its row**.
 Before this it added a second one — a pre-existing bug that auto-save would

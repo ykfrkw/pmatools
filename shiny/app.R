@@ -49,6 +49,12 @@ options(pmatools.vendored_root = normalizePath(getwd(), winslash = "/"))
 local_files <- c(
   "R/educational_copy.R",
   "R/ui_helpers.R",
+  "R/outcome_bank.R",
+  "R/outcome_provenance.R",
+  "R/judgment_display.R",
+  "R/plot_panels.R",
+  "R/column_roles.R",
+  "R/sof_display.R",
   "R/step1_data.R",
   "R/step2_ma.R",
   "R/step3_threshold.R",

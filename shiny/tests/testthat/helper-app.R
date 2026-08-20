@@ -5,6 +5,16 @@
 # them only DEFINES things at source time - no Shiny session is created, no
 # reactive is touched.
 #
+# The six files after R/ui_helpers.R are what came out of it when it was split
+# by role: the multi-outcome bank, the provenance signatures and input
+# registry, the judgment badges and flowcharts, the forest / funnel display
+# panels, the column-role and analysis-set helpers, and the Summary of Findings
+# presentation. They are all pure and the suite calls into all six directly, so
+# they are on the list for the same reason R/ui_helpers.R always was. They keep
+# app.R's relative order among themselves and sit immediately after the file
+# they were carved out of, so that a helper moving between the seven never
+# changes what the suite has loaded.
+#
 # R/step3_pubias.R is on the list for neither half: it defines
 # step3_pubias_server() and .effective_pubias_k() and nothing else, and no test
 # calls either. It is sourced anyway so that the helper keeps loading the same
@@ -40,7 +50,7 @@ PMA_APP_ROOT <- local({
 })
 
 # The package's own R/utils.R, which the running app gets from the staged
-# copy under R/_pmatools/. ui_helpers.R reads GRADE_LEVEL_SOURCE_WORDING /
+# copy under R/_pmatools/. judgment_display.R reads GRADE_LEVEL_SOURCE_WORDING /
 # .grade_level_wording() from it so the app's badges and the Evidence Profile
 # cannot word the same judgment differently, and without it every badge test
 # would fail on a missing object rather than on a wrong label. Both locations
@@ -82,7 +92,9 @@ for (.stem in c("utils.R", "multi_outcome.R", "data_ingest.R",
 }
 rm(.stem)
 
-for (.f in c("R/ui_helpers.R", "R/educational_copy.R", "R/step3_threshold.R",
+for (.f in c("R/ui_helpers.R", "R/outcome_bank.R", "R/outcome_provenance.R",
+             "R/judgment_display.R", "R/plot_panels.R", "R/column_roles.R",
+             "R/sof_display.R", "R/educational_copy.R", "R/step3_threshold.R",
              "R/step3_pubias.R", "R/step2_ma.R", "R/step3_grade.R")) {
   source(file.path(PMA_APP_ROOT, .f))
 }
