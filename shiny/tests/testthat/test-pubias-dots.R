@@ -98,8 +98,22 @@ test_that("no dot value reaches grade_meta() or assess_pubias()", {
   # site alone would prove nothing - the arguments are built above it). The
   # assertion is therefore made against everything inside that reactive, plus
   # every direct call to a rating entry point anywhere in the app.
+  #
+  # grade_obj() no longer holds that assembly on its own: each domain's
+  # arguments are built by a closure beside it, and the call plus everything
+  # done to the rating afterwards by a second set. They are named here for the
+  # same reason grade_obj() is - a dot value reaching the rating through any
+  # one of them is the thing this test exists to catch. A new block added to
+  # grade_obj() belongs in this list.
   rating_calls   <- c("grade_meta", "assess_pubias", "grade_meta_multi")
-  rating_holders <- c("grade_obj")
+  rating_holders <- c("grade_obj",
+                      ".rob_grade_args", ".incon_grade_args",
+                      ".indir_grade_args", ".impre_grade_args",
+                      ".ois_grade_args", ".pubias_grade_args",
+                      ".rare_grade_args",
+                      ".run_grade_with_refit", ".apply_threshold_note",
+                      ".append_rare_crossing_note", ".apply_pubias_override",
+                      ".apply_other_downgrade", ".attach_grade_call_args")
 
   .rating_names <- function(expr, acc = character(0)) {
     if (!is.call(expr)) return(acc)

@@ -2287,25 +2287,23 @@ step3_server <- function(input, output, session, state) {
       in_force)
   })
 
-  grade_obj <- shiny::reactive({
-    obj <- state$ma
-    if (is.null(obj)) return(NULL)
+  # ----- The grade_meta() argument blocks ---------------------------------
+  # One plain closure per domain, deliberately NOT shiny::reactive(). They are
+  # called from inside grade_obj()'s reactive body, so every input$ they read
+  # registers as a dependency of grade_obj() exactly as it did when all of this
+  # was one block. Wrapping them in reactive() would give each its own node in
+  # the invalidation graph, which is a different graph.
+  #
+  # Each returns the arguments it owns, named and in the order grade_meta()
+  # takes them, so grade_obj() can splice the blocks with c() and hand
+  # do.call() the same list it always did. The order the blocks are CALLED in
+  # is grade_obj()'s business and is not c()'s order: .override_or_ignore() and
+  # the indirectness branch below show a notification when a rationale is
+  # missing, so the domains have to be resolved in the order the reviewer
+  # meets them on the tab.
 
-    # The `require_threshold = FALSE` bridge added for pmatools 0.5.1 is
-    # gone. It was a temporary opt-out that let grade_meta() rate an outcome
-    # with no threshold at all, which is exactly the silent behaviour Core
-    # GRADE warns against - three of the five domains would have been judged
-    # against nothing. Deleting it alone would crash the tab, because
-    # grade_meta() aborts on a NULL threshold under the default
-    # threshold_type = "mid", and a reviewer can still clear the field. So
-    # the app never makes that call: with no threshold, grade_obj() returns
-    # NULL and threshold_missing() drives an explicit on-screen state
-    # (output$config_status, the read-only domain blocks and
-    # output$final_certainty). No error toast, and no rating computed
-    # without a threshold.
-    if (is.null(.threshold_grade_args(obj)$threshold)) return(NULL)
-
-    # --- Risk of bias: per-study vector, or scalar override + rationale ---
+  # --- Risk of bias: per-study vector, or scalar override + rationale ---
+  .rob_grade_args <- function(obj) {
     rob_arg <- .study_covariate(.study_labels_for_grade(obj), "rob", default = "*")
     rob_rationale <- NULL
     rob_ov <- .override_or_ignore("rob_override", "rob_override_rationale",
@@ -2314,36 +2312,66 @@ step3_server <- function(input, output, session, state) {
       rob_arg       <- rob_ov$value
       rob_rationale <- rob_ov$rationale
     }
+    # .rob_some_concerns_setting() used to be called down in the argument list,
+    # after the other four domains had been resolved. It is a pure read of
+    # input$/state$ with no notification, so reading it here changes nothing
+    # but the line it sits on.
+    list(
+      rob                      = rob_arg,
+      rob_rationale            = rob_rationale,
+      # Where the low/high boundary falls. The app defaults to "high" (only
+      # studies explicitly rated low are low), not the vendored default
+      # "low"; unrated studies normalise to 'some concerns' (the "*" default
+      # of rob_arg above) and so follow the same side. Core GRADE 4 endorses
+      # the binary split but leaves the boundary open, so it is a reviewer
+      # choice, exposed on the tab.
+      rob_some_concerns        = .rob_some_concerns_setting()
+      # rob_inflation_threshold is deliberately NOT passed. The app used to
+      # expose it as a slider; it is a pmatools convention rather than a Core
+      # GRADE 4 rule, and a reviewer had no basis on which to move it. The
+      # package default PMA_ROB_INFLATION_THRESHOLD (R/domain_rob.R) now
+      # applies unconditionally, and export_bundle() writes that same value
+      # into the bundled analysis.R. Not naming the number here is the point:
+      # it moved from 0.10 to 0.20 in 0.5.1 and the app followed for free.
+    )
+  }
 
-    # Outcome direction is a required Step 2 answer, mirrored into state.
-    sv <- state$small_values
-
-    # --- Inconsistency: scalar override + rationale, or manual flowchart ---
+  # --- Inconsistency: scalar override + rationale, or manual flowchart ---
+  .incon_grade_args <- function() {
     incon_ov <- .override_or_ignore("incon_override",
                                     "incon_override_rationale",
                                     "Inconsistency")
-    # inconsistency_ci_diff and inconsistency_threshold_side are never sent.
-    # Both are DERIVED by .auto_inconsistency() - Step 1 from the I-squared
-    # surrogate, Step 2 from the zone tally over the study estimates - and
-    # supplying either switched the domain onto the manual path, which then
-    # aborted unless the other was supplied too. The two widgets are gone
-    # from the tab and the zone tally is surfaced as facts instead.
-    #
     # Step 3 is the one node no algorithm can reach (subgroup credibility),
     # so it is still asked, and since pmatools 0.5.1 the AUTO path reads it.
     subgroup_expl <- if (!is.null(input$subgroup_explained) &&
                          length(input$subgroup_explained) > 0 &&
                          nzchar(input$subgroup_explained)) input$subgroup_explained else NULL
 
-    # --- Indirectness: the four Core GRADE 5 subdomain answers, plus an
-    # optional scalar override of their worst-case fold.
-    #
-    # `indirectness` MUST be NULL - not "not_serious" - whenever no override is
-    # intended: grade_meta() reads any non-NULL scalar alongside a subdomain
-    # table as a manual override and demands indirectness_rationale for it.
-    # With no subdomain answers the scalar path is unchanged and "not_serious"
-    # is the safe default; the confirmation gate (not an error) is what tells
-    # the user the domain is still unassessed.
+    list(
+      inconsistency            = incon_ov$value,
+      inconsistency_rationale  = incon_ov$rationale,
+      # inconsistency_ci_diff and inconsistency_threshold_side are never sent.
+      # Both are DERIVED by .auto_inconsistency() - Step 1 from the I-squared
+      # surrogate, Step 2 from the zone tally over the study estimates - and
+      # supplying either switched the domain onto the manual path, which then
+      # aborted unless the other was supplied too. The two widgets are gone
+      # from the tab and the zone tally is surfaced as facts instead.
+      inconsistency_ci_diff            = NULL,
+      inconsistency_threshold_side     = NULL,
+      inconsistency_subgroup_explained = subgroup_expl
+    )
+  }
+
+  # --- Indirectness: the four Core GRADE 5 subdomain answers, plus an
+  # optional scalar override of their worst-case fold.
+  #
+  # `indirectness` MUST be NULL - not "not_serious" - whenever no override is
+  # intended: grade_meta() reads any non-NULL scalar alongside a subdomain
+  # table as a manual override and demands indirectness_rationale for it.
+  # With no subdomain answers the scalar path is unchanged and "not_serious"
+  # is the safe default; the confirmation gate (not an error) is what tells
+  # the user the domain is still unassessed.
+  .indir_grade_args <- function() {
     indir_sub       <- indir_subdomains()
     indir_worst     <- indir_worst_case()
     indir_arg       <- if (is.null(indir_sub)) {
@@ -2377,12 +2405,65 @@ step3_server <- function(input, output, session, state) {
       }
     }
 
-    # --- Imprecision: scalar override + rationale (vendored v0.4.0 API) ---
+    list(
+      indirectness             = indir_arg,
+      indirectness_rationale   = indir_rationale,
+      # Core GRADE 5 asks the indirectness question per PICO element; the
+      # four answers on the tab are that table. pmatools folds them
+      # worst-case, which does NOT reproduce the Table 2 gradient - the tab
+      # says so next to the questions.
+      indirectness_subdomains  = indir_sub
+    )
+  }
+
+  # --- Imprecision: scalar override + rationale (vendored v0.4.0 API) ---
+  .impre_grade_args <- function() {
     impre_ov <- .override_or_ignore("impre_override",
                                     "impre_override_rationale",
                                     "Imprecision")
+    list(
+      imprecision              = impre_ov$value,
+      imprecision_rationale    = impre_ov$rationale
+    )
+  }
 
-    # --- Publication bias ---
+  # --- Optimal information size, and the outcome scale that picks its
+  # formula. Both are read off the fitted object rather than off the Step 2
+  # radio, so they belong together.
+  .ois_grade_args <- function(obj) {
+    list(
+      # Derived from the fitted object, not from input$outcome_type. The Step 2
+      # radio is rebuilt on every step change and, before state$outcome_type
+      # existed, reported "binary" again on every 3 -> 2 -> 3 round trip; a
+      # metacont fit was then sent outcome_type = "relative", for which
+      # .calc_ois() wants ois_p0 / ois_p1 that a continuous analysis cannot
+      # supply, and the OIS silently vanished. step3_is_binary_outcome() reads
+      # the class and the arm-level counts first and only falls back to the
+      # radio, and it is what .threshold_grade_args() and config_status
+      # already use.
+      outcome_type = if (step3_is_binary_outcome(obj, state$outcome_type)) {
+        "relative"
+      } else {
+        "absolute"
+      },
+      # Same control-group risk the Configuration tab shows, not a second
+      # crude computation of its own.
+      ois_p0       = ois_p0_value(),
+      # Core GRADE 2 parameterises the binary OIS by a modest relative risk
+      # reduction ("typically 20% or 25%"), not by the threshold. Reviewer
+      # choice between the two values the paper names.
+      ois_rrr      = ois_rrr_value(),
+      ois_sd       = .na_null(input$ois_sd),
+      ois_events   = .na_null(input$ois_events_override),
+      ois_n        = .na_null(input$ois_n_override)
+    )
+  }
+
+  # --- Publication bias ---
+  # Returns $args, which grade_meta() takes, and $override, which it does not:
+  # there is no scalar publication-bias override parameter, so that one is
+  # applied to the returned rating by .apply_pubias_override() below.
+  .pubias_grade_args <- function() {
     # The Q3 select needs to distinguish "not reached yet" from "the reviewer
     # looked and accepts the test", so it carries an explicit VALUE rather
     # than the empty string. That value does not reach grade_meta(): it means
@@ -2412,96 +2493,54 @@ step3_server <- function(input, output, session, state) {
     pubias_ov_res <- .override_or_ignore("pubias_override",
                                          "pubias_override_rationale",
                                          "Publication bias")
-    pubias_ov <- pubias_ov_res$value
 
-    th_args <- .threshold_grade_args(obj)
+    list(
+      args = list(
+        pubias_small_industry    = pubias_si,
+        pubias_funnel_asymmetry  = pubias_fa,
+        pubias_rationale         = pubias_rationale,
+        pubias_unpublished       = pubias_un,
+        # Only "yes" is forwarded, because only "yes" decides anything: it is
+        # the pmatools short-circuit assess_pubias() reads. "no" means "carry on
+        # down Fig 5", which is what NULL already means to the package, and it
+        # is sent as NULL rather than "no" so the domain note does not report an
+        # answered registry question the flowchart then ignored.
+        pubias_registry_complete = if (identical(pubias_rc, "yes")) "yes" else NULL
+      ),
+      override = pubias_ov_res
+    )
+  }
 
-    args <- list(
-      meta_obj                 = obj,
-      study_design             = "RCT",
-      rob                      = rob_arg,
-      rob_rationale            = rob_rationale,
-      # Where the low/high boundary falls. The app defaults to "high" (only
-      # studies explicitly rated low are low), not the vendored default
-      # "low"; unrated studies normalise to 'some concerns' (the "*" default
-      # of rob_arg above) and so follow the same side. Core GRADE 4 endorses
-      # the binary split but leaves the boundary open, so it is a reviewer
-      # choice, exposed on the tab.
-      rob_some_concerns        = .rob_some_concerns_setting(),
-      # rob_inflation_threshold is deliberately NOT passed. The app used to
-      # expose it as a slider; it is a pmatools convention rather than a Core
-      # GRADE 4 rule, and a reviewer had no basis on which to move it. The
-      # package default PMA_ROB_INFLATION_THRESHOLD (R/domain_rob.R) now
-      # applies unconditionally, and export_bundle() writes that same value
-      # into the bundled analysis.R. Not naming the number here is the point:
-      # it moved from 0.10 to 0.20 in 0.5.1 and the app followed for free.
-      small_values             = sv,
-      indirectness             = indir_arg,
-      indirectness_rationale   = indir_rationale,
-      # Core GRADE 5 asks the indirectness question per PICO element; the
-      # four answers on the tab are that table. pmatools folds them
-      # worst-case, which does NOT reproduce the Table 2 gradient - the tab
-      # says so next to the questions.
-      indirectness_subdomains  = indir_sub,
-      inconsistency            = incon_ov$value,
-      inconsistency_rationale  = incon_ov$rationale,
-      inconsistency_ci_diff            = NULL,
-      inconsistency_threshold_side     = NULL,
-      inconsistency_subgroup_explained = subgroup_expl,
-      imprecision              = impre_ov$value,
-      imprecision_rationale    = impre_ov$rationale,
-      threshold          = th_args$threshold,
-      threshold_scale    = th_args$threshold_scale,
-      threshold_baseline = th_args$threshold_baseline,
-      # Derived from the fitted object, not from input$outcome_type. The Step 2
-      # radio is rebuilt on every step change and, before state$outcome_type
-      # existed, reported "binary" again on every 3 -> 2 -> 3 round trip; a
-      # metacont fit was then sent outcome_type = "relative", for which
-      # .calc_ois() wants ois_p0 / ois_p1 that a continuous analysis cannot
-      # supply, and the OIS silently vanished. step3_is_binary_outcome() reads
-      # the class and the arm-level counts first and only falls back to the
-      # radio, and it is what .threshold_grade_args() and config_status
-      # already use.
-      outcome_type = if (step3_is_binary_outcome(obj, state$outcome_type)) {
-        "relative"
-      } else {
-        "absolute"
-      },
-      # Same control-group risk the Configuration tab shows, not a second
-      # crude computation of its own.
-      ois_p0       = ois_p0_value(),
-      # Core GRADE 2 parameterises the binary OIS by a modest relative risk
-      # reduction ("typically 20% or 25%"), not by the threshold. Reviewer
-      # choice between the two values the paper names.
-      ois_rrr      = ois_rrr_value(),
-      ois_sd       = .na_null(input$ois_sd),
-      ois_events   = .na_null(input$ois_events_override),
-      ois_n        = .na_null(input$ois_n_override),
-      pubias_small_industry    = pubias_si,
-      pubias_funnel_asymmetry  = pubias_fa,
-      pubias_rationale         = pubias_rationale,
-      pubias_unpublished       = pubias_un,
-      # Only "yes" is forwarded, because only "yes" decides anything: it is
-      # the pmatools short-circuit assess_pubias() reads. "no" means "carry on
-      # down Fig 5", which is what NULL already means to the package, and it
-      # is sent as NULL rather than "no" so the domain note does not report an
-      # answered registry question the flowchart then ignored.
-      pubias_registry_complete = if (identical(pubias_rc, "yes")) "yes" else NULL,
-      # ----- Rare events (shiny/SPEC.md 3.4.14) -------------------------
-      # Three facts about the analysis, not three new rules. They switch the
-      # OIS to an event basis, withdraw the Inconsistency I2 surrogate, and
-      # send Fig 5 down its k < 10 branch; no domain rates down because of
-      # them, and no domain's decision rule changes. Passed only when the
-      # reviewer actually accepted the workflow - a dataset that trips
-      # rare_flow and is then rated on the regular fit is an ordinary rating.
+  # ----- Rare events (shiny/SPEC.md 3.4.14) -------------------------
+  # Three facts about the analysis, not three new rules. They switch the
+  # OIS to an event basis, withdraw the Inconsistency I2 surrogate, and
+  # send Fig 5 down its k < 10 branch; no domain rates down because of
+  # them, and no domain's decision rule changes. Passed only when the
+  # reviewer actually accepted the workflow - a dataset that trips
+  # rare_flow and is then rated on the regular fit is an ordinary rating.
+  .rare_grade_args <- function() {
+    list(
       rare_flow    = .rare_active(),
       rare_one_arm_total_zero = .rare_one_arm_zero(),
       # Recorded, never read by anything that rates: it is what lets the
       # exported record name the method the estimate came from.
-      rare_method  = if (.rare_active()) state$rare_primary_method else NULL,
-      outcome_name = state$outcome_name %||% "Outcome"
+      rare_method  = if (.rare_active()) state$rare_primary_method else NULL
     )
+  }
 
+  # ----- What happens to the rating once grade_meta() has returned --------
+  # Plain closures for the same reason the argument blocks are, and in call
+  # order: each takes the rating the one before it produced and returns it,
+  # so the sequence in grade_obj() reads as the sequence it always was. Each
+  # one passes a NULL rating straight through, which is what the single
+  # `if (!is.null(g))` around the tail used to do.
+
+  # The grade_meta() call itself, plus the one correction Core GRADE 4 can
+  # force on it. Returns the rating AND the threshold arguments it was rated
+  # against, because the re-run can replace them and everything downstream -
+  # the threshold note, the exported call - has to describe the run that
+  # actually happened.
+  .run_grade_with_refit <- function(obj, args, th_args) {
     .run_grade <- function(th) {
       args$threshold          <- th$threshold
       args$threshold_scale    <- th$threshold_scale
@@ -2543,129 +2582,211 @@ step3_server <- function(input, output, session, state) {
         }
       }
     }
+    list(g = g, th_args = th_args)
+  }
 
-    # threshold_scale = "ratio" means pmatools no longer returns
-    # $threshold_ard or the $threshold_note it used to append to the three
-    # threshold-aware domains and to the Evidence Profile footnote. Rebuild
-    # both here, in absolute terms, so nothing loses that provenance.
-    if (!is.null(g) && !is.null(th_args$note)) {
-      g$threshold_note     <- th_args$note
-      g$threshold_ard      <- th_args$dir$ard
-      g$threshold_baseline <- th_args$dir$p0
-      for (dom in c("Risk of bias", "Inconsistency", "Imprecision")) {
-        g$domain_assessments <- step3_append_domain_note(
-          g$domain_assessments, dom, th_args$note)
-      }
-      # .derive_rating_target() writes a scale note off threshold_kind, which
-      # is now "ratio", so it says the target was derived on the relative
-      # scale and recommends threshold_scale = "ard". Both are wrong here -
-      # the threshold IS absolute, converted app-side - so swap the sentence
-      # for one that describes what happened. A no-op if the vendored wording
-      # ever changes.
-      sm_g   <- obj$sm %||% "OR"
-      stale  <- paste0(
-        " Target derived on the relative-effect scale (", sm_g,
-        "); Core GRADE 2 recommends an absolute-effect threshold ",
-        "(threshold_scale = 'ard') where a baseline risk is available.")
-      fresh <- sprintf(paste0(
-        " Target derived from the absolute-effect threshold (%g per 1,000 at ",
-        "a baseline risk %g per 1,000), converted to the %s scale on the %s ",
-        "side."), 1000 * th_args$dir$ard, 1000 * th_args$dir$p0, sm_g,
-        th_args$dir$exact_side)
-      if (!is.null(g$rating_target_note)) {
-        g$rating_target_note <- sub(stale, fresh, g$rating_target_note,
-                                    fixed = TRUE)
-      }
-      idx <- which(g$domain_assessments$domain == "Imprecision")
-      if (length(idx)) {
-        g$domain_assessments$notes[idx] <-
-          sub(stale, fresh, g$domain_assessments$notes[idx], fixed = TRUE)
-      }
+  # threshold_scale = "ratio" means pmatools no longer returns
+  # $threshold_ard or the $threshold_note it used to append to the three
+  # threshold-aware domains and to the Evidence Profile footnote. Rebuild
+  # both here, in absolute terms, so nothing loses that provenance.
+  .apply_threshold_note <- function(g, obj, th_args) {
+    if (is.null(g) || is.null(th_args$note)) return(g)
+
+    g$threshold_note     <- th_args$note
+    g$threshold_ard      <- th_args$dir$ard
+    g$threshold_baseline <- th_args$dir$p0
+    for (dom in c("Risk of bias", "Inconsistency", "Imprecision")) {
+      g$domain_assessments <- step3_append_domain_note(
+        g$domain_assessments, dom, th_args$note)
     }
-
-    # ----- Rare events: the suite as a sensitivity analysis FOR THE RATING --
-    # Step 2 already shows the suite as a sensitivity analysis for the
-    # ESTIMATE. Core GRADE 2 asks a different question of it - does the
-    # interval cross the chosen threshold - and every fit that could answer it
-    # already exists, so asking costs no new statistics.
-    #
-    # Appended app-side rather than passed into grade_meta(), for the reason
-    # the threshold note above is: the fitted suite is a live object that
-    # cannot travel through a reproducibility script, while the sentence it
-    # produces is a domain note like any other and reaches results.txt with the
-    # rest of them. `rare_suite_crossing()` is in R/rare_step3.R, pure and
-    # unit-tested; nothing here decides anything.
-    #
-    # Skipped when Imprecision is not assessable at all: there is no primary
-    # answer for the other methods to agree or disagree with.
-    if (!is.null(g) && .rare_active() && !.rare_one_arm_zero() &&
-        inherits(state$rare, "pma_rare_meta")) {
-      thr_impre <- .rated_threshold_for_imprecision(g)
-      cross <- rare_suite_crossing(state$rare, thr_impre)
-      note  <- rare_suite_crossing_note(cross, thr_impre)
-      if (!is.na(note)) {
-        g$domain_assessments <- step3_append_domain_note(
-          g$domain_assessments, "Imprecision", note)
-      }
-      # Carried on the object so the Imprecision tab can render the same
-      # comparison it just described, without recomputing it.
-      g$rare$crossing <- cross
+    # .derive_rating_target() writes a scale note off threshold_kind, which
+    # is now "ratio", so it says the target was derived on the relative
+    # scale and recommends threshold_scale = "ard". Both are wrong here -
+    # the threshold IS absolute, converted app-side - so swap the sentence
+    # for one that describes what happened. A no-op if the vendored wording
+    # ever changes.
+    sm_g   <- obj$sm %||% "OR"
+    stale  <- paste0(
+      " Target derived on the relative-effect scale (", sm_g,
+      "); Core GRADE 2 recommends an absolute-effect threshold ",
+      "(threshold_scale = 'ard') where a baseline risk is available.")
+    fresh <- sprintf(paste0(
+      " Target derived from the absolute-effect threshold (%g per 1,000 at ",
+      "a baseline risk %g per 1,000), converted to the %s scale on the %s ",
+      "side."), 1000 * th_args$dir$ard, 1000 * th_args$dir$p0, sm_g,
+      th_args$dir$exact_side)
+    if (!is.null(g$rating_target_note)) {
+      g$rating_target_note <- sub(stale, fresh, g$rating_target_note,
+                                  fixed = TRUE)
     }
-
-    if (!is.null(g)) {
-      # "Reporting bias is plausible" used to be rewritten here into a forced
-      # rate-down 1, overriding whatever the Fig 5 nodes had just decided.
-      # Deleted in 0.5.1: Core GRADE 4 Fig 5 has no such rule, and the app was
-      # the only thing that had one - a reviewer who thought reporting bias
-      # plausible AND then answered the funnel question found the funnel
-      # answer had counted for nothing. Suspecting reporting bias is now a
-      # reason to go on and look, which is what the remaining nodes are for.
-      # A reviewer who wants the rating regardless still has the scalar
-      # override below, which asks for a written rationale.
-      #
-      # Final scalar publication-bias override (app-level; recorded in the
-      # notes in the same "Manual override (<judgment>): <rationale>"
-      # format the vendored make_domain_row() uses).
-      if (!is.null(pubias_ov)) {
-        idx <- which(g$domain_assessments$domain == "Publication bias")
-        if (length(idx)) {
-          g$domain_assessments$judgment[idx] <- pubias_ov
-          g$domain_assessments$auto[idx]     <- FALSE
-          g$domain_assessments$downgrade[idx] <- pmatools_GRADE_DOWNGRADE(pubias_ov)
-          g$domain_assessments$notes[idx] <- paste0(
-            sprintf("Manual override (%s): %s", pubias_ov,
-                    pubias_ov_res$rationale),
-            " | ", g$domain_assessments$notes[idx])
-        }
-      }
-      # Additional user-specified downgrade from "Other considerations"
-      other_dg <- suppressWarnings(as.integer(input$other_downgrade %||% "0"))
-      if (is.na(other_dg)) other_dg <- 0L
-      other_dg <- min(0L, other_dg)  # cannot rate UP via this control
-
-      total_dg <- sum(g$domain_assessments$downgrade) + other_dg
-      score    <- max(1L, 4L + total_dg)
-      g$certainty_score    <- score
-      g$certainty          <- c("Very Low","Low","Moderate","High")[score]
-      g$other_text         <- input$other_text
-      g$other_downgrade    <- other_dg
-
-      # The exact grade_meta() call that produced this rating, shaped as the
-      # {value, origin, col} specs export_bundle() renders analysis.R from
-      # (see pma_grade_arg_specs() in ui_helpers.R). Carried on the object
-      # rather than in a separate reactive value so it cannot drift away from
-      # the rating it describes; Step 4 reads it back off state$grade.
-      #
-      # th_args, not args$threshold: the low-risk-of-bias refit above can
-      # re-convert the threshold, and the script must reproduce the conversion
-      # that was actually rated against.
-      args$threshold          <- th_args$threshold
-      args$threshold_scale    <- th_args$threshold_scale
-      args$threshold_baseline <- th_args$threshold_baseline
-      attr(g, PMA_GRADE_ARGS_ATTR) <- pma_grade_arg_specs(args)
+    idx <- which(g$domain_assessments$domain == "Imprecision")
+    if (length(idx)) {
+      g$domain_assessments$notes[idx] <-
+        sub(stale, fresh, g$domain_assessments$notes[idx], fixed = TRUE)
     }
-
     g
+  }
+
+  # ----- Rare events: the suite as a sensitivity analysis FOR THE RATING --
+  # Step 2 already shows the suite as a sensitivity analysis for the
+  # ESTIMATE. Core GRADE 2 asks a different question of it - does the
+  # interval cross the chosen threshold - and every fit that could answer it
+  # already exists, so asking costs no new statistics.
+  #
+  # Appended app-side rather than passed into grade_meta(), for the reason
+  # the threshold note above is: the fitted suite is a live object that
+  # cannot travel through a reproducibility script, while the sentence it
+  # produces is a domain note like any other and reaches results.txt with the
+  # rest of them. `rare_suite_crossing()` is in R/rare_step3.R, pure and
+  # unit-tested; nothing here decides anything.
+  #
+  # Skipped when Imprecision is not assessable at all: there is no primary
+  # answer for the other methods to agree or disagree with.
+  .append_rare_crossing_note <- function(g) {
+    if (is.null(g) || !.rare_active() || .rare_one_arm_zero() ||
+        !inherits(state$rare, "pma_rare_meta")) {
+      return(g)
+    }
+
+    thr_impre <- .rated_threshold_for_imprecision(g)
+    cross <- rare_suite_crossing(state$rare, thr_impre)
+    note  <- rare_suite_crossing_note(cross, thr_impre)
+    if (!is.na(note)) {
+      g$domain_assessments <- step3_append_domain_note(
+        g$domain_assessments, "Imprecision", note)
+    }
+    # Carried on the object so the Imprecision tab can render the same
+    # comparison it just described, without recomputing it.
+    g$rare$crossing <- cross
+    g
+  }
+
+  # "Reporting bias is plausible" used to be rewritten here into a forced
+  # rate-down 1, overriding whatever the Fig 5 nodes had just decided.
+  # Deleted in 0.5.1: Core GRADE 4 Fig 5 has no such rule, and the app was
+  # the only thing that had one - a reviewer who thought reporting bias
+  # plausible AND then answered the funnel question found the funnel
+  # answer had counted for nothing. Suspecting reporting bias is now a
+  # reason to go on and look, which is what the remaining nodes are for.
+  # A reviewer who wants the rating regardless still has the scalar
+  # override below, which asks for a written rationale.
+  #
+  # Final scalar publication-bias override (app-level; recorded in the
+  # notes in the same "Manual override (<judgment>): <rationale>"
+  # format the vendored make_domain_row() uses).
+  .apply_pubias_override <- function(g, pubias_ov_res) {
+    if (is.null(g)) return(g)
+    pubias_ov <- pubias_ov_res$value
+    if (is.null(pubias_ov)) return(g)
+    idx <- which(g$domain_assessments$domain == "Publication bias")
+    if (!length(idx)) return(g)
+
+    g$domain_assessments$judgment[idx] <- pubias_ov
+    g$domain_assessments$auto[idx]     <- FALSE
+    g$domain_assessments$downgrade[idx] <- pmatools_GRADE_DOWNGRADE(pubias_ov)
+    g$domain_assessments$notes[idx] <- paste0(
+      sprintf("Manual override (%s): %s", pubias_ov,
+              pubias_ov_res$rationale),
+      " | ", g$domain_assessments$notes[idx])
+    g
+  }
+
+  # Additional user-specified downgrade from "Other considerations"
+  # - and the certainty score the five domains plus that downgrade add up to.
+  .apply_other_downgrade <- function(g) {
+    if (is.null(g)) return(g)
+
+    other_dg <- suppressWarnings(as.integer(input$other_downgrade %||% "0"))
+    if (is.na(other_dg)) other_dg <- 0L
+    other_dg <- min(0L, other_dg)  # cannot rate UP via this control
+
+    total_dg <- sum(g$domain_assessments$downgrade) + other_dg
+    score    <- max(1L, 4L + total_dg)
+    g$certainty_score    <- score
+    g$certainty          <- c("Very Low","Low","Moderate","High")[score]
+    g$other_text         <- input$other_text
+    g$other_downgrade    <- other_dg
+    g
+  }
+
+  # The exact grade_meta() call that produced this rating, shaped as the
+  # {value, origin, col} specs export_bundle() renders analysis.R from
+  # (see pma_grade_arg_specs() in ui_helpers.R). Carried on the object
+  # rather than in a separate reactive value so it cannot drift away from
+  # the rating it describes; Step 4 reads it back off state$grade.
+  #
+  # th_args, not args$threshold: the low-risk-of-bias refit above can
+  # re-convert the threshold, and the script must reproduce the conversion
+  # that was actually rated against.
+  .attach_grade_call_args <- function(g, args, th_args) {
+    if (is.null(g)) return(g)
+
+    args$threshold          <- th_args$threshold
+    args$threshold_scale    <- th_args$threshold_scale
+    args$threshold_baseline <- th_args$threshold_baseline
+    attr(g, PMA_GRADE_ARGS_ATTR) <- pma_grade_arg_specs(args)
+    g
+  }
+
+  grade_obj <- shiny::reactive({
+    obj <- state$ma
+    if (is.null(obj)) return(NULL)
+
+    # The `require_threshold = FALSE` bridge added for pmatools 0.5.1 is
+    # gone. It was a temporary opt-out that let grade_meta() rate an outcome
+    # with no threshold at all, which is exactly the silent behaviour Core
+    # GRADE warns against - three of the five domains would have been judged
+    # against nothing. Deleting it alone would crash the tab, because
+    # grade_meta() aborts on a NULL threshold under the default
+    # threshold_type = "mid", and a reviewer can still clear the field. So
+    # the app never makes that call: with no threshold, grade_obj() returns
+    # NULL and threshold_missing() drives an explicit on-screen state
+    # (output$config_status, the read-only domain blocks and
+    # output$final_certainty). No error toast, and no rating computed
+    # without a threshold.
+    if (is.null(.threshold_grade_args(obj)$threshold)) return(NULL)
+
+    # Resolved in the order the reviewer meets the domains on the tab, which
+    # is the order they get warned about a missing rationale in. It is not
+    # grade_meta()'s parameter order; that one is the c() below.
+    rob    <- .rob_grade_args(obj)
+    # Outcome direction is a required Step 2 answer, mirrored into state.
+    sv     <- state$small_values
+    incon  <- .incon_grade_args()
+    indir  <- .indir_grade_args()
+    impre  <- .impre_grade_args()
+    pubias <- .pubias_grade_args()
+
+    th_args <- .threshold_grade_args(obj)
+
+    args <- c(
+      list(meta_obj                 = obj,
+           study_design             = "RCT"),
+      rob,
+      list(small_values             = sv),
+      indir,
+      incon,
+      impre,
+      list(threshold          = th_args$threshold,
+           threshold_scale    = th_args$threshold_scale,
+           threshold_baseline = th_args$threshold_baseline),
+      .ois_grade_args(obj),
+      pubias$args,
+      .rare_grade_args(),
+      list(outcome_name = state$outcome_name %||% "Outcome")
+    )
+
+    rated   <- .run_grade_with_refit(obj, args, th_args)
+    g       <- rated$g
+    # From here on th_args is the one the rating was actually made against:
+    # the refit inside .run_grade_with_refit() can have re-converted it.
+    th_args <- rated$th_args
+
+    g <- .apply_threshold_note(g, obj, th_args)
+    g <- .append_rare_crossing_note(g)
+    g <- .apply_pubias_override(g, pubias$override)
+    g <- .apply_other_downgrade(g)
+    .attach_grade_call_args(g, args, th_args)
   })
 
   shiny::observe({
