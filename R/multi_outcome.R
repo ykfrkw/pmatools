@@ -572,10 +572,12 @@ summary.pmatools_set <- function(object, ...) {
     }
     cat(sprintf("[%s] %s (starting: %s, design: %s)\n",
                 nm, g$certainty, g$starting_quality, g$study_design))
-    d <- g$domain_assessments
-    for (i in seq_len(nrow(d))) {
-      dg <- if (d$downgrade[i] < 0) sprintf(" [%d]", d$downgrade[i]) else "    "
-      cat(sprintf("   %-20s %-14s %s\n", d$domain[i], d$judgment[i], dg))
+    domain_rows <- g$domain_assessments
+    for (i in seq_len(nrow(domain_rows))) {
+      downgrade <- domain_rows$downgrade[i]
+      dg <- if (downgrade < 0) sprintf(" [%d]", downgrade) else "    "
+      cat(sprintf("   %-20s %-14s %s\n",
+                  domain_rows$domain[i], domain_rows$judgment[i], dg))
     }
     cat("\n")
   }

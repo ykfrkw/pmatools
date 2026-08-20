@@ -627,7 +627,8 @@ plot_rare_sensitivity_forest <- function(x,
 }
 
 .rare_peto_note_text <- function() {
-  "Note: Peto may be inappropriate unless events are <1%, groups are balanced, and effects are small."
+  paste0("Note: Peto may be inappropriate unless events are <1%, ",
+         "groups are balanced, and effects are small.")
 }
 
 .rare_log_ticks <- function(xlim) {

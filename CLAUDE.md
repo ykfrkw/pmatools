@@ -111,3 +111,32 @@ Docs and code comments are English. Keep it that way.
 
 Commits made under `shiny/` before the repos merged carry Japanese messages. That is
 history; do not rewrite it.
+
+## 7. File headers are prose, on purpose
+
+Every `.R` file here opens with a **prose header** — a title line, then a few short
+paragraphs — and not with the six-part numbered header (`#1. Copyright` …
+`#6. Executed statements`) the house R style guide mandates. Every file in the repo is
+written this way. It is a deliberate house rule, not 51 files that drifted, and it is
+not changing. Write new files the same way.
+
+What the numbered form encodes is *intent*, and the header must still deliver all of it:
+
+- **what the file is** — the title line says what it owns, in its own words;
+- **what it reads and what it produces** — the inputs it takes, and the objects,
+  strings or UI it hands back;
+- **what it depends on, or what depends on it** — name the neighbouring files;
+- **the admission rule** — how a future editor decides whether a new function belongs
+  here or next door. This is the part a numbered skeleton has no slot for, and the part
+  that keeps a split file from silting up again.
+
+`R/grade_vocabulary.R`, `shiny/R/step3_pubias.R` and `shiny/R/outcome_provenance.R` are
+the models. Read one before writing a header.
+
+The layout order the guide asks for still holds: header, then libraries, then constants,
+then function definitions, with executed statements last. Never interleave executed
+statements between function definitions.
+
+Why prose: these files are read by sessions that begin with no memory of them, and a
+`#4. Function definitions` heading sitting above 400 lines of function definitions tells
+that reader nothing the prose header has not already said.

@@ -188,8 +188,10 @@ pma_forest_display_panel <- function(prefix = NULL) {
 
       shiny::textInput(labels[["label_e"]], "Intervention label", value = "", width = "100%"),
       shiny::textInput(labels[["label_c"]], "Control label",      value = "", width = "100%"),
-      shiny::textInput(labels[["favors_left"]],  "Favors (left)",  placeholder = "e.g., Favors Control", width = "100%"),
-      shiny::textInput(labels[["favors_right"]], "Favors (right)", placeholder = "e.g., Favors CBT-I",   width = "100%"),
+      shiny::textInput(labels[["favors_left"]],  "Favors (left)",
+                       placeholder = "e.g., Favors Control", width = "100%"),
+      shiny::textInput(labels[["favors_right"]], "Favors (right)",
+                       placeholder = "e.g., Favors CBT-I",   width = "100%"),
 
       # Two per row rather than four: a row holding only x-min and x-max left
       # the third and fourth columns empty, so the fields below it sat a column

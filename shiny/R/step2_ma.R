@@ -511,11 +511,11 @@ step2_server <- function(input, output, session, state) {
   # Summary measure for continuous outcomes. RoM (ratio of means) is only
   # meaningful when every mean value is positive, so include it conditionally.
   output$sm_cont_ui <- shiny::renderUI({
-    d <- state$data
+    study_data <- state$data
     has_positive_means <- FALSE
     mean_col <- input$col_mean %||% "mean"
-    if (!is.null(d) && nzchar(mean_col) && mean_col %in% names(d)) {
-      m <- suppressWarnings(as.numeric(d[[mean_col]]))
+    if (!is.null(study_data) && nzchar(mean_col) && mean_col %in% names(study_data)) {
+      m <- suppressWarnings(as.numeric(study_data[[mean_col]]))
       if (length(m) > 0 && all(is.finite(m)) && all(m > 0)) {
         has_positive_means <- TRUE
       }
@@ -540,12 +540,13 @@ step2_server <- function(input, output, session, state) {
 
   shiny::observe({
     if (!identical(as.integer(state$step %||% 0L), 2L)) return()
-    d <- state$data
-    if (is.null(d)) return()
-    all_cols <- names(d)
-    numeric_cols <- names(d)[vapply(d, is.numeric, logical(1))]
-    factor_cols  <- names(d)[vapply(d, function(x) is.character(x) || is.factor(x),
-                                    logical(1))]
+    study_data <- state$data
+    if (is.null(study_data)) return()
+    all_cols <- names(study_data)
+    numeric_cols <- names(study_data)[vapply(study_data, is.numeric, logical(1))]
+    is_factor_like <- function(x) is.character(x) || is.factor(x)
+    factor_cols  <- names(study_data)[vapply(study_data, is_factor_like,
+                                             logical(1))]
     all_choices <- .mapping_choices(all_cols)
     numeric_choices <- .mapping_choices(numeric_cols)
     studlab_default <- .pick(c("studlab", "id", "study_name", "study_id",
@@ -600,9 +601,9 @@ step2_server <- function(input, output, session, state) {
   # When outcome_type changes, prefer outcome-appropriate defaults (only if
   # the user hasn't picked something already valid for the new outcome).
   shiny::observeEvent(input$outcome_type, {
-    d <- state$data
-    if (is.null(d)) return()
-    numeric_cols <- names(d)[vapply(d, is.numeric, logical(1))]
+    study_data <- state$data
+    if (is.null(study_data)) return()
+    numeric_cols <- names(study_data)[vapply(study_data, is.numeric, logical(1))]
     if (length(numeric_cols) == 0) return()
 
     if (identical(input$outcome_type, "binary")) {
@@ -633,10 +634,10 @@ step2_server <- function(input, output, session, state) {
   # positive. Hide RoM from the sm_cont radio when the chosen mean column
   # contains zero or negative values.
   shiny::observe({
-    d   <- state$data
+    study_data   <- state$data
     col <- input$col_mean
-    if (is.null(d) || is.null(col) || !nzchar(col) || !col %in% names(d)) return()
-    vals <- d[[col]]
+    if (is.null(study_data) || is.null(col) || !nzchar(col) || !col %in% names(study_data)) return()
+    vals <- study_data[[col]]
     if (!is.numeric(vals)) return()
     has_non_positive <- any(vals <= 0, na.rm = TRUE)
     choices  <- if (has_non_positive) c("MD", "SMD") else c("MD", "SMD", "RoM")
@@ -656,9 +657,9 @@ step2_server <- function(input, output, session, state) {
 
   output$subgroup_order_ui <- shiny::renderUI({
     if (is.null(input$subgroup_col) || !nzchar(input$subgroup_col)) return(NULL)
-    d <- state$data
-    if (is.null(d) || !(input$subgroup_col %in% names(d))) return(NULL)
-    lv <- unique(as.character(d[[input$subgroup_col]]))
+    study_data <- state$data
+    if (is.null(study_data) || !(input$subgroup_col %in% names(study_data))) return(NULL)
+    lv <- unique(as.character(study_data[[input$subgroup_col]]))
     lv <- lv[!is.na(lv) & nzchar(lv)]
     if (length(lv) < 2) {
       return(htmltools::p(class = "pma-card-subtitle",
@@ -748,34 +749,34 @@ step2_server <- function(input, output, session, state) {
     # HAMD / BDI review left one study standing and no message saying why.
     # run_ma() stops the one case that genuinely cannot be pooled -- the same
     # study under two outcomes -- and the tryCatch below shows what it said.
-    d <- args$data
+    study_data <- args$data
 
     missing_cols <- character()
     if (is.null(args$col_studlab) || !nzchar(args$col_studlab) ||
-        !args$col_studlab %in% names(d)) {
+        !args$col_studlab %in% names(study_data)) {
       missing_cols <- c(missing_cols, "studlab")
     }
     if (is.null(args$col_treat) || !nzchar(args$col_treat) ||
-        !args$col_treat %in% names(d)) {
+        !args$col_treat %in% names(study_data)) {
       missing_cols <- c(missing_cols, "treat")
     }
     missing_cols <- c(missing_cols, "n")
     if (!is.null(args$col_n) && nzchar(args$col_n) &&
-        args$col_n %in% names(d)) {
+        args$col_n %in% names(study_data)) {
       missing_cols <- setdiff(missing_cols, "n")
     }
     if (identical(args$outcome_type, "binary")) {
       if (is.null(args$col_event) || !nzchar(args$col_event) ||
-          !args$col_event %in% names(d)) {
+          !args$col_event %in% names(study_data)) {
         missing_cols <- c(missing_cols, "event")
       }
     } else {
       if (is.null(args$col_mean) || !nzchar(args$col_mean) ||
-          !args$col_mean %in% names(d)) {
+          !args$col_mean %in% names(study_data)) {
         missing_cols <- c(missing_cols, "mean")
       }
       if (is.null(args$col_sd) || !nzchar(args$col_sd) ||
-          !args$col_sd %in% names(d)) {
+          !args$col_sd %in% names(study_data)) {
         missing_cols <- c(missing_cols, "sd")
       }
     }
@@ -836,8 +837,8 @@ step2_server <- function(input, output, session, state) {
       return(NULL)
     }
 
-    d$studlab <- d[[args$col_studlab]]
-    d$treat <- d[[args$col_treat]]
+    study_data$studlab <- study_data[[args$col_studlab]]
+    study_data$treat <- study_data[[args$col_treat]]
     if (is.null(args$experimental_label) || is.null(args$control_label) ||
         identical(args$experimental_label, args$control_label)) {
       # This was the one exit in this reactive that said nothing at all, and a
@@ -870,11 +871,11 @@ step2_server <- function(input, output, session, state) {
     }
     # Guard: when the user just swapped data, input$experimental_label /
     # input$control_label may still hold values from the previous dataset.
-    # Running run_ma() with arm labels that do not appear in d$treat
+    # Running run_ma() with arm labels that do not appear in study_data$treat
     # produces a misleading "Study X does not have exactly one intervention
     # and one control arm" error for every row. Wait silently for the
     # arm_assignment_ui to re-render with valid defaults.
-    arms_in_data <- unique(as.character(d$treat))
+    arms_in_data <- unique(as.character(study_data$treat))
     arms_in_data <- arms_in_data[!is.na(arms_in_data) & nzchar(arms_in_data)]
     if (!(args$experimental_label %in% arms_in_data) ||
         !(args$control_label %in% arms_in_data)) {
@@ -898,29 +899,29 @@ step2_server <- function(input, output, session, state) {
     }
 
     if (!is.null(args$col_n) && nzchar(args$col_n) && args$col_n != "n" &&
-        args$col_n %in% names(d)) {
-      d$n <- d[[args$col_n]]
+        args$col_n %in% names(study_data)) {
+      study_data$n <- study_data[[args$col_n]]
     }
     if (identical(args$outcome_type, "binary")) {
       if (!is.null(args$col_event) && nzchar(args$col_event) &&
-          args$col_event != "event" && args$col_event %in% names(d)) {
-        d$event <- d[[args$col_event]]
+          args$col_event != "event" && args$col_event %in% names(study_data)) {
+        study_data$event <- study_data[[args$col_event]]
       }
     } else {
       if (!is.null(args$col_mean) && nzchar(args$col_mean) &&
-          args$col_mean != "mean" && args$col_mean %in% names(d)) {
-        d$mean <- d[[args$col_mean]]
+          args$col_mean != "mean" && args$col_mean %in% names(study_data)) {
+        study_data$mean <- study_data[[args$col_mean]]
       }
       if (!is.null(args$col_sd) && nzchar(args$col_sd) &&
-          args$col_sd != "sd" && args$col_sd %in% names(d)) {
-        d$sd <- d[[args$col_sd]]
+          args$col_sd != "sd" && args$col_sd %in% names(study_data)) {
+        study_data$sd <- study_data[[args$col_sd]]
       }
     }
 
     # Apply subgroup factor levels for user-specified order
-    if (!is.null(args$subgroup_col) && args$subgroup_col %in% names(d) &&
+    if (!is.null(args$subgroup_col) && args$subgroup_col %in% names(study_data) &&
         !is.null(args$subgroup_order) && length(args$subgroup_order) >= 2) {
-      d[[args$subgroup_col]] <- factor(as.character(d[[args$subgroup_col]]),
+      study_data[[args$subgroup_col]] <- factor(as.character(study_data[[args$subgroup_col]]),
                                        levels = args$subgroup_order)
     }
 
@@ -931,10 +932,10 @@ step2_server <- function(input, output, session, state) {
     # intervention sub-arms share the same canonical treat label).
     # combine_arms() is pmatools public API as of 0.5.0 (the dot-prefixed
     # .combine_arms() is only a back-compat alias) -- keep the public name.
-    n_before <- nrow(d)
-    d <- tryCatch(combine_arms(d), error = function(e) d)
-    if (nrow(d) < n_before) {
-      unit_label <- if ("outcome" %in% names(d)) {
+    n_before <- nrow(study_data)
+    study_data <- tryCatch(combine_arms(study_data), error = function(e) study_data)
+    if (nrow(study_data) < n_before) {
+      unit_label <- if ("outcome" %in% names(study_data)) {
         "(studlab, outcome, treat)"
       } else {
         "(studlab, treat)"
@@ -942,9 +943,9 @@ step2_server <- function(input, output, session, state) {
       shiny::showNotification(
         sprintf(
           "Combined %d duplicate %s row%s before meta-analysis (Cochrane Handbook 6.5.2.10).",
-          n_before - nrow(d),
+          n_before - nrow(study_data),
           unit_label,
-          if ((n_before - nrow(d)) > 1L) "s" else ""
+          if ((n_before - nrow(study_data)) > 1L) "s" else ""
         ),
         type = "message",
         duration = 6
@@ -953,7 +954,7 @@ step2_server <- function(input, output, session, state) {
 
     # Strip non-run_ma args
     run_args <- list(
-      data         = d,
+      data         = study_data,
       outcome_type = args$outcome_type,
       sm           = args$sm,
       method       = args$method,
@@ -984,10 +985,10 @@ step2_server <- function(input, output, session, state) {
     shiny::withProgress(
       message = "Running meta-analysis...", value = 0.4,
       tryCatch({
-        out <- do.call(run_ma, run_args)
-        attr(out, "pmatools_input_data") <- d
-        attr(out, "pmatools_run_args") <- run_args
-        out
+        ma_result <- do.call(run_ma, run_args)
+        attr(ma_result, "pmatools_input_data") <- study_data
+        attr(ma_result, "pmatools_run_args") <- run_args
+        ma_result
       },
         error = function(e) {
           msg <- conditionMessage(e)
@@ -1013,8 +1014,8 @@ step2_server <- function(input, output, session, state) {
   })
 
   .rare_mode_on <- function() {
-    d <- state$rare_diagnostics
-    if (is.null(d) || !isTRUE(d$rare_flow)) return(FALSE)
+    rare_diagnostics <- state$rare_diagnostics
+    if (is.null(rare_diagnostics) || !isTRUE(rare_diagnostics$rare_flow)) return(FALSE)
     if (is.null(input$use_rare_workflow)) {
       isTRUE(state$rare_mode_requested %||% TRUE)
     } else {
@@ -1084,14 +1085,14 @@ step2_server <- function(input, output, session, state) {
     state$rare_mode_active <- FALSE
 
     run_args <- attr(obj, "pmatools_run_args")
-    d <- attr(obj, "pmatools_input_data")
+    input_data <- attr(obj, "pmatools_input_data")
     checked_rare <- FALSE
     if (!is.null(run_args) && identical(run_args$outcome_type, "binary") &&
-        !is.null(d)) {
+        !is.null(input_data)) {
       checked_rare <- TRUE
       diag <- tryCatch(
         rare_event_diagnostics(
-          d,
+          input_data,
           experimental_label = run_args$experimental_label,
           control_label = run_args$control_label
         ),
@@ -1106,7 +1107,7 @@ step2_server <- function(input, output, session, state) {
           value = 0.4,
           tryCatch(
             run_rare_ma(
-              d,
+              input_data,
               effect_scale = "OR",
               primary_method = primary_method,
               random = isTRUE(run_args$random),
@@ -1171,8 +1172,8 @@ step2_server <- function(input, output, session, state) {
     obj <- state$regular_ma
     if (is.null(obj)) return()
     run_args <- attr(obj, "pmatools_run_args")
-    d <- attr(obj, "pmatools_input_data")
-    if (is.null(run_args) || is.null(d) ||
+    input_data <- attr(obj, "pmatools_input_data")
+    if (is.null(run_args) || is.null(input_data) ||
         !identical(run_args$outcome_type, "binary")) return()
     rare <- shiny::withProgress(
       message = "Recomputing rare-events method suite...",
@@ -1180,7 +1181,7 @@ step2_server <- function(input, output, session, state) {
       value = 0.4,
       tryCatch(
         run_rare_ma(
-          d,
+          input_data,
           effect_scale = "OR",
           primary_method = method_id,
           random = isTRUE(run_args$random),
@@ -1248,8 +1249,8 @@ step2_server <- function(input, output, session, state) {
   }
 
   output$rare_events_panel <- shiny::renderUI({
-    d <- state$rare_diagnostics
-    if (is.null(d) || !isTRUE(d$rare_flow)) return(NULL)
+    rare_diagnostics <- state$rare_diagnostics
+    if (is.null(rare_diagnostics) || !isTRUE(rare_diagnostics$rare_flow)) return(NULL)
     pma_card(
       id = "rare-events-detected-card",
       title = "Rare events suspected",
@@ -1260,12 +1261,13 @@ step2_server <- function(input, output, session, state) {
       ),
       htmltools::tags$ul(
         style = "font-size: 0.82rem; margin-bottom: 0.4rem;",
-        htmltools::tags$li(sprintf("Overall event rate: %s", .pct(d$event_rate_overall))),
-        htmltools::tags$li(sprintf("Single-zero studies: %d", d$single_zero_k)),
-        htmltools::tags$li(sprintf("Double-zero studies: %d", d$double_zero_k)),
-        htmltools::tags$li(sprintf("Total events: %d", d$total_events))
+        htmltools::tags$li(sprintf("Overall event rate: %s",
+                                   .pct(rare_diagnostics$event_rate_overall))),
+        htmltools::tags$li(sprintf("Single-zero studies: %d", rare_diagnostics$single_zero_k)),
+        htmltools::tags$li(sprintf("Double-zero studies: %d", rare_diagnostics$double_zero_k)),
+        htmltools::tags$li(sprintf("Total events: %d", rare_diagnostics$total_events))
       ),
-      if (isTRUE(d$very_sparse_flag)) {
+      if (isTRUE(rare_diagnostics$very_sparse_flag)) {
         htmltools::p(class = "pma-card-subtitle",
           style = "font-weight: 600; color: #92400e;",
           "Very sparse warning: interpret pooled estimates with extra caution."
@@ -1394,7 +1396,9 @@ step2_server <- function(input, output, session, state) {
       if (is.null(v) || !nzchar(v)) NULL else v
     }
     lo <- input$xlim_lo; hi <- input$xlim_hi
-    xlim <- if (!is.null(lo) && !is.null(hi) && !is.na(lo) && !is.na(hi) && lo < hi) c(lo, hi) else NULL
+    xlim_is_usable <- !is.null(lo) && !is.null(hi) &&
+      !is.na(lo) && !is.na(hi) && lo < hi
+    xlim <- if (xlim_is_usable) c(lo, hi) else NULL
     state$display$forest_step2 <- list(
       title        = pick_text("forest_title"),
       label_e      = pick_text("label_e"),

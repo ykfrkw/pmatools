@@ -160,12 +160,18 @@ EDU_COPY <- list(
   ),
 
   threshold_help = list(
-    OR  = "An OR of 1.25 vs 1.0 represents a 25 percent relative change in odds - a typical small but clinically meaningful effect.",
+    OR  = paste0("An OR of 1.25 vs 1.0 represents a 25 percent relative ",
+                 "change in odds - a typical small but clinically ",
+                 "meaningful effect."),
     RR  = "An RR of 1.20 vs 1.0 represents a 20 percent relative change in risk.",
     HR  = "An HR of 1.20 represents a 20 percent relative change in hazard.",
-    RoM = "A 10 percent ratio of means is a typical small clinically meaningful difference for continuous outcomes.",
-    SMD = "Cohen's small effect size (0.20) is widely accepted as the smallest clinically meaningful SMD.",
-    MD  = "Auto-suggested as 0.20 times the pooled SD (Cohen's small in raw units). Replace with a published threshold for your outcome whenever possible.",
+    RoM = paste0("A 10 percent ratio of means is a typical small clinically ",
+                 "meaningful difference for continuous outcomes."),
+    SMD = paste0("Cohen's small effect size (0.20) is widely accepted as ",
+                 "the smallest clinically meaningful SMD."),
+    MD  = paste0("Auto-suggested as 0.20 times the pooled SD (Cohen's small ",
+                 "in raw units). Replace with a published threshold for your ",
+                 "outcome whenever possible."),
     ARD = "A 5 percent absolute risk difference is a typical small clinically meaningful effect."
   ),
 

@@ -399,7 +399,10 @@ assess_pubias <- function(meta_obj,
     egger_note <- sprintf("Egger's test: p = %.3f.", pval)
     judgment   <- "not_serious"
     flow_end   <- c("pma-pubias-edge-q3-no", "pma-pubias-leaf-nodown-q3")
-    asym_desc  <- "Q3 (auto): Egger's test p >= 0.05 -> no strong evidence of funnel-plot asymmetry -> do not rate down."
+    asym_desc  <- paste0(
+      "Q3 (auto): Egger's test p >= 0.05 -> no strong evidence of ",
+      "funnel-plot asymmetry -> do not rate down."
+    )
   }
 
   make_domain_row(

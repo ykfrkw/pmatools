@@ -550,7 +550,11 @@ assess_inconsistency <- function(meta_obj,
     threshold_side <- "opposite_substantial"
     judgment_auto  <- "very_serious"
     decision_note  <- sprintf(
-      "Both directions have substantial mass: n_above = %d (%.0f%%) AND n_below = %d (%.0f%%) >= %.0f%% each -> rate down 2 (clinically opposite).",
+      paste0(
+        "Both directions have substantial mass: n_above = %d (%.0f%%) AND ",
+        "n_below = %d (%.0f%%) >= %.0f%% each -> rate down 2 ",
+        "(clinically opposite)."
+      ),
       n_above, n_above / n_total * 100,
       n_below, n_below / n_total * 100,
       OPPOSITE_EACH * 100
@@ -559,13 +563,19 @@ assess_inconsistency <- function(meta_obj,
     threshold_side <- "heterogeneous"
     judgment_auto  <- "serious"
     decision_note  <- sprintf(
-      "Largest single-zone share %.0f%% < %.0f%% but neither direction reaches %.0f%% -> rate down 1 (heterogeneous magnitude).",
+      paste0(
+        "Largest single-zone share %.0f%% < %.0f%% but neither direction ",
+        "reaches %.0f%% -> rate down 1 (heterogeneous magnitude)."
+      ),
       pct_max_zone * 100, ZONE_MAJORITY * 100, OPPOSITE_EACH * 100
     )
   }
 
   side_note <- sprintf(
-    "AUTO Step 2 (%s): zone counts (k = %d): above_threshold = %d, trivial = %d, below_threshold = %d. %s %s",
+    paste0(
+      "AUTO Step 2 (%s): zone counts (k = %d): above_threshold = %d, ",
+      "trivial = %d, below_threshold = %d. %s %s"
+    ),
     threshold_label, n_total,
     n_above, n_trivial, n_below,
     decision_note, .INCONSISTENCY_ZONE_CAVEAT

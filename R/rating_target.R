@@ -30,8 +30,10 @@
 #
 # 「null 近傍 (very near null)」の操作的定義は原論文にない (本文は "the point
 # estimate is near the null" / "clearly suggests an unimportant effect" と述べる
-# のみ)。pmatools は MID が与えられている場合に限り |TE| <= MID を近傍と定義する。
-# MID がない場合は近傍か否かを判定できないため non_null_effect に倒し、その旨を
+# のみ)。pmatools は MID が与えられている場合に限り |TE| <= MID
+# を近傍と定義する。
+# MID がない場合は近傍か否かを判定できないため
+# non_null_effect に倒し、その旨を
 # note に明記する (本文: "although choosing the null usually avoids specifying
 # MIDs, it will not always do so"、supplementary appendix 4 参照)。
 #
@@ -39,7 +41,8 @@
 #   Core GRADE は target を絶対効果 (risk difference / weighted mean difference)
 #   で決めると明記している。threshold_scale = "ard" 指定時は
 #   threshold_to_te_scale() が baseline risk を使って ARD を比スケールへ換算済み
-#   なので、比較はその換算後の閾値の上で成立する。ARD 閾値が与えられていない場合
+#   なので、比較はその換算後の閾値の上で成立する。ARD
+#   閾値が与えられていない場合
 #   は比スケール上で比較し、その旨を note に残す。
 
 # 妥当な rating target と人間可読ラベル

@@ -45,8 +45,8 @@
 #                              N >= OIS -> Do not rate down       [-0]
 #                              N <  OIS -> Rate down one level    [-1]
 #
-#   両側 MID を跨いだときの -2 は、閾値として null を選んだ経路にも適用される
-#   (本文 6 ページ目 逐語):
+#   両側 MID を跨いだときの -2 は、閾値として null
+#   を選んだ経路にも適用される (本文 6 ページ目 逐語):
 #     "The two considerations also apply to imprecision judgments when Core
 #      GRADE users choose the null as the threshold of interest. For example,
 #      consider a situation in which users rate their certainty in a benefit
@@ -55,14 +55,15 @@
 #      harm motivates a plain language summary stating that the intervention
 #      'may' result in a benefit, and rating down two levels for imprecision."
 #   したがって rating target = non_null_effect (閾値 = null) でも、MID が
-#   与えられていれば ±MID を跨ぐかを別途評価し、両側を跨ぐなら -2 とする。
+#   与えられていれば ±MID を跨ぐかを別途評価し、両側を跨ぐなら
+#   -2 とする。
 #   -1 / -0 の判定は従来どおり null (= 0) を基準にする。MID がない場合は
 #   両側判定が不能なので -1 止まりになる。
 #
 #   CI ratio (Fig 4 caption): 「CI 上限 / CI 下限」を比スケールで取った値。
 #   "Large effect" = implausibly large: 本文は二値アウトカムについて
-#   "implausibly large (certainly relative risk reduction >40%, possibly
-#   >30%)" とだけ操作化している。連続アウトカムの「大きい効果」は原論文に
+#   "implausibly large (certainly relative risk reduction >40%, possibly >30%)"
+#   とだけ操作化している。連続アウトカムの「大きい効果」は原論文に
 #   定義がないため、pmatools は Cohen の慣例 (標準化効果量 >= 0.8) を用い、
 #   その旨を note に明記する（原論文の記述ではない）。
 #
@@ -74,7 +75,8 @@
 #
 # Null の定義:
 #   {meta} の lower.random / upper.random は RR/OR/HR で log スケール、
-#   MD/SMD で原スケール。いずれも null_val = 0 として crosses-null を判定できる。
+#   MD/SMD で原スケール。いずれも null_val = 0 として
+#   crosses-null を判定できる。
 # Threshold:
 #   threshold_internal は TE スケール（ratio は log、絶対値は原）の正値。OIS の
 #   自動計算（ois_p1 / ois_delta の導出）には常に MID を使う。
@@ -85,9 +87,9 @@
 #   "N=number of participants; OIS=optimal information size"、本文 6 ページ目:
 #   "If the total sample size of all the studies included in a meta-analysis
 #    exceeds the OIS, one does not rate down")。二値アウトカムでも総イベント数
-#   ではなく総サンプルサイズ (n.e + n.c) を OIS と比較する。総イベント数は参考値
-#   として notes に併記する。ois_events を明示指定した場合のみイベント数比較に
-#   なる（後方互換）。
+#   ではなく総サンプルサイズ (n.e + n.c) を OIS
+#   と比較する。総イベント数は参考値 として notes に併記する。ois_events
+#   を明示指定した場合のみイベント数比較に なる（後方互換）。
 #
 #   方法 1 — 直接指定:
 #     ois_events: バイナリ結果の目標総イベント数（後方互換の経路）
@@ -109,12 +111,13 @@
 #        rates: alpha (typically 0.05) and beta (typically 0.20), the control
 #        group event rate (chosen from the context), and a modest relative risk
 #        reduction, typically 20% or 25%."
-#     すなわち二値の OIS は MID ではなく「控えめな相対リスク減少」で決める。
+#     すなわち二値の OIS は MID
+#     ではなく「控えめな相対リスク減少」で決める。
 #     pmatools は ois_rrr (既定 0.20) を用いて ois_p1 を導出する。
 #     ois_p1 を明示指定した場合はそちらが優先される。
-#     連続アウトカムは同じ段落で書き分けられており ("by specifying the smallest
-#     difference between intervention and control that one would want to avoid
-#     missing (ie, the MID)")、従来どおり MID を ois_delta に使う。
+#     連続アウトカムは同じ段落で書き分けられており ("by specifying the
+#     smallest difference between intervention and control that one would want
+#     to avoid missing (ie, the MID)")、従来どおり MID を ois_delta に使う。
 #
 #   Direction of the binary OIS alternative rate (v0.5.1):
 #     Core GRADE 2 writes "reduction" because its worked example has an
@@ -1146,13 +1149,15 @@ assess_imprecision <- function(meta_obj,
 
 # 総サンプルサイズ（連続アウトカムの "N >= OIS (or 800)" 判定に使う）
 #
-# 意図的に strict にしてある。800 の rule of thumb は「400 patients per group」なので、
+# 意図的に strict にしてある。800 の rule of thumb は「400
+# patients per group」なので、
 # 二群の実測合計が揃っているときにしか適用できない。片群しかない meta
 # （metaprop / metamean など、n.e / n.c を持たず meta_obj$n だけを持つ
 # オブジェクト）では NA を返し、meta_obj$n へのフォールバックはしない。
 # 同じファイルの .compute_ois_pct() も n.e / n.c が揃わなければ OIS を
 # 計算しないので、そちらと足並みを揃えている。
-# 表示用の寛容版（N 列に出す総参加者数）は sof_table.R の .total_n() のほう。
+# 表示用の寛容版（N 列に出す総参加者数）は sof_table.R の
+# .total_n() のほう。
 .total_n_strict <- function(meta_obj) {
   n_e <- if (!is.null(meta_obj$n.e)) sum(meta_obj$n.e, na.rm = TRUE) else NA_real_
   n_c <- if (!is.null(meta_obj$n.c)) sum(meta_obj$n.c, na.rm = TRUE) else NA_real_

@@ -379,7 +379,12 @@ grade_table <- function(outcomes,
     CERTAINTY_SYMBOLS[["Low"]], "=Low  ",
     CERTAINTY_SYMBOLS[["Very Low"]], "=Very Low  ",
     "CI=confidence interval.",
-    if (show_domains) " Domain columns: RoB=Risk of bias; Ind=Indirectness; Inc=Inconsistency; Imp=Imprecision; PB=Publication bias." else ""
+    if (show_domains) {
+      paste0(" Domain columns: RoB=Risk of bias; Ind=Indirectness; ",
+             "Inc=Inconsistency; Imp=Imprecision; PB=Publication bias.")
+    } else {
+      ""
+    }
   )
   ft <- flextable::add_footer_lines(ft, values = footnote)
 
