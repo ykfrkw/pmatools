@@ -1,4 +1,4 @@
-# The app side of the Core GRADE decision flowcharts (R/ui_helpers.R,
+# The app side of the Core GRADE decision flowcharts (R/judgment_display.R,
 # www/flowchart.js, www/shadcn.css).
 #
 # The package half of the contract - that the ids an assessor emits are ids

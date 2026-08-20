@@ -1,4 +1,4 @@
-# pma_grade_arg_specs() (R/ui_helpers.R) builds the {value, origin} specs that
+# pma_grade_arg_specs() (R/outcome_provenance.R) builds the {value, origin} specs that
 # export_bundle() renders into the "reproducible" analysis.R.
 #
 # History worth keeping, because it explains why these tests are pointed at

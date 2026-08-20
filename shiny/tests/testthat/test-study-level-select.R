@@ -1,4 +1,4 @@
-# The per-study RoB / Indirectness dropdowns on Step 3 (R/ui_helpers.R).
+# The per-study RoB / Indirectness dropdowns on Step 3 (R/judgment_display.R).
 #
 # The bug these pin down: the cell was free text, with a caption telling the
 # reviewer to type low / some / high. A typo landed the study in the "unknown"

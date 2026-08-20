@@ -1,4 +1,4 @@
-# Forest-plot display helpers (R/ui_helpers.R).
+# Forest-plot display helpers (R/plot_panels.R).
 #
 # These decide what the axis says and how much white space surrounds the pooled
 # row. A wrong "Favors ..." side is a reversed conclusion on the printed plot,
