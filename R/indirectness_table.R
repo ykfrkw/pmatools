@@ -24,7 +24,7 @@ INDIRECTNESS_OVERALL_COLORS <- list(
 
 # Checkbox glyphs (U+2611 = checked, U+2610 = empty); \u escapes keep the
 # source ASCII-safe regardless of file encoding (same convention as
-# CERTAINTY_SYMBOLS_UNICODE in utils.R).
+# CERTAINTY_SYMBOLS_UNICODE in house_style.R).
 INDIRECTNESS_MARK_ON  <- "\u2611"
 INDIRECTNESS_MARK_OFF <- "\u2610"
 

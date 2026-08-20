@@ -1583,7 +1583,7 @@ assess_rob <- function(rob, meta_obj,
 #
 # Note this is not the Core GRADE domain vocabulary the values map ONTO: a
 # per-study label describes one study, a GRADE level describes the body of
-# evidence. GRADE_LEVELS in R/utils.R owns that second vocabulary.
+# evidence. GRADE_LEVELS in R/grade_vocabulary.R owns that second vocabulary.
 # --------------------------------------------------------------------------
 .normalize_rob_level <- function(x) {
   aliases <- c(

@@ -67,9 +67,9 @@ evidence_profile <- function(grade,
   impr  <- pick("Imprecision")
   pubi  <- pick("Publication bias")
 
-  # The display vocabulary is .grade_level_wording() in R/utils.R, not a
-  # second switch() here: the Shiny badges and the override menus read the
-  # same function, so the app and this table cannot word a judgment
+  # The display vocabulary is .grade_level_wording() in R/grade_vocabulary.R,
+  # not a second switch() here: the Shiny badges and the override menus read
+  # the same function, so the app and this table cannot word a judgment
   # differently.
   fmt_judgment <- function(judgment) .grade_level_wording(judgment)
 

@@ -33,14 +33,19 @@ PMA_APP_ROOT <- local({
   d
 })
 
-# The package's own R/utils.R, which the running app gets from the staged
-# copy under R/_pmatools/. ui_helpers.R reads GRADE_LEVEL_SOURCE_WORDING /
-# .grade_level_wording() from it so the app's badges and the Evidence Profile
-# cannot word the same judgment differently, and without it every badge test
-# would fail on a missing object rather than on a wrong label. Both locations
-# are tried and neither is required: a checkout with no staged bundle still
-# has ../../R relative to shiny/, and the guard keeps the helper usable in a
-# tree where the sources are laid out some third way.
+# The five files the package's old R/utils.R was split into, which the running
+# app gets from the staged copy under R/_pmatools/. ui_helpers.R reads
+# GRADE_LEVEL_SOURCE_WORDING / .grade_level_wording()
+# (R/grade_vocabulary.R) so the app's badges and the Evidence Profile cannot
+# word the same judgment differently, and it reaches the Core GRADE DOIs
+# through .core_grade_doi_url() (R/house_style.R) for the same reason; without
+# them every badge test would fail on a missing object rather than on a wrong
+# label. The other three ride along because they were sourced as one file
+# before the split and nothing here should depend on which of the five a
+# helper ended up in. Both locations are tried and neither is required: a
+# checkout with no staged bundle still has ../../R relative to shiny/, and the
+# guard keeps the helper usable in a tree where the sources are laid out some
+# third way.
 #
 # R/multi_outcome.R rides along for PMATOOLS_DISPLAY_ATTR and the set
 # constructor: the app's export helpers write that attribute and build a
@@ -64,7 +69,9 @@ PMA_APP_ROOT <- local({
 # labels off .rare_method_specs() so the app and the fitted suite cannot name
 # the same method two ways. Without them a test of that block would fail on a
 # missing object rather than on wrong copy.
-for (.stem in c("utils.R", "multi_outcome.R", "data_ingest.R",
+for (.stem in c("grade_vocabulary.R", "house_style.R", "domain_row.R",
+                "meta_quantities.R", "effect_scales.R",
+                "multi_outcome.R", "data_ingest.R",
                 "not_reported.R", "rare_events.R", "rare_step3.R")) {
   for (.f in c(file.path(PMA_APP_ROOT, "R", "_pmatools", .stem),
                file.path(dirname(PMA_APP_ROOT), "R", .stem))) {
