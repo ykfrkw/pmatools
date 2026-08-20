@@ -12,7 +12,10 @@
 # public accessor over the facts recorded here is domain_facts() in
 # R/domain_facts.R; the judgment vocabulary itself is R/grade_vocabulary.R.
 
-# 確実性ドメイン判定をサマリ tibble にまとめる
+# Gather one certainty-domain judgment into the summary tibble row that every
+# domain assessor returns. One row, one domain, the same columns every time --
+# which is what lets grade_meta() bind five assessors' output into a single
+# domain_assessments table without knowing which of them produced what.
 #
 # rationale: free-text justification for a manual override of an automated
 # domain judgment (Core GRADE transparency principle). When non-NULL it is

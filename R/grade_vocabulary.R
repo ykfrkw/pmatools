@@ -162,7 +162,10 @@ score_to_certainty <- function(score) {
     (\(.) CERTAINTY_LABELS[. == score])()
 }
 
-# GRADE 判定の検証 (legacy "no" / "some" / "some_concerns" も受け入れて正規化する)
+# Validate a GRADE judgment. The legacy spellings "no", "some" and
+# "some_concerns" are accepted here and normalised, not rejected: they are what
+# older calls and saved objects say, and refusing them would break reading back
+# work that was correct when it was written.
 #
 # `check_ambiguous = FALSE` is for the one caller that validates values it has
 # ALREADY normalised (assess_rob(), which maps Cochrane RoB2 labels first and

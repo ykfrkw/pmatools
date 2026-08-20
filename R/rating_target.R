@@ -1,6 +1,23 @@
-# rating_target.R — 確実性評価の「対象 (target)」決定
+# rating_target.R - which claim the certainty rating is about
 #
 # BMJ 2025 Core GRADE 2: choosing the target of the certainty rating
+#
+# Core GRADE rates certainty in a claim, not in a number, and the claim has to be
+# settled before any domain is judged. That choice lives here. This file owns the
+# three rating targets, the Fig 2 branch table that derives one of them from the
+# pooled point estimate, the entry gate that refuses threshold_type = "mid" with
+# no MID in hand, and the manual-override path. What it hands back each time is
+# the target, its display label, the threshold the Imprecision domain must then
+# evaluate the CI against, and a note naming the branch that produced it.
+#
+# grade_meta() (R/grade_meta.R) is the caller that matters: it resolves the
+# target here and passes the chosen threshold down to assess_imprecision()
+# (R/domain_imprecision.R) as threshold_for_imprecision. Imprecision must never
+# re-derive it -- a second derivation is a second chance to disagree with the
+# first, and the two would then disagree silently.
+#
+# A helper belongs here when it decides WHAT the rating is a rating of. When it
+# decides how well the evidence supports that claim, it belongs in a domain file.
 #
 # References:
 #   Guyatt G, Zeng L, Brignardello-Petersen R, et al.
@@ -9,7 +26,7 @@
 #     -- Fig 1 (thresholds), Fig 2 (three steps for deciding the target),
 #        Fig 3 (point estimate above / below the MID).
 #
-# Core GRADE 2 Fig 2 の 3 ステップ:
+# Core GRADE 2 Fig 2, in three steps:
 #   1. Choose threshold of interest
 #        "Are you interested in whether there is an important effect or not?"
 #          -> Choose MID                       (threshold_type = "mid")
@@ -19,33 +36,34 @@
 #   2. Establish absolute effect (weighted mean difference or risk difference)
 #   3. Choose target of certainty based on the point estimate
 #
-# 分岐表 (Fig 2 下段 + 本文 3 ページ目):
+# The branch table (Fig 2, lower half, plus the body text on p3):
 #
-#   threshold_type | 点推定値の位置        | target                  | imprecision の閾値
-#   ---------------+-----------------------+-------------------------+-------------------
-#   mid            | |TE| >  MID           | important_effect        | +/-MID
-#   mid            | |TE| <= MID           | little_to_no_difference | +/-MID
-#   null           | null 近傍             | little_to_no_difference | +/-MID
-#   null           | null 近傍でない       | non_null_effect         | null (= 0)
+#   threshold_type | point estimate      | target                  | imprecision threshold
+#   ---------------+---------------------+-------------------------+----------------------
+#   mid            | |TE| >  MID         | important_effect        | +/-MID
+#   mid            | |TE| <= MID         | little_to_no_difference | +/-MID
+#   null           | near the null       | little_to_no_difference | +/-MID
+#   null           | not near the null   | non_null_effect         | null (= 0)
 #
-# 「null 近傍 (very near null)」の操作的定義は原論文にない (本文は "the point
-# estimate is near the null" / "clearly suggests an unimportant effect" と述べる
-# のみ)。pmatools は MID が与えられている場合に限り |TE| <= MID
-# を近傍と定義する。
-# MID がない場合は近傍か否かを判定できないため
-# non_null_effect に倒し、その旨を
-# note に明記する (本文: "although choosing the null usually avoids specifying
-# MIDs, it will not always do so"、supplementary appendix 4 参照)。
+# "Very near the null" has no operational definition in the source: the body text
+# says only that "the point estimate is near the null" and that it "clearly
+# suggests an unimportant effect". pmatools therefore reads near-the-null as
+# |TE| <= MID, and only where a MID exists. Without one the question cannot be
+# asked at all, so the derivation falls to non_null_effect and the note says why.
+# That gap is the paper's own: "although choosing the null usually avoids
+# specifying MIDs, it will not always do so" (supplementary appendix 4).
 #
-# 絶対効果ベースの導出:
-#   Core GRADE は target を絶対効果 (risk difference / weighted mean difference)
-#   で決めると明記している。threshold_scale = "ard" 指定時は
-#   threshold_to_te_scale() が baseline risk を使って ARD を比スケールへ換算済み
-#   なので、比較はその換算後の閾値の上で成立する。ARD
-#   閾値が与えられていない場合
-#   は比スケール上で比較し、その旨を note に残す。
+# Derived on the absolute effect, wherever there is one:
+#   Core GRADE says plainly that the target is decided on the absolute effect
+#   (risk difference, weighted mean difference). With threshold_scale = "ard"
+#   that is what happens, indirectly: threshold_to_te_scale() has already
+#   converted the ARD to the ratio scale using the baseline risk, so comparing
+#   against the converted threshold IS the absolute-effect comparison, done in
+#   the units the pooled estimate arrives in. With no ARD threshold there is
+#   nothing to convert, the comparison runs on the relative scale, and the note
+#   records which of the two it was rather than letting them look alike.
 
-# 妥当な rating target と人間可読ラベル
+# The three valid rating targets, and the wording each is displayed in.
 RATING_TARGETS <- c("important_effect", "little_to_no_difference",
                     "non_null_effect")
 
@@ -55,9 +73,11 @@ RATING_TARGET_LABELS <- c(
   non_null_effect         = "Non-null effect"
 )
 
-# プールされた点推定値を TE スケールで取り出す。
-# random / common のどちらが有効かは meta_obj$random に従い、欠損時は他方に
-# フォールバックする (assess_imprecision() の CI 取り出しと同じ方針)。
+# The pooled point estimate, on the TE scale. meta_obj$random says which of the
+# two fits is in force; a missing or non-finite value falls back to the other,
+# which is the same rule assess_imprecision() follows when it picks up the CI.
+# Keeping the two rules identical is what stops the target and the interval it is
+# compared against from coming out of different fits.
 .pooled_te <- function(meta_obj) {
   te <- if (isTRUE(meta_obj$random)) meta_obj$TE.random else meta_obj$TE.common
   if (is.null(te) || length(te) == 0L || !all(is.finite(te))) {
@@ -67,7 +87,9 @@ RATING_TARGET_LABELS <- c(
   as.numeric(te)[1]
 }
 
-# MID が使える形で与えられているか
+# Is there a MID the branch table can actually use: present, finite and strictly
+# positive? Zero is excluded on purpose - it is the null threshold wearing a MID's
+# name, and the branches below must be able to tell those two cases apart.
 .has_mid <- function(threshold_internal) {
   !is.null(threshold_internal) &&
     length(threshold_internal) > 0 &&
@@ -101,8 +123,10 @@ RATING_TARGET_LABELS <- c(
   te_ok   <- !is.null(te_point) && length(te_point) == 1L &&
              !is.na(te_point) && is.finite(te_point)
 
-  # 絶対効果で導出できたか (Core GRADE 2: "consider absolute rather than
-  # relative effects")。
+  # Which scale the derivation actually ran on (Core GRADE 2: "consider absolute
+  # rather than relative effects"). Appended to every note that had a MID to
+  # compare against, so a reader can see whether the paper's preference was met
+  # on this analysis or only approximated on the relative scale.
   scale_note <- if (!has_mid) {
     ""
   } else if (identical(threshold_kind, "ard")) {
@@ -130,7 +154,10 @@ RATING_TARGET_LABELS <- c(
 
   if (identical(threshold_type, "mid")) {
     if (!has_mid) {
-      # require_threshold = FALSE で MID なしを許容した場合の逃げ道。
+      # The only way to arrive here is require_threshold = FALSE: the entry gate
+      # in .check_threshold_type_gate() rejects every other route to
+      # threshold_type = "mid" with no MID. Importance cannot be judged without
+      # one, so the target falls back to the null-threshold answer.
       return(list(
         target                    = "non_null_effect",
         target_label              = RATING_TARGET_LABELS[["non_null_effect"]],
@@ -182,8 +209,8 @@ RATING_TARGET_LABELS <- c(
     ))
   }
   if (abs(te_point) <= threshold_internal) {
-    # 本文: "If, however, the point estimate is near the null ... they will
-    # rate their certainty in an unimportant effect".
+    # Core GRADE 2, body text: "If, however, the point estimate is near the null
+    # ... they will rate their certainty in an unimportant effect".
     return(list(
       target                    = "little_to_no_difference",
       target_label              = RATING_TARGET_LABELS[["little_to_no_difference"]],
@@ -209,12 +236,16 @@ RATING_TARGET_LABELS <- c(
 }
 
 # --------------------------------------------------------------------------
-# grade_meta() の入口ゲート
+# grade_meta()'s entry gate
 # --------------------------------------------------------------------------
 
-# threshold_type = "mid" は MID を必須にする (Core GRADE 2: importance can be
-# judged only against a MID)。エラーメッセージには suggest_threshold() の実際の
-# 返り値を埋め込み、そのままコピーできる形にする。
+# threshold_type = "mid" makes a MID mandatory: importance can only be judged
+# against one (Core GRADE 2). The abort embeds suggest_threshold()'s ACTUAL
+# return value for this analysis rather than describing where to find it, so the
+# caller can copy the argument straight out of the error message. It then says at
+# length where that number came from, because most of them are pmatools
+# placeholders rather than Core GRADE numbers, and an error message that hands
+# over a figure without that warning invites it to be pasted in unread.
 .check_threshold_type_gate <- function(meta_obj, threshold_type, threshold,
                                        require_threshold) {
   if (!identical(threshold_type, "mid")) return(invisible(NULL))
@@ -280,8 +311,11 @@ RATING_TARGET_LABELS <- c(
   ), class = "pmatools_threshold_gate")
 }
 
-# rating_target の手動指定を検証し、target/note を組み立てる。
-# 手動指定は自動導出 (Fig 2) の上書きなので rationale を必須にする。
+# Validate a manually supplied rating_target and build the target / note pair
+# from it. A manual target overrides the Fig 2 derivation, so a rationale is
+# mandatory, and the note records both the reason given and the target the
+# derivation would have reached. That pairing is what makes the override
+# auditable: a reader can see what was overridden as well as why.
 .resolve_rating_target <- function(rating_target, rating_target_rationale,
                                    auto_target, threshold_internal) {
   if (is.null(rating_target)) return(auto_target)
@@ -297,8 +331,9 @@ RATING_TARGET_LABELS <- c(
   .check_override_rationale(rating_target_rationale, "rating_target_rationale",
                             "rating target")
 
-  # important_effect / little_to_no_difference は MID を基準に imprecision を
-  # 判定するため MID が必須 (Core GRADE 2 supplementary appendix 4)。
+  # important_effect and little_to_no_difference both have Imprecision judge the
+  # CI against +/-MID, so neither can be chosen without one (Core GRADE 2
+  # supplementary appendix 4).
   if (rating_target %in% c("important_effect", "little_to_no_difference") &&
       !.has_mid(threshold_internal)) {
     # Same gate, reached from the manual-override side; classed for the same

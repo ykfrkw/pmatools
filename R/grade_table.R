@@ -1,4 +1,17 @@
-# grade_table.R — 複数アウトカム GRADE テーブル
+# grade_table.R - many outcomes, one Summary of Findings table
+#
+# grade_table() takes a named list of rated pmatools objects (or a pmatools_set)
+# and returns a single flextable: one row per outcome, primary outcomes grouped
+# above secondary ones, certainty coloured by house palette, and the two layouts
+# -- "gradepro" and "bmj" -- selectable per call. Where sof_table.R renders ONE
+# outcome in full, this file is the multi-outcome view, so most of what is here
+# builds a row (.build_row(), .build_row_not_reported()) and the headers those
+# rows have to line up under (.col_headers()).
+#
+# A helper belongs here when it decides how several outcomes sit together in one
+# table. When it decides how a single outcome's numbers are computed or worded,
+# it belongs in R/sof_table.R or R/sof_bmj.R; the report wrappers that put this
+# table into a docx or an appendix are R/grade_report.R.
 
 #' Summary of Findings table for multiple outcomes
 #'

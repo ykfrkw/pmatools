@@ -1,14 +1,23 @@
-# grade_report.R — Appendix 用 GRADE レポート生成
+# grade_report.R - the certainty appendix, ready to submit
 #
-# grade_report():
-#   複数の pmatools オブジェクトから、Appendix
-#   にそのまま使えるレポートを生成する。
-#   含まれる内容:
-#     1. Summary of Findings テーブル（grade_table）
-#     2. 各ドメインの判断根拠（ドメイン別詳細テキスト）
-#   出力形式: "docx" / "html" / "pdf" / "md"
+# grade_report() turns a set of rated pmatools objects into a document that can
+# go into a paper's appendix unedited. That is the whole point of the file: a
+# reviewer should not have to reformat anything between rating the evidence and
+# submitting the account of how it was rated. Each report carries
 #
-# 依存: officer (docx), rmarkdown (html/pdf/md), flextable
+#   1. the Summary of Findings table (built by grade_table()), and
+#   2. the reasoning behind every domain judgment, written out per domain,
+#
+# in any of four formats: "docx", "html", "pdf" or "md". docx is written
+# directly with {officer} and {flextable}. The other three share one markdown
+# build (.build_report_md()): "md" is that build written out as it stands, and
+# "html" and "pdf" wrap it in a temporary .Rmd for {rmarkdown} to render, so all
+# three say the same thing and only one of them has to be got right.
+#
+# A helper belongs here when it decides what the appendix says or how it is
+# laid out on a page. When it decides how the table itself is assembled, that
+# is R/grade_table.R; when it decides what a domain's prose means, that is the
+# domain file that wrote the note.
 
 #' Generate a certainty-of-evidence appendix report (Core GRADE series)
 #'

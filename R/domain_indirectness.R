@@ -1,7 +1,14 @@
-# domain_indirectness.R — 非直接性ドメイン処理
+# domain_indirectness.R - the domain nothing can compute for you
 #
-# BMJ 2025 Core GRADE 5: 非直接性は臨床的判断が必要なため手動入力。
-# domain_rob.R と同じ入力パターンをサポート。
+# BMJ 2025 Core GRADE 5. Indirectness is the one domain pmatools cannot assess
+# from the fit. Whether the evidence answers the question actually being asked
+# is a clinical judgment about populations, doses, comparators and follow-up,
+# and nothing in a {meta} object knows what question was asked of it. So the
+# judgment arrives from the reviewer, and the work here is to accept it in any
+# of four shapes, fold it down to the single domain row every domain returns,
+# and record in the notes how that fold was made. The four shapes are
+# deliberately the ones domain_rob.R accepts, so a caller learns the pattern
+# once and uses it twice.
 #
 # Inputs (mutually exclusive with the subdomain table):
 #   (a) scalar GRADE level ("not_serious" / "serious" / "very_serious" /
@@ -176,11 +183,11 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
   k <- meta_obj$k
   dominant_threshold <- .check_indirectness_dominant_threshold(dominant_threshold)
 
-  # デフォルト: スカラ "not_serious"
+  # The documented default: the scalar "not_serious", i.e. no downgrade.
   if (is.null(indirectness)) indirectness <- "not_serious"
 
-  # 列名参照. The legacy spellings have to be recognised here too, or a scalar
-  # `indirectness = "no"` is taken for a column name and aborts.
+  # (c) Column-name reference. The legacy spellings have to be recognised here
+  # too, or a scalar `indirectness = "no"` is taken for a column name and aborts.
   if (length(indirectness) == 1 && is.character(indirectness) &&
       !indirectness %in% c(GRADE_LEVELS, names(GRADE_LEVEL_ALIASES))) {
     col <- indirectness
@@ -195,7 +202,7 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
     return(.aggregate_indirectness(ind_vec, meta_obj, dominant_threshold))
   }
 
-  # スカラ
+  # (a) Scalar GRADE level.
   # v0.4.0 (breaking): any scalar other than the default "not_serious" is a
   # manual override and requires indirectness_rationale. "not_serious" (= no
   # downgrade, the documented default) stays exempt so default calls keep
@@ -216,7 +223,7 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
     ))
   }
 
-  # ベクタ
+  # (b) Per-study vector: one GRADE level per study, folded by weight share.
   if (length(indirectness) == k) {
     validate_grade_level(indirectness, "indirectness")
     return(.aggregate_indirectness(indirectness, meta_obj, dominant_threshold))
