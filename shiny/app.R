@@ -74,11 +74,13 @@ ui <- bslib::page_fluid(
   ),
   htmltools::tags$head(
     htmltools::includeCSS("www/shadcn.css"),
-    # 埋め込み親ページ（yukifurukawa.jp/pmatools/）へ中身の高さを通知する。
-    # www/ はアプリのルートで配信されるので src はファイル名だけでよい。
+    # Tell the embedding parent page (yukifurukawa.jp/pmatools/) how tall the
+    # content is. www/ is served from the app's root, so src is a bare filename.
     htmltools::tags$script(src = "embed-height.js"),
-    # iframe が中身の実高まで伸びると内部にスクロール余地が無くなり
-    # window.scrollTo が事実上効かないので、埋め込み時は親にも通知する。
+    # Once the iframe has grown to the content's real height there is no scroll
+    # room left inside it, and window.scrollTo below is effectively inert. So
+    # when embedded the parent has to be asked to scroll instead, which is what
+    # pmaNotifyScrollTop() in embed-height.js is for.
     htmltools::tags$script(htmltools::HTML(
       "Shiny.addCustomMessageHandler('scroll_top', function(_msg){
          window.scrollTo({top:0, behavior:'smooth'});

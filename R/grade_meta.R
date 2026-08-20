@@ -1,7 +1,20 @@
-# grade_meta.R — メイン GRADE 評価関数
+# grade_meta.R - the front door: one meta-analysis in, one rating out
 #
-# BMJ 2025 Core GRADE シリーズに準拠した確実性評価を {meta}
-# オブジェクトから実施する。
+# grade_meta() rates the certainty of a body of evidence from a {meta} object,
+# following the BMJ 2025 Core GRADE series. It is the function almost every
+# caller reaches for first, and the only one that sees the whole rating at once:
+# it validates the entry gates, resolves the threshold and the rating target,
+# calls each of the five domain assessors in turn, sums their downgrades into a
+# certainty, and returns the pmatools object the rest of the package renders,
+# exports and prints.
+#
+# Almost nothing is decided here. Every domain judgment belongs to its own file
+# (R/domain_rob.R, domain_inconsistency.R, domain_imprecision.R,
+# domain_indirectness.R, domain_pubias.R) and the choice of what the rating is
+# about belongs to R/rating_target.R. What this file owns is the ORDER those
+# happen in, the arguments they are handed, and the single object they are
+# gathered into -- so a helper belongs here only when it concerns the run as a
+# whole rather than one domain of it.
 
 #' Assess certainty of evidence (Core GRADE series) from a meta-analysis object
 #'
@@ -969,7 +982,11 @@ grade_meta <- function(meta_obj,
   if (!is.null(impre_facts))  domain_facts[["Imprecision"]]      <- impre_facts
   if (!is.null(pubias_facts)) domain_facts[["Publication bias"]] <- pubias_facts
 
-  # --- 確実性スコア計算 ---
+  # --- Certainty score ---
+  # The five domains' downgrades are summed and clamped at 1 ("Very low"): GRADE
+  # has no rating below it, so a body of evidence with four serious concerns and
+  # one with six land in the same place. The unclamped sum is deliberately not
+  # kept -- see score_to_certainty() in R/grade_vocabulary.R.
   total_downgrade <- sum(domains$downgrade)
   final_score     <- max(1L, start_score + total_downgrade)
   certainty       <- score_to_certainty(final_score)

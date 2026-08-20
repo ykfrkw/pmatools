@@ -1,6 +1,21 @@
-# domain_imprecision.R — 不精確性ドメイン自動評価
+# domain_imprecision.R - the Imprecision domain, rated automatically
 #
 # BMJ 2025 Core GRADE 2: Imprecision
+#
+# This file owns one question and everything needed to answer it: given a pooled
+# {meta} fit and a chosen threshold, does the confidence interval leave enough
+# doubt to rate certainty down, and by how much? assess_imprecision() takes the
+# fit plus the OIS inputs and hands back one make_domain_row(): a judgment, the
+# sentence that justifies it, and the structured facts a caller can branch on
+# without re-parsing that sentence. Everything else here is machinery it needs --
+# the OIS calculation, the "implausibly large" test, the CI-ratio cut-offs, and
+# the Fig 4 classifier that turns those into a verdict and a path string.
+#
+# What it does NOT decide is which threshold it is rating against. Core GRADE 2
+# Fig 2 makes that choice and R/rating_target.R implements it; grade_meta() hands
+# the answer down as threshold_for_imprecision. A helper belongs here when it
+# reads the interval or sizes the evidence; when it decides what the rating is a
+# rating OF, it belongs next door in rating_target.R.
 #
 # References:
 #   Guyatt G, Brignardello-Petersen R, Hultcrantz M, et al.
@@ -16,7 +31,7 @@
 #     Size). J Clin Epidemiol. 2011;64(12):1283-1293.
 #     doi:10.1016/j.jclinepi.2011.01.012 (PMID 21839614)
 #
-# 判定基準 (BMJ 2025 Core GRADE 2 Fig 4 の逐語構造):
+# The decision rule, laid out in Fig 4's own structure (BMJ 2025 Core GRADE 2):
 #
 #   Evaluate CI in relation to chosen threshold — does CI cross threshold?
 #
@@ -26,14 +41,14 @@
 #              important harm), or
 #            - the most appropriate plain language description suggests more
 #              uncertainty ("may" rather than "likely").
-#          サンプルサイズ／OIS はこの経路では参照しない (本文: "Core GRADE
-#          users will rate down for imprecision and do not need to consider
-#          sample size")。
+#          Sample size and the OIS are NOT consulted on this path (body text:
+#          "Core GRADE users will rate down for imprecision and do not need to
+#          consider sample size").
 #
 #   No  -> Moderate effect -> Do not rate down                    [-0]
 #       -> Large effect    -> Proceed to OIS approach
 #
-#          OIS approach (Fig 4 下段):
+#          OIS approach (Fig 4, lower half):
 #            Continuous outcome:
 #              N >= OIS (or 800)   -> Do not rate down            [-0]
 #              N <  OIS            -> Rate down one level         [-1]
@@ -45,8 +60,9 @@
 #                              N >= OIS -> Do not rate down       [-0]
 #                              N <  OIS -> Rate down one level    [-1]
 #
-#   両側 MID を跨いだときの -2 は、閾値として null
-#   を選んだ経路にも適用される (本文 6 ページ目 逐語):
+#   The two-level downgrade for crossing BOTH MIDs applies on the null-threshold
+#   path as well, not only where a MID was the chosen threshold. Body text, p6,
+#   verbatim:
 #     "The two considerations also apply to imprecision judgments when Core
 #      GRADE users choose the null as the threshold of interest. For example,
 #      consider a situation in which users rate their certainty in a benefit
@@ -54,70 +70,82 @@
 #      The finding that the CI is consistent with both benefit and important
 #      harm motivates a plain language summary stating that the intervention
 #      'may' result in a benefit, and rating down two levels for imprecision."
-#   したがって rating target = non_null_effect (閾値 = null) でも、MID が
-#   与えられていれば ±MID を跨ぐかを別途評価し、両側を跨ぐなら
-#   -2 とする。
-#   -1 / -0 の判定は従来どおり null (= 0) を基準にする。MID がない場合は
-#   両側判定が不能なので -1 止まりになる。
+#   So with rating target = non_null_effect (threshold = null), a MID that
+#   exists is still put to work: whether the CI crosses +/-MID is evaluated
+#   separately, and crossing both sides earns -2. The -1 / -0 decision is
+#   untouched by this and goes on being made against the null (= 0). With no MID
+#   the both-sides question cannot be asked at all, so that path stops at -1.
 #
-#   CI ratio (Fig 4 caption): 「CI 上限 / CI 下限」を比スケールで取った値。
-#   "Large effect" = implausibly large: 本文は二値アウトカムについて
-#   "implausibly large (certainly relative risk reduction >40%, possibly >30%)"
-#   とだけ操作化している。連続アウトカムの「大きい効果」は原論文に
-#   定義がないため、pmatools は Cohen の慣例 (標準化効果量 >= 0.8) を用い、
-#   その旨を note に明記する（原論文の記述ではない）。
+#   CI ratio (Fig 4 caption): the upper CI limit divided by the lower limit, on
+#   the ratio scale.
+#   "Large effect" means implausibly large, and the body text operationalises it
+#   for BINARY outcomes only: "implausibly large (certainly relative risk
+#   reduction >40%, possibly >30%)". For continuous outcomes the source offers
+#   no definition of a large effect whatsoever, so pmatools falls back on
+#   Cohen's convention (standardized effect >= 0.8) and says so in the notes
+#   every time it fires. That convention is pmatools', not Core GRADE 2's, and
+#   the note exists so nobody reads it back out as the paper's.
 #
-# Rating target との関係 (Core GRADE 2 Fig 2 / R/rating_target.R):
-#   target = non_null_effect            -> 閾値は null (= 0)
+# How the rating target picks the threshold (Core GRADE 2 Fig 2;
+# R/rating_target.R):
+#   target = non_null_effect            -> the threshold is the null (= 0)
 #   target = important_effect /
-#            little_to_no_difference    -> 閾値は ±MID
-#   assess_imprecision() は threshold_for_imprecision 引数でこの選択を受け取る。
+#            little_to_no_difference    -> the threshold is +/-MID
+#   assess_imprecision() receives that choice ALREADY MADE, as the
+#   threshold_for_imprecision argument, and does not re-derive it.
 #
-# Null の定義:
-#   {meta} の lower.random / upper.random は RR/OR/HR で log スケール、
-#   MD/SMD で原スケール。いずれも null_val = 0 として
-#   crosses-null を判定できる。
+# Where the null sits:
+#   {meta}'s lower.random / upper.random are on the log scale for RR / OR / HR
+#   and on the raw scale for MD / SMD. The null is 0 on both, so a single
+#   null_val = 0 answers the crosses-the-null question for every measure.
 # Threshold:
-#   threshold_internal は TE スケール（ratio は log、絶対値は原）の正値。OIS の
-#   自動計算（ois_p1 / ois_delta の導出）には常に MID を使う。
+#   threshold_internal is a positive value on the TE scale (log for ratio
+#   measures, raw for absolute ones). The automatic OIS derivations read
+#   threshold_internal, never threshold_for_imprecision. For a continuous
+#   outcome the MID becomes ois_delta directly. For a binary one it does not:
+#   ois_p1 comes from a modest relative risk reduction instead (see below), and
+#   the MID reaches the OIS only where the threshold arrived as an ARD, whose
+#   baseline risk is then reused to anchor ois_p0.
 #
-# OIS (Optimal Information Size) の計算方法:
+# How the OIS (optimal information size) is computed:
 #
-#   比較の単位は「参加者数」(Core GRADE 2 Fig 4 caption 逐語:
-#   "N=number of participants; OIS=optimal information size"、本文 6 ページ目:
+#   The unit of comparison is PARTICIPANTS. Core GRADE 2 Fig 4 caption, verbatim:
+#   "N=number of participants; OIS=optimal information size"; body text, p6:
 #   "If the total sample size of all the studies included in a meta-analysis
-#    exceeds the OIS, one does not rate down")。二値アウトカムでも総イベント数
-#   ではなく総サンプルサイズ (n.e + n.c) を OIS
-#   と比較する。総イベント数は参考値 として notes に併記する。ois_events
-#   を明示指定した場合のみイベント数比較に なる（後方互換）。
+#    exceeds the OIS, one does not rate down". Binary outcomes are no exception:
+#   it is the total sample size (n.e + n.c) that is compared with the OIS, not
+#   the total event count, which is reported alongside for information only. An
+#   explicitly supplied ois_events is the one thing that moves the comparison
+#   onto events, and it exists for backward compatibility. (The rare-event flow
+#   moves it too, for a quite different reason -- see RARE EVENTS below.)
 #
-#   方法 1 — 直接指定:
-#     ois_events: バイナリ結果の目標総イベント数（後方互換の経路）
-#     ois_n     : 目標総サンプル数
+#   Route 1 -- supplied directly:
+#     ois_events: target total events for a binary outcome (backward-compatible)
+#     ois_n     : target total sample size
 #
-#   方法 2 — 自動計算（方法 1 が未指定の場合に使用）:
-#     バイナリ結果: ois_p0 と ois_p1 を指定
+#   Route 2 -- computed, used when route 1 supplied neither:
+#     Binary outcome: supply ois_p0 and ois_p1
 #       n_arm = (z_alpha/2 + z_beta)^2 × [p0(1-p0) + p1(1-p1)] / (p0-p1)^2
-#       OIS_n = 2 × n_arm                （参加者数）
-#       参考: OIS_events ≈ 2 × n_arm × p̄  (p̄ = (p0+p1)/2)
-#     連続結果: ois_delta と ois_sd を指定
+#       OIS_n = 2 × n_arm                (participants)
+#       for information: OIS_events ≈ 2 × n_arm × p̄  (p̄ = (p0+p1)/2)
+#     Continuous outcome: supply ois_delta and ois_sd
 #       n_arm = 2 × (z_alpha/2 + z_beta)^2 × sigma^2 / delta^2
 #       OIS_n = 2 × n_arm
-#     既定: ois_alpha = 0.05 (両側), ois_beta = 0.20 (検出力 80%)
+#     Defaults: ois_alpha = 0.05 (two-sided), ois_beta = 0.20 (80% power)
 #
-#   ois_p1 の導出 (二値):
-#     Core GRADE 2 本文 6 ページ目 逐語:
+#   Deriving ois_p1 (binary):
+#     Core GRADE 2, body text p6, verbatim:
 #       "For binary outcomes, these involve specifying the acceptable error
 #        rates: alpha (typically 0.05) and beta (typically 0.20), the control
 #        group event rate (chosen from the context), and a modest relative risk
 #        reduction, typically 20% or 25%."
-#     すなわち二値の OIS は MID
-#     ではなく「控えめな相対リスク減少」で決める。
-#     pmatools は ois_rrr (既定 0.20) を用いて ois_p1 を導出する。
-#     ois_p1 を明示指定した場合はそちらが優先される。
-#     連続アウトカムは同じ段落で書き分けられており ("by specifying the
+#     So the binary OIS is set by a MODEST RELATIVE RISK REDUCTION and not by
+#     the MID. pmatools derives ois_p1 from ois_rrr (default 0.20); an
+#     explicitly supplied ois_p1 takes precedence over the derivation. The same
+#     paragraph writes the continuous case out separately ("by specifying the
 #     smallest difference between intervention and control that one would want
-#     to avoid missing (ie, the MID)")、従来どおり MID を ois_delta に使う。
+#     to avoid missing (ie, the MID)"), and there the MID does become
+#     ois_delta, as it always has.
 #
 #   Direction of the binary OIS alternative rate (v0.5.1):
 #     Core GRADE 2 writes "reduction" because its worked example has an
@@ -128,11 +156,14 @@
 #     .ois_target_increase(). `small_values` is required as of 0.5.1, so there
 #     is no "direction unknown" case left to fall back on.
 #
-#   ois_sd の自動導出 (連続, v0.5.1):
-#     .calc_ois() は連続アウトカムで ois_delta と ois_sd の両方を要求するが、
-#     ois_sd は利用者が入力しなければ NULL のままだった。結果として連続
-#     アウトカムの OIS は黙って計算不能になっていた。ois_sd 未指定時は
-#     compute_pooled_sd() から導出し、導出した旨を note に書く。
+#   Deriving ois_sd (continuous, v0.5.1):
+#     .calc_ois() wants both ois_delta and ois_sd for a continuous outcome, and
+#     until 0.5.1 nothing ever filled ois_sd in: left blank by the caller it
+#     stayed NULL, so the continuous OIS was silently uncomputable and Fig 4's
+#     large-effect path fell through to "do not rate down" with no explanation
+#     of why the OIS was missing. An unsupplied ois_sd is now derived from
+#     compute_pooled_sd(), and the notes record that it was derived rather than
+#     supplied. See the SMD exception where the derivation happens.
 #
 # RARE EVENTS (`rare_flow`; shiny/SPEC.md 3.4.14)
 # ------------------------------------------------
@@ -754,7 +785,7 @@ assess_imprecision <- function(meta_obj,
 }
 
 # --------------------------------------------------------------------------
-# OIS 自動計算
+# Computing the OIS
 # --------------------------------------------------------------------------
 
 # Validate the modest relative risk reduction used for the binary OIS
@@ -927,7 +958,10 @@ assess_imprecision <- function(meta_obj,
 }
 
 # --------------------------------------------------------------------------
-# OIS 達成率（達成判定 / serious 判定の双方に使用）
+# How much of the OIS the evidence actually reaches. Every OIS decision reads
+# this one number -- whether the OIS was met, and the "< 30% of OIS" rule that
+# escalates to two levels -- so they cannot reach contradictory conclusions
+# about the same body of evidence.
 #
 # Returns list(pct, observed, target, unit). `unit` is "N" (participants,
 # Core GRADE 2 Fig 4: "N=number of participants") or "events" when the caller
@@ -964,7 +998,7 @@ assess_imprecision <- function(meta_obj,
 }
 
 # --------------------------------------------------------------------------
-# 効果量が「implausibly large」か (Core GRADE 2 本文 6 ページ目)
+# Is the effect "implausibly large"? (Core GRADE 2, body text p6)
 #
 #   "when the CI does not cross the threshold or thresholds of interest and
 #    effects on binary outcomes are implausibly large (certainly relative risk
@@ -972,14 +1006,16 @@ assess_imprecision <- function(meta_obj,
 #    down for imprecision if the sample size and number of events across all
 #    contributing studies are limited"
 #
-# 二値: RRR > 30% を「possibly」、> 40% を「certainly」とし、OIS 経路へ進む
-#       トリガーには保守的に 30% を用いる。比スケールでは
-#       |log(effect)| > -log(0.70) が RRR > 30%、
-#       |log(effect)| > -log(0.60) が RRR > 40% に対応する
-#       （OR は risk ratio の近似として扱う）。
-# 連続: 原論文に「大きい効果」の定義がないため、Cohen の慣例
-#       （標準化効果量 |d| >= 0.8 = large）を pmatools の操作的定義として使う。
-#       MD は pooled SD で標準化する。これは Core GRADE 2 の記述ではない。
+# Binary: an RRR above 30% is "possibly" implausibly large and above 40% is
+#       "certainly", and the trigger onto the OIS path takes the conservative
+#       30%. On the ratio scale |log(effect)| > -log(0.70) is an RRR above 30%
+#       and |log(effect)| > -log(0.60) is an RRR above 40% (the OR is treated as
+#       an approximation to the risk ratio here, as it is throughout Fig 4).
+# Continuous: the source defines no "large effect" for continuous outcomes at
+#       all, so pmatools adopts Cohen's convention (standardized |d| >= 0.8) as
+#       its own operational definition and standardizes an MD by the pooled SD
+#       to reach it. This is NOT Core GRADE 2's rule, and the note says so
+#       wherever it decides anything.
 # --------------------------------------------------------------------------
 # Wording for the ratio-scale magnitude 1 - exp(-|log ratio|).
 #
@@ -1053,12 +1089,14 @@ assess_imprecision <- function(meta_obj,
 }
 
 # --------------------------------------------------------------------------
-# CI 比 (Core GRADE 2 Fig 4 caption)
+# The CI ratio (Core GRADE 2 Fig 4 caption)
 #   "The relative risk CI ratio represents the upper boundary divided by lower
 #    boundary of CI of relative risk, and the odds ratio CI ratio represents
 #    the upper boundary divided by lower boundary of CI of odds ratio."
-# TE が log スケールなので exp(upper) / exp(lower) = exp(upper - lower)。
-# 比スケール以外の効果指標では定義されないので NA を返す。
+# TE is on the log scale, so exp(upper) / exp(lower) = exp(upper - lower).
+# The quantity is undefined for anything but a ratio measure -- there is no
+# "upper divided by lower" to read off a mean difference -- so those return NA
+# and the CI-ratio branch of Fig 4 never fires for them.
 # --------------------------------------------------------------------------
 .ci_ratio <- function(lower, upper, sm) {
   if (is.null(sm) || !sm %in% c("OR", "RR", "HR", "RoM", "IRR")) return(NA_real_)
@@ -1123,10 +1161,15 @@ assess_imprecision <- function(meta_obj,
                          "pma-impre-edge-large-yes",
                          "pma-impre-node-ois")
 
-# 二値 (event ベース) アウトカムか。metabin 由来のイベント数があるか、
-# 効果指標が二値向けなら二値扱い。Fig 4 の連続／二値の分岐に使う
-# (grade_meta の outcome_type は OIS 計算用の "relative"/"absolute" であって
-#  連続／二値の区別ではないため、ここでは使わない)。
+# Is this an event-based (binary) outcome? Event counts from a metabin fit, or a
+# summary measure that only makes sense for events, are each enough to say yes.
+# This is what Fig 4's continuous-versus-binary fork reads.
+#
+# grade_meta()'s `outcome_type` is deliberately NOT consulted: it says
+# "relative" or "absolute", which is a statement about the OIS formula, not
+# about whether the outcome counts events. Reading it here would fold two
+# different distinctions into one and send, say, a risk difference down the
+# continuous branch.
 #
 # NOTE — RoM. RoM is deliberately NOT listed here: a ratio of means is a
 # continuous-outcome summary, so Fig 4's continuous branch (N >= 800 rule of
@@ -1147,17 +1190,21 @@ assess_imprecision <- function(meta_obj,
   FALSE
 }
 
-# 総サンプルサイズ（連続アウトカムの "N >= OIS (or 800)" 判定に使う）
+# Total sample size, for the continuous "N >= OIS (or 800)" test.
 #
-# 意図的に strict にしてある。800 の rule of thumb は「400
-# patients per group」なので、
-# 二群の実測合計が揃っているときにしか適用できない。片群しかない meta
-# （metaprop / metamean など、n.e / n.c を持たず meta_obj$n だけを持つ
-# オブジェクト）では NA を返し、meta_obj$n へのフォールバックはしない。
-# 同じファイルの .compute_ois_pct() も n.e / n.c が揃わなければ OIS を
-# 計算しないので、そちらと足並みを揃えている。
-# 表示用の寛容版（N 列に出す総参加者数）は sof_table.R の
-# .total_n() のほう。
+# Strict on purpose. The 800 rule of thumb is really "400 patients per group",
+# so it only means anything when both arms were actually counted. A one-arm meta
+# -- metaprop, metamean and the like, which carry meta_obj$n but no n.e / n.c --
+# returns NA here rather than falling back to meta_obj$n, because a single-arm
+# total of 800 is not the quantity the rule of thumb is about and comparing it
+# would quietly pass analyses the rule was meant to catch.
+#
+# .compute_ois_pct() in this file refuses the same inputs for the same reason,
+# so the two stay in step: no OIS percentage, and no 800 test either.
+#
+# The permissive version -- total participants for the SoF table's N column,
+# where the number is being displayed rather than decided on -- is .total_n() in
+# R/sof_table.R. Do not swap one for the other.
 .total_n_strict <- function(meta_obj) {
   n_e <- if (!is.null(meta_obj$n.e)) sum(meta_obj$n.e, na.rm = TRUE) else NA_real_
   n_c <- if (!is.null(meta_obj$n.c)) sum(meta_obj$n.c, na.rm = TRUE) else NA_real_
@@ -1166,11 +1213,14 @@ assess_imprecision <- function(meta_obj,
 }
 
 # --------------------------------------------------------------------------
-# 判定分類 (Core GRADE 2 Fig 4)
+# Turning the inputs into a verdict (Core GRADE 2 Fig 4)
 #
-# 返り値: list(judgment, path, ois_used, flow)
-#   path     — 通過した Fig 4 の経路（notes に記録し、監査可能にする）
-#   ois_used — OIS 経路を実際に使ったか（notes の表現を切り替える）
+# Returns list(judgment, path, ois_used, flow)
+#   path     - the Fig 4 route actually taken, in words. Recorded in the notes,
+#              which is what makes the judgment auditable rather than asserted
+#   ois_used - whether the OIS branch was really reached. The notes read
+#              differently when it was not, because the OIS figures are then
+#              reported for information and did not decide anything
 #   flow     — the same route as inst/figures/impre.svg node ids, so the
 #              caller can record it as the "flow_path" fact without parsing
 #              `path` back out of the prose (see .IMPRE_FIG4_NODE_IDS)
