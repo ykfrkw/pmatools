@@ -120,20 +120,20 @@ PMA_OUTCOME_SOURCE_ATTR <- "pma_outcome_source"
 pma_outcome_display <- function(display = list(), pubias_missing = NULL,
                                 rare = NULL) {
   display <- display %||% list()
-  out <- list(
+  display_facts <- list(
     forest_display      = display$forest_step2,
     forest_display_rob  = display$forest_rob,
     rare                = rare,
     rare_forest_display = display$forest_step2,
     pubias_missing_df   = pubias_missing
   )
-  out <- out[!vapply(out, is.null, logical(1))]
+  display_facts <- display_facts[!vapply(display_facts, is.null, logical(1))]
 
   # state$display$convert is the GUARDED boolean (shiny/SPEC.md §3.2): Step 3
   # writes it only after the effect measure and the responder proportion have
   # been checked, so an outcome shown as its effect carries nothing here.
-  if (!isTRUE(display$convert)) return(out)
-  c(out, list(
+  if (!isTRUE(display$convert)) return(display_facts)
+  c(display_facts, list(
     convert_smd_to_or = TRUE,
     # Banked alongside the conversion, never instead of it: grade_table() reads
     # it only on a row that converts, and a row banked without it renders as
@@ -185,11 +185,11 @@ pma_export_data <- function(outcomes) {
   frames <- list()
   for (nm in names(outcomes)) {
     src <- attr(outcomes[[nm]], PMA_OUTCOME_SOURCE_ATTR, exact = TRUE)
-    d   <- if (is.list(src)) src$data else NULL
-    if (!is.data.frame(d) || nrow(d) == 0L) next
-    d <- pma_name_arms(d, src$experimental_label, src$control_label)
-    d$outcome <- nm
-    frames[[nm]] <- d
+    source_data   <- if (is.list(src)) src$data else NULL
+    if (!is.data.frame(source_data) || nrow(source_data) == 0L) next
+    source_data <- pma_name_arms(source_data, src$experimental_label, src$control_label)
+    source_data$outcome <- nm
+    frames[[nm]] <- source_data
   }
   if (length(frames) == 0L) return(NULL)
   pma_bind_rows_union(frames)
@@ -249,8 +249,8 @@ pma_set_ma_args <- function(outcomes) {
   # instead (.not_reported_block(), R/export_bundle_multi.R).
   outcomes <- pma_rated_outcomes(outcomes)
   per_outcome_value <- function(f) {
-    out <- lapply(outcomes, f)
-    out[!vapply(out, is.null, logical(1))]
+    values <- lapply(outcomes, f)
+    values[!vapply(values, is.null, logical(1))]
   }
   list(
     outcomes     = names(outcomes),
@@ -401,8 +401,8 @@ pma_rated_outcomes <- function(outcomes) {
 pma_outcome_updated_label <- function(g) {
   ts <- attr(g, PMA_SAVED_AT_ATTR, exact = TRUE)
   if (is.null(ts) || length(ts) != 1L || is.na(ts)) return("")
-  out <- tryCatch(format(as.POSIXct(ts), "%H:%M"), error = function(e) "")
-  if (is.na(out)) "" else out
+  time_label <- tryCatch(format(as.POSIXct(ts), "%H:%M"), error = function(e) "")
+  if (is.na(time_label)) "" else time_label
 }
 
 # One-row-per-outcome summary used by the saved-outcome list UI.
@@ -431,8 +431,9 @@ pma_outcome_summary_df <- function(outcomes, signature = NULL) {
       if (.is_not_reported(g)) return(.not_reported_label(g))
       # format_effect() is pmatools public API as of 0.5.0 (the dot-prefixed
       # .format_effect() is only a back-compat alias) -- keep the public name.
-      out <- tryCatch(format_effect(g$meta, g$outcome_type), error = function(e) NA_character_)
-      if (is.null(out) || is.na(out)) "-" else gsub("\n", "; ", out)
+      effect_text <- tryCatch(format_effect(g$meta, g$outcome_type),
+                              error = function(e) NA_character_)
+      if (is.null(effect_text) || is.na(effect_text)) "-" else gsub("\n", "; ", effect_text)
     }, character(1)),
     certainty = vapply(outcomes, function(g) {
       if (.is_not_reported(g)) return(NOT_REPORTED_CERTAINTY)
@@ -456,8 +457,8 @@ pma_saved_outcomes_ui <- function(outcomes, delete_input_id = "outcome_delete",
                                   move_input_id = "outcome_move",
                                   primary_input_id = "outcome_primary",
                                   primary = character(0)) {
-  df <- pma_outcome_summary_df(outcomes, signature = signature)
-  if (nrow(df) == 0) {
+  summary_rows <- pma_outcome_summary_df(outcomes, signature = signature)
+  if (nrow(summary_rows) == 0) {
     if (is.null(empty_text)) return(NULL)
     return(htmltools::p(class = "pma-card-subtitle", empty_text))
   }
@@ -479,8 +480,8 @@ pma_saved_outcomes_ui <- function(outcomes, delete_input_id = "outcome_delete",
       onclick = if (isTRUE(disabled)) NULL else js,
       label)
   }
-  rows <- lapply(seq_len(nrow(df)), function(i) {
-    is_primary <- df$name[i] %in% primary
+  rows <- lapply(seq_len(nrow(summary_rows)), function(i) {
+    is_primary <- summary_rows$name[i] %in% primary
     htmltools::div(
       style = paste(
         "display: flex; align-items: center; gap: 0.75rem;",
@@ -491,31 +492,31 @@ pma_saved_outcomes_ui <- function(outcomes, delete_input_id = "outcome_delete",
       # order the outcomes happened to be saved in.
       htmltools::div(
         style = "display: flex; flex-direction: column; gap: 0.15rem;",
-        .row_button(move_input_id, df$name[i], list(dir = "up"),
+        .row_button(move_input_id, summary_rows$name[i], list(dir = "up"),
                     label = htmltools::HTML("&#9650;"),
                     title = "Move up", disabled = i == 1L),
-        .row_button(move_input_id, df$name[i], list(dir = "down"),
+        .row_button(move_input_id, summary_rows$name[i], list(dir = "down"),
                     label = htmltools::HTML("&#9660;"),
-                    title = "Move down", disabled = i == nrow(df))
+                    title = "Move down", disabled = i == nrow(summary_rows))
       ),
       htmltools::div(
         style = "flex: 1 1 auto; min-width: 0;",
-        htmltools::div(style = "font-weight: 600;", df$name[i]),
+        htmltools::div(style = "font-weight: 600;", summary_rows$name[i]),
         htmltools::div(
           style = "font-size: 0.8rem; color: hsl(var(--muted-foreground));",
           # "last updated", not "saved at": nobody presses Save, so the stamp
           # says when the row was last recomputed (shiny/SPEC.md 3.4.14).
-          sprintf("k = %s | %s%s", df$k[i], df$effect[i],
-                  if (nzchar(df$updated[i]))
-                    paste0(" | last updated ", df$updated[i]) else "")),
-        if (isTRUE(df$stale[i])) htmltools::div(
+          sprintf("k = %s | %s%s", summary_rows$k[i], summary_rows$effect[i],
+                  if (nzchar(summary_rows$updated[i]))
+                    paste0(" | last updated ", summary_rows$updated[i]) else "")),
+        if (isTRUE(summary_rows$stale[i])) htmltools::div(
           style = sprintf("font-size: 0.78rem; margin-top: 0.15rem; color: %s;",
                           PMA_ALERT_FG),
           "Saved from a dataset other than the one currently loaded."
         ) else NULL
       ),
-      if (isTRUE(df$stale[i])) htmltools::div(pma_stale_badge()) else NULL,
-      htmltools::div(pma_certainty_badge(df$certainty[i])),
+      if (isTRUE(summary_rows$stale[i])) htmltools::div(pma_stale_badge()) else NULL,
+      htmltools::div(pma_certainty_badge(summary_rows$certainty[i])),
       htmltools::tags$button(
         type  = "button",
         class = if (is_primary) "btn btn-primary" else "btn btn-secondary",
@@ -524,7 +525,7 @@ pma_saved_outcomes_ui <- function(outcomes, delete_input_id = "outcome_delete",
         style = "padding: 0.2rem 0.6rem; font-size: 0.8rem;",
         onclick = sprintf(
           "Shiny.setInputValue('%s', {name: %s, nonce: Math.random()}, {priority: 'event'})",
-          primary_input_id, .name_lit(df$name[i])),
+          primary_input_id, .name_lit(summary_rows$name[i])),
         if (is_primary) "Primary" else "Mark primary"),
       htmltools::tags$button(
         type  = "button",
@@ -532,7 +533,7 @@ pma_saved_outcomes_ui <- function(outcomes, delete_input_id = "outcome_delete",
         style = "padding: 0.2rem 0.6rem; font-size: 0.8rem;",
         onclick = sprintf(
           "Shiny.setInputValue('%s', %s, {priority: 'event'})",
-          delete_input_id, .name_lit(df$name[i])),
+          delete_input_id, .name_lit(summary_rows$name[i])),
         "Remove")
     )
   })

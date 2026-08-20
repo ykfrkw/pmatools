@@ -1,7 +1,8 @@
 # grade_report.R — Appendix 用 GRADE レポート生成
 #
 # grade_report():
-#   複数の pmatools オブジェクトから、Appendix にそのまま使えるレポートを生成する。
+#   複数の pmatools オブジェクトから、Appendix
+#   にそのまま使えるレポートを生成する。
 #   含まれる内容:
 #     1. Summary of Findings テーブル（grade_table）
 #     2. 各ドメインの判断根拠（ドメイン別詳細テキスト）

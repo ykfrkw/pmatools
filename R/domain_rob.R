@@ -1346,7 +1346,8 @@ assess_rob <- function(rob, meta_obj,
   .disp <- function(x) if (log_scale) round(exp(x), 3) else round(x, 3)
 
   # Threshold handling
-  M <- if (!is.null(threshold_internal) && is.finite(threshold_internal) && threshold_internal > 0) {
+  M <- if (!is.null(threshold_internal) && is.finite(threshold_internal) &&
+           threshold_internal > 0) {
     threshold_internal
   } else {
     0
@@ -1358,9 +1359,14 @@ assess_rob <- function(rob, meta_obj,
     else if (te < -M) "below"
     else "trivial"
   }
-  threshold_disp <- if (threshold_supplied) sprintf("+/-%s", format(.disp(M), nsmall = 0)) else "+/-0"
+  threshold_disp <- if (threshold_supplied) {
+    sprintf("+/-%s", format(.disp(M), nsmall = 0))
+  } else {
+    "+/-0"
+  }
   threshold_note <- if (threshold_supplied) {
-    sprintf("Threshold = %s (%s)", threshold_disp, if (log_scale) paste0("log ", sm_label, " scale") else sm_label)
+    scale_label <- if (log_scale) paste0("log ", sm_label, " scale") else sm_label
+    sprintf("Threshold = %s (%s)", threshold_disp, scale_label)
   } else {
     "Threshold not supplied; trivial zone collapsed to {0} (sign-flip rule only)"
   }
@@ -1460,10 +1466,16 @@ assess_rob <- function(rob, meta_obj,
       rule_desc <- "Rule 1: TE_all and TE_low both in trivial zone -> do not rate down"
     } else if (inflates) {
       judgment <- "serious"; rule <- 3L
-      rule_desc <- "Rule 3: same non-trivial zone but bias-favouring inflation > threshold -> rate down 1"
+      rule_desc <- paste0(
+        "Rule 3: same non-trivial zone but bias-favouring inflation > ",
+        "threshold -> rate down 1"
+      )
     } else {
       judgment <- "not_serious"; rule <- 2L
-      rule_desc <- "Rule 2: same non-trivial zone, inflation within threshold (or not bias-favouring) -> do not rate down"
+      rule_desc <- paste0(
+        "Rule 2: same non-trivial zone, inflation within threshold ",
+        "(or not bias-favouring) -> do not rate down"
+      )
       # Transparency: the magnitude of the shift exceeds the threshold, but the
       # direction gate blocked the downgrade. Say so explicitly so readers do
       # not conclude the threshold was ignored. The consequence clause is the

@@ -263,7 +263,8 @@ threshold_to_te_scale <- function(threshold, threshold_scale = "auto", sm = NULL
       "SMD" = "te_scale",
       "MD"  = "te_scale",
       rlang::abort(sprintf(
-        "Cannot auto-detect threshold_scale for sm = '%s'. Specify threshold_scale explicitly.", sm))
+        paste0("Cannot auto-detect threshold_scale for sm = '%s'. ",
+               "Specify threshold_scale explicitly."), sm))
     )
   } else {
     threshold_scale

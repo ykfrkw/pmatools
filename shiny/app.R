@@ -130,7 +130,8 @@ ui <- bslib::page_fluid(
   htmltools::div(
     style = "color: hsl(var(--muted-foreground)); font-size: 0.8rem; padding: 1rem 0;",
     htmltools::HTML(
-      "Powered by <a href='https://yukifurukawa.jp/pmatools/' target='_blank'>yukifurukawa.jp/pmatools/</a>."
+      paste0("Powered by <a href='https://yukifurukawa.jp/pmatools/' ",
+             "target='_blank'>yukifurukawa.jp/pmatools/</a>.")
     ),
     # Which pmatools produced the numbers on screen. It was reachable only by
     # opening Step 2's "Text results" tab, which is no place to look for the

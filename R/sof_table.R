@@ -257,7 +257,7 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
   # and the dichotomised reading below when both were asked for. The columns
   # that do not split are merged over the pair below, so the lower row leaves
   # them empty.
-  df <- if (split_row) {
+  sof_rows <- if (split_row) {
     data.frame(
       col1 = c(x$outcome_name, ""),
       col2 = c(.n_participants_studies(k, n_total, x$study_design), ""),
@@ -278,9 +278,9 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
       stringsAsFactors = FALSE
     )
   }
-  names(df) <- headers
+  names(sof_rows) <- headers
 
-  ft <- flextable::flextable(df)
+  ft <- flextable::flextable(sof_rows)
   ft <- flextable::set_header_labels(ft, .list = stats::setNames(as.list(headers), headers))
   ft <- flextable::theme_vanilla(ft)
   ft <- flextable::fontsize(ft, size = 10, part = "all")
@@ -519,11 +519,11 @@ sof_add_notes <- function(x, notes) {
 # a "Due to indirectness" sentence with nothing under it saying why -- the one
 # case where the footer had a reason available and printed none.
 .rated_down_fact_domains <- function(x) {
-  d <- x$domain_assessments
-  if (is.null(d) || nrow(d) == 0L) return(character(0))
+  domain_rows <- x$domain_assessments
+  if (is.null(domain_rows) || nrow(domain_rows) == 0L) return(character(0))
   all_facts <- x$domain_facts %||% list()
-  dg   <- d$downgrade
-  doms <- d$domain[!is.na(dg) & dg < 0]
+  dg   <- domain_rows$downgrade
+  doms <- domain_rows$domain[!is.na(dg) & dg < 0]
   has_reason <- vapply(doms, function(dm) {
     dm %in% names(all_facts) || !is.null(.domain_override_note(x, dm))
   }, logical(1))
@@ -644,11 +644,11 @@ sof_add_notes <- function(x, notes) {
     !is.null(x$est) && length(x$est) == 1L && is.finite(x$est)
   }
   primary <- if (isTRUE(meta_obj$random)) "random" else "common"
-  out <- pick(primary)
-  if (!ok(out)) {
-    out <- pick(if (primary == "random") "common" else "random")
+  estimate <- pick(primary)
+  if (!ok(estimate)) {
+    estimate <- pick(if (primary == "random") "common" else "random")
   }
-  out
+  estimate
 }
 
 #' Format a pooled effect estimate as a display string
@@ -709,10 +709,10 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
   if (outcome_type == "relative" && !is.null(sm) &&
       sm %in% c("RR", "OR", "HR", "IRR")) {
     est <- exp(est); lo <- exp(lo); hi <- exp(hi)
-    s <- sprintf("%s %.2f (%.2f; %.2f)", sm, est, lo, hi)
+    effect_text <- sprintf("%s %.2f (%.2f; %.2f)", sm, est, lo, hi)
   } else {
-    s <- sprintf("%s %.2f (%.2f; %.2f)",
-                 if (is.null(sm)) "Effect" else sm, est, lo, hi)
+    effect_text <- sprintf("%s %.2f (%.2f; %.2f)",
+                           if (is.null(sm)) "Effect" else sm, est, lo, hi)
   }
 
   if (prediction) {
@@ -724,11 +724,12 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
           sm %in% c("RR", "OR", "HR", "IRR")) {
         pi_lo <- exp(pi_lo); pi_hi <- exp(pi_hi)
       }
-      s <- paste0(s, sprintf("\nPrI (%.2f; %.2f)", pi_lo, pi_hi))
+      effect_text <- paste0(effect_text,
+                            sprintf("\nPrI (%.2f; %.2f)", pi_lo, pi_hi))
     }
   }
 
-  s
+  effect_text
 }
 
 # Internal alias kept so existing call sites (sof_table.R, grade_table.R,
@@ -1069,7 +1070,7 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
 .resolve_responder <- function(outcomes, nms = names(outcomes), per = 1000,
                                big_mark = TRUE, ci_sep = "; ",
                                label_control = "control") {
-  out <- lapply(nms, function(nm) {
+  resolutions <- lapply(nms, function(nm) {
     g <- outcomes[[nm]]
     .check_outcome_display(g, nm)
     args <- .responder_args(g)
@@ -1081,7 +1082,7 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
          arm    = .responder_arm_cells(g$meta, args, per,
                                        big_mark = big_mark, ci_sep = ci_sep))
   })
-  stats::setNames(out, nms)
+  stats::setNames(resolutions, nms)
 }
 
 # The outcomes of a resolved table that are actually being converted.

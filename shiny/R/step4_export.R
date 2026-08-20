@@ -484,7 +484,8 @@ step4_server <- function(input, output, session, state) {
       }
       if (is.null(state$grade)) {
         shiny::showNotification(
-          "Cannot export: please open Step 3 (Certainty assessment) at least once before downloading.",
+          paste0("Cannot export: please open Step 3 (Certainty assessment) ",
+                 "at least once before downloading."),
           type = "error", duration = NULL
         )
         return()

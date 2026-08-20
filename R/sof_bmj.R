@@ -6,9 +6,9 @@
 #     BMJ. 2025;389:e083866. -- Box 1 (plain language summaries) and the
 #     column layout reproduced here:
 #
-#     Outcome and     | No of participants | Relative | Absolute effects (95% CI) | Certainty  | Plain
-#     follow-up       | (No of studies     | effect   |---------------------------| of         | language
-#                     |  and type)         | (95% CI) | control | interv. | Diff  | evidence   | summary
+#    Outcome and | No of participants | Relative | Absolute effects (95% CI) | Certainty | Plain
+#    follow-up   | (No of studies     | effect   |---------------------------| of        | language
+#                |  and type)         | (95% CI) | control | interv. | Diff  | evidence  | summary
 #
 # The GRADEpro layout stays the default (see sof_table()); everything here is
 # reached only through style = "bmj".
@@ -134,12 +134,12 @@
     identical(x$starting_quality, "Low")
 
   dom_parts <- character(0)
-  d <- x$domain_assessments
-  if (!is.null(d) && nrow(d) > 0) {
-    dg  <- d$downgrade
+  domain_rows <- x$domain_assessments
+  if (!is.null(domain_rows) && nrow(domain_rows) > 0) {
+    dg  <- domain_rows$downgrade
     sel <- !is.na(dg) & dg < 0
     if (any(sel)) {
-      dn   <- d[sel, , drop = FALSE]
+      dn   <- domain_rows[sel, , drop = FALSE]
       adj  <- vapply(dn$judgment, .fmt_severity, character(1),
                      USE.NAMES = FALSE)
       doms <- tolower(dn$domain)

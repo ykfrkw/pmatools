@@ -410,10 +410,14 @@ step3_ui <- function(state = NULL) {
                            "Step 1."),
               htmltools::div(
                 style = "display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem;",
-                shiny::actionButton("step3_rob_set_low",  "Set all to Low risk of bias",  class = "btn-sm"),
-                shiny::actionButton("step3_rob_set_some", "Set all to Some concerns",     class = "btn-sm"),
-                shiny::actionButton("step3_rob_set_high", "Set all to High risk of bias", class = "btn-sm"),
-                shiny::actionButton("step3_rob_clear",    "Clear all",                    class = "btn-sm")
+                shiny::actionButton("step3_rob_set_low",  "Set all to Low risk of bias",
+                                    class = "btn-sm"),
+                shiny::actionButton("step3_rob_set_some", "Set all to Some concerns",
+                                    class = "btn-sm"),
+                shiny::actionButton("step3_rob_set_high", "Set all to High risk of bias",
+                                    class = "btn-sm"),
+                shiny::actionButton("step3_rob_clear",    "Clear all",
+                                    class = "btn-sm")
               ),
               DT::DTOutput("step3_rob_editor")
             )
@@ -805,7 +809,8 @@ step3_ui <- function(state = NULL) {
                 htmltools::tags$option(value = "Not measured"),
                 htmltools::tags$option(value = "Measured but not reported (suspect P > 0.05)"),
                 htmltools::tags$option(value = "Measured but not reported (suspect P < 0.05)"),
-                htmltools::tags$option(value = "Measured but not reported (in the opposite direction)")
+                htmltools::tags$option(
+                  value = "Measured but not reported (in the opposite direction)")
               ),
               # When DT injects an <input type="text"> on cell edit for the
               # results_known column (index 2 of the visible columns), give
@@ -2165,10 +2170,10 @@ step3_server <- function(input, output, session, state) {
     if (!is.null(rt) && col %in% names(rt)) {
       source <- rt[, c("studlab", col), drop = FALSE]
     } else {
-      d <- state$data
-      if (!is.null(d) && col %in% names(d)) {
-        first_per_study <- !duplicated(d$studlab)
-        source <- d[first_per_study, c("studlab", col), drop = FALSE]
+      study_data <- state$data
+      if (!is.null(study_data) && col %in% names(study_data)) {
+        first_per_study <- !duplicated(study_data$studlab)
+        source <- study_data[first_per_study, c("studlab", col), drop = FALSE]
       }
     }
     if (is.null(source)) return(NULL)
@@ -2468,9 +2473,10 @@ step3_server <- function(input, output, session, state) {
     # looked and accepts the test", so it carries an explicit VALUE rather
     # than the empty string. That value does not reach grade_meta(): it means
     # "let the algorithm decide", which is what NULL means to assess_pubias().
-    pubias_si <- if (nzchar(input$pubias_small_industry %||% "")) input$pubias_small_industry else NULL
-    pubias_un <- if (nzchar(input$pubias_unpublished %||% "")) input$pubias_unpublished else NULL
-    pubias_rc <- if (nzchar(input$pubias_registry_complete %||% "")) input$pubias_registry_complete else NULL
+    picked_or_null <- function(answer) if (nzchar(answer %||% "")) answer else NULL
+    pubias_si <- picked_or_null(input$pubias_small_industry)
+    pubias_un <- picked_or_null(input$pubias_unpublished)
+    pubias_rc <- picked_or_null(input$pubias_registry_complete)
     # Visual override of Egger's test: v0.4.0 requires pubias_rationale
     # whenever pubias_funnel_asymmetry is supplied. "egger" is the explicit
     # "accept the automated test" answer and is NOT an override, so it must
@@ -3060,17 +3066,27 @@ step3_server <- function(input, output, session, state) {
     row$notes[1]
   }
 
-  output$rob_badge    <- shiny::renderUI(pma_judgment_badge(domain_judgment("Risk of bias")    %||% "not_serious"))
-  output$incon_badge  <- shiny::renderUI(pma_judgment_badge(domain_judgment("Inconsistency")   %||% "not_serious"))
-  output$indir_badge  <- shiny::renderUI(pma_judgment_badge(domain_judgment("Indirectness")    %||% "not_serious"))
-  output$impre_badge  <- shiny::renderUI(pma_judgment_badge(domain_judgment("Imprecision")     %||% "not_serious"))
-  output$pubias_badge <- shiny::renderUI(pma_judgment_badge(domain_judgment("Publication bias")%||% "not_serious"))
+  output$rob_badge    <- shiny::renderUI(
+    pma_judgment_badge(domain_judgment("Risk of bias") %||% "not_serious"))
+  output$incon_badge  <- shiny::renderUI(
+    pma_judgment_badge(domain_judgment("Inconsistency") %||% "not_serious"))
+  output$indir_badge  <- shiny::renderUI(
+    pma_judgment_badge(domain_judgment("Indirectness") %||% "not_serious"))
+  output$impre_badge  <- shiny::renderUI(
+    pma_judgment_badge(domain_judgment("Imprecision") %||% "not_serious"))
+  output$pubias_badge <- shiny::renderUI(
+    pma_judgment_badge(domain_judgment("Publication bias") %||% "not_serious"))
 
-  output$rob_chip    <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Risk of bias")    %||% "not_serious"))
-  output$incon_chip  <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Inconsistency")   %||% "not_serious"))
-  output$indir_chip  <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Indirectness")    %||% "not_serious"))
-  output$impre_chip  <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Imprecision")     %||% "not_serious"))
-  output$pubias_chip <- shiny::renderUI(pma_downgrade_chip(domain_judgment("Publication bias")%||% "not_serious"))
+  output$rob_chip    <- shiny::renderUI(
+    pma_downgrade_chip(domain_judgment("Risk of bias") %||% "not_serious"))
+  output$incon_chip  <- shiny::renderUI(
+    pma_downgrade_chip(domain_judgment("Inconsistency") %||% "not_serious"))
+  output$indir_chip  <- shiny::renderUI(
+    pma_downgrade_chip(domain_judgment("Indirectness") %||% "not_serious"))
+  output$impre_chip  <- shiny::renderUI(
+    pma_downgrade_chip(domain_judgment("Imprecision") %||% "not_serious"))
+  output$pubias_chip <- shiny::renderUI(
+    pma_downgrade_chip(domain_judgment("Publication bias") %||% "not_serious"))
 
   # ----- Risk-of-bias analysis set (Core GRADE 4 Fig 2) -------------------
   # Display only: these three outputs read the rated object and change no
@@ -3364,9 +3380,9 @@ step3_server <- function(input, output, session, state) {
     if (!is.null(rt) && "indirectness" %in% names(rt)) {
       vals <- c(vals, as.character(rt$indirectness))
     }
-    d <- state$data
-    if (!is.null(d) && "indirectness" %in% names(d)) {
-      vals <- c(vals, as.character(d$indirectness))
+    study_data <- state$data
+    if (!is.null(study_data) && "indirectness" %in% names(study_data)) {
+      vals <- c(vals, as.character(study_data$indirectness))
     }
     vals <- vals[!is.na(vals) & nzchar(trimws(vals))]
     length(vals) > 0
@@ -3968,10 +3984,10 @@ step3_server <- function(input, output, session, state) {
 
   # ----- Per-study RoB / Indirectness editors (synced with Step 1) -----
   .step3_bulk_set <- function(col, value) {
-    d <- state$rob_table
-    if (is.null(d)) return()
-    d[[col]] <- value
-    state$rob_table <- d
+    rob_table <- state$rob_table
+    if (is.null(rob_table)) return()
+    rob_table[[col]] <- value
+    state$rob_table <- rob_table
   }
 
   shiny::observeEvent(input$step3_rob_set_low,    { .step3_bulk_set("rob", "low")  })
@@ -3981,19 +3997,20 @@ step3_server <- function(input, output, session, state) {
   shiny::observeEvent(input$step3_indir_set_low,  { .step3_bulk_set("indirectness", "low")  })
   shiny::observeEvent(input$step3_indir_set_some, { .step3_bulk_set("indirectness", "some") })
   shiny::observeEvent(input$step3_indir_set_high, { .step3_bulk_set("indirectness", "high") })
-  shiny::observeEvent(input$step3_indir_clear,    { .step3_bulk_set("indirectness", NA_character_) })
+  shiny::observeEvent(input$step3_indir_clear,
+                      { .step3_bulk_set("indirectness", NA_character_) })
 
   output$step3_rob_editor <- DT::renderDT({
-    d <- state$rob_table
-    if (is.null(d)) {
+    rob_table <- state$rob_table
+    if (is.null(rob_table)) {
       return(DT::datatable(data.frame(message = "Load data in Step 1 first."),
                            options = list(dom = "t"), rownames = FALSE))
     }
     some_as <- .rob_some_concerns_setting()
-    tbl <- d[, "studlab", drop = FALSE]
+    tbl <- rob_table[, "studlab", drop = FALSE]
     tbl[["RoB 2 judgment"]] <- pma_study_level_column(
-      d$rob, "step3_rob_choice", PMA_ROB2_CHOICES)
-    tbl[["Risk group"]] <- .rob_risk_group(d$rob, some_as)
+      rob_table$rob, "step3_rob_choice", PMA_ROB2_CHOICES)
+    tbl[["Risk group"]] <- .rob_risk_group(rob_table$rob, some_as)
     dt <- DT::datatable(
       tbl,
       # Nothing here is DT-editable any more: the judgment is a <select> the
@@ -4017,14 +4034,14 @@ step3_server <- function(input, output, session, state) {
   shiny::outputOptions(output, "step3_rob_editor", suspendWhenHidden = FALSE)
 
   output$step3_indir_editor <- DT::renderDT({
-    d <- state$rob_table
-    if (is.null(d)) {
+    rob_table <- state$rob_table
+    if (is.null(rob_table)) {
       return(DT::datatable(data.frame(message = "Load data in Step 1 first."),
                            options = list(dom = "t"), rownames = FALSE))
     }
-    tbl <- d[, "studlab", drop = FALSE]
+    tbl <- rob_table[, "studlab", drop = FALSE]
     tbl[["Indirectness"]] <- pma_study_level_column(
-      d$indirectness, "step3_indir_choice", PMA_INDIRECTNESS_CHOICES)
+      rob_table$indirectness, "step3_indir_choice", PMA_INDIRECTNESS_CHOICES)
     DT::datatable(
       tbl,
       escape   = "studlab",
@@ -4048,12 +4065,12 @@ step3_server <- function(input, output, session, state) {
   }
 
   .step3_apply_choice <- function(info, col, choices) {
-    d <- state$rob_table
-    if (is.null(d)) return()
+    rob_table <- state$rob_table
+    if (is.null(rob_table)) return()
     hit <- .step3_level_choice(info, choices)
-    if (is.null(hit) || hit$row < 1L || hit$row > nrow(d)) return()
-    d[[col]][hit$row] <- hit$value
-    state$rob_table <- d
+    if (is.null(hit) || hit$row < 1L || hit$row > nrow(rob_table)) return()
+    rob_table[[col]][hit$row] <- hit$value
+    state$rob_table <- rob_table
   }
 
   shiny::observeEvent(input$step3_rob_choice, {
@@ -4069,33 +4086,37 @@ step3_server <- function(input, output, session, state) {
   # made on Step 3 immediately (without re-running Step 1 commit).
   shiny::observe({
     rt <- state$rob_table
-    d  <- state$data
-    if (is.null(rt) || is.null(d)) return()
+    study_data  <- state$data
+    if (is.null(rt) || is.null(study_data)) return()
     shiny::isolate({
-      idx <- match(as.character(d$studlab), as.character(rt$studlab))
+      idx <- match(as.character(study_data$studlab), as.character(rt$studlab))
       changed <- FALSE
       if (any(!is.na(rt$rob))) {
         new_rob <- rt$rob[idx]
         # tibble's `$` warns on an absent column, so ask names() instead.
-        cur_rob <- if ("rob" %in% names(d)) d$rob else rep(NA_character_, nrow(d))
+        cur_rob <- if ("rob" %in% names(study_data)) {
+          study_data$rob
+        } else {
+          rep(NA_character_, nrow(study_data))
+        }
         if (!identical(as.character(cur_rob), new_rob)) {
-          d$rob <- new_rob
+          study_data$rob <- new_rob
           changed <- TRUE
         }
       }
       if (any(!is.na(rt$indirectness))) {
         new_indir <- rt$indirectness[idx]
-        cur_indir <- if ("indirectness" %in% names(d)) {
-          d$indirectness
+        cur_indir <- if ("indirectness" %in% names(study_data)) {
+          study_data$indirectness
         } else {
-          rep(NA_character_, nrow(d))
+          rep(NA_character_, nrow(study_data))
         }
         if (!identical(as.character(cur_indir), new_indir)) {
-          d$indirectness <- new_indir
+          study_data$indirectness <- new_indir
           changed <- TRUE
         }
       }
-      if (changed) state$data <- d
+      if (changed) state$data <- study_data
     })
   })
 

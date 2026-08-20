@@ -207,10 +207,10 @@ written even for outcomes whose events are the desirable thing.}
 
 \item{indirectness}{Indirectness judgment. Same format as \code{rob} (scalar/vector/column).
 Default \code{NULL}, which is treated as \code{"not_serious"} (no
-downgrade). Pass \code{NULL} — rather than \code{"not_serious"} — whenever no manual judgment is
-intended, so that programmatic callers (\code{do.call()}, Shiny UIs) that
-always supply every argument are not mistaken for manual overrides of an
-\code{indirectness_subdomains} table.
+downgrade). Pass \code{NULL} — rather than \code{"not_serious"} —
+whenever no manual judgment is intended, so that programmatic callers
+(\code{do.call()}, Shiny UIs) that always supply every argument are not
+mistaken for manual overrides of an \code{indirectness_subdomains} table.
 \strong{Breaking change (v0.4.0)}: a scalar value other than
 \code{"not_serious"} is a manual override and requires
 \code{indirectness_rationale}. \code{"not_serious"} (no downgrade) never requires
@@ -420,10 +420,14 @@ point estimate:
 \tabular{llll}{
 \strong{threshold_type} \tab \strong{point estimate} \tab
 \strong{target} \tab \strong{imprecision threshold} \cr
-\code{"mid"}  \tab \eqn{|TE| >} MID    \tab \code{"important_effect"}        \tab \eqn{\pm}MID \cr
-\code{"mid"}  \tab \eqn{|TE| \le} MID  \tab \code{"little_to_no_difference"} \tab \eqn{\pm}MID \cr
-\code{"null"} \tab very near null      \tab \code{"little_to_no_difference"} \tab \eqn{\pm}MID \cr
-\code{"null"} \tab not near null       \tab \code{"non_null_effect"}         \tab null (0) \cr
+\code{"mid"}  \tab \eqn{|TE| >} MID    \tab
+\code{"important_effect"}        \tab \eqn{\pm}MID \cr
+\code{"mid"}  \tab \eqn{|TE| \le} MID  \tab
+\code{"little_to_no_difference"} \tab \eqn{\pm}MID \cr
+\code{"null"} \tab very near null      \tab
+\code{"little_to_no_difference"} \tab \eqn{\pm}MID \cr
+\code{"null"} \tab not near null       \tab
+\code{"non_null_effect"}         \tab null (0) \cr
 }
 "Very near null" is operationalized as \eqn{|TE| \le} MID; with no MID
 supplied, nearness cannot be judged and the target falls back to

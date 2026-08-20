@@ -361,7 +361,7 @@ export_bundle.meta <- function(x,
   # 7. grade_appendix.docx
   if ("grade_appendix" %in% include) {
     appendix_path <- tryCatch({
-      out <- grade_report(
+      report_path <- grade_report(
         outcomes    = stats::setNames(list(grade), grade$outcome_name),
         primary     = grade$outcome_name,
         # One layout per bundle: the appendix embeds a SoF table of its own, so
@@ -372,7 +372,7 @@ export_bundle.meta <- function(x,
         output_dir  = work_dir,
         output_file = "grade_appendix"
       )
-      if (is.character(out) && length(out) == 1) out else
+      if (is.character(report_path) && length(report_path) == 1) report_path else
         file.path(work_dir, "grade_appendix.docx")
     }, error = function(e) {
       warning(sprintf("grade_report() failed: %s", conditionMessage(e)))
@@ -662,10 +662,11 @@ export_bundle.meta <- function(x,
   }
 
   writeLines("[ Domain notes ]", con)
-  d <- grade$domain_assessments
-  for (i in seq_len(nrow(d))) {
-    if (!is.na(d$notes[i])) {
-      writeLines(sprintf("- [%s] %s", d$domain[i], d$notes[i]), con)
+  domain_rows <- grade$domain_assessments
+  for (i in seq_len(nrow(domain_rows))) {
+    if (!is.na(domain_rows$notes[i])) {
+      writeLines(sprintf("- [%s] %s",
+                         domain_rows$domain[i], domain_rows$notes[i]), con)
     }
   }
   writeLines("", con)
@@ -801,8 +802,16 @@ export_bundle.meta <- function(x,
     imprecision_arg  = .arg_lit(grade_args[["imprecision", exact = TRUE]],     fallback = "NULL"),
     imprecision_rationale_arg =
       .arg_lit(grade_args[["imprecision_rationale", exact = TRUE]],            fallback = "NULL"),
-    threshold_arg    = .arg_lit(grade_args[["threshold", exact = TRUE]],       fallback = if (!is.null(grade$threshold)) format(grade$threshold) else "NULL"),
-    threshold_scale  = grade_args[["threshold_scale", exact = TRUE]][["value"]] %||% (grade$threshold_scale %||% "auto"),
+    threshold_arg    = .arg_lit(
+      grade_args[["threshold", exact = TRUE]],
+      fallback = if (!is.null(grade$threshold)) {
+        format(grade$threshold)
+      } else {
+        "NULL"
+      }
+    ),
+    threshold_scale  = grade_args[["threshold_scale", exact = TRUE]][["value"]] %||%
+      (grade$threshold_scale %||% "auto"),
     # threshold_baseline: pin the baseline the rating was actually made with.
     # An ARD threshold is anchored to a control-arm risk, and when the reviewer
     # did not set one grade_meta() derives it with .compute_control_risk(); a
@@ -819,7 +828,8 @@ export_bundle.meta <- function(x,
         "NULL"
       }
     ),
-    threshold_type   = grade_args[["threshold_type", exact = TRUE]][["value"]] %||% (grade$threshold_type %||% "mid"),
+    threshold_type   = grade_args[["threshold_type", exact = TRUE]][["value"]] %||%
+      (grade$threshold_type %||% "mid"),
     # require_threshold: the bundled script must reproduce the original call
     # even when it deliberately ran without a MID.
     require_threshold_arg = .arg_lit(
@@ -966,7 +976,8 @@ export_bundle.meta <- function(x,
     "  stringsAsFactors = FALSE\n",
     ")\n",
     "write.csv(rare_diag, \"rare_event_diagnostics.csv\", row.names = FALSE)\n",
-    "write.csv(as.data.frame(rare$method_table), \"rare_event_method_table.csv\", row.names = FALSE)\n",
+    "write.csv(as.data.frame(rare$method_table), ",
+    "\"rare_event_method_table.csv\", row.names = FALSE)\n",
     "grDevices::pdf(\"rare_event_method_forest.pdf\", width = 8, height = 5)\n",
     "plot_rare_sensitivity_forest(rare)\n",
     "grDevices::dev.off()\n"
@@ -1038,23 +1049,25 @@ export_bundle.meta <- function(x,
 # Literalise the subdomain table as a data.frame() call. Accepts a plain
 # data.frame or a {value, ...} spec.
 .indirectness_subdomains_lit <- function(spec) {
-  df <- if (is.data.frame(spec)) {
+  subdomain_table <- if (is.data.frame(spec)) {
     spec
   } else if (is.list(spec) && is.data.frame(spec$value)) {
     spec$value
   } else {
     NULL
   }
-  if (is.null(df) || nrow(df) == 0) return("NULL")
+  if (is.null(subdomain_table) || nrow(subdomain_table) == 0) return("NULL")
 
-  cols <- intersect(c("subdomain", "target", "evidence", "judgment"), names(df))
+  cols <- intersect(c("subdomain", "target", "evidence", "judgment"),
+                    names(subdomain_table))
   if (length(cols) == 0) return("NULL")
 
   vec_lit <- function(v) {
     paste(deparse(as.character(v), width.cutoff = 500L), collapse = "")
   }
   lines <- paste0("    ", format(cols), " = ",
-                  vapply(cols, function(cl) vec_lit(df[[cl]]), character(1)))
+                  vapply(cols, function(cl) vec_lit(subdomain_table[[cl]]),
+                         character(1)))
   paste0("data.frame(\n", paste(lines, collapse = ",\n"),
          ",\n    stringsAsFactors = FALSE\n  )")
 }
@@ -1110,8 +1123,8 @@ export_bundle.meta <- function(x,
   if (length(bad) == 0L) return(invisible(TRUE))
 
   described <- vapply(bad, function(b) {
-    d    <- utils::adist(b, legal, ignore.case = TRUE)[1, ]
-    near <- legal[d == min(d)]
+    edit_distance <- utils::adist(b, legal, ignore.case = TRUE)[1, ]
+    near <- legal[edit_distance == min(edit_distance)]
     paste0("'", b, "' (closest legal name",
            if (length(near) > 1L) "s: " else ": ",
            paste(near, collapse = ", "), ")")
@@ -1180,14 +1193,16 @@ ARG_LIT_ORIGINS <- c("null", "column", "scalar", "vector")
   }
   e <- get_val(exp_spec)
   c_ <- get_val(ctl_spec)
-  out <- ""
+  label_args <- ""
   if (!is.null(e)) {
-    out <- paste0(out, ",\n  experimental_label = ", shQuote(e))
+    label_args <- paste0(label_args,
+                         ",\n  experimental_label = ", shQuote(e))
   }
   if (!is.null(c_)) {
-    out <- paste0(out, ",\n  control_label      = ", shQuote(c_))
+    label_args <- paste0(label_args,
+                         ",\n  control_label      = ", shQuote(c_))
   }
-  out
+  label_args
 }
 
 .subgroup_arg <- function(spec) {
@@ -1210,20 +1225,22 @@ ARG_LIT_ORIGINS <- c("null", "column", "scalar", "vector")
 # Render follow_up / unit as trailing sof_table() arguments for the bundled
 # analysis.R. Returns "" when neither is set, so the template line is unchanged.
 .display_args_str <- function(follow_up, unit) {
-  out <- ""
+  display_args <- ""
   fu <- .display_arg(follow_up)
   un <- .display_arg(unit)
   # deparse(), not shQuote(): both are free text and an apostrophe ("patient's
   # last visit") would leave shQuote()'s single-quoted literal unparseable.
   if (!is.null(fu)) {
-    out <- paste0(out, ", follow_up = ",
-                  paste(deparse(fu, width.cutoff = 500L), collapse = ""))
+    display_args <- paste0(display_args, ", follow_up = ",
+                           paste(deparse(fu, width.cutoff = 500L),
+                                 collapse = ""))
   }
   if (!is.null(un)) {
-    out <- paste0(out, ", unit = ",
-                  paste(deparse(un, width.cutoff = 500L), collapse = ""))
+    display_args <- paste0(display_args, ", unit = ",
+                           paste(deparse(un, width.cutoff = 500L),
+                                 collapse = ""))
   }
-  out
+  display_args
 }
 
 # Render the caller's extra footnotes as a sof_add_notes() call on `obj` for

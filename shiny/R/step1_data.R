@@ -110,7 +110,12 @@ step1_ui <- function() {
       ),
       htmltools::div(
         class = "pma-card-subtitle",
-        style = "border-left: 3px solid hsl(var(--accent)); padding: 0.5rem 0.75rem; background: hsl(var(--accent) / 0.08); border-radius: 4px; margin-top: 0.5rem;",
+        style = paste0(
+          "border-left: 3px solid hsl(var(--accent)); ",
+          "padding: 0.5rem 0.75rem; ",
+          "background: hsl(var(--accent) / 0.08); ",
+          "border-radius: 4px; margin-top: 0.5rem;"
+        ),
         htmltools::strong("Tip (Reporting bias / RoB-ME):"),
         " Also include eligible studies from your systematic review that did ",
         "not report the outcome of interest. Enter ",
@@ -415,9 +420,9 @@ step1_server <- function(input, output, session, state) {
   # start mixing datasets. Say so once per load; Step 4 then flags the
   # individual rows that came from other data.
   shiny::observeEvent(ingested(), {
-    res <- ingested()
-    if (is.null(res) ||
-        (!is.data.frame(res) && pma_is_error_result(res))) return()
+    ingest_result <- ingested()
+    if (is.null(ingest_result) ||
+        (!is.data.frame(ingest_result) && pma_is_error_result(ingest_result))) return()
     n <- length(pma_outcomes_list(state$outcomes))
     if (n == 0) return()
     shiny::showNotification(
@@ -434,15 +439,15 @@ step1_server <- function(input, output, session, state) {
       identical(loaded_signature(), current_signature())
   })
 
-  commit_loaded_data <- function(res) {
+  commit_loaded_data <- function(ingest_result) {
     rt <- state$rob_table
     if (!is.null(rt)) {
-      idx <- match(as.character(res$studlab), as.character(rt$studlab))
+      idx <- match(as.character(ingest_result$studlab), as.character(rt$studlab))
       if (any(!is.na(rt$rob))) {
-        res$rob <- rt$rob[idx]
+        ingest_result$rob <- rt$rob[idx]
       }
       if (any(!is.na(rt$indirectness))) {
-        res$indirectness <- rt$indirectness[idx]
+        ingest_result$indirectness <- rt$indirectness[idx]
       }
     }
 
@@ -463,8 +468,8 @@ step1_server <- function(input, output, session, state) {
     # already excludes the `rob` and `indirectness` columns for that reason
     # (PMA_SIGNATURE_IGNORE_COLS), so it is the right comparator here.
     changed <- !identical(pma_dataset_signature(state$data),
-                          pma_dataset_signature(res))
-    state$data <- res
+                          pma_dataset_signature(ingest_result))
+    state$data <- ingest_result
     if (changed) {
       state$ma <- NULL
       state$ma_blocked <- NULL
@@ -532,16 +537,16 @@ step1_server <- function(input, output, session, state) {
   })
 
   output$data_load_banner <- shiny::renderUI({
-    res <- ingested()
+    ingest_result <- ingested()
     if (!isTRUE(loaded_current())) return(NULL)
-    if (is.null(res)) return(NULL)
-    if (pma_is_error_result(res)) {
+    if (is.null(ingest_result)) return(NULL)
+    if (pma_is_error_result(ingest_result)) {
       return(pma_banner(htmltools::strong("Could not read this data. "),
-                        res$error))
+                        ingest_result$error))
     }
     pma_banner(tone = "success",
                htmltools::strong("Data loaded. "),
-               pma_load_summary(res))
+               pma_load_summary(ingest_result))
   })
 
   # ----- Initialize state$rob_table from ingested data -----
@@ -549,20 +554,20 @@ step1_server <- function(input, output, session, state) {
   # only seed the table when ingest finishes so that Step 3 has values to
   # show / edit.
   shiny::observe({
-    res <- ingested()
+    ingest_result <- ingested()
     if (!isTRUE(loaded_current()) ||
-        is.null(res) || pma_is_error_result(res)) return()
-    studs <- unique(as.character(res$studlab))
-    rob_init <- if ("rob" %in% names(res)) {
-      vals <- as.character(res$rob)
-      lookup <- vals[!duplicated(res$studlab)]
-      names(lookup) <- as.character(res$studlab)[!duplicated(res$studlab)]
+        is.null(ingest_result) || pma_is_error_result(ingest_result)) return()
+    studs <- unique(as.character(ingest_result$studlab))
+    rob_init <- if ("rob" %in% names(ingest_result)) {
+      vals <- as.character(ingest_result$rob)
+      lookup <- vals[!duplicated(ingest_result$studlab)]
+      names(lookup) <- as.character(ingest_result$studlab)[!duplicated(ingest_result$studlab)]
       .study_level_for_editor(unname(lookup[studs]))
     } else rep(NA_character_, length(studs))
-    indir_init <- if ("indirectness" %in% names(res)) {
-      vals <- as.character(res$indirectness)
-      lookup <- vals[!duplicated(res$studlab)]
-      names(lookup) <- as.character(res$studlab)[!duplicated(res$studlab)]
+    indir_init <- if ("indirectness" %in% names(ingest_result)) {
+      vals <- as.character(ingest_result$indirectness)
+      lookup <- vals[!duplicated(ingest_result$studlab)]
+      names(lookup) <- as.character(ingest_result$studlab)[!duplicated(ingest_result$studlab)]
       .study_level_for_editor(unname(lookup[studs]))
     } else rep(NA_character_, length(studs))
 
@@ -580,24 +585,24 @@ step1_server <- function(input, output, session, state) {
   # ----- Preview DT -----
 
   output$data_preview <- DT::renderDT({
-    res <- state$data_edits %||% ingested()
+    ingest_result <- state$data_edits %||% ingested()
     if (!isTRUE(loaded_current())) {
       return(DT::datatable(data.frame(message = "Click Load data to preview.")))
     }
-    if (is.null(res)) {
+    if (is.null(ingest_result)) {
       return(DT::datatable(data.frame(message = "No data loaded yet.")))
     }
-    if (pma_is_error_result(res)) {
-      return(DT::datatable(data.frame(error = res$error)))
+    if (pma_is_error_result(ingest_result)) {
+      return(DT::datatable(data.frame(error = ingest_result$error)))
     }
     # HIDE the extra columns; do not subset the frame. DT reports a cell edit
     # as `col`, the DataTables column index, which counts hidden columns --
-    # and input$data_preview_cell_edit is applied below as res[[info$col + 1]]
+    # and input$data_preview_cell_edit is applied below as ingest_result[[info$col + 1]]
     # against the FULL frame. Passing a subset here would silently write the
     # edit into whichever column happened to sit at that index in the subset.
-    hidden <- which(!names(res) %in% pma_analysis_columns(res)) - 1L
+    hidden <- which(!names(ingest_result) %in% pma_analysis_columns(ingest_result)) - 1L
     DT::datatable(
-      res,
+      ingest_result,
       editable = list(target = "cell"),
       options = list(
         pageLength = 10,
@@ -619,10 +624,10 @@ step1_server <- function(input, output, session, state) {
   # state$data while the preview (which reads state$data_edits) still shows
   # them, and Step 2 / Step 3 quietly analyse different numbers.
   shiny::observe({
-    res <- ingested()
+    ingest_result <- ingested()
     if (!isTRUE(loaded_current()) ||
-        is.null(res) || pma_is_error_result(res)) return()
-    commit_loaded_data(state$data_edits %||% res)
+        is.null(ingest_result) || pma_is_error_result(ingest_result)) return()
+    commit_loaded_data(state$data_edits %||% ingest_result)
   })
 
   # ----- Advance hook -----
@@ -635,9 +640,9 @@ step1_server <- function(input, output, session, state) {
     # would leave output$step1_nav below rendering an empty div instead of a
     # disabled button. Nothing can be loaded at that point anyway.
     if (!isTRUE((input$load_data %||% 0) > 0)) return(FALSE)
-    res <- ingested()
+    ingest_result <- ingested()
     isTRUE(loaded_current()) &&
-      !is.null(res) && !pma_is_error_result(res)
+      !is.null(ingest_result) && !pma_is_error_result(ingest_result)
   })
 
   # Wizard nav. Rendered as its own output so that flipping Next between
@@ -649,9 +654,9 @@ step1_server <- function(input, output, session, state) {
   })
 
   state$step1_commit <- function() {
-    res <- ingested()
+    ingest_result <- ingested()
     if (!isTRUE(loaded_current()) ||
-        is.null(res) || pma_is_error_result(res)) {
+        is.null(ingest_result) || pma_is_error_result(ingest_result)) {
       shiny::showNotification(
         "Cannot advance: click Load data and confirm the preview first.",
         type = "error"
@@ -659,20 +664,20 @@ step1_server <- function(input, output, session, state) {
       return(FALSE)
     }
 
-    commit_loaded_data(state$data_edits %||% res)
+    commit_loaded_data(state$data_edits %||% ingest_result)
   }
 
   # Apply DT cell edits to state$data so direct stepper navigation uses them.
   shiny::observeEvent(input$data_preview_cell_edit, {
     info <- input$data_preview_cell_edit
     if (is.null(info)) return()
-    res <- state$data_edits %||% ingested()
+    ingest_result <- state$data_edits %||% ingested()
     if (!isTRUE(loaded_current()) ||
-        is.null(res) || pma_is_error_result(res)) return()
-    new_value <- DT::coerceValue(info$value, res[[info$col + 1]][info$row])
-    res[info$row, info$col + 1] <- new_value
-    state$data_edits <- res
-    commit_loaded_data(res)
+        is.null(ingest_result) || pma_is_error_result(ingest_result)) return()
+    new_value <- DT::coerceValue(info$value, ingest_result[[info$col + 1]][info$row])
+    ingest_result[info$row, info$col + 1] <- new_value
+    state$data_edits <- ingest_result
+    commit_loaded_data(ingest_result)
   })
 
   # ----- Bulk Risk of Bias (the Step 3 buttons, on the data-entry step) -----
@@ -692,12 +697,12 @@ step1_server <- function(input, output, session, state) {
     rob_table$rob <- value
     state$rob_table <- rob_table
 
-    res <- state$data_edits %||% ingested()
+    ingest_result <- state$data_edits %||% ingested()
     if (!isTRUE(loaded_current()) ||
-        is.null(res) || pma_is_error_result(res)) return(invisible(NULL))
-    res$rob <- value
-    state$data_edits <- res
-    commit_loaded_data(res)
+        is.null(ingest_result) || pma_is_error_result(ingest_result)) return(invisible(NULL))
+    ingest_result$rob <- value
+    state$data_edits <- ingest_result
+    commit_loaded_data(ingest_result)
     invisible(NULL)
   }
 
