@@ -5,6 +5,12 @@
 # them only DEFINES things at source time - no Shiny session is created, no
 # reactive is touched.
 #
+# R/step3_pubias.R is on the list for neither half: it defines
+# step3_pubias_server() and .effective_pubias_k() and nothing else, and no test
+# calls either. It is sourced anyway so that the helper keeps loading the same
+# set of files app.R does - a file left off the list is a file whose parse
+# errors and top-level name collisions the suite would stop noticing.
+#
 # R/step2_ma.R and R/step3_grade.R are on the list for their UI halves only:
 # step2_ui() and step3_ui() are pure functions of `state` and can be rendered
 # to HTML and inspected (see test-step2-layout.R and
@@ -77,7 +83,7 @@ for (.stem in c("utils.R", "multi_outcome.R", "data_ingest.R",
 rm(.stem)
 
 for (.f in c("R/ui_helpers.R", "R/educational_copy.R", "R/step3_threshold.R",
-             "R/step2_ma.R", "R/step3_grade.R")) {
+             "R/step3_pubias.R", "R/step2_ma.R", "R/step3_grade.R")) {
   source(file.path(PMA_APP_ROOT, .f))
 }
 rm(.f)
