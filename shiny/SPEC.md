@@ -79,6 +79,7 @@ shiny/
 │   ├── step1_data.R               # data import module (UI + server)
 │   ├── step2_ma.R                 # MA module
 │   ├── step3_grade.R              # GRADE module (domain tabs)
+│   ├── step3_pubias.R             # publication-bias wizard server half (bare ids, no NS)
 │   ├── step3_threshold.R          # decision-threshold + presentation helpers
 │   ├── step4_export.R             # export/download module
 │   ├── ui_helpers.R               # shadcn-style component helpers (card, badge, stepper)
