@@ -212,7 +212,7 @@ SPEC.md §11「Out of scope」と同期していること。
    候補 (b) で完了。3 つの引数（`threshold_baseline` / `ois_p0` /
    `baseline_risk`）は同じ対照群イベント率を指しているので、どれか 1 つに
    渡した値が残り 2 つに継承されるようにした（`.resolve_control_risk()`,
-   [R/utils.R](R/utils.R)）。順序は「明示指定が常に勝つ →
+   [R/meta_quantities.R](R/meta_quantities.R)）。順序は「明示指定が常に勝つ →
    `threshold_baseline` → `ois_p0` → `baseline_risk` → プール対照群率」。
    3 者が正当に異なりうる（SoF だけ特定のリスク群で描く等）ので、明示値を
    継承値で上書きすることはしない。どれが採用されたかは `$control_risk` と
@@ -228,7 +228,7 @@ SPEC.md §11「Out of scope」と同期していること。
 
 6. ~~**Downgrade scale を Core GRADE 用語に合わせる**~~ — 完了（2026-08-14、
    `9a9787f`）。判定語彙は `not_serious` / `serious` / `very_serious` /
-   `extremely_serious` の 4 値になり、`GRADE_DOWNGRADE`（[R/utils.R](R/utils.R)）が
+   `extremely_serious` の 4 値になり、`GRADE_DOWNGRADE`（[R/grade_vocabulary.R](R/grade_vocabulary.R)）が
    0 / −1 / −2 / −3 を与える。−3 は手動専用で、自動経路が出せる上限は
    `GRADE_LEVEL_AUTO_MAX <- "very_serious"` としてコード上の性質にしてあり、
    テストが全アセッサに対して検証する。旧値は legacy alias として正規化。

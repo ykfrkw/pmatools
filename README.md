@@ -2319,7 +2319,11 @@ pmatools/
 ├── README.md
 ├── sample.R                 ← worked example; run line-by-line in RStudio
 ├── R/
-│   ├── utils.R                 # constants, threshold + baseline_risk helpers
+│   ├── grade_vocabulary.R      # judgment levels, aliases, certainty labels
+│   ├── house_style.R           # certainty glyphs/colours, table font, citations
+│   ├── domain_row.R            # make_domain_row(), override notes, facts
+│   ├── meta_quantities.R       # control-arm risk + pooled SD off a meta object
+│   ├── effect_scales.R         # Chinn, suggest_threshold(), scale conversion
 │   ├── data_ingest.R           # long/wide ingestion, aliases, `outcome` column
 │   ├── combine_arms.R          # multi-arm collapse (Cochrane Handbook 6.5.2.10)
 │   ├── run_ma.R                # {meta} wrapper

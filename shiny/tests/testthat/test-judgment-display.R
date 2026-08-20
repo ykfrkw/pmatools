@@ -7,7 +7,7 @@
 # second one. The same judgment therefore read differently in the app and in
 # the exported table, and worse, "Serious" meant -2 in the badge and -1 in the
 # table. Both now go through .grade_level_wording() in the package's
-# R/utils.R, which helper-app.R sources.
+# R/grade_vocabulary.R, which helper-app.R sources.
 
 .badge_text <- function(x) {
   gsub("<[^>]*>", "", as.character(x))

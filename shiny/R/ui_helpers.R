@@ -368,7 +368,7 @@ pma_banner <- function(..., tone = c("warning", "success")) {
 # source paper wants the paper, not the ability to retype the citation into a
 # search box. What that removal was actually right about was the inconsistency
 # -- the same paper used to render four different ways -- so the link now hangs
-# off ONE map (.core_grade_doi_url() in R/utils.R) reached through ONE helper
+# off ONE map (.core_grade_doi_url() in R/house_style.R) reached through ONE helper
 # (pma_domain_reference() below), and every Core GRADE tab renders alike.
 # Citation TEXT is unchanged and still carries no DOI.
 pma_reference <- function(..., url = NULL) {

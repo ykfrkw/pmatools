@@ -1228,7 +1228,7 @@ removed: what the removal was right about was the *inconsistency* — the same
 paper rendered four different ways across the wizard — not the link itself, and
 a reviewer checking a domain against its source wants the paper rather than the
 ability to retype a citation into a search box. So the destination comes from
-one map, `PMA_CORE_GRADE_DOIS` in the package's `R/utils.R`, keyed on the Core
+one map, `PMA_CORE_GRADE_DOIS` in the package's `R/house_style.R`, keyed on the Core
 GRADE series number and read through `.core_grade_doi_url()`, and every Core
 GRADE tab renders alike.
 

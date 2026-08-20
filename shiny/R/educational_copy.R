@@ -48,7 +48,7 @@ EDU_COPY <- list(
   # old per-domain DOI fields; it had no call sites left.
   #
   # `$core_grade` is which paper of the series that is, as a number.
-  # pma_domain_reference() hands it to .core_grade_doi_url() (R/utils.R) to
+  # pma_domain_reference() hands it to .core_grade_doi_url() (R/house_style.R) to
   # open the paper in a new tab. It is a field rather than something recovered
   # from `$ref` because the prefix is display text: a regex over it would turn
   # any rewording of the citation into a silently dead link, and the number is

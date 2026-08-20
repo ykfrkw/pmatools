@@ -36,7 +36,9 @@ devtools::load_all(".", reset = TRUE)   # reset=TRUE: 毎回完全リロード�
 
 ## ↑ devtools 未インストールの場合は以下の代替コードを使用:
 ## pkg_dir <- here::here()
-## r_files <- c("utils.R", "domain_rob.R", "domain_indirectness.R",
+## r_files <- c("grade_vocabulary.R", "house_style.R", "domain_row.R",
+##              "meta_quantities.R", "effect_scales.R", "domain_rob.R",
+##              "domain_indirectness.R",
 ##              "domain_inconsistency.R", "domain_imprecision.R",
 ##              "domain_pubias.R", "grade_meta.R",
 ##              "sof_table.R", "grade_table.R", "grade_report.R")

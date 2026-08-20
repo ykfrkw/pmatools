@@ -98,8 +98,8 @@
 #
 # NOTE ON VOCABULARY. The level names are shared with Risk of bias and are Core
 # GRADE's own words ("not serious; serious; very serious; or, rarely, extremely
-# serious", Core GRADE 1). See R/utils.R for the table and for why a bare
-# "serious" is refused in this release. Domain notes render the level through
+# serious", Core GRADE 1). See R/grade_vocabulary.R for the table and for why a
+# bare "serious" is refused in this release. Domain notes render the level through
 # .indirectness_level_label(), which defers to .grade_level_wording().
 #
 # The overall domain judgment defaults to the WORST case across subdomains
@@ -137,7 +137,7 @@ INDIRECTNESS_ANSWER_LABELS <- c(
 
 # The domain notes used to carry their own copy of the level -> wording table.
 # There is one display vocabulary for the whole package (.grade_level_wording()
-# in R/utils.R) and this domain has no reason to be the exception.
+# in R/grade_vocabulary.R) and this domain has no reason to be the exception.
 .indirectness_level_label <- function(level) {
   .grade_level_wording(level)
 }

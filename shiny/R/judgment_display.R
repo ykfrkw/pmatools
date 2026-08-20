@@ -14,7 +14,7 @@
 # node ids to light up. The moment a helper here starts choosing a certainty level rather than
 # painting one, it has become app-side rating logic and belongs in the package
 # instead. The wording itself comes from GRADE_LEVEL_SOURCE_WORDING /
-# .grade_level_wording() in the package's R/utils.R for exactly that reason -
+# .grade_level_wording() in the package's R/grade_vocabulary.R for exactly that reason -
 # a badge and the Evidence Profile cannot be allowed to name one judgment two
 # ways.
 #
@@ -63,7 +63,7 @@ pma_downgrade_chip <- function(judgment) {
 
 # Generic judgment badge.
 #
-# The words are NOT chosen here. .grade_level_wording() (vendored R/utils.R,
+# The words are NOT chosen here. .grade_level_wording() (vendored R/grade_vocabulary.R,
 # driven by GRADE_LEVEL_SOURCE_WORDING) is the app's single display
 # vocabulary, shared with the Evidence Profile: "Not serious" / "Serious" /
 # "Very serious" / "Extremely serious", which is Core GRADE's own wording. The

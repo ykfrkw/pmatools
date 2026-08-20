@@ -1,4 +1,5 @@
-# test-grade-levels.R — the domain-judgment vocabulary itself (R/utils.R).
+# test-grade-levels.R — the domain-judgment vocabulary itself
+# (R/grade_vocabulary.R).
 #
 # Three properties, and the whole file exists because breaking any of them is
 # silent:

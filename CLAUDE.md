@@ -47,7 +47,7 @@ older than the package. **These four survived it. Do not assume otherwise.**
   names them only as *strings*, so rsconnect's static scan cannot see them at all.
   Audit with `Rscript shiny/stage_bundle.R --check-only`; `deploy.R` fails on it.
 - **NEVER rely on `utils::packageVersion("pmatools")` at runtime.** It errors under
-  `source()`. Call `.pmatools_version()` in `R/utils.R`, which falls back to
+  `source()`. Call `.pmatools_version()` in `R/house_style.R`, which falls back to
   `.vendored_version_stamp()` / `getOption("pmatools.version_stamp")`.
 - **NEVER make runtime code depend on lazy-loaded data** (`data/cbti_depression.rda`).
   `R/data.R` and `data/` are deliberately not staged. Ship sample data through
