@@ -910,6 +910,32 @@
 
 ## Behaviour changes
 
+* **A mean-difference forest plot's automatic x-axis is now bounded in
+  standardised units, and both its ends are round numbers.** The range still
+  starts as the 5th-to-95th percentile of the study confidence limits plus 10%
+  padding, but that rule is scale-equivariant — it cannot tell a 40-point
+  depression scale from a 4-point one — so one very wide trial used to drag the
+  axis until the rest of the forest was a row of dots on the null line. The
+  candidate range is now bounded to **±3 standardised units**: ±3 for
+  `sm = "SMD"`, and ±3 × `compute_pooled_sd()` for `sm = "MD"`, which is the
+  same bound expressed in the instrument's own units. Both ends are then
+  rounded outward to multiples of a step drawn from `{1, 2, 2.5, 5} × 10^k`
+  (4–8 intervals, 6 preferred), and the ticks are the multiples of that step,
+  so the outermost ticks sit exactly on the two ends and the null line always
+  carries one.
+
+  **The bound never hides the result.** The range is widened, before rounding,
+  to contain the pooled random-effects interval (falling back to the
+  common-effect interval, then the point estimate), so a meta-analysis whose
+  diamond runs past 3 SD gets a wider axis rather than a cropped one. Where no
+  pooled SD can be derived — a `metacont` with no usable SDs, a `metagen`
+  carrying only TE and seTE, any other continuous `sm` — the bound is skipped
+  and the previous unbounded range is drawn, rounded; `plot_forest()` does not
+  fail over a missing SD. An `xlim` the caller supplies, including the Shiny
+  app's x-min / x-max fields, is untouched as before: only its ticks are
+  chosen. Ratio scales (OR/RR/HR/RoM/IRR) keep the log-tick snapping they had.
+  See `SPEC.md` §4.3.
+
 * **The risk-of-bias figure's rate-down leaf reads "Rate down", and nothing
   else.** It carried "1 level, or 2 on rule 5 with a threshold supplied — Core
   GRADE 4 describes no two-level downgrade", which made the only coloured shape

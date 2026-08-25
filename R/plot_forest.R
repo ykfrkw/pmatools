@@ -3,6 +3,22 @@
 # Wraps meta::forest() with sensible defaults. auto_layout = TRUE handles
 # x-axis scaling (log for ratios, quantile-based for continuous), top margin
 # scaling with k, and label cex shrinking for long study names.
+#
+# It takes a fitted `meta` object plus the display arguments the export bundle
+# and the Shiny app carry (title, arm labels, "Favors" labels, blank rows,
+# decimal places, an optional caller xlim), and its product is a drawing on the
+# active device -- nothing here returns a value a caller reads.
+#
+# The x-axis half of that work lives at the bottom of the file: .auto_xlim()
+# derives limits when the caller pins none, and the .snap_*/.nice_*_ticks()
+# pairs turn any limits into round ends and ticks. The continuous branch reads
+# compute_pooled_sd() from R/meta_quantities.R so a mean difference can be
+# bounded in standardised units; R/plot_forest_pubias_subgroup.R draws its own
+# forests but shares the same snapping and tick helpers.
+#
+# A helper belongs here when it decides how a forest is laid out or labelled.
+# One that decides what a pooled number *is* belongs in R/meta_quantities.R,
+# and one that draws something other than a forest belongs beside that plot.
 
 #' Forest plot for a meta-analysis with auto-layout
 #'
@@ -479,6 +495,34 @@ PMA_FOREST_TITLE_CLEARANCE_IN <- 0.10
 # --------------------------------------------------------------------------
 # Auto x-limit calculation (snap to standard log ticks for ratio scales)
 # --------------------------------------------------------------------------
+# The candidate range is the 5th-to-95th percentile of the study confidence
+# limits plus 10% padding, on either scale. That rule is scale-equivariant:
+# double every mean difference and it doubles too, so it cannot tell a
+# 40-point depression scale from a 4-point one, and one wide study drags the
+# axis until the rest of the forest is a row of dots at the null line.
+#
+# The bound below is what supplies the missing sense of scale. It is expressed
+# in STANDARDISED units -- Cohen's d -- where 3 is far past any effect a trial
+# reports, so the axis stops there whatever the instrument. For SMD the study
+# values already are standardised; for MD the pooled SD is the conversion, and
+# a bound of 3 SD in raw units is exactly the same clamp expressed once.
+PMA_FOREST_MAX_STANDARDISED_XLIM <- 3
+
+# The step chooser picks from these multipliers times a power of ten, aiming
+# for ~6 intervals across the axis (what nint = 6 used to ask axisTicks() for)
+# and accepting 4 to 8. A tick that is not a multiple of a round step reads as
+# an accident; a step of 6 or 7 is one even when the interval count is perfect.
+PMA_FOREST_NICE_STEP_MULTIPLIERS <- c(1, 2, 2.5, 5)
+PMA_FOREST_TARGET_INTERVALS <- 6
+PMA_FOREST_MIN_INTERVALS <- 4
+PMA_FOREST_MAX_INTERVALS <- 8
+PMA_FOREST_MIN_TICKS <- 3
+
+# Slack allowed when testing whether a multiple of the step is still inside
+# the limits: 0.15 / 0.05 is 2.9999999999999996 in binary, and without the
+# slack the tick on a snapped end would be dropped as one step outside it.
+PMA_FOREST_STEP_TOLERANCE <- 1e-8
+
 .auto_xlim <- function(meta_obj) {
   sm <- meta_obj$sm
   lo <- meta_obj$lower
@@ -501,9 +545,133 @@ PMA_FOREST_TITLE_CLEARANCE_IN <- 0.10
 
   qrange <- stats::quantile(c(lo, hi), c(0.05, 0.95), na.rm = TRUE)
   pad <- 0.1 * abs(diff(qrange))
-  out <- c(qrange[1] - pad, qrange[2] + pad)
-  if (any(is.na(out)) || out[1] >= out[2]) return(NULL)
-  unname(out)
+  candidate <- unname(c(qrange[1] - pad, qrange[2] + pad))
+  if (any(is.na(candidate)) || candidate[1] >= candidate[2]) return(NULL)
+
+  # Order matters: clamp first, then re-admit the pooled result the clamp may
+  # have cut off, then round the ends outward. Snapping last keeps the ends
+  # round, and since it only ever widens, the pooled interval stays inside.
+  clamped <- .clamp_standardised_xlim(candidate, meta_obj)
+  .snap_lin_xlim(.widen_to_pooled_ci(clamped, meta_obj))
+}
+
+# Divisor that turns this object's effect scale into standardised units, or
+# NULL when there is none to be had -- a metacont with no usable SDs, a
+# metagen carrying only TE and seTE, or any continuous sm that is neither MD
+# nor SMD. NULL means "skip the clamp": an unbounded axis is a worse plot,
+# never a failed one, and plot_forest() must not abort over a missing SD.
+.standardised_scale_factor <- function(meta_obj) {
+  sm <- meta_obj$sm
+  if (is.null(sm) || length(sm) != 1L || is.na(sm)) return(NULL)
+  if (identical(as.character(sm), "SMD")) return(1)
+  if (!identical(as.character(sm), "MD")) return(NULL)
+
+  pooled_sd <- tryCatch(compute_pooled_sd(meta_obj), error = function(e) NULL)
+  if (is.null(pooled_sd) || length(pooled_sd) != 1L) return(NULL)
+  pooled_sd <- suppressWarnings(as.numeric(pooled_sd))
+  if (!is.finite(pooled_sd) || pooled_sd <= 0) return(NULL)
+  pooled_sd
+}
+
+# Clamp to +/-PMA_FOREST_MAX_STANDARDISED_XLIM standardised units. Dividing by
+# the scale factor, clamping, and multiplying back is the same arithmetic as
+# comparing against the bound already multiplied out, so it is written the
+# short way; the standardised reading of the bound is in the constant's comment.
+#
+# A clamp that leaves nothing (every study lies past the bound) is discarded:
+# an axis too wide still shows the data, an empty one shows nothing.
+.clamp_standardised_xlim <- function(xlim, meta_obj) {
+  scale_factor <- .standardised_scale_factor(meta_obj)
+  if (is.null(scale_factor)) return(xlim)
+
+  bound <- PMA_FOREST_MAX_STANDARDISED_XLIM * scale_factor
+  clamped <- c(max(xlim[1], -bound), min(xlim[2], bound))
+  if (clamped[1] >= clamped[2]) return(xlim)
+  clamped
+}
+
+# Widen so the pooled diamond is on the plot. The clamp is a display bound, and
+# a display bound that hides the result the plot exists to show is a bug: a
+# meta-analysis whose pooled CI runs past 3 SD gets a wider axis, not a cropped
+# diamond.
+.widen_to_pooled_ci <- function(xlim, meta_obj) {
+  span <- .pooled_span(meta_obj)
+  if (is.null(span)) return(xlim)
+  c(min(xlim[1], span[1]), max(xlim[2], span[2]))
+}
+
+# Range covered by the pooled result on the TE scale: the random-effects CI,
+# else the common/fixed-effect CI, else the point estimate alone. Names are
+# read with [[ against names(meta_obj) rather than with $, whose partial
+# matching would answer `TE.fixed` with the per-subgroup `TE.fixed.w`.
+.pooled_span <- function(meta_obj) {
+  read_finite <- function(...) {
+    wanted <- c(...)
+    values <- unlist(lapply(wanted, function(name) {
+      if (!name %in% names(meta_obj)) return(numeric(0))
+      suppressWarnings(as.numeric(meta_obj[[name]]))
+    }), use.names = FALSE)
+    values[is.finite(values)]
+  }
+
+  intervals <- list(
+    read_finite("lower.random", "upper.random"),
+    read_finite("lower.common", "upper.common"),
+    read_finite("lower.fixed",  "upper.fixed"),
+    read_finite("TE.random"),
+    read_finite("TE.common"),
+    read_finite("TE.fixed")
+  )
+  for (values in intervals) {
+    if (length(values)) return(range(values))
+  }
+  NULL
+}
+
+# Snap (lo, hi) outward to multiples of a round step. The linear counterpart of
+# .snap_log_xlim(), and applied to the auto range only: a caller who typed an
+# x-minimum gets the number they typed.
+.snap_lin_xlim <- function(xlim) {
+  if (length(xlim) != 2L || !all(is.finite(xlim)) || xlim[1] >= xlim[2]) {
+    return(xlim)
+  }
+  step <- .nice_lin_step(xlim[2] - xlim[1])
+  if (is.na(step)) return(xlim)
+
+  c(.round_to_step(floor(xlim[1] / step) * step, step),
+    .round_to_step(ceiling(xlim[2] / step) * step, step))
+}
+
+# Step for an axis of the given width: the multiplier-times-power-of-ten
+# candidate whose interval count sits closest to PMA_FOREST_TARGET_INTERVALS,
+# preferring one inside the 4-to-8 window. Closeness is measured on the log
+# ratio so that "half as many intervals as asked" and "twice as many" score
+# alike -- on the plain difference, too-few always wins, and the axis drifts
+# coarse. Returns NA_real_ for a width nothing can be fitted to.
+.nice_lin_step <- function(width) {
+  width <- suppressWarnings(as.numeric(width)[1])
+  if (is.na(width) || !is.finite(width) || width <= 0) return(NA_real_)
+
+  # Three decades around the raw step cover every candidate that could win.
+  raw_step  <- width / PMA_FOREST_TARGET_INTERVALS
+  magnitude <- 10^floor(log10(raw_step))
+  candidates <- sort(as.vector(outer(
+    PMA_FOREST_NICE_STEP_MULTIPLIERS, magnitude * c(0.1, 1, 10))))
+
+  intervals <- width / candidates
+  score <- abs(log(intervals / PMA_FOREST_TARGET_INTERVALS))
+  in_window <- intervals >= PMA_FOREST_MIN_INTERVALS &
+               intervals <= PMA_FOREST_MAX_INTERVALS
+  eligible <- if (any(in_window)) which(in_window) else seq_along(candidates)
+
+  candidates[eligible[which.min(score[eligible])]]
+}
+
+# Drop the binary-representation dust that floor(x / step) * step leaves, at a
+# precision two digits finer than the step itself.
+.round_to_step <- function(value, step) {
+  digits <- max(0, -floor(log10(step)) + 2)
+  round(value, digits)
 }
 
 # Snap (lo, hi) outward to the nearest standard log ticks
@@ -530,7 +698,30 @@ PMA_FOREST_TITLE_CLEARANCE_IN <- 0.10
   if (length(ticks) >= 4) ticks else std[std >= xlim[1] & std <= xlim[2] * 2]
 }
 
-# Nice linear ticks within (xmin, xmax) using pretty()
+# Nice linear ticks within (xmin, xmax): every multiple of the round step that
+# fits. Limits that came from .snap_lin_xlim() are multiples of that same step,
+# so the outermost ticks land exactly on the two ends; limits typed by a caller
+# get interior ticks and bare ends. Because the ticks are multiples of the
+# step, zero carries one whenever it is in range -- the null line must.
+#
+# Falls back to the axisTicks() call this used to be for anything degenerate,
+# and to no `at` argument at all if even that refuses.
 .nice_lin_ticks <- function(xlim) {
-  grDevices::axisTicks(usr = xlim, log = FALSE, nint = 6)
+  fallback <- function() {
+    tryCatch(grDevices::axisTicks(usr = xlim, log = FALSE,
+                                  nint = PMA_FOREST_TARGET_INTERVALS),
+             error = function(e) NULL)
+  }
+  if (length(xlim) != 2L || !all(is.finite(xlim)) || xlim[1] >= xlim[2]) {
+    return(fallback())
+  }
+
+  step <- .nice_lin_step(xlim[2] - xlim[1])
+  if (is.na(step)) return(fallback())
+
+  first <- ceiling(xlim[1] / step - PMA_FOREST_STEP_TOLERANCE)
+  last  <- floor(xlim[2] / step + PMA_FOREST_STEP_TOLERANCE)
+  if (last - first + 1 < PMA_FOREST_MIN_TICKS) return(fallback())
+
+  .round_to_step(seq(from = first, to = last) * step, step)
 }

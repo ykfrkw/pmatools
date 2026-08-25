@@ -303,8 +303,15 @@ plot_forest(
 **`auto_layout = TRUE` behavior:**
 
 - `par(mar = c(4, 4, 2 + ceiling(k/8), 4))` for top margin growing with k.
-- For binary `sm` (OR/RR/RoM): log-scale x-axis; `xlim` from `quantile(c(meta_obj$lower, meta_obj$upper), c(0.01, 0.99))` clamped to `c(0.01, 100)`.
-- For continuous (MD/SMD): linear-scale x-axis; `xlim` from `quantile(..., c(0.01, 0.99))` clamped to ±5.
+- For ratio `sm` (OR/RR/HR/RoM/IRR): log-scale x-axis; `xlim` from `quantile(exp(c(meta_obj$lower, meta_obj$upper)), c(0.05, 0.95))`, snapped outward to the nearest standard log ticks by `.snap_log_xlim()`, with `at` the standard ticks inside it (`.nice_log_ticks()`).
+- For continuous `sm` (MD/SMD): linear-scale x-axis, built by `.auto_xlim()` in three steps.
+  1. **Candidate range** — `quantile(c(meta_obj$lower, meta_obj$upper), c(0.05, 0.95))`, widened at each end by 10% of its width.
+  2. **±3 standardised-unit clamp** — the candidate is bounded to ±3 in *standardised* (SMD) units. The scale factor is `1` for `sm = "SMD"`, where the values already are standardised, and `compute_pooled_sd(meta_obj)` (§4.7b) for `sm = "MD"`, so a mean-difference axis stops at ±3 × pooled SD and the bound follows the instrument rather than the units it happens to be printed in. The quantile rule of step 1 is scale-equivariant — double every mean difference and the range doubles with it — so this clamp is the only part that knows a 40-point scale from a 4-point one. **The clamp is skipped, not enforced, when it cannot be computed**: a NULL, non-finite or non-positive scale factor (a `metacont` with no usable SDs, a `metagen` carrying only TE/seTE, any other continuous `sm`) leaves the candidate range as it stands, and a clamp that would leave an empty range is discarded. `plot_forest()` never fails over a missing pooled SD.
+  3. **Pooled-CI guard, then nice-number ends** — the range is first widened, if needed, to contain the pooled random-effects CI (falling back to the common/fixed-effect CI, then to the point estimate alone), because a display bound that crops the diamond is worse than no bound. Both ends are then rounded outward to multiples of a step chosen from `{1, 2, 2.5, 5} × 10^k` so the axis holds 4–8 intervals (target 6).
+
+  `at` is every multiple of that step inside `xlim` (`.nice_lin_ticks()`), so on an auto range the extreme ticks fall exactly on the two ends, and 0 — the null line — always carries a tick when it is in range. Limits `.auto_xlim()` did not choose still get interior ticks, never fewer than three, and a degenerate range falls back to `grDevices::axisTicks()`.
+
+- A **caller-supplied `xlim`** (including the Shiny app's x-min / x-max fields) reaches `meta::forest()` unchanged on the linear scale: none of the clamping or snapping above applies to it, only the tick choice does.
 - If `meta::forest()` returns coordinates and the heterogeneity row overlaps a diamond/PI row, reduce `fontsize` by 10% (max 2 reductions).
 - Long study labels (>30 chars) get `cex.lab = 0.85`; otherwise default.
 - Pass `colgap.left = unit(2, "mm")`, `colgap.right = unit(2, "mm")` for tighter columns.
