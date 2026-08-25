@@ -530,6 +530,16 @@ ids). It holds the title, the two arm labels, the two "Favors …" labels, the
 x-min / x-max overrides, the two blank-row spinners, the Mean / SD decimal
 spinners and the per-arm column checkbox.
 
+- **The x-min / x-max fields are overrides, and blank is the normal state.**
+  Blank sends `xlim = NULL` and `plot_forest()` derives the range itself
+  (SPEC.md §4.3): the 5th-to-95th percentile of the study limits plus padding,
+  bounded to ±3 standardised units — ±3 × the pooled SD for a mean difference,
+  so the axis follows the instrument rather than one wide trial — widened if
+  need be to keep the pooled diamond on the plot, and rounded outward to round
+  numbers that the ticks then land on. A number typed into either field is used
+  **exactly as typed**: nothing clamps or rounds a caller's limits, because the
+  axis moving under a number the user chose is not a nicety.
+
 - **`digits_mean` / `digits_sd` both default to 1**, matching
   `plot_forest()`'s own defaults (SPEC.md §4.3) rather than `{meta}`'s 2 and 4.
   They are coerced by `pma_forest_digits()` before they leave the app: a blank
