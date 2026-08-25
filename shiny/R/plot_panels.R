@@ -28,6 +28,14 @@
 # which is the difference between a readable forest plot in an embedded iframe
 # and a postage stamp adrift in white space.
 
+# Default edge of the funnel canvas, in px. A funnel is square and its
+# information density does not grow with k, so it needs nothing like the
+# forest's canvas: at 1400 the reviewer got a plot wider than the pane it
+# sits in, scaled back down to fit. Both the numericInput defaults and the
+# fallback in pma_funnel_display_args() read it, so a reviewer who clears
+# the field lands back on what the panel first offered.
+PMA_FUNNEL_DEFAULT_PX <- 700L
+
 # Render a base R plot to a temp PNG and trim white margins via {magick}.
 # Returns a list compatible with shiny::renderImage().
 pma_render_trimmed <- function(plot_fn,
@@ -72,10 +80,10 @@ pma_funnel_display_panel <- function(prefix, include_egger = TRUE) {
     htmltools::div(
       class = "pma-display-grid",
       shiny::numericInput(paste0(prefix, "_funnel_width"),
-                          "Width (px)",  value = 1400,
+                          "Width (px)",  value = PMA_FUNNEL_DEFAULT_PX,
                           min = 400, step = 100, width = "100%"),
       shiny::numericInput(paste0(prefix, "_funnel_height"),
-                          "Height (px)", value = 1400,
+                          "Height (px)", value = PMA_FUNNEL_DEFAULT_PX,
                           min = 400, step = 100, width = "100%"),
       shiny::numericInput(paste0(prefix, "_funnel_xlim_lo"),
                           "x-min", value = NA, width = "100%"),
@@ -99,8 +107,10 @@ pma_funnel_display_args <- function(input, prefix, include_egger = TRUE) {
   w  <- input[[paste0(prefix, "_funnel_width")]]
   h  <- input[[paste0(prefix, "_funnel_height")]]
   list(
-    width      = if (is.numeric(w) && !is.na(w) && w > 0) as.integer(w) else 1400L,
-    height     = if (is.numeric(h) && !is.na(h) && h > 0) as.integer(h) else 1400L,
+    width      = if (is.numeric(w) && !is.na(w) && w > 0) as.integer(w)
+                 else PMA_FUNNEL_DEFAULT_PX,
+    height     = if (is.numeric(h) && !is.na(h) && h > 0) as.integer(h)
+                 else PMA_FUNNEL_DEFAULT_PX,
     xlim       = xlim,
     show_egger = if (isTRUE(include_egger))
                    isTRUE(input[[paste0(prefix, "_funnel_show_egger")]])
