@@ -120,10 +120,10 @@ test_that("the diagnostic does not reach the GRADE judgment", {
   # The guard on the design: Core GRADE 4 Fig 5 has no trim-and-fill node, and
   # the day assess_pubias() starts reading this function it will have invented
   # a rule the source does not contain.
-  src <- paste(readLines(test_path("..", "..", "R", "domain_pubias.R"),
-                         warn = FALSE),
-               collapse = "\n")
-  skip_if(!nzchar(src), "R/domain_pubias.R not readable from the test tree")
+  src_path <- test_path("..", "..", "R", "domain_pubias.R")
+  skip_if_not(file.exists(src_path), "package sources not laid out as expected")
+
+  src <- paste(readLines(src_path, warn = FALSE), collapse = "\n")
   code <- sub("^.*?\n\\.PUBIAS_FIG5_NODE_IDS", ".PUBIAS_FIG5_NODE_IDS", src)
   expect_false(grepl("trimfill", code, fixed = TRUE))
 })
