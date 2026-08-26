@@ -7,12 +7,12 @@
 #   - Step 2's required fields and column mapping: the answers Run analysis
 #     cannot proceed without, and the set of mapping selects that varies with
 #     the outcome type.
-#   - Step 1's detected-columns strip. An upload gets column detection wrong,
-#     and a 39-column preview table answers "here is your data" instead of "did
-#     it load correctly?". The strip states, per role, which column filled it.
-#     The roles and their order come from the package's detect_column_roles(),
-#     which resolves them exactly as ingest_data() does; only the human labels
-#     and the traffic light are here.
+#   - Step 1's canonical column roles. PMA_ROLE_LABELS names the roles the
+#     analysis reads, in the order ingest_data() resolves them, and
+#     pma_analysis_columns() narrows that list to the ones a loaded frame
+#     carries -- which is what step1_data.R hides the rest of the preview
+#     against. pma_load_summary() states what was loaded, as the sentence the
+#     Step 1 banner carries.
 #   - The risk-of-bias analysis set (Core GRADE 4 Fig 2). When the flowchart
 #     reaches "use low risk of bias studies only", pmatools refits on that
 #     subset and reports it through an R-level message() that never reaches a
@@ -23,10 +23,14 @@
 # result. A helper about the pooled estimate belongs elsewhere; a helper about
 # which rows went into it belongs here.
 #
-# Pure: a detect_column_roles() frame or a GRADE object in, a data.frame or
+# Pure: a data frame or a GRADE object in, a character vector, a data.frame or
 # HTML out, no reactives. The Step 2 helpers are pure for a specific reason -
 # step2_server() holds the reactive that decides whether the required-field
 # marks are ARMED, so the rule they are painted from stays testable on its own.
+#
+# Callers: R/step1_data.R (the preview's column set and load banner),
+# R/step2_ma.R (the required-field marks) and R/step3_grade.R (the
+# analysis-set indicator and banner).
 
 # ----- Step 2 required fields ---------------------------------------------
 # Which of the two required Step 2 fields are still blank. Pure, so the rule
@@ -85,16 +89,14 @@ pma_step2_mapping_unset <- function(outcome_type, values) {
 }
 
 # --------------------------------------------------------------------------
-# Detected-columns strip (Step 1)
+# Canonical column roles (Step 1)
 # --------------------------------------------------------------------------
-# Step 1's job is to answer "did my data load correctly?", and a 39-column
-# table answers "here is your data" instead. The strip states, per role, which
-# column filled it -- which is precisely what an upload gets wrong, and what
-# nothing on the screen used to say.
-#
-# The roles and their order come from detect_column_roles(), which resolves
-# them exactly as ingest_data() does. Only the human labels and the traffic
-# light live here.
+# The roles the analysis reads, in the order detect_column_roles() resolves
+# them -- which is the order ingest_data() uses. This survives as the single
+# source of that order and of the human labels; its only reader now is
+# pma_analysis_columns() below, which uses the NAMES to decide which preview
+# columns Step 1 shows. The labels are kept with them so a role cannot be
+# added here without a name for it.
 PMA_ROLE_LABELS <- c(
   studlab      = "Study",
   treat        = "Arm",
@@ -107,111 +109,6 @@ PMA_ROLE_LABELS <- c(
   indirectness = "Indirectness",
   subgroup     = "Subgroup"
 )
-
-# Roles whose absence is ordinary rather than a problem: an analysis of one
-# outcome with no strata is the common case, so flagging them amber would
-# make the strip noise.
-PMA_ROLE_OPTIONAL <- c("outcome", "subgroup")
-
-# The measure columns. A binary outcome needs `event`; a continuous one needs
-# `mean` and `sd`. Whichever branch the data did not take is not missing, so
-# the unused half is reported as optional rather than amber.
-PMA_ROLE_MEASURE_BINARY     <- "event"
-PMA_ROLE_MEASURE_CONTINUOUS <- c("mean", "sd")
-
-# Per-role status for the strip. Pure: same inputs, same rows, no reactives.
-#
-# `detected` is a detect_column_roles() frame. `judgments` is the per-study
-# Risk of Bias / Indirectness table (state$rob_table) or NULL -- those two
-# roles report how much of the review has been RATED, not what the file
-# happened to carry, because a reviewer can fill them here with the bulk
-# buttons and the chip has to follow.
-#
-# Returns a data.frame of role, label, column, status ("found" / "missing" /
-# "optional") and hint.
-pma_column_role_status <- function(detected, judgments = NULL) {
-  has_binary     <- .role_found(detected, PMA_ROLE_MEASURE_BINARY)
-  has_continuous <- all(vapply(PMA_ROLE_MEASURE_CONTINUOUS,
-                               function(r) .role_found(detected, r), logical(1)))
-
-  rows <- lapply(seq_len(nrow(detected)), function(i) {
-    role   <- detected$role[i]
-    column <- detected$column[i]
-    found  <- isTRUE(detected$found[i])
-
-    if (role %in% c("rob", "indirectness")) {
-      return(.judgment_role_row(role, column, judgments))
-    }
-
-    is_unused_measure <-
-      (role == PMA_ROLE_MEASURE_BINARY && has_continuous && !has_binary) ||
-      (role %in% PMA_ROLE_MEASURE_CONTINUOUS && has_binary && !has_continuous)
-
-    # With neither measure branch satisfied nothing is "unused", so all three
-    # measure roles fall through to missing -- which is the right answer: the
-    # analysis has no numbers to pool.
-    status <- if (found) {
-      "found"
-    } else if (role %in% PMA_ROLE_OPTIONAL || is_unused_measure) {
-      "optional"
-    } else {
-      "missing"
-    }
-
-    data.frame(role = role, label = unname(PMA_ROLE_LABELS[role]),
-               column = column, status = status,
-               hint = .role_hint(role, status),
-               stringsAsFactors = FALSE)
-  })
-
-  do.call(rbind, rows)
-}
-
-.role_found <- function(detected, role) {
-  isTRUE(detected$found[match(role, detected$role)])
-}
-
-# Risk of Bias / Indirectness are judgments, not data. The chip counts rated
-# studies so that assigning them here turns the chip green, and so that a file
-# carrying an unreadable label cannot show green on the strength of the column
-# existing.
-.judgment_role_row <- function(role, column, judgments) {
-  values <- if (is.data.frame(judgments) && role %in% names(judgments)) {
-    as.character(judgments[[role]])
-  } else {
-    character(0)
-  }
-  total <- length(values)
-  rated <- sum(!is.na(values) & nzchar(trimws(values)))
-
-  status <- if (total > 0 && rated == total) "found" else "missing"
-  hint <- if (status == "found") {
-    ""
-  } else if (total == 0) {
-    "not rated yet"
-  } else {
-    sprintf("%d of %d studies rated", rated, total)
-  }
-
-  data.frame(role = role, label = unname(PMA_ROLE_LABELS[role]),
-             column = column, status = status, hint = hint,
-             stringsAsFactors = FALSE)
-}
-
-.role_hint <- function(role, status) {
-  if (status == "found") return("")
-  if (status == "optional") return("not in your data")
-  switch(
-    role,
-    studlab = "no study column",
-    treat   = "no arm column",
-    n       = "no sample-size column",
-    event   = "no events column",
-    mean    = "no mean column",
-    sd      = "no SD column",
-    "not in your data"
-  )
-}
 
 # The columns the analysis actually reads, in role order, restricted to those
 # the data carries. Everything else is context the reviewer brought along.
@@ -230,36 +127,6 @@ pma_load_summary <- function(data) {
   units <- length(unique(paste(data$studlab, data$outcome, sep = "\r")))
   sprintf("%d rows, %d studies, %d study-outcomes, long format.",
           rows, studies, units)
-}
-
-# One chip per role. The source column is named only when it differs from the
-# role, so a canonical table reads as a row of plain green names rather than
-# ten copies of "studlab from studlab".
-pma_column_roles_strip <- function(detected, judgments = NULL) {
-  status <- pma_column_role_status(detected, judgments)
-
-  chips <- lapply(seq_len(nrow(status)), function(i) {
-    row <- status[i, ]
-    detail <- if (nzchar(row$hint)) {
-      row$hint
-    } else if (!is.na(row$column) && !identical(row$column, row$role)) {
-      row$column
-    } else {
-      NULL
-    }
-    htmltools::div(
-      class = paste0("pma-role-chip pma-role-", row$status),
-      htmltools::span(class = "pma-role-chip-label", row$label),
-      if (!is.null(detail)) {
-        htmltools::span(class = "pma-role-chip-detail", detail)
-      }
-    )
-  })
-
-  htmltools::div(
-    htmltools::div(class = "pma-role-strip-title", "Detected columns"),
-    htmltools::div(class = "pma-role-strip", chips)
-  )
 }
 
 # --------------------------------------------------------------------------

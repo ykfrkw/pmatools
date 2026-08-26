@@ -18,7 +18,7 @@
 #   R/judgment_display.R    certainty badges, verdicts and the Core GRADE
 #                           decision flowcharts
 #   R/plot_panels.R         the forest / funnel display panels and autofill
-#   R/column_roles.R        Step 1's detected-columns strip, Step 2's required
+#   R/column_roles.R        Step 1's canonical column roles, Step 2's required
 #                           fields, and the risk-of-bias analysis set
 #   R/sof_display.R         the Summary of Findings presentation
 #

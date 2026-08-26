@@ -162,13 +162,6 @@ step1_server <- function(input, output, session, state) {
 
   loaded_signature <- shiny::reactiveVal(NULL)
 
-  # The column names as they arrived, captured at ingest so the detected-
-  # columns strip describes the data that was loaded rather than whatever the
-  # file input currently points at. ingest_data() renames source columns onto
-  # their role names, so the ingested tibble alone can no longer say "studlab
-  # came from `study`".
-  loaded_raw_names <- shiny::reactiveVal(NULL)
-
   # ----- Example templates (Upload / Paste branches) -----
   # Generated from PMA_TEMPLATE_CSV, never read off disk, so the download
   # cannot pick up a changed sample dataset. Read-path untouched.
@@ -384,7 +377,6 @@ step1_server <- function(input, output, session, state) {
     df <- raw()
     loaded_signature(current_signature())
     state$data_edits <- NULL
-    loaded_raw_names(NULL)
     if (is.null(df)) {
       return(list(error = "No data source selected, or the selected source is empty."))
     }
@@ -392,7 +384,6 @@ step1_server <- function(input, output, session, state) {
     if (!is.data.frame(df) && pma_is_error_result(df)) {
       return(df)
     }
-    loaded_raw_names(names(df))
     tryCatch(
       withCallingHandlers(
         ingest_data(df, format = "long"),
@@ -483,7 +474,6 @@ step1_server <- function(input, output, session, state) {
     pma_card(
       title = "Preview & edit",
       shiny::uiOutput("data_load_banner"),
-      shiny::uiOutput("data_roles_strip"),
       htmltools::p(class = "pma-card-subtitle",
                    paste0(
                      "Long-format view (one row per study x arm, or study x ",
@@ -522,18 +512,6 @@ step1_server <- function(input, output, session, state) {
         shiny::actionButton("step1_rob_clear",    "Clear all",       class = "btn-sm")
       )
     )
-  })
-
-  detected_roles <- shiny::reactive({
-    cols <- loaded_raw_names()
-    if (is.null(cols)) return(NULL)
-    detect_column_roles(cols)
-  })
-
-  output$data_roles_strip <- shiny::renderUI({
-    detected <- detected_roles()
-    if (!isTRUE(loaded_current()) || is.null(detected)) return(NULL)
-    pma_column_roles_strip(detected, state$rob_table)
   })
 
   output$data_load_banner <- shiny::renderUI({
