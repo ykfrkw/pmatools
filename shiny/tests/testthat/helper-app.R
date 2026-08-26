@@ -68,10 +68,9 @@ PMA_APP_ROOT <- local({
 # pmatools_set out of the banked outcomes, so without it their tests would
 # fail on a missing object rather than on a wrong bundle.
 #
-# R/data_ingest.R rides along for detect_column_roles(): Step 1's
-# detected-columns strip is a presentation of that function's output, and a
-# test that hand-built the frame instead would keep passing after the two
-# drifted apart.
+# R/data_ingest.R rides along because Step 1 is built ON it: step1_data.R
+# calls ingest_data() on every load, so a test of that step has to see the
+# same canonical frame the app does rather than one hand-built beside it.
 #
 # R/not_reported.R rides along because pma_outcomes_list() and the modal
 # helpers are built ON it: `.is_not_reported()`, `.rated_outcomes()` and
