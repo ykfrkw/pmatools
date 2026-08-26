@@ -206,12 +206,3 @@ test_that("pma_export_data() leaves not-reported outcomes out of the CSV", {
   d <- pma_export_data(mixed_outcomes())
   expect_setequal(unique(d$outcome), c("Mortality", "Relapse"))
 })
-
-# --- the footnote that used to say this was impossible ---------------------
-
-test_that("the limitations note no longer claims the rows are absent", {
-  expect_no_match(pma_sof_limitations_note(), "Not reported", fixed = TRUE)
-  # The other two caveats it carries are untouched.
-  expect_match(pma_sof_limitations_note(), "Arm-level values", fixed = TRUE)
-  expect_match(pma_sof_limitations_note(), "Per-domain footnotes", fixed = TRUE)
-})

@@ -1126,7 +1126,7 @@ export_bundle(
 {bundle_name}.zip
 ├── summary_of_findings.docx      rows in set$order
 ├── summary_of_findings.csv       the same table as plain text
-├── evidence_profile.docx         one profile per outcome
+├── evidence_profile.docx         one profile per outcome, one per page
 ├── analysis.R                    multi-outcome reproducibility script
 ├── data_long.csv                 every outcome
 ├── README.txt                    outcome order and per-outcome analysis sets
@@ -1447,7 +1447,7 @@ indirectness_table(x, summary_text = NULL, ...) -> flextable
 
 Renders `x$indirectness_subdomains` (§4.5.3): target question, evidence found, a colour-graded 4-option judgment row with the recorded answer ticked, and a merged "Judgment across subdomains" row carrying the overall judgment. Aborts with a message telling the caller how to record subdomains when `x` has none.
 
-**Attribution (§4.13).** This is a **pmatools table layout implementing Core GRADE 5's per-PICO reasoning — not a Core GRADE 5 publication table.** The article body carries exactly two tables: Table 1 (an adaptation of a summary of findings table) and Table 2 ("Summary of indirectness issues": PICO element / Reason for rating down / Examples / Likelihood of rating down). Nothing of this shape appears there, and the strings "sufficiently direct", "probably yes" and "probably no" occur nowhere in it. *(The online supplementary appendices have not been checked.)* The footer of the rendered table states this, and also reproduces the Table 2 likelihood gradient (Population "Low" → Intervention "Intermediate" → Comparison "Substantial" → Outcome "High likelihood"), which the symmetric worst-case fold does not reproduce.
+**Attribution (§4.13).** This is a **pmatools table layout implementing Core GRADE 5's per-PICO reasoning — not a Core GRADE 5 publication table.** The article body carries exactly two tables: Table 1 (an adaptation of a summary of findings table) and Table 2 ("Summary of indirectness issues": PICO element / Reason for rating down / Examples / Likelihood of rating down). Nothing of this shape appears there, and the strings "sufficiently direct", "probably yes" and "probably no" occur nowhere in it. *(The online supplementary appendices have not been checked.)* This attribution is stated **here and in `?indirectness_table`'s `@section Attribution`** — the two places a reader looks it up once — and no longer in the rendered footer, where it rode along on every exported copy of the table describing the tool rather than the evidence. The footer carries what a reader needs in order to read the table in front of them: the provenance line the disclaimer hangs off ("implemented by pmatools from the per-PICO reasoning in Core GRADE 5"), the mark key, the rate-down rule, the worst-case default, and the Table 2 likelihood gradient (Population "Low" → Intervention "Intermediate" → Comparison "Substantial" → Outcome "High likelihood"), which the symmetric worst-case fold does not reproduce.
 
 ### 4.14 `not_reported_outcome()` / `add_not_reported()` [v0.5.1]
 

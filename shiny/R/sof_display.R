@@ -230,57 +230,12 @@ pma_rare_event_banner <- function(alert) {
   )
 }
 
-# What is left of the Core GRADE 6 features pmatools does not fully implement.
-# Two of the three have since shrunk to caveats: pmatools now fills the
-# arm-level columns of a continuous outcome from the control arms (but only
-# when the analysis carries them), and now footnotes the numbers behind a
-# downgrade (but only for the three domains that record them). The third -
-# "\"Not reported\" rows: outcomes the evidence base did not measure are
-# absent from this table" - is gone entirely: the reviewer adds those rows from
-# Step 4's "+ Add next outcome" (pma_not_reported_modal()).
-#
-# It lives in the table footer only: a second copy used to sit under the table
-# as page text, which said the same thing twice in two different fonts, and the
-# footer is the copy that travels into the .docx.
-# `labels` rather than a constant, because this sentence names the table's own
-# arm columns and a footnote that calls them something the headers do not is a
-# footnote about a different table. "the value with X" mirrors the column head
-# "With X" exactly; the old "<label>-group value" shape does not survive a
-# free-text label ("CBT-I-group value").
-pma_sof_limitations_note <- function(labels = PMA_ARM_LABELS_DEFAULT) paste0(
-  "Not implemented in this table (Core GRADE 6 features pmatools does not yet ",
-  "produce). Arm-level values for continuous outcomes -- the value with ",
-  labels$control, ", the value with ", labels$intervention,
-  " and the difference, ",
-  "which Core GRADE 6 calls its preferred approach -- are now reported, ",
-  "except where the analysis carries no arm-level means (a generic ",
-  "inverse-variance analysis) or uses a ratio-of-means measure; those still ",
-  "leave the two arm columns empty. Per-domain footnotes now state what drove ",
-  "each downgrade for risk of bias, inconsistency and imprecision; a rated ",
-  "down indirectness or publication bias domain is still only named in the ",
-  "certainty cell, with its reasoning left in the Evidence Profile and in ",
-  "that domain's notes."
-)
-
-# Core GRADE 6's own presentation advice, as a footnote on the table it is
-# about. It used to be a standing italic paragraph on the Final certainty tab,
-# where it was page text and therefore did not travel into the exported .docx.
-# The arm words are NOT substituted into "control event rate" / "intervention
-# event rate": CER and EER are the cited source's own acronyms and they stop
-# deriving from the words the moment the words change ("the placebo event rate
-# (CER)"). What the reviewer needs is to find the columns, so the columns are
-# named instead -- and those follow the labels, because the headers do.
-pma_sof_cer_eer_note <- function(labels = PMA_ARM_LABELS_DEFAULT) paste0(
-  "Recommended: report both the control event rate (CER, the \"With ",
-  labels$control, "\" column) and the intervention event rate (EER, the ",
-  "\"With ", labels$intervention, "\" column) alongside the relative ",
-  "effect, to aid clinical interpretation ",
-  "(Heimke F, et al. BMJ Ment Health. 2024)."
-)
-
 # Append free-text footer lines to a Summary of Findings flextable, keeping
-# the footer styling the vendored builders apply. Used for the rare-event
-# caution and the limitations statement, so both reach the exported .docx.
+# the footer styling the vendored builders apply. What it carries now is the
+# rare-event caution, one line per affected outcome, so that caution reaches
+# the exported .docx and not just the screen. It stays general over a vector
+# of notes: a caller passing none (no outcome triggered the caution) gets the
+# flextable back untouched.
 pma_sof_add_notes <- function(ft, notes) {
   if (is.null(ft)) return(ft)
   notes <- notes[!vapply(notes, function(z) is.null(z) || is.na(z) ||

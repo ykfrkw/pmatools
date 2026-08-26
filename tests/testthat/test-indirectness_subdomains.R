@@ -321,6 +321,37 @@ test_that("indirectness_table returns a flextable and saves to docx", {
   expect_gt(file.info(path)$size, 0)
 })
 
+# Same two-line helper the other footer tests use (test-sof_bmj.R,
+# test-grade_table_responder.R); testthat gives each file its own environment,
+# so it is copied rather than shared.
+.footer_text <- function(ft) paste(unlist(ft$footer$dataset), collapse = " ")
+
+test_that("the indirectness footer explains the table, not the tool", {
+  skip_if_not_installed("flextable")
+  footer <- .footer_text(indirectness_table(grade_with_subdomains(
+    bmj_subdomains())))
+
+  # Which layout conventions are pmatools' own rather than Core GRADE 5's is
+  # attribution, and it belongs where a reader looks it up once:
+  # ?indirectness_table's @section Attribution, SPEC.md 4.13 and README.md.
+  # In the footer it rode along on every exported copy of the table.
+  expect_no_match(footer, "pmatools conventions", fixed = TRUE)
+  expect_no_match(footer, "4-point answer scale", fixed = TRUE)
+  expect_no_match(footer, "sufficiently direct", fixed = TRUE)
+
+  # What stays is what a reader needs to read THIS table: the provenance the
+  # disclaimer hangs off, the mark key, the rate-down rule, the worst-case
+  # default, and the asymmetry Core GRADE 5 Table 2 grades and this fold does
+  # not.
+  expect_match(footer, "implemented by pmatools from the", fixed = TRUE)
+  expect_match(footer, "Not an official GRADE Working Group assessment.",
+               fixed = TRUE)
+  expect_match(footer, "marks the recorded judgment", fixed = TRUE)
+  expect_match(footer, "rates down 2 levels", fixed = TRUE)
+  expect_match(footer, "worst case", fixed = TRUE)
+  expect_match(footer, "asymmetrically", fixed = TRUE)
+})
+
 test_that("indirectness_table aborts without subdomain judgments", {
   g <- suppressWarnings(grade_meta(make_metabin_ind(), threshold_type = "null",
     small_values = "desirable"))

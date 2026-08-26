@@ -907,6 +907,62 @@
 
 ## Behaviour changes
 
+* **Every heading in an exported .docx now starts its own page.** In
+  `evidence_profile.docx` each outcome's profile opens a fresh page, and in
+  `grade_report(format = "docx")` so do "Domain-by-Domain Rationale" and every
+  per-outcome section after the first. Before this, a heading would strand
+  itself at the foot of a page, under the *previous* table's footnotes, with
+  the table it named beginning overleaf.
+
+  **Keep-with-next was already on and was not enough.** officer's default
+  template gives `heading 1/2/3` a `<w:keepNext/>`, but Word abandons
+  keep-with-next when the block that follows cannot fit a page of its own —
+  which an evidence profile carrying a full footnote block routinely cannot,
+  so the pairing silently failed on exactly the tables that needed it.
+  `flextable::body_add_flextable(keepnext = TRUE)` does not help either: in
+  flextable 0.9.10 the argument is in the signature and never read. The break
+  is therefore explicit, through a new internal `.docx_add_heading()` in
+  `R/house_style.R` that every heading site in both writers goes through.
+
+  **The cost is pages.** A document now runs at least one page per outcome, so
+  a two-outcome bundle that was two pages is three or more, and a short
+  profile leaves white space at the foot of its page. The trailing blank
+  paragraph after each table is unchanged — it is what keeps two consecutive
+  tables from merging, and replacing it with the break would put a blank page
+  after the last outcome.
+
+* **Three categories of footnote no longer appear under the exported tables.**
+  All three described the tool or advised the reviewer rather than reporting
+  anything about the evidence in the table, and all three were attached
+  unconditionally:
+
+  - the Core GRADE 6 "not implemented in this table" note, on every Summary of
+    Findings the Shiny app rendered or exported. Its two remaining caveats are
+    recorded in `README.md` under "Limitations and future work";
+  - the "Recommended reading: Chinn S. Stat Med. 2000; Heimke F, et al. BMJ
+    Ment Health. 2024" tail of the `*` responder footnote, and the app's
+    standing CER/EER recommendation. Everything else in the Chinn note — the
+    formula, the direction, the threshold, the "this is NOT Core GRADE 6's
+    option 2" paragraph and the derived-quantity sentence — is unchanged, and
+    both citations remain in `SPEC.md` §12 and `README.md`;
+  - the sentence in `indirectness_table()`'s footer declaring the table
+    layout, the 4-point scale and the header wording to be pmatools
+    conventions. The attribution is stated in `?indirectness_table`,
+    `SPEC.md` §4.13 and `README.md`; the footer keeps the provenance line the
+    disclaimer hangs off, the mark key, the rate-down rule, the worst-case
+    default and the Core GRADE 5 Table 2 gradient.
+
+  Abbreviation and symbol legends, the numbered `[n]` domain-fact notes, the
+  risk-of-bias analysis-set note, the "Not reported" explanation, the Core
+  GRADE disclosure line and the rare-event caution are all untouched.
+
+* **A bundle's generated `analysis.R` can now contain no `sof_add_notes()`
+  call at all.** The Shiny app's exported SoF footnotes are down to the
+  rare-event caution, which fires only when an outcome's event rate is below
+  2%, so a set where none does produces a script with no annotation step. The
+  script still reproduces the table that was exported; `sof_add_notes()` and
+  the bundler's own handling of an empty note vector are unchanged.
+
 * **A mean-difference forest plot's automatic x-axis is now bounded in
   standardised units, and both its ends are round numbers.** The range still
   starts as the 5th-to-95th percentile of the study confidence limits plus 10%

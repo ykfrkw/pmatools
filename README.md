@@ -1084,8 +1084,12 @@ findings table) and Table 2 ("Summary of indirectness issues": PICO element /
 Reason for rating down / Examples / Likelihood of rating down) — and neither has
 this shape. The layout implements Core GRADE 5's per-PICO reasoning; the table
 itself, the 4-point scale and the header wording are ours. (The online
-supplementary appendices have not been checked.) The rendered table repeats this
-caveat, and the Table 2 likelihood gradient, in its footer.
+supplementary appendices have not been checked.) That attribution is stated here
+and in `?indirectness_table`, and no longer in the rendered footer — it describes
+the tool rather than the evidence, and rode along on every exported copy of the
+table. The footer carries the Table 2 likelihood gradient, the mark key, the
+rate-down rule and the worst-case default: what a reader needs in order to read
+the table in front of them.
 
 ---
 
@@ -1848,7 +1852,7 @@ files at the top, one directory per outcome below:
 cbti_multi.zip
 ├── summary_of_findings.docx      rows in set$order
 ├── summary_of_findings.csv       the same table as plain text
-├── evidence_profile.docx         one profile per outcome
+├── evidence_profile.docx         one profile per outcome, one per page
 ├── analysis.R                    multi-outcome reproducibility script
 ├── data_long.csv                 every outcome
 ├── README.txt                    outcome order and per-outcome analysis sets
@@ -2418,11 +2422,18 @@ pmatools/
    - ~~**Arm-level columns for continuous outcomes.**~~ Delivered in v0.5.1 —
      both SoF layouts now fill the comparison-group and intervention-group
      cells for a `metacont` analysis, not just the difference.
+     *(Residual)* An analysis carrying no arm-level means — a generic
+     inverse-variance analysis — or using a ratio-of-means measure still
+     leaves both arm columns empty; only the difference is reported.
    - ~~**"Not reported" rows**~~ Delivered in v0.5.1 —
      `not_reported_outcome()` / `add_not_reported()`.
    - ~~**Per-domain rate-down footnotes**~~ Delivered in v0.5.1 — the numbered
      markers are generated from `domain_facts()`; `$domain_assessments$notes`
      remains the authoritative prose record.
+     *(Residual)* Only risk of bias, inconsistency and imprecision record the
+     numbers behind a downgrade. A rated-down indirectness or publication bias
+     domain is named in the certainty cell and nowhere else in the table; its
+     reasoning stays in the evidence profile and in that domain's notes.
    - **A rare-event warning.** Core GRADE 6: applying relative effects to
      baseline risks misleads "when the outcome is rare (event rates <2% and
      most problematic <1%)", and in that case "review authors should generally
