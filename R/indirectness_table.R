@@ -211,10 +211,7 @@ indirectness_table <- function(x, summary_text = NULL, ...) {
     paste0(
       "Indirectness subdomain judgments, implemented by pmatools from the ",
       "per-PICO reasoning in ", .core_grade_ref(5), ". ",
-      "Not an official GRADE Working Group assessment. This table layout, the ",
-      "4-point answer scale and the wording 'Is the evidence sufficiently ",
-      "direct?' are pmatools conventions and do not appear in the Core GRADE 5 ",
-      "article body. ",
+      "Not an official GRADE Working Group assessment. ",
       INDIRECTNESS_MARK_ON, " marks the recorded judgment. ",
       "Yes / Probably yes do not rate down; Probably no rates down 1 level; ",
       "No rates down 2 levels. The overall judgment defaults to the worst case ",

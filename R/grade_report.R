@@ -326,14 +326,16 @@ grade_report <- function(outcomes,
                          label_control      = "control") {
   doc <- officer::read_docx()
 
-  doc <- officer::body_add_par(doc, title, style = "heading 1")
+  doc <- .docx_add_heading(doc, title, style = "heading 1",
+                           page_break = FALSE)
   doc <- officer::body_add_par(doc, paste0(
     .PMA_CORE_GRADE_FOOTNOTE,
     " Generated: ", format(Sys.time(), "%Y-%m-%d %H:%M")
   ), style = "Normal")
   doc <- officer::body_add_par(doc, "", style = "Normal")
 
-  doc <- officer::body_add_par(doc, "Summary of Findings", style = "heading 2")
+  doc <- .docx_add_heading(doc, "Summary of Findings", style = "heading 2",
+                           page_break = FALSE)
 
   ft <- grade_table(outcomes, primary = primary, palette = palette,
                     style = style,
@@ -344,7 +346,8 @@ grade_report <- function(outcomes,
   doc <- flextable::body_add_flextable(doc, ft)
   doc <- officer::body_add_par(doc, "", style = "Normal")
 
-  doc <- officer::body_add_par(doc, "Domain-by-Domain Rationale", style = "heading 2")
+  doc <- .docx_add_heading(doc, "Domain-by-Domain Rationale",
+                           style = "heading 2", page_break = TRUE)
 
   nms <- names(outcomes)
   if (is.null(nms)) nms <- vapply(outcomes, function(g) g$outcome_name, character(1))
@@ -356,7 +359,8 @@ grade_report <- function(outcomes,
       if (nm %in% primary) " (Primary)" else " (Secondary)"
     } else ""
 
-    doc <- officer::body_add_par(doc, paste0(nm, group_tag), style = "heading 3")
+    doc <- .docx_add_heading(doc, paste0(nm, group_tag), style = "heading 3",
+                             page_break = i > 1L)
 
     # Same treatment as the Markdown report: no domain table, because there is
     # no body of evidence whose domains could be judged.

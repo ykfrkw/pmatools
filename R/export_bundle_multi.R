@@ -567,16 +567,18 @@ export_bundle.pmatools_set <- function(x,
                                         other_downgrade = 0L) {
   outcomes <- .set_outcome_list(set)
   doc <- officer::read_docx()
-  doc <- officer::body_add_par(doc, "Evidence profiles (Core GRADE series)",
-                               style = "heading 1")
+  doc <- .docx_add_heading(doc, "Evidence profiles (Core GRADE series)",
+                           style = "heading 1", page_break = FALSE)
   doc <- officer::body_add_par(doc, paste0(
     .PMA_CORE_GRADE_FOOTNOTE, " Generated: ",
     format(Sys.time(), "%Y-%m-%d %H:%M")), style = "Normal")
 
-  for (nm in set$order) {
+  for (i in seq_along(set$order)) {
+    nm <- set$order[[i]]
     g <- outcomes[[nm]]
     tag <- if (nm %in% set$primary) " (Primary)" else ""
-    doc <- officer::body_add_par(doc, paste0(nm, tag), style = "heading 2")
+    doc <- .docx_add_heading(doc, paste0(nm, tag), style = "heading 2",
+                             page_break = i > 1L)
 
     # Prose, not a table row: all five domain columns of an evidence profile
     # are judgments about a body of evidence, and there is none here.

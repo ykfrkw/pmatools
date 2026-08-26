@@ -224,9 +224,8 @@ step4_server <- function(input, output, session, state) {
         label_intervention = arms$intervention,
         label_control      = arms$control
       )
-      notes <- c(vapply(combined_rare_alerts(), function(a) a$note,
-                        character(1)),
-                 pma_sof_limitations_note(arms))
+      notes <- vapply(combined_rare_alerts(), function(a) a$note,
+                      character(1))
       pma_sof_add_notes(ft, notes)
     },
       error = function(e) {
@@ -363,10 +362,11 @@ step4_server <- function(input, output, session, state) {
   }
 
   # Footnotes for the exported Summary of Findings that the bundler cannot
-  # derive: one rare-event alert per outcome (Core GRADE 6) and the
-  # not-implemented note shown under every on-screen table. Built from the
+  # derive: one rare-event alert per outcome (Core GRADE 6). Built from the
   # outcomes being exported rather than from combined_rare_alerts(), so the
-  # single rating on screen gets its alert too.
+  # single rating on screen gets its alert too. Returns character(0) when no
+  # outcome triggers the caution, and the exported analysis.R then carries no
+  # sof_add_notes() call at all.
   .export_sof_notes <- function(outs) {
     arms   <- pma_arm_labels(state)
     outs   <- pma_rated_outcomes(outs)
@@ -374,8 +374,7 @@ step4_server <- function(input, output, session, state) {
       pma_rare_event_alert(outs[[nm]], label = nm, labels = arms)
     })
     alerts <- alerts[!vapply(alerts, is.null, logical(1))]
-    c(vapply(alerts, function(a) a$note, character(1)),
-      pma_sof_limitations_note(arms))
+    vapply(alerts, function(a) a$note, character(1))
   }
 
   # Gate the Download button on Steps 2-3 being complete. Without this,

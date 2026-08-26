@@ -3608,10 +3608,10 @@ step3_server <- function(input, output, session, state) {
                    error = function(e) NULL)
     if (is.null(ft)) return(htmltools::p("(SoF not yet available)"))
     alert <- sof_rare_alert()
-    # All three notes go into the flextable footer as well as onto the page,
-    # so they travel into the exported .docx.
-    ft <- pma_sof_add_notes(ft, c(alert$note, pma_sof_cer_eer_note(arms),
-                                  pma_sof_limitations_note(arms)))
+    # The rare-event caution goes into the flextable footer as well as onto
+    # the page, so it travels into the exported .docx. A NULL note (no rare
+    # event here) is filtered by pma_sof_add_notes(), which returns ft as is.
+    ft <- pma_sof_add_notes(ft, alert$note)
     htmltools::tagList(
       pma_rare_event_banner(alert),
       pma_sof_scroller(

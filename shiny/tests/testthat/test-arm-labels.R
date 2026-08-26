@@ -44,31 +44,44 @@ test_that("the Step 3 preview asks sof_table() for the same labels", {
 
 test_that("the notes under the table name the same arms as its headers", {
   # A footnote that calls a column something the header does not is a footnote
-  # about a different table. "the value with X" mirrors the column head
-  # "With X"; the old "<label>-group value" shape does not survive a free-text
-  # label ("CBT-I-group value").
+  # about a different table. The rare-event caution is the note that survives
+  # on every exported SoF, and it does both the things a footnote can get
+  # wrong: it names the two arms in prose and it quotes a column head
+  # verbatim, so it is the anchor for the invariant.
   arms <- list(intervention = "CBT-I", control = "placebo")
-  note <- pma_sof_limitations_note(arms)
-  expect_match(note, "the value with placebo, the value with CBT-I",
-               fixed = TRUE)
-  expect_no_match(note, "control-group value", fixed = TRUE)
+  rare <- list(meta = list(event.e = 9, n.e = 1000,
+                           event.c = 10, n.c = 1000),
+               baseline_risk = NA_real_)
+  detail <- pma_rare_event_alert(rare, labels = arms)$detail
+  expect_match(detail, "in the placebo arm", fixed = TRUE)
+  expect_match(detail, "in the CBT-I arm", fixed = TRUE)
+  expect_match(detail, '"With CBT-I" column', fixed = TRUE)
+  expect_no_match(detail, "With intervention", fixed = TRUE)
 
   # Default output is the wording it always had.
-  expect_match(pma_sof_limitations_note(),
-               "the value with control, the value with intervention",
-               fixed = TRUE)
-  expect_match(pma_sof_limitations_note(), "Arm-level values", fixed = TRUE)
+  expect_match(pma_rare_event_alert(rare)$detail,
+               '"With intervention" column', fixed = TRUE)
 })
 
-test_that("CER and EER keep their acronyms and gain their columns", {
-  # Deliberately NOT substituted into "control event rate" / "intervention
-  # event rate": CER and EER are the cited source's own acronyms and stop
-  # deriving from the words the moment the words change. What the reviewer
-  # needs is to find the columns, so the columns are named instead.
-  note <- pma_sof_cer_eer_note(list(intervention = "CBT-I",
-                                    control = "placebo"))
-  expect_match(note, "control event rate (CER", fixed = TRUE)
-  expect_match(note, "intervention event rate (EER", fixed = TRUE)
-  expect_match(note, '"With placebo" column', fixed = TRUE)
-  expect_match(note, '"With CBT-I" column', fixed = TRUE)
+# --- the tool-description notes, deleted on purpose ------------------------
+#
+# pma_sof_limitations_note() and pma_sof_cer_eer_note() rode on every SoF
+# table unconditionally and described the TOOL rather than this body of
+# evidence: which Core GRADE 6 features pmatools has not built, and how a
+# reviewer ought to present event rates. Their substance lives in README.md
+# ("Limitations and future work") and in the "With <arm>" column heads the
+# CER/EER note only pointed at. Reinstating either would put tool
+# documentation back into every exported .docx, so both the definitions and
+# the call sites are pinned absent.
+
+test_that("the tool-description SoF notes stay deleted", {
+  expect_false(exists("pma_sof_limitations_note", mode = "function"))
+  expect_false(exists("pma_sof_cer_eer_note", mode = "function"))
+
+  for (f in c("sof_display.R", "step3_grade.R", "step4_export.R")) {
+    src <- paste(readLines(file.path(PMA_APP_ROOT, "R", f), warn = FALSE),
+                 collapse = "\n")
+    expect_no_match(src, "pma_sof_limitations_note", fixed = TRUE)
+    expect_no_match(src, "pma_sof_cer_eer_note", fixed = TRUE)
+  }
 })

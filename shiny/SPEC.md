@@ -1772,22 +1772,29 @@ warrants 'may' rather than 'likely'"* — is now the only thing there, visible.
 `.inputs_details(open = TRUE)` stays open.
 
 **Final certainty.** `other_text` / `other_downgrade` are answers and stay
-open; the rest of Display options collapses. The Heimke CER/EER recommendation
-is now `pma_sof_cer_eer_note(arms)`, written into the SoF footer by
-`pma_sof_add_notes()`, so it travels into the exported .docx — which it never
-did as page text.
+open; the rest of Display options collapses.
 
-> **CER and EER keep their acronyms (0.5.1).** The arm labels are *not*
-> substituted into "control event rate" / "intervention event rate": the two
-> acronyms are the cited source's own and stop deriving from the words the
-> moment the words change ("the placebo event rate (CER)"). What the reviewer
-> needs is to find the columns, so the note names the columns instead — and
-> those do follow the labels, because the headers do. Same reasoning inverted
-> for `pma_sof_limitations_note(arms)`, which names the arm columns and
-> therefore must follow them: it says "the value with &lt;control&gt;", mirroring
-> the column head "With &lt;control&gt;", because the older
-> "&lt;label&gt;-group value" shape does not survive free text ("CBT-I-group
-> value").
+> **Two standing SoF footnotes are deleted (0.5.1).** `pma_sof_cer_eer_note()`
+> (the Heimke CER/EER recommendation) and `pma_sof_limitations_note()` (which
+> Core GRADE 6 features pmatools does not yet produce) are gone, definitions
+> and call sites alike — from the Step 3 preview, the Step 4 combined table
+> and `.export_sof_notes()`. Both were advice on how a reviewer ought to
+> *write up* a review, not facts about the evidence this table reports, and
+> both rode on every table unconditionally, into every exported .docx. The
+> CER/EER substance is in the column heads the note only pointed at
+> ("With &lt;control&gt;" / "With &lt;intervention&gt;"); the limitations
+> substance is in `README.md`'s "Limitations and future work". What
+> `pma_sof_add_notes()` carries now is the rare-event caution alone, one line
+> per affected outcome, and nothing at all when no outcome triggers it.
+
+> **A footnote names a column the way the header names it.** The general rule
+> survives its first two examples. A footnote calling a column something the
+> header does not is a footnote about a different table, so any note quoting a
+> column head follows `pma_arm_labels(state)`. The rare-event caution is where
+> this now lives: it says *the "With &lt;intervention&gt;" column*, mirroring
+> the header exactly, and names the two arms in prose from the same labels.
+> The inverse also holds — an acronym from a cited source is left alone, since
+> "the placebo event rate (CER)" stops deriving from anything.
 
 #### 3.4.14 Rare events in Step 3
 
@@ -2182,7 +2189,10 @@ emits one `add_not_reported()` call per not-reported outcome, after
 `pma_sof_limitations_note()` (a constant until 0.5.1, when it had to start
 following the arm labels) lost its first sentence with this change. It said
 *"'Not reported' rows: outcomes the evidence base did not measure are absent
-from this table"*, which is no longer true.
+from this table"*, which is no longer true. The function itself is deleted
+outright in 0.5.1 (§3.4.11), so nothing carries the remaining two caveats into
+the table any more; they are recorded in `README.md`'s "Limitations and future
+work" instead.
 
 ### 3.4.12 Domain flowcharts (v0.5.1)
 

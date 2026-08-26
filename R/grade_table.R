@@ -447,8 +447,7 @@ grade_table <- function(outcomes,
                                  label_control = "control") {
   if (length(converted_nms) == 0L) return(ft)
   ft <- flextable::add_footer_lines(
-    ft, values = .chinn_note(reading = TRUE,
-                             label_intervention = label_intervention,
+    ft, values = .chinn_note(label_intervention = label_intervention,
                              label_control = label_control))
   for (nm in converted_nms) {
     ft <- flextable::add_footer_lines(

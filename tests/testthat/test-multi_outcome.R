@@ -412,6 +412,43 @@ test_that("the multi-outcome ZIP has the specified layout", {
   expect_equal(sof$group, c("primary", "secondary", "secondary"))
 })
 
+test_that("each evidence profile opens its own page", {
+  skip_if_not_installed("flextable")
+  skip_if_not_installed("officer")
+  set  <- make_set()
+  path <- tempfile(fileext = ".docx")
+  suppressWarnings(pmatools:::.write_set_evidence_profile(set, path))
+
+  ex <- tempfile(); dir.create(ex)
+  zip::unzip(path, files = "word/document.xml", exdir = ex)
+  xml <- paste(readLines(file.path(ex, "word", "document.xml"),
+                         warn = FALSE), collapse = "")
+
+  # One break per outcome after the first: the document already starts a page,
+  # so breaking before the first heading would open on a near-empty one. This
+  # is a count and not a lower bound because an extra break is as wrong as a
+  # missing one -- it inserts a blank page.
+  breaks <- gregexpr('w:br w:type="page"', xml, fixed = TRUE)[[1]]
+  breaks <- if (breaks[1] == -1L) 0L else length(breaks)
+  expect_equal(breaks, length(set$order) - 1L)
+
+  # And the break sits BEFORE the heading it belongs to, not after the table
+  # it follows: heading 1, then per outcome a heading 2 and its table, with a
+  # break opening every outcome but the first.
+  #
+  # <w:keepNext/> is not looked for here -- officer's heading styles carry it
+  # in word/styles.xml and it is inherited, so it never appears in this file.
+  shape <- regmatches(xml, gregexpr(
+    '<w:br w:type="page"/>|<w:pStyle w:val="Titre[123]"/>|<w:tbl[ >]',
+    xml))[[1]]
+  shape <- sub('<w:pStyle w:val="Titre([123])"/>', "h\\1", shape)
+  shape <- sub('<w:br w:type="page"/>', "break", shape, fixed = TRUE)
+  shape <- sub("<w:tbl[ >]", "table", shape)
+  expect_equal(shape,
+               c("h1", "h2", "table", "break", "h2", "table",
+                 "break", "h2", "table"))
+})
+
 # --------------------------------------------------------------------------
 # 10/11. Conditional per-outcome artifacts
 # --------------------------------------------------------------------------

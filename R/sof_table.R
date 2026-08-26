@@ -358,7 +358,6 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
     ft <- flextable::add_footer_lines(
       ft, values = .chinn_note(invert = isTRUE(chinn_invert),
                                threshold_label = threshold_label,
-                               reading = TRUE,
                                baseline_risk = baseline_risk,
                                label_intervention = label_intervention,
                                label_control = label_control))
@@ -948,14 +947,14 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
 # `threshold_label` are woven in for a single-outcome table, whose one row owns
 # the whole footnote; a combined table passes neither, because it can hold rows
 # converted in opposite directions against different thresholds, and states
-# those per row (.responder_row_note()). `reading` appends the two references.
+# those per row (.responder_row_note()).
 #
 # `baseline_risk` names the assumed control responder proportion the derived
 # quantities were computed against. A combined table passes none, for the same
 # reason it passes no direction: its rows can be converted against different
 # proportions, and .responder_row_note() states each row's own.
 .chinn_note <- function(invert = NULL, threshold_label = NULL,
-                        reading = FALSE, baseline_risk = NULL,
+                        baseline_risk = NULL,
                         label_intervention = "intervention",
                         label_control = "control") {
   invert_str <- if (is.null(invert)) {
@@ -980,11 +979,7 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
     "proportion in each arm improving by more than the MID; Chinn's formula ",
     "assumes a logistic latent variable, uses no MID and is applied to the ",
     "pooled SMD. The two do not generally agree.",
-    " ", .chinn_derived_sentence(baseline_risk, label_control),
-    if (reading) paste0(
-      " Recommended reading: ",
-      "Chinn S. Stat Med. 2000; ",
-      "Heimke F, et al. BMJ Ment Health. 2024.") else ""
+    " ", .chinn_derived_sentence(baseline_risk, label_control)
   )
 }
 

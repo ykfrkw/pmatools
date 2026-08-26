@@ -8,7 +8,11 @@
 # once worded the same disclaimer four ways.
 #
 # A new helper belongs here when it fixes how something is worded, coloured or
-# stamped for the reader, rather than what it says.
+# stamped for the reader, rather than what it says. That includes how an
+# exported document is broken across pages: page layout is presentation too,
+# and the docx writers (grade_report.R, export_bundle_multi.R, and
+# export_bundle.R's landscape saver) each answered it for themselves, which is
+# how eight footnotes came to word one disclaimer four ways.
 #
 # .PMA_CORE_GRADE_FOOTNOTE is built at load time by calling .core_grade_ref(),
 # so the two stay together in this file: the app source()s R/_pmatools/*.R in
@@ -116,6 +120,29 @@ PMA_CORE_GRADE_DOIS <- c(
   "Reference: ", .core_grade_ref(),
   ". Not an official GRADE Working Group assessment."
 )
+
+# ==========================================================================
+# DOCX PAGE LAYOUT
+# ==========================================================================
+# Every heading this package writes into a .docx opens a block whose next
+# element is a flextable, and Word will not keep the two together on its own.
+# officer's template already gives `heading 1/2/3` <w:keepNext/>, but Word
+# drops keep-with-next when the block that follows cannot fit on a page of its
+# own -- which an evidence profile carrying a full footnote block routinely
+# cannot. What the reviewer sees is a heading stranded at the foot of a page,
+# under the PREVIOUS table's footnotes, with its own table overleaf.
+#
+# So the break is explicit. `page_break` is the caller's loop test rather than
+# a default, because the first heading of a document already starts a page and
+# a break before it opens on a near-empty one.
+#
+# Do NOT reach for flextable::body_add_flextable(keepnext = ) instead: in
+# flextable 0.9.10 the argument is in the signature and is never read.
+.docx_add_heading <- function(doc, text, style = "heading 2",
+                              page_break = FALSE) {
+  if (isTRUE(page_break)) doc <- officer::body_add_break(doc)
+  officer::body_add_par(doc, text, style = style)
+}
 
 # ==========================================================================
 # VERSION STAMP FOR PROVENANCE LINES IN EXPORTED ARTIFACTS
