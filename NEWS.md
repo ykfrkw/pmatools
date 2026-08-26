@@ -670,15 +670,12 @@
   wins; `group` goes to `treat`, leaving `subgroup` empty). Nothing about the
   `ingest_data()` contract changes.
 
-* **Step 1 of the Shiny app says which column was recognised as what.** The
-  preview card opens with a green load banner ("36 rows, 18 studies, long
-  format.", replacing a monospace `Status:` line) and a detected-columns strip
-  built from `detect_column_roles()`: one chip per role, green with the source
-  column when filled, amber with a hint when a role the analysis needs is not,
-  muted when its absence is ordinary. `rob` and `indirectness` report how many
-  studies are rated rather than whether a column exists. The preview itself now
-  defaults to the analysis columns — the bundled sample is 39 columns wide and
-  five of them are the analysis — with an **All columns** toggle beside it, and
+* **Step 1 of the Shiny app answers "did my data load correctly?" rather than
+  dumping the file.** The preview card opens with a green load banner ("36
+  rows, 18 studies, long format.", replacing a monospace `Status:` line), and
+  the preview itself now defaults to the analysis columns — the bundled sample
+  is 39 columns wide and five of them are the analysis — with an
+  **All columns** toggle beside it, and
   the bulk risk-of-bias buttons that previously existed only inside Step 3's
   Risk of Bias tab are repeated below the table, where the data-entry pass
   happens. Both sets write the same `state$rob_table`; the Step 3 copies stay.

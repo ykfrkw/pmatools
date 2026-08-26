@@ -270,35 +270,16 @@ For wide format, mapping prompts for `studlab, n_e, n_c, event_e, event_c` (bina
 
 `DT::DTOutput("data_preview")` rendered from the post-mapping long tibble. Cells are editable (so RoB / Indirectness columns can be added or corrected). Edits write back to `state$data`.
 
-The card opens with two pieces of feedback, because the step's job is to answer
-"is my data right?", not to display it:
+The card opens with **a load banner** — `pma_banner(tone = "success")` carrying
+`pma_load_summary()` ("36 rows, 18 studies, long format.") — because the step's
+job is to answer "is my data right?", not to display it. It replaces a
+`verbatimTextOutput` reading `Status: ...`; a read failure renders the same
+banner in its warning tone instead.
 
-1. **A load banner** — `pma_banner(tone = "success")` carrying
-   `pma_load_summary()` ("36 rows, 18 studies, long format."). It replaces a
-   `verbatimTextOutput` reading `Status: ...`; a read failure renders the same
-   banner in its warning tone instead.
-2. **A detected-columns strip** — `pma_column_roles_strip()`, one chip per
-   `pmatools::detect_column_roles()` role, above the table. The strip is built
-   from the column names **as they arrived**, captured into `loaded_raw_names`
-   at ingest: `ingest_data()` renames source columns onto their role names, so
-   the ingested tibble alone can no longer say that `studlab` came from
-   `study`.
-
-Chip states, from `pma_column_role_status()`:
-
-| state | meaning | shown |
-|---|---|---|
-| `found` | a column filled the role | green, naming the source column when it differs from the role |
-| `missing` | nothing filled a role the analysis needs | amber, with a short hint |
-| `optional` | absence is ordinary | muted, "not in your data" |
-
-`outcome` and `subgroup` are always `optional` when absent. The measure roles
-are an either-or family: with `event` present, `mean`/`sd` are `optional`, and
-vice versa; with neither branch satisfied all three are `missing`. `rob` and
-`indirectness` report **how much of the review is rated** (from
-`state$rob_table`), not whether a column exists, so assigning them here turns
-the chip green and a file carrying unreadable labels cannot show green on the
-strength of the column existing.
+Which column filled which role is not stated here: Step 2's column mapping
+shows every role's source column in a select the reviewer can change, so a
+read-only restatement of the same detection above the preview table was
+duplicated noise rather than a second opinion.
 
 **Column toggle.** `radioButtons("preview_columns", …)` switches the preview
 between **Analysis columns** (default) and **All columns**. The analysis set is
