@@ -46,7 +46,7 @@ devtools::load_all(".", reset = TRUE)   # reset=TRUE: 毎回完全リロード�
 
 
 ## ── 1. Load and prepare data ─────────────────────────────────────────────────
-## パッケージ同梱の合成サンプルデータを使用（外部ファイル不要）
+## パッケージ同梱のサンプルデータ（実際に抽出した実データ）を使用（外部ファイル不要）
 ## system.file() は devtools::load_all() 後に inst/extdata/ を正しく参照する
 data_raw <- read.csv(
   system.file("extdata", "cbti_depression.csv", package = "pmatools"),
@@ -571,7 +571,7 @@ if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable())
 ##   export_bundle()    : outcomes/NN_name/ 構成の ZIP を書き出す
 ##
 ## NOTE: 以下の "Insomnia remission" はセクション 7 と同じくプレースホルダで、
-##       depression response のイベント数を流用した合成データ。
+##       depression response のイベント数を流用しただけのダミー outcome。
 
 long_response <- rbind(
   data.frame(studlab = df$study, outcome = "Depression response",

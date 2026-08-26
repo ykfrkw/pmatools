@@ -1,6 +1,6 @@
 ## data-raw/cbti_depression.R
 ##
-## CBT-I for Depression Response — synthetic sample dataset
+## CBT-I for Depression Response — sample dataset (real extracted data)
 ##
 ## This script reads the CSV from inst/extdata/ and saves it as an R data object.
 ## Run once (from the package root) to regenerate data/cbti_depression.rda:

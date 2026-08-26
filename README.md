@@ -1375,7 +1375,7 @@ Full runnable code in [sample.R](sample.R). Sample data is bundled in `inst/extd
 - **Question:** Is CBT-I effective for achieving depression response in patients with MDD and comorbid insomnia?
 - **Effect measure:** Odds Ratio (OR), random-effects, k = 17 RCTs
 
-> **Note on sample data:** `cbti_depression.csv` is a synthetic dataset that reproduces the structure of the original data. All study names, effect sizes, and sample sizes are fictional.
+> **Note on sample data:** `cbti_depression.csv` holds the real data extracted for this review. Study names, sample sizes, and event counts are the values each trial actually reported. `Lopez2019` has `d_r = NA` because that trial did not report this outcome, which makes it a genuine missing-results case for the publication-bias / ROB-ME workflow.
 
 ### Certainty assessment code (Core GRADE series)
 
@@ -2354,7 +2354,7 @@ pmatools/
 │   ├── export_bundle_multi.R   # pmatools_set ZIP (outcomes/NN_name/)
 │   └── data.R                  # cbti_depression dataset documentation
 ├── inst/
-│   ├── extdata/cbti_depression.csv       # bundled sample data (synthetic)
+│   ├── extdata/cbti_depression.csv       # bundled sample data (real extraction)
 │   └── templates/                        # analysis.R templates (single + multi)
 ├── data-raw/
 │   └── cbti_depression.R    # script to generate data/*.rda

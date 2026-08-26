@@ -1679,6 +1679,19 @@
   "a systematic review and meta-analysis (SR&MA)". The sentence after it has
   always said `SR&MA`, which until now arrived undefined.
 
+## Documentation and provenance
+
+* **`cbti_depression` is real extracted data, not a synthetic dataset.** The
+  documentation (`R/data.R`, `README.md`, `data-raw/cbti_depression.R`,
+  `sample.R`) described the study names, sample sizes and event counts as
+  synthetic values reproducing only the structure of the source review. They
+  are the values the trials actually reported, as extracted for Furukawa Y,
+  et al. J Affect Disord. 2024 (doi:10.1016/j.jad.2024.09.017). `Lopez2019`
+  carries `d_r = NA` because that trial did not report the outcome, so the
+  missing-results example the publication-bias / ROB-ME workflow uses is a
+  real one rather than a constructed one. Wording only: the data files are
+  unchanged.
+
 # pmatools 0.5.0
 
 0.5.0 rebuilds all five certainty domains on the BMJ 2025 Core GRADE flowcharts
