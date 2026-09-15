@@ -84,10 +84,20 @@ PMA_APP_ROOT <- local({
 # labels off .rare_method_specs() so the app and the fitted suite cannot name
 # the same method two ways. Without them a test of that block would fail on a
 # missing object rather than on wrong copy.
+#
+# R/domain_imprecision.R joined the list in 0.5.1 for exactly that reason. The
+# four-clinical-questions block (R/step3_threshold.R) and the question footnote
+# (R/sof_display.R) both name the worse side of the threshold through
+# .threshold_worse_sign(), and both quote PMA_NO_MARGIN_PLACEHOLDER verbatim,
+# so that the side the app echoes is the side Imprecision tested and the reason
+# on screen is the reason in the package's own abort. Sourced, not
+# re-implemented: a second reading of `small_values` in the app would be free to
+# disagree with the rating it describes.
 for (.stem in c("grade_vocabulary.R", "house_style.R", "domain_row.R",
                 "meta_quantities.R", "effect_scales.R",
                 "multi_outcome.R", "data_ingest.R",
-                "not_reported.R", "rare_events.R", "rare_step3.R")) {
+                "not_reported.R", "rare_events.R", "rare_step3.R",
+                "domain_imprecision.R")) {
   for (.f in c(file.path(PMA_APP_ROOT, "R", "_pmatools", .stem),
                file.path(dirname(PMA_APP_ROOT), "R", .stem))) {
     if (file.exists(.f)) {
@@ -105,3 +115,39 @@ for (.f in c("R/ui_helpers.R", "R/outcome_bank.R", "R/outcome_provenance.R",
   source(file.path(PMA_APP_ROOT, .f))
 }
 rm(.f)
+
+# ----- The whole vendored package, for the tests that need a REAL rating ---
+#
+# The loop above sources the eleven vendored files the app's own helpers are
+# built ON, into the global environment, exactly as app.R does. This is a
+# different need: pma_question_of() and pma_question_note() take a RATED
+# OBJECT, and the round-trip they must satisfy is
+# question -> grade_meta() -> question. A hand-built stub proves the branch
+# table and nothing about whether grade_meta() stores what the branch table
+# reads, which is the half that actually breaks.
+#
+# So the whole of R/_pmatools/ is sourced into an environment of its own, the
+# way app.R sources it into the session, and grade_meta() is called out of
+# there. Deliberately NOT added to the loop above: sourcing thirty-nine files
+# into the global environment would put every package internal in front of
+# every app test, and test-vendor-collisions.R exists because that is a silent
+# override rather than an error. Here the package is behind one name and
+# nothing in it can shadow anything.
+#
+# Memoised, because it is thirty-nine files and two test files want it. NULL
+# when there is no staged bundle, which the callers skip on rather than fail:
+# `Rscript shiny/stage_bundle.R` is the fix and the skip message says so.
+pma_vendored_pkg <- local({
+  cached <- NULL
+  function() {
+    if (!is.null(cached)) return(cached)
+    dir <- file.path(PMA_APP_ROOT, "R", "_pmatools")
+    if (!dir.exists(dir)) return(NULL)
+    env <- new.env(parent = globalenv())
+    for (f in list.files(dir, pattern = "[.][Rr]$", full.names = TRUE)) {
+      sys.source(f, envir = env)
+    }
+    cached <<- env
+    env
+  }
+})

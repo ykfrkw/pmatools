@@ -315,3 +315,372 @@ test_that(".responder_block() offers a three-way choice defaulting to both", {
   # A measure with no conversion offers no choice at all.
   expect_no_match(as.character(.responder_block("RoM")), "sof_presentation")
 })
+
+# --------------------------------------------------------------------------
+# The four clinical questions
+# --------------------------------------------------------------------------
+# Every summary measure the Configuration tab offers a threshold box for, so
+# the copy audits below cover the whole (question x measure) grid rather than
+# one cell of it.
+PMA_TEST_SM <- c("OR", "RR", "HR", "RoM", "SMD", "MD", "ARD")
+
+# Every string the four helpers and the copy deck can put in front of a
+# reviewer, over that whole grid. One function, because the "MID" audit and the
+# "is anything empty" audit have to see the same set: a string that escapes one
+# escapes both.
+pma_all_question_strings <- function() {
+  out <- c(
+    EDU_COPY$config_tab$question_section,
+    EDU_COPY$config_tab$question_label,
+    EDU_COPY$config_tab$question_intro,
+    EDU_COPY$config_tab$question_labels,
+    EDU_COPY$config_tab$question_headings,
+    EDU_COPY$config_tab$question_threshold_units,
+    unlist(EDU_COPY$question_help, use.names = FALSE),
+    PMA_QUESTION_RATIONALE[!is.na(PMA_QUESTION_RATIONALE)],
+    PMA_QUESTION_NOTE_QUESTIONS,
+    step3_worse_side_sentence("desirable"),
+    step3_worse_side_sentence("undesirable"),
+    step3_worse_side_sentence(NULL)
+  )
+  for (q in PMA_CLINICAL_QUESTIONS) {
+    for (sm in PMA_TEST_SM) {
+      for (per in c(100L, 1000L)) {
+        for (sv in list(NULL, "desirable", "undesirable")) {
+          cp <- step3_threshold_copy(q, sm, per = per, small_values = sv)
+          out <- c(out, cp$heading, cp$label, cp$help)
+        }
+      }
+    }
+  }
+  unname(out)
+}
+
+test_that("pma_question_grade_args() is the mapping table and nothing else", {
+  # Five names, always, so grade_obj() can c() the result into its argument
+  # list without a four-way branch over something this table already answers.
+  for (q in PMA_CLINICAL_QUESTIONS) {
+    expect_named(pma_question_grade_args(q),
+                 c("threshold_type", "rating_target",
+                   "rating_target_rationale", "threshold_sides",
+                   "plain_language_frame"),
+                 info = q)
+  }
+
+  # Superiority rates against the null and needs no threshold.
+  sup <- pma_question_grade_args("superiority")
+  expect_identical(sup$threshold_type, "null")
+  expect_null(sup$rating_target)
+  expect_null(sup$rating_target_rationale)
+  expect_identical(sup$threshold_sides, "both")
+  expect_null(sup$plain_language_frame)
+
+  # The default is today's app: threshold_type "mid", Fig 2 derives the target,
+  # both sides tested, Box 1's existing wording. Every value that is not NULL
+  # here is a value the pre-0.5.1 app also produced.
+  imp <- pma_question_grade_args("important_superiority")
+  expect_identical(imp$threshold_type, "mid")
+  expect_null(imp$rating_target)
+  expect_null(imp$rating_target_rationale)
+  expect_identical(imp$threshold_sides, "both")
+  expect_null(imp$plain_language_frame)
+
+  eq <- pma_question_grade_args("equivalence")
+  expect_identical(eq$threshold_type, "mid")
+  expect_identical(eq$rating_target, "little_to_no_difference")
+  expect_identical(eq$threshold_sides, "both")
+  expect_identical(eq$plain_language_frame, "equivalence")
+
+  ni <- pma_question_grade_args("non_inferiority")
+  expect_identical(ni$threshold_type, "mid")
+  expect_identical(ni$rating_target, "little_to_no_difference")
+  expect_identical(ni$threshold_sides, "worse_only")
+  expect_identical(ni$plain_language_frame, "non_inferiority")
+
+  # A pinned target is a manual override, and the package makes the rationale
+  # mandatory. rating_target and its rationale must travel together or neither:
+  # one without the other aborts inside grade_meta().
+  for (q in PMA_CLINICAL_QUESTIONS) {
+    a <- pma_question_grade_args(q)
+    expect_identical(is.null(a$rating_target),
+                     is.null(a$rating_target_rationale), info = q)
+    if (!is.null(a$rating_target_rationale)) {
+      expect_true(nzchar(trimws(a$rating_target_rationale)), info = q)
+    }
+  }
+})
+
+test_that("an unrecognised question resolves to the pre-0.5.1 default", {
+  # NULL before the radio has rendered, and a stale value restored from an
+  # outcome banked by an older build, both land on the default rather than
+  # aborting - the default being the only answer that cannot silently change a
+  # rating.
+  expect_identical(PMA_CLINICAL_QUESTION_DEFAULT, "important_superiority")
+  expect_true(PMA_CLINICAL_QUESTION_DEFAULT %in% PMA_CLINICAL_QUESTIONS)
+  for (bad in list(NULL, NA, NA_character_, "", "noninferiority",
+                   c("superiority", "equivalence"), 3)) {
+    expect_identical(pma_clinical_question(bad), PMA_CLINICAL_QUESTION_DEFAULT)
+  }
+  for (q in PMA_CLINICAL_QUESTIONS) {
+    expect_identical(pma_clinical_question(q), q)
+  }
+  expect_identical(pma_question_grade_args(NULL),
+                   pma_question_grade_args(PMA_CLINICAL_QUESTION_DEFAULT))
+})
+
+test_that("every question survives a real grade_meta() round trip", {
+  # The point of doing this against a REAL fit rather than a stub: the branch
+  # table in pma_question_of() reads fields grade_meta() has to have STORED,
+  # and a stub built from the same table proves only that the table agrees with
+  # itself.
+  skip_if_not_installed("meta")
+  pkg <- pma_vendored_pkg()
+  skip_if(is.null(pkg), "no staged bundle - run Rscript shiny/stage_bundle.R")
+
+  fit <- meta::metabin(
+    event.e = c(10, 12, 9), n.e = c(100, 110, 90),
+    event.c = c(20, 22, 19), n.c = c(100, 110, 90),
+    sm = "RR", random = TRUE, common = FALSE)
+
+  for (q in PMA_CLINICAL_QUESTIONS) {
+    g <- suppressWarnings(do.call(pkg$grade_meta, c(
+      list(fit, small_values = "desirable", threshold = 1.20,
+           threshold_scale = "ratio", pubias_unpublished = "no"),
+      pma_question_grade_args(q))))
+    expect_identical(pma_question_of(g), q, info = q)
+    # And the object really did carry the arguments, rather than the recovery
+    # having guessed right off a default.
+    expect_identical(g$threshold_sides,
+                     pma_question_grade_args(q)$threshold_sides, info = q)
+    expect_identical(g$plain_language_frame,
+                     pma_question_grade_args(q)$plain_language_frame, info = q)
+  }
+})
+
+test_that("pma_question_of() reads a pre-0.5.1 object as the default", {
+  # An object rated before the feature carries none of the three new fields, so
+  # the recovery has to land on the question the app was asking then.
+  expect_identical(pma_question_of(list(threshold_type = "mid")),
+                   "important_superiority")
+  expect_identical(pma_question_of(list(threshold_type = "null")),
+                   "superiority")
+  expect_identical(pma_question_of(NULL), PMA_CLINICAL_QUESTION_DEFAULT)
+  expect_identical(pma_question_of("not an object"),
+                   PMA_CLINICAL_QUESTION_DEFAULT)
+
+  # THE ONE JUDGMENT in that function. A pinned little_to_no_difference with
+  # threshold_type "mid" is what an equivalence question looks like AND what a
+  # legitimate pre-0.5.1 manual override looks like. Reading it as equivalence
+  # would reinterpret somebody's override as a question they never asked and
+  # reword their Summary of Findings sentence to match, so it must not.
+  legacy_override <- list(threshold_type = "mid",
+                          rating_target = "little_to_no_difference",
+                          rating_target_auto = FALSE)
+  expect_identical(pma_question_of(legacy_override), "important_superiority")
+
+  # worse_only identifies itself without help from any other field.
+  expect_identical(pma_question_of(list(threshold_sides = "worse_only")),
+                   "non_inferiority")
+  # An object with no threshold_type at all, rated against the null: the same
+  # fact recovered from the other side.
+  expect_identical(pma_question_of(list(rating_target = "non_null_effect",
+                                        rating_target_auto = TRUE)),
+                   "superiority")
+})
+
+test_that("step3_threshold_copy() keeps the default question byte-identical", {
+  # A reviewer who never touches the radio must see exactly the tab that was
+  # there before, so the label and the note are the existing copy-deck strings
+  # and not a rewording of them.
+  for (sm in PMA_TEST_SM) {
+    cp <- step3_threshold_copy("important_superiority", sm)
+    expect_identical(cp$heading, "Decision threshold", info = sm)
+    expect_identical(cp$label, EDU_COPY$threshold_labels[[sm]], info = sm)
+    expect_identical(cp$help, EDU_COPY$threshold_help[[sm]], info = sm)
+    expect_true(cp$prefill, info = sm)
+  }
+  # An unmapped measure falls back to the same strings output$threshold_panel
+  # already used for one.
+  odd <- step3_threshold_copy("important_superiority", "IRR")
+  expect_identical(odd$label, "Threshold for clinical importance")
+  expect_identical(odd$help, "")
+})
+
+test_that("step3_threshold_copy() prefills only the two superiority questions", {
+  # suggest_threshold() offers a placeholder for a threshold of clinical
+  # importance, which belongs to the outcome. A margin belongs to the review's
+  # own question, and a reviewer who starts on the default and switches to
+  # non-inferiority must not inherit that placeholder as their margin.
+  for (sm in PMA_TEST_SM) {
+    expect_true(step3_threshold_copy("superiority", sm)$prefill, info = sm)
+    expect_true(step3_threshold_copy("important_superiority", sm)$prefill,
+                info = sm)
+    expect_false(step3_threshold_copy("equivalence", sm)$prefill, info = sm)
+    expect_false(step3_threshold_copy("non_inferiority", sm)$prefill, info = sm)
+  }
+})
+
+test_that("step3_threshold_copy() names the question in its heading and label", {
+  expect_identical(step3_threshold_copy("superiority", "RR")$heading,
+                   "Decision threshold (optional)")
+  expect_identical(step3_threshold_copy("equivalence", "RR")$heading,
+                   "Equivalence threshold")
+  expect_identical(step3_threshold_copy("non_inferiority", "RR")$heading,
+                   "Non-inferiority threshold")
+
+  # A margin input label carries the SCALE and no example value: an example in
+  # the label of a box that has no default is a number a reviewer can read as a
+  # suggestion.
+  for (sm in PMA_TEST_SM) {
+    for (q in c("equivalence", "non_inferiority")) {
+      lab <- step3_threshold_copy(q, sm)$label
+      expect_match(lab, "^(Equivalence|Non-inferiority) threshold \\(",
+                   info = paste(q, sm))
+      expect_false(grepl("e.g.", lab, fixed = TRUE), info = paste(q, sm))
+    }
+  }
+  expect_identical(step3_threshold_copy("equivalence", "RR")$label,
+                   "Equivalence threshold (as a risk ratio above 1)")
+  expect_identical(step3_threshold_copy("non_inferiority", "MD")$label,
+                   "Non-inferiority threshold (in outcome units)")
+})
+
+test_that("the two margin questions cite the package's own no-default reason", {
+  # Verbatim, not paraphrased. PMA_NO_MARGIN_PLACEHOLDER is cited by the two
+  # gates that refuse a margin question with no margin, so the reason on screen
+  # and the reason in the abort are one string.
+  for (q in c("equivalence", "non_inferiority")) {
+    for (sm in PMA_TEST_SM) {
+      expect_true(grepl(PMA_NO_MARGIN_PLACEHOLDER,
+                        step3_threshold_copy(q, sm)$help, fixed = TRUE),
+                  info = paste(q, sm))
+    }
+  }
+  # And the two superiority questions do not: there IS a placeholder for a
+  # threshold of clinical importance, so the sentence would be false there.
+  for (q in c("superiority", "important_superiority")) {
+    expect_false(grepl(PMA_NO_MARGIN_PLACEHOLDER,
+                       step3_threshold_copy(q, "RR")$help, fixed = TRUE),
+                 info = q)
+  }
+})
+
+test_that("the superiority question never mentions a threshold in its label", {
+  # On that question a threshold is optional, and a radio label implying
+  # otherwise sends a reviewer looking for a protocol value they do not need.
+  lab <- EDU_COPY$config_tab$question_labels[["superiority"]]
+  expect_identical(lab, "Superiority - is there any effect at all?")
+  expect_false(grepl("threshold|margin", lab, ignore.case = TRUE))
+
+  # The other three do name one, because on those three it is the question.
+  for (q in c("important_superiority", "equivalence", "non_inferiority")) {
+    expect_true(nzchar(EDU_COPY$config_tab$question_labels[[q]]), info = q)
+  }
+
+  # All four are prose questions rather than bare names: the reviewer is
+  # choosing between questions, and "non-inferiority" alone assumes they
+  # already know which one that is.
+  for (q in PMA_CLINICAL_QUESTIONS) {
+    expect_match(EDU_COPY$config_tab$question_labels[[q]], "\\?$", info = q)
+  }
+})
+
+test_that("non-inferiority copy states the one-sidedness and names the side", {
+  # A one-sided test whose side the reviewer cannot see on screen is a silent
+  # exit. The side comes from .threshold_worse_sign(), so the side echoed is
+  # the side Imprecision tested.
+  hi <- step3_threshold_copy("non_inferiority", "RR",
+                             small_values = "desirable")$help
+  lo <- step3_threshold_copy("non_inferiority", "RR",
+                             small_values = "undesirable")$help
+  none <- step3_threshold_copy("non_inferiority", "RR")$help
+
+  for (txt in c(hi, lo, none)) {
+    expect_match(txt, "Only the worse side is tested", fixed = TRUE)
+  }
+  expect_match(hi, "HIGHER values are the worse ones", fixed = TRUE)
+  expect_match(lo, "LOWER values are the worse ones", fixed = TRUE)
+  # Unanswered is said to be unanswered. The package's fallback is the +1
+  # reading, but printing a side off a question nobody has answered is the
+  # silent exit this sentence exists to close.
+  expect_match(none, "that answer is still missing", fixed = TRUE)
+  expect_false(grepl("HIGHER values", none, fixed = TRUE))
+
+  # Equivalence says the opposite, because it tests both.
+  eqv <- step3_threshold_copy("equivalence", "RR")$help
+  expect_match(eqv, "Both sides are tested", fixed = TRUE)
+  expect_false(grepl("worse side", eqv, fixed = TRUE))
+
+  # step3_worse_side_sentence() agrees with the package helper on both signs,
+  # rather than re-reading small_values with a rule of its own.
+  expect_equal(.threshold_worse_sign("desirable"), 1)
+  expect_equal(.threshold_worse_sign("undesirable"), -1)
+})
+
+test_that("the margin help names the display unit it was given", {
+  # A reviewer who switches from per 1,000 to per 100 must not be reading a
+  # note that still says per 1,000.
+  per1000 <- step3_threshold_copy("equivalence", "RR", per = 1000L)$help
+  per100  <- step3_threshold_copy("equivalence", "RR", per = 100L)$help
+  expect_match(per1000, "events per 1,000 patients", fixed = TRUE)
+  expect_match(per100,  "events per 100 patients", fixed = TRUE)
+
+  # A measure with one input box has nothing to choose between, so the
+  # sentence is dropped - and dropping it must not leave a double space.
+  for (sm in c("SMD", "MD")) {
+    txt <- step3_threshold_copy("equivalence", sm)$help
+    expect_false(grepl("absolute box", txt, fixed = TRUE), info = sm)
+    expect_false(grepl("  ", txt, fixed = TRUE), info = sm)
+  }
+})
+
+test_that("PMA_QUESTION_RATIONALE is a constant, and survives analysis.R", {
+  expect_setequal(names(PMA_QUESTION_RATIONALE), PMA_CLINICAL_QUESTIONS)
+  # NA for the two questions that pin nothing, so a lookup by question can
+  # never yield a rationale for a rating that was not overridden.
+  expect_true(is.na(PMA_QUESTION_RATIONALE[["superiority"]]))
+  expect_true(is.na(PMA_QUESTION_RATIONALE[["important_superiority"]]))
+
+  for (q in c("equivalence", "non_inferiority")) {
+    txt <- PMA_QUESTION_RATIONALE[[q]]
+    expect_true(nzchar(trimws(txt)), info = q)
+    # These become string literals in the exported bundle's analysis.R, where
+    # an apostrophe inside a single-quoted argument is a syntax error rather
+    # than a typo.
+    expect_false(grepl("'", txt, fixed = TRUE), info = q)
+    expect_false(grepl('"', txt, fixed = TRUE), info = q)
+    # It has to say why the override was made, since that is what
+    # .check_override_rationale() exists to capture.
+    expect_match(txt, "Fig 2", fixed = TRUE, info = q)
+  }
+})
+
+test_that("no string a reviewer can read says MID", {
+  # A standing guard, and an explicit user instruction rather than a style
+  # preference: the internals keep .has_mid() and mid_zone, and the screen says
+  # Threshold (shiny/SPEC.md 4.5.1). The audit runs over the whole
+  # (question x measure x unit x direction) grid, because a per-measure switch
+  # is exactly where one would survive.
+  strings <- pma_all_question_strings()
+  expect_gt(length(strings), 100L)
+  offenders <- strings[grepl("\\bmid\\b", strings, ignore.case = TRUE)]
+  expect_identical(offenders, character(0))
+  # ... and nothing in the grid is empty or NA, which would hide a string from
+  # the audit above rather than pass it.
+  expect_false(any(is.na(strings)))
+  expect_true(all(nzchar(trimws(strings))))
+})
+
+test_that("pma_question_note() is NULL-safe", {
+  # It goes into a table footer, so a caller must be able to drop the result
+  # straight in. NULL for a NULL object, and for one that was never rated:
+  # "Question rated: clinically important superiority" against an unrated stub
+  # would be a fabrication, not a default.
+  expect_null(pma_question_note(NULL))
+  expect_null(pma_question_note(list()))
+  expect_null(pma_question_note("not an object"))
+  expect_null(pma_question_note(structure(list(certainty = "High"),
+                                          class = "pmatools")))
+  expect_null(pma_question_note(list(threshold_type = NA_character_)))
+  expect_null(pma_question_note(list(threshold_type = "")))
+})

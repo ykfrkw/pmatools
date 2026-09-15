@@ -35,6 +35,14 @@
 # built three lines further down - and because splitting the labels from the
 # marks they paint would let a domain be named two ways on one screen.
 #
+# The clinical-question VOCABULARY below is the second such exception, and it
+# is here for a reason of source order rather than of role: R/step3_grade.R
+# renders the radio, R/step3_threshold.R maps the chosen value onto
+# grade_meta() arguments and R/sof_display.R names the question in a footnote,
+# and this file is sourced before all three (see local_files in app.R). Two
+# constants and no behaviour, so nothing here reads a GRADE object; the rules
+# built on them live next door.
+#
 # `%||%` is defined here because every one of the six uses it. The package
 # defines it too, identically; test-vendor-collisions.R allows that one shared
 # name and no other.
@@ -144,6 +152,25 @@ pma_pmatools_version_number <- function() {
   if (!grepl("^[0-9]", version)) return(NULL)
   version
 }
+
+# ----- The four clinical questions a certainty rating can answer ----------
+# Core GRADE 2 rates certainty IN A CLAIM, and which claim it is has to be
+# chosen before the threshold means anything. Until 0.5.1 the app asked one
+# question of every analysis - is the effect clinically important? - and had no
+# way to say the review was asking about superiority, equivalence or
+# non-inferiority. These four values name the question; pma_question_grade_args()
+# in R/step3_threshold.R is the one place they turn into grade_meta() arguments.
+#
+# The order is the order the radio offers them: weakest claim first, then the
+# two-sided margin question, then the one-sided one. A reviewer reads down the
+# list and stops at the question their protocol asks.
+#
+# The DEFAULT reproduces the pre-0.5.1 app exactly - threshold_type = "mid",
+# the rating target derived by Fig 2, both sides of the threshold tested - so a
+# reviewer who never touches the control gets the rating they got before.
+PMA_CLINICAL_QUESTIONS <- c("superiority", "important_superiority",
+                            "equivalence", "non_inferiority")
+PMA_CLINICAL_QUESTION_DEFAULT <- "important_superiority"
 
 # ----- W4-A output gate: shared confirmation-domain labels -----
 # Named after the keys of the state$domain_confirmed logical vector set in

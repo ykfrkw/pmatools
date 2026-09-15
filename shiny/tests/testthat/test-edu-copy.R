@@ -56,6 +56,92 @@ test_that("the saved-outcome copy no longer describes a Save button", {
   }
 })
 
+test_that("the clinical-question copy is complete for all four questions", {
+  # The radio cannot render a question it has no label for, and the threshold
+  # box cannot relabel itself for one it has no heading for. A value added to
+  # PMA_CLINICAL_QUESTIONS without its copy would surface as an empty label
+  # rather than as an error, so the vocabulary and the deck are checked against
+  # each other rather than each on its own.
+  copy <- EDU_COPY$config_tab
+  for (field in c("question_labels", "question_headings")) {
+    expect_setequal(names(copy[[field]]), PMA_CLINICAL_QUESTIONS)
+    for (q in PMA_CLINICAL_QUESTIONS) {
+      expect_true(nzchar(copy[[field]][[q]]), info = paste(field, q))
+    }
+  }
+  for (field in c("question_section", "question_label", "question_intro")) {
+    expect_true(nzchar(copy[[field]]), info = field)
+  }
+  # One scale phrase per summary measure the threshold box is offered for.
+  expect_setequal(names(copy$question_threshold_units),
+                  c("OR", "RR", "HR", "RoM", "SMD", "MD", "ARD"))
+  expect_setequal(names(copy$question_threshold_units),
+                  names(EDU_COPY$threshold_labels))
+
+  # question_help covers the three questions whose body copy is its own string.
+  # `important_superiority` is deliberately absent: its help is whatever
+  # threshold_help[[sm]] says, which is what keeps the default question
+  # byte-identical to the pre-0.5.1 tab. step3_threshold_copy() resolves that.
+  expect_setequal(names(EDU_COPY$question_help),
+                  c("superiority", "equivalence", "non_inferiority"))
+  expect_null(EDU_COPY$question_help$important_superiority)
+})
+
+test_that("the question copy registers exactly the one line that is a subtitle", {
+  # `question_intro` is the muted line under the radio, so it is registered and
+  # capped like every other subtitle. The rest of the question copy is not, and
+  # each exemption has a different reason - which is why they are named rather
+  # than derived (see the comment above EDU_COPY_SUBTITLE_FIELDS).
+  expect_true("config_tab$question_intro" %in% EDU_COPY_SUBTITLE_FIELDS)
+  expect_lte(edu_copy_word_count(EDU_COPY$config_tab$question_intro),
+             EDU_COPY_SUBTITLE_WORD_CAP)
+
+  # Widget labels and headings, like `threshold_labels`: not subtitles.
+  for (path in c("config_tab$question_section", "config_tab$question_label",
+                 "config_tab$question_labels",
+                 "config_tab$question_headings",
+                 "config_tab$question_threshold_units")) {
+    expect_false(path %in% EDU_COPY_SUBTITLE_FIELDS, info = path)
+  }
+
+  # The per-question help is the exemption that needs arguing. It renders
+  # through .config_note(), which does hang the subtitle class on it, and it is
+  # over the cap on purpose: it DEFINES THE QUESTION the threshold answers -
+  # which side is tested, whether an empty box is a complete answer, why no
+  # value is offered - rather than annotating the control. Delete-first cannot
+  # apply to a sentence the reviewer cannot answer the control without, and
+  # shorten-second cannot apply to two strings that close by quoting
+  # PMA_NO_MARGIN_PLACEHOLDER verbatim.
+  for (q in names(EDU_COPY$question_help)) {
+    expect_false(paste0("question_help$", q) %in% EDU_COPY_SUBTITLE_FIELDS,
+                 info = q)
+    expect_gt(edu_copy_word_count(EDU_COPY$question_help[[q]]), 0L)
+  }
+  # The registry has no stale entry pointing into the new block either - which
+  # the generic loop above would already catch, but this says which block.
+  for (path in EDU_COPY_SUBTITLE_FIELDS[
+        grepl("question", EDU_COPY_SUBTITLE_FIELDS, fixed = TRUE)]) {
+    text <- edu_copy_field(path)
+    expect_true(is.character(text) && length(text) == 1L, info = path)
+  }
+})
+
+test_that("no clinical-question copy in the deck says MID", {
+  # The screen says Threshold; the internals keep .has_mid() and mid_zone
+  # (shiny/SPEC.md 4.5.1). test-step3-threshold.R audits every string the four
+  # helpers can EMIT; this audits the deck itself, so a copy edit made here
+  # fails here rather than two files away.
+  deck <- c(EDU_COPY$config_tab$question_section,
+            EDU_COPY$config_tab$question_label,
+            EDU_COPY$config_tab$question_intro,
+            EDU_COPY$config_tab$question_labels,
+            EDU_COPY$config_tab$question_headings,
+            EDU_COPY$config_tab$question_threshold_units,
+            unlist(EDU_COPY$question_help, use.names = FALSE))
+  expect_identical(unname(deck[grepl("\\bmid\\b", deck, ignore.case = TRUE)]),
+                   character(0))
+})
+
 test_that("edu_copy_word_count() counts what a reader sees", {
   expect_equal(edu_copy_word_count("one two three"), 3L)
   # Copy is assembled with paste0() across source lines, so a joined string can

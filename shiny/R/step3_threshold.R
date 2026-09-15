@@ -6,6 +6,22 @@
 # makes them testable without Shiny, and it is the property to preserve when
 # adding to this file. Sourced BEFORE R/step3_grade.R (see local_files in
 # app.R), though R only needs the definitions to exist by call time.
+#
+# What it reads: the answers the Configuration tab holds - a question, a
+# summary measure, a threshold, a control-arm risk, a display unit - plus
+# EDU_COPY (R/educational_copy.R), the clinical-question vocabulary
+# (R/ui_helpers.R) and three staged pmatools helpers it must not second-guess
+# (.threshold_worse_sign(), PMA_NO_MARGIN_PLACEHOLDER, rare_method_statement()).
+# What it produces: grade_meta() arguments, converted thresholds, copy strings
+# and the tab's HTML blocks. R/step3_grade.R is the only caller of most of it;
+# R/sof_display.R calls pma_question_of() to name a question in a footnote.
+#
+# THE FOUR CLINICAL QUESTIONS live in their own block below, between the
+# absolute-scale conversion and the directed conversion, because the question
+# is what decides which threshold the conversion is even for. A helper that
+# maps between a question and grade_meta() arguments or the copy on screen
+# belongs there; one that reads a rated object to build a Summary of Findings
+# sentence belongs in R/sof_display.R instead.
 
 # ----- Why is there no analysis? ------------------------------------------
 #
@@ -767,6 +783,292 @@ step3_ard_equivalence <- function(sm, abs1000, base1000) {
     rr_up         = p1_up / p0,
     or_up         = (p1_up / (1 - p1_up)) / (p0 / (1 - p0))
   )
+}
+
+# --------------------------------------------------------------------------
+# The four clinical questions
+# --------------------------------------------------------------------------
+# Core GRADE 2 rates certainty IN A CLAIM. Until 0.5.1 the app asked one claim
+# of every analysis - is the effect clinically important? - and a review asking
+# about superiority, equivalence or non-inferiority had no way to say so. The
+# vocabulary is PMA_CLINICAL_QUESTIONS (R/ui_helpers.R); what is here is the
+# translation, in both directions, and the copy policy that follows from it.
+#
+# Nothing below is a new methodological rule. Each question picks existing
+# grade_meta() arguments:
+#
+#   question               threshold_type  rating_target             sides
+#   superiority            "null"          NULL (Fig 2 derives it)   both
+#   important_superiority  "mid"           NULL (Fig 2 derives it)   both
+#   equivalence            "mid"           "little_to_no_difference" both
+#   non_inferiority        "mid"           "little_to_no_difference" worse_only
+#
+# plus `plain_language_frame`, which is presentation only, and
+# `rating_target_rationale`, which the package makes mandatory whenever the
+# target is pinned. `important_superiority` is the default and reproduces the
+# pre-0.5.1 rating byte for byte.
+#
+# ALL FOUR FUNCTIONS HERE ARE PURE, like everything else in this file: the
+# question comes in as a string, the copy comes out as strings. The reactiveVal
+# that holds the reviewer's answer, the radio that sets it, the reseed observer
+# and the Next gate are R/step3_grade.R's, and they call into these.
+#
+# THE ADMISSION RULE for this block: a function belongs here when it maps
+# BETWEEN the question and something the package or the screen already
+# understands - arguments, a heading, a label, a note. A function that reads a
+# rated object to build a SUMMARY OF FINDINGS sentence does not; that is
+# pma_question_note() in R/sof_display.R, beside the rare-event alert it sits
+# next to on the page.
+
+# The five grade_meta() arguments each question picks. Always five names, with
+# NULL where the question does not set one, so a caller can c() the result into
+# an argument list without branching on the question - which is the whole point
+# of having it: grade_obj() in R/step3_grade.R must not grow a four-way `if`
+# over something the mapping table already answers.
+pma_question_grade_args <- function(question) {
+  question <- pma_clinical_question(question)
+  pinned   <- question %in% c("equivalence", "non_inferiority")
+  list(
+    threshold_type = if (identical(question, "superiority")) "null" else "mid",
+    rating_target  = if (pinned) "little_to_no_difference" else NULL,
+    rating_target_rationale = if (pinned) {
+      unname(PMA_QUESTION_RATIONALE[[question]])
+    } else {
+      NULL
+    },
+    threshold_sides = if (identical(question, "non_inferiority")) {
+      "worse_only"
+    } else {
+      "both"
+    },
+    plain_language_frame = if (pinned) question else NULL
+  )
+}
+
+# One of PMA_CLINICAL_QUESTIONS, or the default. Anything unrecognised - NULL
+# before the radio has rendered, a stale value restored from an outcome banked
+# by an older build - resolves to the default rather than aborting, because
+# the default is the pre-0.5.1 behaviour and falling back to it is the only
+# answer that cannot silently change a rating.
+pma_clinical_question <- function(question) {
+  q <- as.character(question)
+  if (length(q) != 1L || is.na(q) || !q %in% PMA_CLINICAL_QUESTIONS) {
+    return(PMA_CLINICAL_QUESTION_DEFAULT)
+  }
+  q
+}
+
+# The inverse: which question did this rated object answer?
+#
+# Read in this order, and the order is load-bearing:
+#
+#   1. threshold_sides == "worse_only" is non-inferiority and nothing else.
+#      It is the only question that asks a one-sided threshold question, so it
+#      identifies itself without help.
+#   2. plain_language_frame names the family the Summary of Findings sentence
+#      was drawn from, and the two margin questions are the only things that
+#      set it.
+#   3. threshold_type == "null" is superiority: the rating was against the null.
+#   4. rating_target == "non_null_effect", auto-derived, is the same fact
+#      recovered from the other side, for an object that carries no
+#      threshold_type at all.
+#   5. everything else is the default, which is what a pre-0.5.1 object is.
+#
+# rating_target is deliberately NOT read as evidence of EQUIVALENCE, and that
+# is the one judgment in this function. A pinned "little_to_no_difference" with
+# threshold_type = "mid" is exactly what an equivalence question looks like -
+# and also exactly what a legitimate pre-0.5.1 manual override looks like.
+# Inferring equivalence from it would reinterpret somebody's override as a
+# question they never asked, and reword their Summary of Findings sentence to
+# match. plain_language_frame exists so that the two can be told apart.
+pma_question_of <- function(g) {
+  if (is.null(g) || !is.list(g)) return(PMA_CLINICAL_QUESTION_DEFAULT)
+
+  .one <- function(x) {
+    x <- as.character(x)
+    if (length(x) != 1L || is.na(x)) NULL else x
+  }
+
+  if (identical(.one(g$threshold_sides), "worse_only")) return("non_inferiority")
+
+  frame <- .one(g$plain_language_frame)
+  if (identical(frame, "non_inferiority")) return("non_inferiority")
+  if (identical(frame, "equivalence"))     return("equivalence")
+
+  if (identical(.one(g$threshold_type), "null")) return("superiority")
+  if (is.null(.one(g$threshold_type)) &&
+      identical(.one(g$rating_target), "non_null_effect") &&
+      isTRUE(g$rating_target_auto)) {
+    return("superiority")
+  }
+
+  PMA_CLINICAL_QUESTION_DEFAULT
+}
+
+# The rationale the two margin questions hand to grade_meta(). A CONSTANT, and
+# that is the decision rather than an economy.
+#
+# The package makes rating_target_rationale mandatory because pinning the
+# target overrides the Core GRADE 2 Fig 2 derivation, and an override wants a
+# written reason (.check_override_rationale(), R/domain_row.R). But the
+# reviewer here is not overruling a derivation on a hunch: they are answering a
+# DIFFERENT QUESTION, and the reason is the same every time - Fig 2 derives its
+# target from the point estimate, which is a reading of these data, and an
+# equivalence or non-inferiority claim is fixed in the protocol before any data
+# are read. Asking a reviewer to retype that per outcome does not make the
+# record more auditable; it trains them to type anything, and then the one
+# rationale that should have been specific is "n/a" too.
+#
+# NA_character_ for the two questions that pin nothing, so a lookup by question
+# can never yield a rationale for a rating that was not overridden.
+#
+# NO APOSTROPHES. These strings are written out as string literals in the
+# exported bundle's analysis.R, where an apostrophe inside a single-quoted
+# argument is a syntax error rather than a typo.
+PMA_QUESTION_RATIONALE <- c(
+  superiority           = NA_character_,
+  important_superiority = NA_character_,
+  equivalence = paste0(
+    "The review asks an equivalence question, so certainty is rated in the ",
+    "claim that the difference is unimportant in either direction. Core GRADE ",
+    "2 Fig 2 derives the rating target from the pooled point estimate, which ",
+    "answers a different question about these data; the target is therefore ",
+    "pinned to little or no difference. The equivalence threshold is the ",
+    "protocol value, not a reading of this evidence."
+  ),
+  non_inferiority = paste0(
+    "The review asks a non-inferiority question, so certainty is rated in the ",
+    "claim that the intervention is not worse than the comparator by more ",
+    "than the threshold. Core GRADE 2 Fig 2 derives the rating target from ",
+    "the pooled point estimate, which answers a different question about ",
+    "these data; the target is therefore pinned to little or no difference. ",
+    "The threshold and the side it is tested on are protocol values, not ",
+    "readings of this evidence."
+  )
+)
+
+# The Decision-threshold box, per question: its heading, the label on the
+# numeric input, the body copy under it, and whether the box may be prefilled.
+#
+# `sm` is the summary measure, because the label and the two superiority help
+# bodies are measure-specific. `per` is the display unit of the absolute box
+# (R/step3_threshold.R's STEP3_PER_UNITS), named in the margin help so a
+# reviewer switching from 1,000 to 100 does not read a note that still says
+# per 1,000. `small_values` is Step 2's direction answer, and it is optional
+# only because this runs before Step 2 can have been answered: supplied, the
+# non-inferiority help NAMES the worse side, which is the whole reason a
+# one-sided test is safe to offer. A one-sided test whose side the reviewer
+# cannot see on screen is a silent exit (shiny/SPEC.md 2.3).
+#
+# `prefill` is TRUE for the two superiority questions and FALSE for the two
+# margin ones. suggest_threshold() offers a placeholder for a threshold of
+# clinical importance, which belongs to the outcome; a margin belongs to the
+# review's own question. Prefilling one does not save a lookup, it answers the
+# question - and a reviewer who starts on the default and switches to
+# non-inferiority would otherwise inherit that placeholder as their margin,
+# which is the exact failure the no-default decision exists to prevent.
+step3_threshold_copy <- function(question, sm, per = STEP3_PER_DEFAULT,
+                                 small_values = NULL) {
+  question <- pma_clinical_question(question)
+  sm       <- as.character(sm %||% "")[1]
+  copy     <- EDU_COPY$config_tab
+
+  heading <- unname(copy$question_headings[[question]])
+
+  # The two superiority questions keep the existing label and the existing
+  # per-measure help verbatim, which is what makes the default question
+  # byte-identical to the pre-0.5.1 tab. The fallbacks are the ones
+  # output$threshold_panel already used for an unmapped measure.
+  base_label <- EDU_COPY$threshold_labels[[sm]] %||%
+    "Threshold for clinical importance"
+  # `[[` on a named CHARACTER vector errors for a name it does not hold, where
+  # `[[` on a list returns NULL, so the two lookups on this line cannot be
+  # written the same way. An unmapped measure has to reach a fallback rather
+  # than abort: output$threshold_panel renders for whatever Step 2 produced.
+  unit <- unname(copy$question_threshold_units[sm])
+  if (is.na(unit)) unit <- "on the effect scale of this analysis"
+
+  label <- switch(
+    question,
+    equivalence     = sprintf("Equivalence threshold (%s)", unit),
+    non_inferiority = sprintf("Non-inferiority threshold (%s)", unit),
+    base_label
+  )
+
+  # step3_margin_scale_note() is empty for a measure with one input box, so the
+  # parts are filtered before joining rather than pasted blind: a dropped
+  # sentence must not leave a double space behind it on screen.
+  .sentences <- function(...) {
+    parts <- c(...)
+    paste(parts[nzchar(trimws(parts))], collapse = " ")
+  }
+
+  help <- switch(
+    question,
+    important_superiority = EDU_COPY$threshold_help[[sm]] %||% "",
+    superiority           = EDU_COPY$question_help$superiority,
+    equivalence = .sentences(
+      EDU_COPY$question_help$equivalence,
+      step3_margin_scale_note(sm, per),
+      PMA_NO_MARGIN_PLACEHOLDER
+    ),
+    non_inferiority = .sentences(
+      EDU_COPY$question_help$non_inferiority,
+      step3_worse_side_sentence(small_values),
+      step3_margin_scale_note(sm, per),
+      PMA_NO_MARGIN_PLACEHOLDER
+    )
+  )
+
+  list(heading = heading, label = label, help = help,
+       prefill = question %in% c("superiority", "important_superiority"))
+}
+
+# Which side of the threshold is the worse one, in words, for the reviewer who
+# has to check it against what they answered in Step 2.
+#
+# The sign comes from .threshold_worse_sign() (R/domain_imprecision.R, staged
+# under R/_pmatools/) rather than from a second reading of `small_values` here:
+# the imprecision domain tests the side that function names, and an app echoing
+# a side of its own would be free to disagree with the rating it is describing.
+#
+# An unanswered direction is said to be unanswered. The package's fallback in
+# that case is the +1 reading, but printing "higher values are worse" off a
+# question nobody has answered is the silent exit this sentence exists to
+# close.
+step3_worse_side_sentence <- function(small_values) {
+  answered <- is.character(small_values) && length(small_values) == 1L &&
+    !is.na(small_values) && small_values %in% c("desirable", "undesirable")
+  if (!answered) {
+    return(paste0(
+      "Which side is the worse one follows from Step 2's direction answer, ",
+      "and that answer is still missing - go back and record whether smaller ",
+      "values of this outcome are favorable."))
+  }
+  if (.threshold_worse_sign(small_values) > 0) {
+    paste0(
+      "Step 2 records that smaller values of this outcome are favorable, so ",
+      "HIGHER values are the worse ones and the threshold is tested on the ",
+      "higher-value side.")
+  } else {
+    paste0(
+      "Step 2 records that smaller values of this outcome are unfavorable, ",
+      "so LOWER values are the worse ones and the threshold is tested on the ",
+      "lower-value side.")
+  }
+}
+
+# Where a margin may be typed, for the measures that offer two boxes. Binary
+# ratio measures carry an absolute box as well as a relative one, and the
+# absolute one is the recommended route, so a reviewer holding a margin per
+# 1,000 patients should not have to convert it by hand to enter it. Empty for
+# every other measure, which has one box and nothing to choose between.
+step3_margin_scale_note <- function(sm, per = STEP3_PER_DEFAULT) {
+  if (!sm %in% c("OR", "RR", "HR")) return("")
+  sprintf(paste0(
+    "Enter it on whichever scale your protocol states it on: the absolute ",
+    "box takes it as events %s patients, this box takes it as a ratio."),
+    step3_per_unit_label(per))
 }
 
 # --------------------------------------------------------------------------

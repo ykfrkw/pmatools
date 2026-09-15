@@ -19,6 +19,14 @@
 # builds the table itself does not: grade_table() is the package's, and the
 # app must keep feeding it rather than growing a second implementation.
 #
+# pma_question_note() is here under that rule and not under the four clinical
+# questions in R/step3_threshold.R, which is where the rest of the feature
+# lives. What it builds is a footer line, from a rated object, for the same
+# three surfaces pma_rare_event_alert() serves. It reads pma_question_of() and
+# step3_per_label() out of that file - defined later in app.R's order, which is
+# fine because both are called rather than evaluated at source time - the way
+# every helper here reads PMA_ALERT_* out of R/ui_helpers.R.
+#
 # pma_arm_labels() reads `state`, never `input`, and every SoF helper that
 # needs arm words takes them as an argument defaulting to
 # PMA_ARM_LABELS_DEFAULT. Step 2's two selects are destroyed when the wizard
@@ -214,6 +222,125 @@ pma_rare_event_alert <- function(g, baseline_risk = NULL, label = NULL,
 
   list(band = band, lowest = lowest, rates = rates, baseline_risk = br,
        headline = headline, detail = detail, note = note, label = label)
+}
+
+# The question the rating answered, as a footer line.
+#
+# Same admission rule as pma_rare_event_alert() above, and it is here for the
+# same reason: a Summary of Findings is what it is for. It builds one sentence
+# that hangs off the table, three surfaces render it (the Step 3 preview, the
+# Step 4 combined table, the exported .docx), and they must not word it three
+# ways. It goes FIRST among the footnotes, because it frames every other one:
+# a Low rating means something different depending on which claim was rated.
+#
+# EVERY NUMBER COMES OFF THE RATED OBJECT. `g$threshold` is what grade_meta()
+# was given, `g$threshold_ard` the absolute form when it had one,
+# `g$rating_target` which threshold Core GRADE 2 Fig 2 settled on, and
+# `g$threshold_sides` which sides Imprecision then tested. Re-deriving any of
+# it from the Configuration tab's live inputs would let the footnote name a
+# number the rating did not use - which is the failure mode the tab's widget
+# sync already exists to close (R/step3_threshold.R).
+#
+# `question` defaults to pma_question_of(g) (R/step3_threshold.R, sourced after
+# this file; the default is evaluated at call time, so the order is fine). A
+# caller that already knows the question passes it rather than having it
+# recovered twice.
+#
+# NULL for a NULL object and for an unrated one. `threshold_type` is the
+# marker: grade_meta() has always stored it, so every rated object carries it
+# and a hand-built stub does not - and inventing "Question rated: clinically
+# important superiority" for an object that was never rated would be a
+# fabrication, not a default.
+pma_question_note <- function(g, per = STEP3_PER_DEFAULT, question = NULL) {
+  if (is.null(g) || !is.list(g)) return(NULL)
+  ttype <- as.character(g$threshold_type)
+  if (length(ttype) != 1L || is.na(ttype) || !nzchar(ttype)) return(NULL)
+
+  if (is.null(question)) question <- pma_question_of(g)
+  asked <- PMA_QUESTION_NOTE_QUESTIONS[[question]]
+
+  # Fig 2 decides which threshold Imprecision was handed; the "non_null_effect"
+  # target is the one that means "none of it - the rating was against the null".
+  rated_against_null <- identical(as.character(g$rating_target),
+                                  "non_null_effect")
+  thr <- if (rated_against_null) NULL else .pma_question_threshold_words(g, per)
+
+  middle <- if (is.null(thr)) {
+    paste0("The rating is against the null, so no threshold was used.")
+  } else {
+    sides <- if (identical(as.character(g$threshold_sides), "worse_only")) {
+      sprintf("the worse side only (%s)",
+              .pma_worse_side_words(g$small_values))
+    } else {
+      "both sides"
+    }
+    flip <- if (identical(question, "superiority")) {
+      paste0(" The pooled estimate lies very near the null, so Core GRADE 2 ",
+             "Fig 2 rated certainty in little or no difference and read the ",
+             "threshold after all.")
+    } else ""
+    paste0(sprintf("Threshold used: %s, tested on %s.", thr, sides), flip)
+  }
+
+  paste0("Question rated: ", asked, " ", middle,
+         " Certainty is rated in that claim, not in the size of the effect.")
+}
+
+# The footnote's name for each question. Deliberately NOT the radio labels in
+# EDU_COPY$config_tab$question_labels: those are choices in a list the reviewer
+# is reading top to bottom, and these are read alone, under a table, possibly
+# in a .docx a year later. Same four questions, said so they stand up out of
+# context - "the intervention" rather than "it".
+#
+# The word "MID" appears in none of them; the screen says Threshold
+# (shiny/SPEC.md 4.5.1), and a footnote is the screen.
+PMA_QUESTION_NOTE_QUESTIONS <- c(
+  superiority = paste0(
+    "superiority - is there any effect at all?"),
+  important_superiority = paste0(
+    "clinically important superiority - is the effect large enough to ",
+    "matter?"),
+  equivalence = paste0(
+    "equivalence - is the difference small enough to be unimportant in ",
+    "either direction?"),
+  non_inferiority = paste0(
+    "non-inferiority - is the intervention no worse than the comparator by ",
+    "more than the threshold?")
+)
+
+# The threshold the rating used, in the units it was given in. The absolute
+# form wins when there is one, because that is the scale Core GRADE 2 asks for
+# and the one the reviewer typed; otherwise the value with its measure in
+# front, so "1.25" cannot be read as a risk difference.
+#
+# NULL when the object carries no usable threshold, which the caller renders as
+# the against-the-null sentence rather than as a blank.
+.pma_question_threshold_words <- function(g, per = STEP3_PER_DEFAULT) {
+  .usable <- function(x) is.numeric(x) && length(x) == 1L && is.finite(x)
+
+  ard <- g$threshold_ard
+  if (.usable(ard)) return(step3_per_label(1000 * ard, per))
+
+  thr <- g$threshold
+  if (!.usable(thr)) return(NULL)
+  num <- format(signif(thr, 4), trim = TRUE, scientific = FALSE)
+  sm  <- as.character((g$meta$sm %||% "")[1])
+  if (!is.na(sm) && nzchar(sm)) paste(sm, num) else num
+}
+
+# The worse side named for a reader of the table, from the same
+# .threshold_worse_sign() the rating asked. Never a guess: an unanswered
+# direction says so, because a footnote claiming a side the analysis did not
+# record would be the one sentence in the table nobody could check.
+.pma_worse_side_words <- function(small_values) {
+  answered <- is.character(small_values) && length(small_values) == 1L &&
+    !is.na(small_values) && small_values %in% c("desirable", "undesirable")
+  if (!answered) return("the worse side was not recorded for this outcome")
+  if (.threshold_worse_sign(small_values) > 0) {
+    "higher values of this outcome are the worse ones"
+  } else {
+    "lower values of this outcome are the worse ones"
+  }
 }
 
 # Amber banner for a rare-event alert. NULL-safe so callers can drop the
