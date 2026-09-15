@@ -56,6 +56,8 @@ g <- grade_meta(
   require_threshold       = {{require_threshold_arg}},
   rating_target           = {{rating_target_arg}},
   rating_target_rationale = {{rating_target_rationale_arg}},
+  threshold_sides         = "{{threshold_sides}}",
+  plain_language_frame    = {{plain_language_frame_arg}},
   outcome_type            = "{{ois_outcome_type}}",
   ois_events              = {{ois_events_arg}},
   ois_n                   = {{ois_n_arg}},

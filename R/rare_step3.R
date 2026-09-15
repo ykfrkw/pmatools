@@ -12,6 +12,15 @@
 # would be a second chance for the two fits to disagree, and the app already
 # holds the one run_rare_ma() produced (shiny/SPEC.md 3.4.14).
 #
+# Everything the rating's question is made of arrives as an argument, and none
+# of it is re-derived: the threshold from .rated_threshold_for_imprecision()
+# (R/rating_target.R) and, since 0.5.1, the SIDEDNESS as `worse_side`
+# (grade_meta(threshold_sides =); SPEC.md 4.5.1b, 4.12). That is the whole
+# point of the file -- a suite asked a two-sided question while the primary was
+# rated one-sidedly would report a disagreement the rating never had -- so a
+# new fact about the rating belongs in an argument here, never in a
+# computation.
+#
 # NOTHING HERE RATES ANYTHING. Every function returns a fact or a sentence.
 # Sparse data earns arithmetic that is valid on the data at hand and a record
 # of how much the answer depended on a method choice; it does not earn a
@@ -88,19 +97,52 @@ rare_method_statement <- function(method_id, effect_scale = "OR") {
 #
 # `thr` is the threshold on the TE scale, always positive; NULL or 0 means the
 # threshold is the null, and then the question is whether the interval spans 0.
-.rare_crosses_threshold <- function(lower, upper, thr = NULL) {
+#
+# `worse_side` carries the primary's SIDEDNESS as well as its threshold
+# (grade_meta(threshold_sides =), SPEC.md 4.5.1b). NULL asks the two-sided
+# question, which is what every caller before 0.5.1 asked and still asks; +1
+# or -1 asks the one-sided question on that side. It had to be added: this
+# helper exists so the sensitivity answer and the rated answer cannot come
+# from two different rules, and once the primary can be asked a one-sided
+# question a suite still asked the two-sided one would report a disagreement
+# the rating never had -- or miss one it did.
+#
+# The side is THREADED FROM THE RATED OBJECT by the caller, never re-derived
+# here, for the same reason `thr` is (.rated_threshold_for_imprecision()).
+.rare_crosses_threshold <- function(lower, upper, thr = NULL,
+                                    worse_side = NULL) {
   if (!is.finite(lower) || !is.finite(upper)) return(NA)
   if (is.null(thr) || length(thr) != 1L || !is.finite(thr) || thr <= 0) {
     return((lower < 0) && (upper > 0))
   }
+  side <- .rare_worse_side(worse_side)
+  if (!is.null(side)) {
+    worse <- side * thr
+    return((lower < worse) && (upper > worse))
+  }
   ((lower < -thr) && (upper > -thr)) || ((lower < thr) && (upper > thr))
+}
+
+# Normalise a `worse_side` argument to +1 / -1, or NULL for "ask the two-sided
+# question". Anything unusable -- NULL, NA, a non-finite value, 0, a vector --
+# means the caller did not state a side, and the two-sided question is the
+# behaviour-preserving answer to that. Written once because three functions
+# take the argument and all three must read it the same way.
+.rare_worse_side <- function(worse_side) {
+  if (is.null(worse_side) || length(worse_side) != 1L) return(NULL)
+  if (is.na(worse_side) || !is.numeric(worse_side) ||
+      !is.finite(worse_side) || worse_side == 0) {
+    return(NULL)
+  }
+  if (worse_side > 0) 1 else -1
 }
 
 # Ask every fitted method the primary's question.
 #
 # `rare` is a pma_rare_meta from run_rare_ma(); `threshold_internal` is the
 # threshold on the TE scale, exactly as grade_meta() resolved it (NULL = the
-# null). Returns:
+# null); `worse_side` is the primary's sidedness, exactly as the rated object
+# recorded it (NULL = the two-sided question). Returns:
 #   answers    named logical, one per method that produced a usable interval
 #   primary    the primary method's own answer (NA when it produced none)
 #   unanimous  TRUE when every usable method answered the same way
@@ -110,7 +152,8 @@ rare_method_statement <- function(method_id, effect_scale = "OR") {
 # A suite with fewer than two usable methods is reported as unanimous = NA:
 # one answer is not a consensus, and calling it one would be the same mistake
 # as reporting a single study as consistent.
-rare_suite_crossing <- function(rare, threshold_internal = NULL) {
+rare_suite_crossing <- function(rare, threshold_internal = NULL,
+                                worse_side = NULL) {
   empty <- list(answers = logical(0), primary = NA, unanimous = NA,
                 disagree = character(0), k_methods = 0L,
                 table = NULL, effect_scale = NA_character_)
@@ -129,7 +172,8 @@ rare_suite_crossing <- function(rare, threshold_internal = NULL) {
   lower <- log(tab$ci_low)
   upper <- log(tab$ci_high)
   answers <- vapply(seq_len(nrow(tab)), function(i) {
-    .rare_crosses_threshold(lower[i], upper[i], threshold_internal)
+    .rare_crosses_threshold(lower[i], upper[i], threshold_internal,
+                            worse_side = worse_side)
   }, logical(1))
   names(answers) <- tab$method_id
 
@@ -160,11 +204,17 @@ rare_suite_crossing <- function(rare, threshold_internal = NULL) {
 # method agrees the interval crosses the threshold" is a fact about the suite,
 # and the domain's own rule - unchanged - is what turns the primary's answer
 # into a rating.
-rare_suite_crossing_note <- function(cross, threshold_internal = NULL) {
+rare_suite_crossing_note <- function(cross, threshold_internal = NULL,
+                                     worse_side = NULL) {
   if (is.null(cross) || !cross$k_methods) return(NA_character_)
   thr_label <- if (is.null(threshold_internal) ||
                    !is.finite(threshold_internal) || threshold_internal <= 0) {
     "the null"
+  } else if (!is.null(.rare_worse_side(worse_side))) {
+    # The sidedness has to reach the sentence as well as the arithmetic: a
+    # reader comparing this panel with the Imprecision note must be able to
+    # see that both asked the same question.
+    "the chosen threshold on the worse side"
   } else {
     "the chosen threshold"
   }

@@ -117,7 +117,13 @@ make_domain_row <- function(domain, judgment, auto, notes = NA_character_,
 # machine-readable companion -- but every PROSE renderer drops them, because
 # "Flowchart path: pma-rob-node-dominance pma-rob-edge-dominance-yes ..." is not a
 # footnote anybody wants under a Summary of Findings table.
-.FACT_KEYS_MACHINE_ONLY <- c("flow_path")
+# Facts recorded for a renderer rather than for a reader. `flow_path` is a
+# space-separated list of SVG node ids; `threshold_zone` is a bare
+# "within" / "crosses" / "beyond" token that the plain-language families branch
+# on and that the neighbouring `threshold_position` fact already states in
+# words. Neither belongs in a Summary of Findings footnote. Anything else added
+# for a renderer belongs here too (SPEC.md 5.6).
+.FACT_KEYS_MACHINE_ONLY <- c("flow_path", "threshold_zone")
 
 .drop_machine_only_facts <- function(facts) {
   if (is.null(facts) || !is.data.frame(facts) || !"key" %in% names(facts)) {

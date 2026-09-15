@@ -217,6 +217,29 @@ test_that("an automated rating never rates one domain down more than 2", {
   }
 })
 
+test_that("a one-sided threshold test cannot deepen the automated cap", {
+  # threshold_sides = "worse_only" (v0.5.1) changes which threshold Fig 4
+  # tests, never how deep it can go. GRADE_LEVEL_AUTO_MAX still bounds it.
+  m   <- make_levels_metabin()
+  cap <- GRADE_DOWNGRADE[[GRADE_LEVEL_AUTO_MAX]]
+  for (sides in THRESHOLD_SIDES) {
+    for (small_values in SMALL_VALUES_LEVELS) {
+      g <- suppressWarnings(grade_meta(
+        m,
+        small_values            = small_values,
+        threshold               = 1.10,
+        threshold_scale         = "ratio",
+        rating_target           = "little_to_no_difference",
+        rating_target_rationale = "The review asks about a protocol margin",
+        threshold_sides         = sides))
+      auto <- g$domain_assessments[g$domain_assessments$auto, ]
+      expect_gte(min(auto$downgrade), cap,
+                 label = paste(sides, small_values))
+      expect_false(any(auto$judgment == "extremely_serious"))
+    }
+  }
+})
+
 test_that("extremely_serious is reachable by hand, on every domain argument", {
   m <- make_levels_metabin()
 

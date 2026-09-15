@@ -634,3 +634,421 @@ test_that("'OIS could not be computed' names the input that was missing", {
   expect_match(r$notes, "OIS could not be computed (missing ois_delta",
                fixed = TRUE)
 })
+
+# ==========================================================================
+# threshold_sides: the one-sided threshold test (v0.5.1; SPEC.md 4.5.1b)
+# ==========================================================================
+#
+# Order here is deliberate and the first two blocks are the load-bearing ones.
+# Golden invariance comes first: nothing else in this section means anything if
+# the default setting is not byte-for-byte what it was. Monotonicity comes
+# second, because it is the test that would have caught the rejected one-sided
+# `-2` rule, and it is written even though the implementation looks obviously
+# right -- "obviously right" is what the rejected rule also looked.
+
+# An interval built to order. assess_imprecision() reads lower.random /
+# upper.random, so they are set directly rather than reverse-engineered from a
+# pair of studies whose pooling would move them.
+ts_meta <- function(lower, upper, sm = "RR") {
+  te <- (lower + upper) / 2
+  se <- (upper - lower) / (2 * stats::qnorm(0.975))
+  m <- meta::metagen(TE = c(te, te), seTE = c(se, se),
+                     studlab = c("A", "B"), sm = sm,
+                     random = TRUE, common = FALSE)
+  m$lower.random <- lower
+  m$upper.random <- upper
+  m$TE.random    <- te
+  m$n.e <- c(100, 100)
+  m$n.c <- c(100, 100)
+  m
+}
+
+# The threshold every case below is tested against, on the TE scale.
+TS_THRESHOLD <- 0.5
+
+# Every zone on both sides of the band, plus the boundary cases where a limit
+# sits exactly on a threshold (which must NOT count as a crossing).
+TS_INTERVALS <- list(
+  wholly_below      = c(-2.0, -1.0),
+  crosses_lower     = c(-1.5, -0.2),
+  inside_band       = c(-0.3,  0.3),
+  crosses_upper     = c(-0.2,  1.5),
+  wholly_above      = c( 1.0,  2.0),
+  crosses_both      = c(-1.5,  1.5),
+  on_both_limits    = c(-0.5,  0.5),
+  lower_on_upper_t  = c( 0.5,  1.5),
+  upper_on_lower_t  = c(-1.5, -0.5),
+  crosses_upper_2   = c( 0.1,  0.9),
+  crosses_lower_2   = c(-0.9, -0.1)
+)
+
+TS_MEASURES <- list(RR = "relative", MD = "absolute", SMD = "absolute")
+
+# One row of the grid, at a given sidedness.
+ts_assess <- function(sm, outcome_type, small_values, ci, ...) {
+  suppressWarnings(assess_imprecision(
+    ts_meta(ci[1], ci[2], sm = sm),
+    outcome_type              = outcome_type,
+    small_values              = small_values,
+    threshold_internal        = TS_THRESHOLD,
+    threshold_for_imprecision = TS_THRESHOLD,
+    ...))
+}
+
+# Walk the grid, handing each cell to `f`. A loop, not one case: the rejected
+# `-2` rule was wrong on exactly one interval shape out of eleven.
+ts_walk <- function(f) {
+  for (sm in names(TS_MEASURES)) {
+    for (small_values in SMALL_VALUES_LEVELS) {
+      for (nm in names(TS_INTERVALS)) {
+        f(sm = sm, outcome_type = TS_MEASURES[[sm]],
+          small_values = small_values, nm = nm, ci = TS_INTERVALS[[nm]])
+      }
+    }
+  }
+}
+
+ts_fact <- function(row, key) {
+  facts <- attr(row, "facts")
+  if (is.null(facts) || !key %in% facts$key) return(NA_character_)
+  as.character(facts$value[match(key, facts$key)])
+}
+
+# --------------------------------------------------------------------------
+# 1. Golden invariance. threshold_sides = "both" is the argument omitted.
+# --------------------------------------------------------------------------
+
+test_that("threshold_sides = 'both' is identical to omitting the argument", {
+  ts_walk(function(sm, outcome_type, small_values, nm, ci) {
+    omitted <- ts_assess(sm, outcome_type, small_values, ci)
+    both    <- ts_assess(sm, outcome_type, small_values, ci,
+                         threshold_sides = "both")
+    expect_identical(
+      both, omitted,
+      info = paste0(sm, " / ", small_values, " / ", nm))
+  })
+})
+
+test_that("the full default vector resolves to 'both' as match.arg would", {
+  m <- ts_meta(-0.2, 1.5)
+  omitted <- suppressWarnings(assess_imprecision(
+    m, small_values = "desirable", threshold_internal = TS_THRESHOLD,
+    threshold_for_imprecision = TS_THRESHOLD))
+  forwarded <- suppressWarnings(assess_imprecision(
+    m, small_values = "desirable", threshold_internal = TS_THRESHOLD,
+    threshold_for_imprecision = TS_THRESHOLD,
+    threshold_sides = THRESHOLD_SIDES))
+  expect_identical(forwarded, omitted)
+})
+
+# --------------------------------------------------------------------------
+# 2. Monotonicity on Fig 4's crossing branch.
+# --------------------------------------------------------------------------
+# Non-inferiority is a strictly weaker claim about one interval than
+# equivalence, so asking it must never earn a DEEPER downgrade. On Fig 4's
+# "Yes" branch that is an absolute rule, and it is the rule the rejected
+# one-sided `-2` restatement broke: a CI of (-0.5T, +1.5T) crosses the
+# worse-side threshold, so it lands inside this assertion.
+
+test_that("crosses_both_thresholds is identical on both sidedness settings", {
+  # The whole `-2` argument rests on this staying two-sided. Asserted through
+  # the string that branch writes rather than on the private boolean, so it
+  # survives a refactor of the internals.
+  ts_walk(function(sm, outcome_type, small_values, nm, ci) {
+    both  <- ts_assess(sm, outcome_type, small_values, ci,
+                       threshold_sides = "both")
+    worse <- ts_assess(sm, outcome_type, small_values, ci,
+                       threshold_sides = "worse_only")
+    expect_identical(
+      grepl("crosses BOTH Thresholds", worse$notes, fixed = TRUE),
+      grepl("crosses BOTH Thresholds", both$notes,  fixed = TRUE),
+      info = paste0(sm, " / ", small_values, " / ", nm))
+  })
+})
+
+test_that("on the crossing branch worse_only is never more severe than both", {
+  seen_crossing <- 0L
+  ts_walk(function(sm, outcome_type, small_values, nm, ci) {
+    both  <- ts_assess(sm, outcome_type, small_values, ci,
+                       threshold_sides = "both")
+    worse <- ts_assess(sm, outcome_type, small_values, ci,
+                       threshold_sides = "worse_only")
+    # Restricted to the branch the claim is about: once worse_only stops
+    # crossing, Fig 4's OIS branch takes over and has two-level rules of its
+    # own (next test).
+    if (!identical(ts_fact(worse, "threshold_zone"), "crosses")) return()
+    seen_crossing <<- seen_crossing + 1L
+    expect_gte(worse$downgrade, both$downgrade)
+    expect_identical(
+      worse$downgrade, both$downgrade,
+      info = paste0("a crossing interval must rate the same either way: ",
+                    sm, " / ", small_values, " / ", nm))
+  })
+  # A restriction that admitted nothing would make the assertion vacuous.
+  expect_gt(seen_crossing, 0L)
+})
+
+test_that("the global inequality is broken only by Fig 4's own OIS branch", {
+  # Documented rather than worked around; SPEC.md 4.5.1b names these two.
+  # Ceasing to cross the threshold moves the interval onto Fig 4's "No"
+  # branch, where a large binary effect with a CI ratio at or above 3 earns
+  # two levels that the crossing branch never consults ("sample size not
+  # considered on this path"). That is Fig 4 answering its own question about
+  # an interval it was not asked about before, not a sidedness bug.
+  violations <- character(0)
+  ts_walk(function(sm, outcome_type, small_values, nm, ci) {
+    both  <- ts_assess(sm, outcome_type, small_values, ci,
+                       threshold_sides = "both")
+    worse <- ts_assess(sm, outcome_type, small_values, ci,
+                       threshold_sides = "worse_only")
+    if (worse$downgrade < both$downgrade) {
+      violations <<- c(violations, paste(sm, small_values, nm, sep = "/"))
+    }
+  })
+  expect_identical(
+    sort(violations),
+    sort(c("RR/desirable/crosses_lower", "RR/undesirable/crosses_upper")))
+
+  # And the mechanism, pinned by name on one of them.
+  worse <- ts_assess("RR", "relative", "desirable",
+                     TS_INTERVALS$crosses_lower,
+                     threshold_sides = "worse_only")
+  expect_identical(worse$judgment, "very_serious")
+  expect_identical(ts_fact(worse, "threshold_zone"), "within")
+  expect_match(worse$notes, "CI ratio 3.67 >= 3.0", fixed = TRUE)
+})
+
+# --------------------------------------------------------------------------
+# 3. The boolean table, both signs (SPEC.md 4.5.1b).
+# --------------------------------------------------------------------------
+
+test_that("the worse side is +Threshold for desirable, -Threshold for undesirable", {
+  # Read against .ois_target_increase()'s reading of the same argument:
+  # "undesirable" means the EVENTS are desirable, so a benefit is an increase
+  # and the worse side is therefore the decrease.
+  expect_identical(pmatools:::.threshold_worse_sign("desirable"), 1)
+  expect_identical(pmatools:::.threshold_worse_sign("undesirable"), -1)
+  expect_true(pmatools:::.ois_target_increase("undesirable", 0.3)$increase)
+  expect_false(pmatools:::.ois_target_increase("desirable", 0.3)$increase)
+})
+
+test_that("threshold_zone follows the boolean table on the positive worse side", {
+  zone <- function(nm) {
+    ts_fact(ts_assess("RR", "relative", "desirable", TS_INTERVALS[[nm]],
+                      threshold_sides = "worse_only"),
+            "threshold_zone")
+  }
+  # Worse side = +0.5.
+  expect_identical(zone("wholly_below"),     "within")   # never reached +T
+  expect_identical(zone("crosses_lower"),    "within")   # past -T only
+  expect_identical(zone("inside_band"),      "within")
+  expect_identical(zone("crosses_upper"),    "crosses")
+  expect_identical(zone("wholly_above"),     "beyond")
+  expect_identical(zone("crosses_both"),     "crosses")
+  expect_identical(zone("on_both_limits"),   "within")   # upper == +T
+  expect_identical(zone("lower_on_upper_t"), "beyond")   # lower == +T
+})
+
+test_that("threshold_zone mirrors on the negative worse side", {
+  zone <- function(nm) {
+    ts_fact(ts_assess("RR", "relative", "undesirable", TS_INTERVALS[[nm]],
+                      threshold_sides = "worse_only"),
+            "threshold_zone")
+  }
+  # Worse side = -0.5.
+  expect_identical(zone("wholly_below"),     "beyond")
+  expect_identical(zone("crosses_lower"),    "crosses")
+  expect_identical(zone("inside_band"),      "within")
+  expect_identical(zone("crosses_upper"),    "within")   # past +T only
+  expect_identical(zone("wholly_above"),     "within")
+  expect_identical(zone("crosses_both"),     "crosses")
+  expect_identical(zone("on_both_limits"),   "within")   # lower == -T
+  expect_identical(zone("upper_on_lower_t"), "beyond")   # upper == -T
+})
+
+test_that("a CI past the better threshold only does not rate down one-sidedly", {
+  # The headline case: an interval far past the BETTER-side threshold is not
+  # evidence against non-inferiority. Continuous, so Fig 4's binary CI-ratio
+  # rule cannot intervene and the contrast is the sidedness alone.
+  ci    <- TS_INTERVALS$crosses_lower
+  both  <- ts_assess("MD", "absolute", "desirable", ci,
+                     threshold_sides = "both")
+  worse <- ts_assess("MD", "absolute", "desirable", ci,
+                     threshold_sides = "worse_only")
+  expect_identical(both$judgment,  "serious")
+  expect_identical(worse$judgment, "not_serious")
+})
+
+test_that("a CI spanning both thresholds still reaches -2 under worse_only", {
+  worse <- ts_assess("MD", "absolute", "desirable", TS_INTERVALS$crosses_both,
+                     threshold_sides = "worse_only")
+  expect_identical(worse$judgment, "very_serious")
+  expect_equal(worse$downgrade, -2)
+  expect_match(worse$notes, "deliberately NOT one-sided", fixed = TRUE)
+})
+
+# --------------------------------------------------------------------------
+# 4. threshold_zone as a vocabulary.
+# --------------------------------------------------------------------------
+
+test_that("threshold_zone is exhaustive and mutually exclusive over the grid", {
+  seen <- character(0)
+  ts_walk(function(sm, outcome_type, small_values, nm, ci) {
+    for (sides in THRESHOLD_SIDES) {
+      row   <- ts_assess(sm, outcome_type, small_values, ci,
+                         threshold_sides = sides)
+      facts <- attr(row, "facts")
+      # Exactly one zone per assessment: recorded once, never twice, never
+      # absent while a threshold applies.
+      expect_identical(sum(facts$key == "threshold_zone"), 1L,
+                       info = paste(sm, small_values, nm, sides))
+      zone <- as.character(facts$value[facts$key == "threshold_zone"])
+      expect_true(zone %in% PMA_IMPRE_THRESHOLD_ZONES,
+                  info = paste(sm, small_values, nm, sides, zone))
+      seen <<- union(seen, zone)
+    }
+  })
+  # All three reachable, so none of the above is vacuous.
+  expect_identical(sort(seen), sort(PMA_IMPRE_THRESHOLD_ZONES))
+})
+
+test_that("threshold_zone is absent when no threshold zone applies", {
+  m <- ts_meta(-0.2, 1.5)
+  row <- suppressWarnings(assess_imprecision(
+    m, small_values = "desirable", threshold_type = "null",
+    threshold_for_imprecision = 0))
+  facts <- attr(row, "facts")
+  expect_false("threshold_zone" %in% facts$key)
+  expect_false("threshold_position" %in% facts$key)
+})
+
+test_that("threshold_zone never reaches a reader as prose", {
+  # Machine-only, like flow_path: threshold_position already says it in words.
+  expect_true("threshold_zone" %in% pmatools:::.FACT_KEYS_MACHINE_ONLY)
+  facts <- attr(ts_assess("RR", "relative", "desirable",
+                          TS_INTERVALS$crosses_upper), "facts")
+  expect_false("threshold_zone" %in%
+                 pmatools:::.drop_machine_only_facts(facts)$key)
+})
+
+# --------------------------------------------------------------------------
+# 5. The strings a reviewer reads.
+# --------------------------------------------------------------------------
+
+test_that("the Fig 4 path names the worse side and the small_values", {
+  row <- ts_assess("MD", "absolute", "desirable", TS_INTERVALS$crosses_upper,
+                   threshold_sides = "worse_only")
+  expect_match(row$notes, "the Threshold on the worse side (+Threshold)",
+               fixed = TRUE)
+  expect_match(row$notes, "crosses the Threshold on the worse side",
+               fixed = TRUE)
+  expect_match(row$notes,
+               "worse side = +Threshold, from small_values = 'desirable'",
+               fixed = TRUE)
+
+  mirrored <- ts_assess("MD", "absolute", "undesirable",
+                        TS_INTERVALS$crosses_lower,
+                        threshold_sides = "worse_only")
+  expect_match(mirrored$notes, "the Threshold on the worse side (-Threshold)",
+               fixed = TRUE)
+  expect_match(mirrored$notes,
+               "worse side = -Threshold, from small_values = 'undesirable'",
+               fixed = TRUE)
+})
+
+test_that("the one-sided strings replace the two-sided vocabulary, not join it", {
+  row <- ts_assess("MD", "absolute", "desirable", TS_INTERVALS$crosses_lower,
+                   threshold_sides = "worse_only")
+  expect_match(row$notes, "stays inside the Threshold on the worse side",
+               fixed = TRUE)
+  # "within Threshold (trivial effect)" would be false of this interval.
+  expect_false(grepl("within Threshold (trivial effect)", row$notes,
+                     fixed = TRUE))
+  expect_false(grepl("crosses one Threshold", row$notes, fixed = TRUE))
+
+  beyond <- ts_assess("MD", "absolute", "desirable",
+                      TS_INTERVALS$lower_on_upper_t,
+                      threshold_sides = "worse_only")
+  expect_match(beyond$notes, "entirely beyond the Threshold on the worse side",
+               fixed = TRUE)
+})
+
+test_that("no user-visible string added by threshold_sides says MID", {
+  for (nm in names(TS_INTERVALS)) {
+    for (small_values in SMALL_VALUES_LEVELS) {
+      row <- ts_assess("MD", "absolute", small_values, TS_INTERVALS[[nm]],
+                       threshold_sides = "worse_only")
+      expect_false(grepl("\\bMID\\b", row$notes),
+                   info = paste(nm, small_values))
+      facts <- attr(row, "facts")
+      expect_false(any(grepl("\\bMID\\b", facts$value)),
+                   info = paste(nm, small_values))
+      expect_false(any(grepl("\\bMID\\b", facts$label)),
+                   info = paste(nm, small_values))
+    }
+  }
+})
+
+test_that("the worse_only two-level prompt names the null-to-margin region", {
+  row <- ts_assess("MD", "absolute", "desirable", TS_INTERVALS$crosses_upper,
+                   threshold_sides = "worse_only")
+  expect_match(row$notes,
+               paste0("the CI is consistent with the intervention being ",
+                      "better AND with it being worse by more than the ",
+                      "Threshold"),
+               fixed = TRUE)
+  # The two-sided prompt is unchanged where it still applies.
+  both <- ts_assess("MD", "absolute", "desirable", TS_INTERVALS$crosses_upper,
+                    threshold_sides = "both")
+  expect_match(both$notes,
+               "Second Fig 4 two-level condition NOT auto-assessed:",
+               fixed = TRUE)
+})
+
+# --------------------------------------------------------------------------
+# 6. The gate.
+# --------------------------------------------------------------------------
+
+test_that("an unrecognised threshold_sides aborts as a threshold gate", {
+  m <- ts_meta(-0.2, 1.5)
+  cnd <- tryCatch(
+    assess_imprecision(m, small_values = "desirable",
+                       threshold_internal = TS_THRESHOLD,
+                       threshold_for_imprecision = TS_THRESHOLD,
+                       threshold_sides = "worse"),
+    condition = function(e) e)
+  expect_s3_class(cnd, "pmatools_threshold_gate")
+  expect_match(conditionMessage(cnd),
+               "threshold_sides must be 'both' or 'worse_only'", fixed = TRUE)
+})
+
+test_that("worse_only with no threshold aborts as a threshold gate, with no number", {
+  m <- ts_meta(-0.2, 1.5)
+  cnd <- tryCatch(
+    assess_imprecision(m, small_values = "desirable",
+                       threshold_type = "null",
+                       threshold_for_imprecision = 0,
+                       threshold_sides = "worse_only"),
+    condition = function(e) e)
+  expect_s3_class(cnd, "pmatools_threshold_gate")
+  msg <- conditionMessage(cnd)
+  expect_match(msg, "needs a threshold with two sides", fixed = TRUE)
+  expect_match(msg, "the null has no worse side", fixed = TRUE)
+  # A margin is a protocol design value, so the message offers no candidate.
+  expect_match(msg, PMA_NO_MARGIN_PLACEHOLDER, fixed = TRUE)
+  # The only digits in it belong to the Core GRADE figures it cites, so strip
+  # those and assert nothing numeric survives that could be read as a
+  # candidate margin.
+  expect_false(grepl("[0-9]", gsub("(Core GRADE|Fig) [0-9]", "", msg)))
+})
+
+test_that("the enum is checked before the threshold requirement", {
+  # A typo must not be reported as a missing margin, and must abort even on an
+  # analysis that has no threshold to be missing.
+  m <- ts_meta(-0.2, 1.5)
+  expect_error(
+    assess_imprecision(m, small_values = "desirable", threshold_type = "null",
+                       threshold_for_imprecision = 0,
+                       threshold_sides = "worse"),
+    "threshold_sides must be", fixed = TRUE)
+})

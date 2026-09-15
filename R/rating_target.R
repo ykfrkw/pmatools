@@ -339,8 +339,8 @@ RATING_TARGET_LABELS <- c(
     # Same gate, reached from the manual-override side; classed for the same
     # reason (see .check_threshold_type_gate()).
     rlang::abort(sprintf(paste0(
-      "rating_target = '%s' requires a threshold (MID): imprecision for this ",
-      "target is judged against +/-MID, not against the null. Supply ",
+      "rating_target = '%s' requires a Threshold: imprecision for this ",
+      "target is judged against +/-Threshold, not against the null. Supply ",
       "threshold (and threshold_scale)."), rating_target),
       class = "pmatools_threshold_gate")
   }

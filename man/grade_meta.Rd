@@ -34,6 +34,8 @@ grade_meta(
   rating_target = NULL,
   rating_target_rationale = NULL,
   require_threshold = TRUE,
+  threshold_sides = c("both", "worse_only"),
+  plain_language_frame = NULL,
   outcome_name = NULL,
   outcome_type = c("relative", "absolute"),
   ois_events = NULL,
@@ -446,6 +448,68 @@ makes a MID mandatory when \code{threshold_type = "mid"}. Set to
 rating target then falls back to a non-null effect and imprecision is
 judged against the null.}
 
+\item{threshold_sides}{(v0.5.1) Which \strong{sides} of the chosen threshold
+the Imprecision test asks about. \code{threshold_type} says which
+threshold; this says how much of it is being tested. One of:
+\itemize{
+\item \code{"both"} (default): does the CI cross \emph{either} side of
+the threshold? The question an \strong{equivalence} claim asks, and
+the question every release up to 0.5.1 asked. A call that omits the
+argument is unchanged.
+\item \code{"worse_only"}: does the CI cross the threshold on the
+\strong{worse side alone}? The question a \strong{non-inferiority}
+claim asks. A CI running far past the \emph{better}-side threshold is
+not evidence against non-inferiority and no longer rates the claim
+down.
+}
+Which side is worse follows from \code{small_values} and from nothing
+else: \code{"desirable"} (a small outcome value is good) makes the worse
+side \eqn{+}Threshold, \code{"undesirable"} makes it \eqn{-}Threshold.
+
+\strong{Only the one-level test becomes one-sided.} The two-level
+("crosses both thresholds") branch keeps its two-sided \eqn{\pm}Threshold
+definition, deliberately. Non-inferiority is a strictly weaker claim about
+the same interval than equivalence, so asking it must never earn a
+\emph{deeper} downgrade; restating the two-level branch one-sidedly would
+rate a CI of \eqn{(-0.5T, +1.5T)} — a CI straddling the null with its
+upper limit past the margin, the commonest real non-inferiority result —
+two levels down where the two-sided rule rates it one. See SPEC.md
+§4.5.1b, which carries the full argument, and the file header of
+\code{R/domain_imprecision.R}.
+
+\strong{A threshold is mandatory}, and there is no escape hatch: the
+margin \emph{is} the question, so \code{require_threshold = FALSE} has
+nothing to mean here. \code{"worse_only"} on a rating whose threshold is
+the null aborts with condition class \code{"pmatools_threshold_gate"},
+and the message offers \strong{no number} — a margin is a protocol design
+value, not a convention (\code{\link{suggest_threshold}} is unchanged and
+suggests nothing for one).}
+
+\item{plain_language_frame}{(v0.5.1) Which family of plain-language
+statements the Summary of Findings sentence is drawn from.
+\strong{Presentation only}: nothing selected here reaches a judgment.
+\code{NULL} (default) keeps the Core GRADE 6 Box 1 wording chosen by
+\code{threshold_type}, which is what every rating before 0.5.1 used.
+\code{"equivalence"} and \code{"non_inferiority"} select statements keyed
+by where the CI sits relative to the margin (within / crosses / beyond)
+rather than by the direction of the effect, because both questions are
+about a boundary and not about a direction.
+
+\strong{Neither family is GRADE wording.} Core GRADE 6 Box 1 writes only
+a null column and a MID column, and neither states a claim about a margin
+having been respected, so these sentences are \strong{pmatools
+conventions} built on Box 1's grammar and on nothing else of Box 1's. Do
+not cite them as GRADE wording. SPEC.md §5.5c lists all eighteen
+verbatim.
+
+\code{"equivalence"} is never inferred from the other arguments:
+\code{threshold_type = "mid"} with a pinned
+\code{rating_target = "little_to_no_difference"} is a legitimate
+pre-existing override, and reading it as an equivalence question would
+change the wording of ratings already made. \code{"non_inferiority"} is
+the one fallback, taken when \code{threshold_sides = "worse_only"} and no
+family was named, because those two travel together by construction.}
+
 \item{outcome_name}{Optional label for the outcome (used in SoF table).}
 
 \item{outcome_type}{\code{"relative"} (RR/OR/HR, null = 1) or
@@ -589,6 +653,20 @@ is its machine-readable companion. Read it with
 \item{rating_target_note}{How the target was derived (or overridden).}
 \item{rating_target_auto}{\code{TRUE} when the target was derived
 automatically rather than supplied by the user.}
+\item{threshold_sides}{(v0.5.1) \code{"both"} or \code{"worse_only"} —
+which sides of the threshold the Imprecision test asked about.}
+\item{threshold_zone}{(v0.5.1) \code{"within"}, \code{"crosses"} or
+\code{"beyond"} — where the confidence interval sat relative to the
+threshold it was tested against. \strong{Lifted from the Imprecision
+\code{threshold_zone} fact, not recomputed}, so it describes the
+interval the rating was actually made on. \code{NULL} when the domain
+recorded no facts (the scalar \code{imprecision} override) or when no
+threshold zone applied; the plain-language column that reads it is
+then dropped rather than guessed.}
+\item{plain_language_frame}{(v0.5.1) \code{NULL},
+\code{"equivalence"} or \code{"non_inferiority"} — which
+plain-language family the Summary of Findings sentence is drawn from.
+Presentation only.}
 \item{indirectness_subdomains}{The normalised Core GRADE 5 subdomain
 tibble (\code{subdomain}, \code{target}, \code{evidence},
 \code{judgment}, \code{grade_level}), or \code{NULL} when none was

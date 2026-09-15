@@ -85,6 +85,63 @@ test_that("threshold_type = 'mid' is the default, so a bare call aborts", {
   expect_error(grade_meta(m, small_values = "desirable"), "requires a threshold")
 })
 
+test_that("the placeholder-offering gate is not reached for a margin question", {
+  # SPEC.md 4.5.2. .check_threshold_type_gate() is the one gate that OFFERS a
+  # number -- it embeds suggest_threshold()'s actual return value so the
+  # caller can paste the argument out of the message. That is right for a
+  # threshold of clinical importance and wrong for a MARGIN, which is a
+  # protocol design value. A pinned rating_target and threshold_sides =
+  # "worse_only" are the two ways of saying "this is a margin question".
+  m    <- meta_rr()
+  sugg <- suggest_threshold(m)
+  offered <- format(signif(sugg$threshold_user, 4))
+
+  pinned <- tryCatch(suppressWarnings(grade_meta(
+    m, small_values = "desirable", threshold_type = "mid",
+    rating_target = "little_to_no_difference",
+    rating_target_rationale = "The review asks about a protocol margin")),
+    error = function(e) conditionMessage(e))
+  expect_type(pinned, "character")
+  expect_no_match(pinned, "threshold_type = 'mid' requires a threshold",
+                  fixed = TRUE)
+  expect_match(pinned, "requires a Threshold", fixed = TRUE)
+  expect_no_match(pinned, offered, fixed = TRUE)
+  expect_no_match(pinned, "suggest_threshold()", fixed = TRUE)
+
+  sided <- tryCatch(suppressWarnings(grade_meta(
+    m, small_values = "desirable", threshold_type = "mid",
+    threshold_sides = "worse_only")),
+    error = function(e) conditionMessage(e))
+  expect_type(sided, "character")
+  expect_no_match(sided, "threshold_type = 'mid' requires a threshold",
+                  fixed = TRUE)
+  expect_match(sided, "needs a threshold with two sides", fixed = TRUE)
+  expect_no_match(sided, offered, fixed = TRUE)
+  expect_no_match(sided, "suggest_threshold()", fixed = TRUE)
+})
+
+test_that("both surviving margin aborts are classed and carry no number", {
+  m <- meta_rr()
+  for (args in list(
+    list(threshold_type = "mid", rating_target = "little_to_no_difference",
+         rating_target_rationale = "Protocol margin question"),
+    list(threshold_type = "mid", threshold_sides = "worse_only"))) {
+    cnd <- tryCatch(
+      suppressWarnings(do.call(grade_meta, c(
+        list(m, small_values = "desirable"), args))),
+      condition = function(e) e)
+    # Classed so grade_meta_multi() re-raises rather than demotes: an
+    # argument error affecting every outcome in a batch, not a data failure.
+    expect_s3_class(cnd, "pmatools_threshold_gate")
+    msg <- conditionMessage(cnd)
+    # Strip the Core GRADE figure citations; nothing numeric may survive that
+    # could be read as a candidate margin.
+    expect_false(grepl("[0-9]", gsub("(Core GRADE|Fig|appendix) [0-9]", "",
+                                     msg)),
+                 label = paste(names(args), collapse = "+"))
+  }
+})
+
 test_that("require_threshold = FALSE proceeds without a MID", {
   m <- meta_rr()
   g <- suppressWarnings(grade_meta(m, threshold_type = "mid",
@@ -170,7 +227,7 @@ test_that("a MID-based target without a MID aborts", {
       rating_target = "little_to_no_difference",
       rating_target_rationale = "Panel judged the estimate to be at the null"
     )),
-    "requires a threshold (MID)", fixed = TRUE
+    "requires a Threshold", fixed = TRUE
   )
 })
 

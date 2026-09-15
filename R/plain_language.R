@@ -22,6 +22,35 @@
 # the outcome itself: reduces / increases / has little to no effect. That is
 # always readable, whether the outcome is a benefit or a harm.
 #
+# --- What this file owns, and what belongs next door ------------------------
+#
+# It owns PLAIN_LANGUAGE_FRAMES -- the statement table -- and the assembly that
+# turns a rated object into one sentence: .plain_language() takes the pieces,
+# .plain_language_for() reads them off a pmatools object. It reads a certainty
+# label, a threshold type, a rating target, the sign of the pooled estimate and
+# (since 0.5.1) a plain-language family and a threshold zone; it hands back one
+# string, or NULL when no statement applies and the column should be dropped
+# rather than guessed. Its callers are the summary-of-findings renderers --
+# R/sof_bmj.R above all, which needs no knowledge of any of this.
+#
+# Since 0.5.1 the table carries FOUR families, not two. `null` and `mid` are
+# Box 1's own two columns, keyed by the direction of the effect. `equivalence`
+# and `non_inferiority` are pmatools' own, keyed by the threshold zone, because
+# Box 1 has no wording for either question; every one of their cells is tagged
+# accordingly and none of them may be cited as GRADE wording. The gate on the
+# argument that selects them, .check_plain_language_frame(), lives here too:
+# the file that owns the families owns what counts as one.
+#
+# ADMISSION RULE. A helper belongs here when it decides WHAT WORDS a rating is
+# reported in. When it decides what the rating IS, it belongs in
+# R/rating_target.R (which claim) or in a domain file (how well the evidence
+# supports it). The threshold zone is the clearest case of the line: this file
+# CONSUMES it and must never derive it -- assess_imprecision()
+# (R/domain_imprecision.R) computes it from the interval and records it as the
+# "threshold_zone" fact, and a second derivation here would be a second chance
+# to disagree about one interval. The same rule is why the direction is read
+# off the pooled estimate rather than re-pooled.
+#
 # --- Box 1, transcribed verbatim -------------------------------------------
 #
 #   Box 1: Writing standardised GRADE plain language summaries in summary of
@@ -144,9 +173,46 @@
 #                              NO LONGER VERBATIM: it is the cited frame minus
 #                              the parenthesised alternative. See the "One
 #                              adverb per certainty level" note above.
+#   [pmatools; no Box 1 counterpart]
+#                              Core GRADE 6 Box 1 has NO wording for an
+#                              equivalence or a non-inferiority question: it
+#                              writes only the null column and the MID column,
+#                              and neither states a claim about a margin having
+#                              been respected. Every cell of the `equivalence`
+#                              and `non_inferiority` families below carries
+#                              this tag. They are pmatools conventions built on
+#                              Box 1's GRAMMAR -- actor, one certainty adverb,
+#                              predicate, outcome -- and on nothing else of
+#                              Box 1's. Do not cite them as GRADE wording, and
+#                              do not give any of their cells a [Box 1] or a
+#                              [composed] tag: [composed] is reserved for
+#                              assembly from a Box 1 qualifier applied to a
+#                              Box 1 frame, and here there is no Box 1 frame to
+#                              apply one to.
 #
-# Nothing here is paraphrased; the only edit pmatools makes to CG6 wording is
-# the dropped parenthesis flagged by "single adverb".
+# Nothing in the `null` / `mid` families is paraphrased; the only edit pmatools
+# makes to CG6 wording there is the dropped parenthesis flagged by "single
+# adverb".
+#
+# --- Two axes, not one ------------------------------------------------------
+#
+# The `null` and `mid` families are keyed by DIRECTION (increase / decrease /
+# little), because Box 1's question is which way the effect runs. The
+# `equivalence` and `non_inferiority` families are keyed by the THRESHOLD ZONE
+# (within / crosses / beyond, PMA_IMPRE_THRESHOLD_ZONES, read off the
+# "threshold_zone" fact assess_imprecision() records), because their question
+# is about a BOUNDARY and not about a direction -- "increases mortality"
+# answers a question nobody asked of an equivalence rating. Direction lives in
+# the effect column of the table instead.
+#
+# Three zone values and not two, and the third is the point: an interval lying
+# ENTIRELY beyond an equivalence margin does not "may exceed" the margin, it
+# exceeds it, and because a margin question pins the rating target
+# (SPEC.md 4.5.2) Fig 2 will not flip the wording back. Every High x crosses
+# cell is kept even though the automated path cannot reach it -- crossing the
+# rating threshold forces at least -1, so certainty is at most Moderate --
+# because a MISSING cell returns NULL and silently drops the whole column,
+# which is the worse failure.
 PLAIN_LANGUAGE_FRAMES <- list(
   # "When focusing on the target of certainty in relation to the null"
   null = list(
@@ -211,8 +277,95 @@ PLAIN_LANGUAGE_FRAMES <- list(
       # little to no effect" + the MID object "important effect on %s"
       little   = "may have little to no important effect on %s"
     )
+  ),
+  # "Is the difference small enough to be unimportant in either direction?"
+  # Keyed by zone, not by direction. Every cell below is pmatools' own.
+  equivalence = list(
+    "High" = list(
+      # [pmatools; no Box 1 counterpart]
+      within  = paste0("results in a difference in %s that lies within ",
+                       "the equivalence threshold"),
+      # [pmatools; no Box 1 counterpart]
+      crosses = paste0("results in little to no difference in %s, but a ",
+                       "difference beyond the equivalence threshold is not ",
+                       "excluded"),
+      # [pmatools; no Box 1 counterpart]
+      beyond  = paste0("results in a difference in %s that lies beyond ",
+                       "the equivalence threshold")
+    ),
+    "Moderate" = list(
+      # [pmatools; no Box 1 counterpart]
+      within  = paste0("probably results in a difference in %s that lies ",
+                       "within the equivalence threshold"),
+      # [pmatools; no Box 1 counterpart]
+      crosses = paste0("probably results in little to no difference in %s, ",
+                       "but a difference beyond the equivalence threshold is ",
+                       "not excluded"),
+      # [pmatools; no Box 1 counterpart]
+      beyond  = paste0("probably results in a difference in %s that lies ",
+                       "beyond the equivalence threshold")
+    ),
+    "Low" = list(
+      # [pmatools; no Box 1 counterpart]
+      within  = paste0("may result in a difference in %s that lies within ",
+                       "the equivalence threshold"),
+      # [pmatools; no Box 1 counterpart]
+      crosses = paste0("may result in little to no difference in %s, but a ",
+                       "difference beyond the equivalence threshold is not ",
+                       "excluded"),
+      # [pmatools; no Box 1 counterpart]
+      beyond  = paste0("may result in a difference in %s that lies beyond ",
+                       "the equivalence threshold")
+    )
+  ),
+  # "Is it no worse than the comparator by more than a set amount?" Only the
+  # worse side is tested (threshold_sides = "worse_only"), so `within` means
+  # the CI has not reached the margin ON THAT SIDE.
+  non_inferiority = list(
+    "High" = list(
+      # [pmatools; no Box 1 counterpart]
+      within  = paste0("is not worse than the comparator in %s by more than ",
+                       "the non-inferiority threshold"),
+      # [pmatools; no Box 1 counterpart]
+      crosses = paste0("is not worse than the comparator in %s by more than ",
+                       "the non-inferiority threshold, but a larger ",
+                       "difference is not excluded"),
+      # [pmatools; no Box 1 counterpart]
+      beyond  = paste0("is worse than the comparator in %s by more than ",
+                       "the non-inferiority threshold")
+    ),
+    "Moderate" = list(
+      # [pmatools; no Box 1 counterpart]
+      within  = paste0("is probably not worse than the comparator in %s by ",
+                       "more than the non-inferiority threshold"),
+      # [pmatools; no Box 1 counterpart]
+      crosses = paste0("is probably not worse than the comparator in %s by ",
+                       "more than the non-inferiority threshold, but a ",
+                       "larger difference is not excluded"),
+      # [pmatools; no Box 1 counterpart]
+      beyond  = paste0("is probably worse than the comparator in %s by more ",
+                       "than the non-inferiority threshold")
+    ),
+    "Low" = list(
+      # [pmatools; no Box 1 counterpart]
+      within  = paste0("may be no worse than the comparator in %s by more ",
+                       "than the non-inferiority threshold"),
+      # [pmatools; no Box 1 counterpart]
+      crosses = paste0("may be no worse than the comparator in %s by more ",
+                       "than the non-inferiority threshold, but a larger ",
+                       "difference is not excluded"),
+      # [pmatools; no Box 1 counterpart]
+      beyond  = paste0("may be worse than the comparator in %s by more than ",
+                       "the non-inferiority threshold")
+    )
   )
 )
+
+# The families whose cells are keyed by threshold zone rather than by the
+# direction of the effect, and the two values grade_meta(plain_language_frame =)
+# accepts. One list, so a third margin question cannot be added to the frames
+# and forgotten in the lookup.
+PLAIN_LANGUAGE_ZONE_FAMILIES <- c("equivalence", "non_inferiority")
 
 # Very low spans both threshold columns and is direction neutral.
 # Frame arguments: intervention, outcome.
@@ -342,6 +495,82 @@ PLAIN_LANGUAGE_TABLE_NOTE <- paste0(
   .plain_language_direction_key(pooled$est)
 }
 
+# --- Threshold zone ---------------------------------------------------------
+
+# The zone key for the two margin families. NULL for anything unrecognised,
+# including a missing zone, so the caller drops the column rather than guessing
+# -- the same rule the missing-direction path above follows, and for the same
+# reason: there is no zone-free wording to fall back on.
+#
+# The vocabulary itself is PMA_IMPRE_THRESHOLD_ZONES, declared beside the
+# assessor that emits it (R/domain_imprecision.R), because a second list here
+# would be a second chance to disagree about what a zone is.
+.plain_language_zone_key <- function(threshold_zone) {
+  if (is.null(threshold_zone) || length(threshold_zone) != 1L ||
+      is.na(threshold_zone)) {
+    return(NULL)
+  }
+  zone <- as.character(threshold_zone)
+  if (!zone %in% PMA_IMPRE_THRESHOLD_ZONES) return(NULL)
+  zone
+}
+
+# --- Which family ------------------------------------------------------------
+
+# grade_meta(plain_language_frame =)'s gate.
+#
+# Deliberately NOT classed "pmatools_threshold_gate": it changes no judgment,
+# only the wording of a presentation column, so grade_meta_multi() should
+# demote it like any other per-outcome failure rather than re-raise it and
+# abandon the batch.
+.check_plain_language_frame <- function(plain_language_frame,
+                                        arg = "plain_language_frame") {
+  if (is.null(plain_language_frame)) return(invisible(NULL))
+  ok <- is.character(plain_language_frame) &&
+        length(plain_language_frame) == 1L &&
+        !is.na(plain_language_frame) &&
+        plain_language_frame %in% PLAIN_LANGUAGE_ZONE_FAMILIES
+  if (!ok) {
+    rlang::abort(sprintf(paste0(
+      "%s must be NULL, 'equivalence' or 'non_inferiority' (received %s). ",
+      "NULL keeps the Core GRADE 6 Box 1 wording chosen by threshold_type, ",
+      "which is what every rating before 0.5.1 used. The other two select ",
+      "pmatools' own wording for a margin question; Box 1 has no statement ",
+      "for either, so those sentences are not GRADE wording and must not be ",
+      "cited as such."),
+      arg,
+      paste(deparse(plain_language_frame, width.cutoff = 500L),
+            collapse = "")))
+  }
+  invisible(as.character(plain_language_frame))
+}
+
+# Which family a RATED OBJECT's sentence comes from, resolved in one place.
+#
+#   1. an explicit plain_language_frame, when it names a family;
+#   2. else "non_inferiority" when the rating was made one-sided -- the two
+#      travel together by construction (SPEC.md 4.5.1b);
+#   3. else NULL, which sends .plain_language() back to threshold_type.
+#
+# "equivalence" is NEVER inferred. It would be easy to read threshold_type =
+# "mid" plus a pinned "little_to_no_difference" target as an equivalence
+# question, and it must not be: that combination is a legitimate pre-existing
+# manual override, and reinterpreting it would silently change the wording of
+# ratings already made. That is precisely why grade_meta() took TWO new
+# arguments rather than one.
+#
+# A pre-0.5.1 object carries none of the three fields, so this returns NULL and
+# the cell reached is the cell that was reached before.
+.plain_language_frame_of <- function(x) {
+  fam <- x$plain_language_frame
+  if (!is.null(fam) && length(fam) == 1L && !is.na(fam) &&
+      as.character(fam) %in% PLAIN_LANGUAGE_ZONE_FAMILIES) {
+    return(as.character(fam))
+  }
+  if (identical(x$threshold_sides, "worse_only")) return("non_inferiority")
+  NULL
+}
+
 # --- Lookup -----------------------------------------------------------------
 
 #' Plain language summary for a certainty rating (Core GRADE 6 Box 1)
@@ -384,6 +613,20 @@ PLAIN_LANGUAGE_TABLE_NOTE <- paste0(
 #' @param outcome_label Outcome name substituted into the statement. Defaults
 #'   to a generic "the outcome".
 #' @param intervention_label Intervention name; defaults to "Treatment".
+#' @param frame_family (v0.5.1) \code{NULL} (default), \code{"equivalence"} or
+#'   \code{"non_inferiority"}. Selects one of the two pmatools families whose
+#'   statements are about a margin rather than about a direction. \code{NULL}
+#'   falls back to \code{threshold_type}, exactly as before, which is what
+#'   makes a pre-0.5.1 object reach the cell it always reached.
+#'   \code{threshold_type} is deliberately not widened to carry this: it is a
+#'   value users pass to \code{\link{grade_meta}}, and adding a family to its
+#'   enum would make a presentation choice look like a threshold choice.
+#' @param threshold_zone (v0.5.1) \code{"within"}, \code{"crosses"} or
+#'   \code{"beyond"} -- the \code{threshold_zone} fact
+#'   \code{assess_imprecision()} records. The lookup key for the two families
+#'   above, which are keyed by zone rather than by direction. A missing or
+#'   unrecognised zone returns \code{NULL} so the column is dropped rather
+#'   than guessed; ignored by every other family.
 #'
 #' @return A single string, or \code{NULL} when no statement applies.
 #'
@@ -392,7 +635,9 @@ PLAIN_LANGUAGE_TABLE_NOTE <- paste0(
 .plain_language <- function(certainty, threshold_type, rating_target,
                             direction = NULL,
                             outcome_label = NULL,
-                            intervention_label = "Treatment") {
+                            intervention_label = "Treatment",
+                            frame_family = NULL,
+                            threshold_zone = NULL) {
   cert <- .plain_language_certainty(certainty)
   if (is.null(cert)) return(NULL)
 
@@ -415,14 +660,29 @@ PLAIN_LANGUAGE_TABLE_NOTE <- paste0(
       sprintf(PLAIN_LANGUAGE_VERY_LOW, actor, object)))
   }
 
-  dir <- if (identical(rating_target, "little_to_no_difference")) {
+  # Which family, then which key within it. `frame_family` when it names one,
+  # else `threshold_type` exactly as before -- the whole of the backward
+  # compatibility is in that `else`.
+  family <- if (!is.null(frame_family) && length(frame_family) == 1L &&
+                !is.na(frame_family) &&
+                as.character(frame_family) %in% PLAIN_LANGUAGE_ZONE_FAMILIES) {
+    as.character(frame_family)
+  } else {
+    threshold_type
+  }
+
+  key <- if (family %in% PLAIN_LANGUAGE_ZONE_FAMILIES) {
+    # A margin question is about a boundary, so the zone is the key and the
+    # direction is not consulted at all.
+    .plain_language_zone_key(threshold_zone)
+  } else if (identical(rating_target, "little_to_no_difference")) {
     "little"
   } else {
     .plain_language_direction_key(direction)
   }
-  if (is.null(dir)) return(NULL)
+  if (is.null(key)) return(NULL)
 
-  frame <- PLAIN_LANGUAGE_FRAMES[[threshold_type]][[cert]][[dir]]
+  frame <- PLAIN_LANGUAGE_FRAMES[[family]][[cert]][[key]]
   if (is.null(frame)) return(NULL)
 
   .plain_language_sentence(paste0(actor, " ", sprintf(frame, object)))
@@ -431,6 +691,10 @@ PLAIN_LANGUAGE_TABLE_NOTE <- paste0(
 # Convenience wrapper taking a pmatools object. The direction comes from the
 # object's own pooled estimate and the outcome from its outcome_name, so a
 # summary of findings row never has to be told which way the effect points.
+#
+# The family and the zone come off the object too, and the zone is the one
+# grade_meta() LIFTED FROM THE IMPRECISION FACTS rather than recomputing, so
+# the sentence describes the interval the rating was actually made on.
 .plain_language_for <- function(x, outcome_label = NULL,
                                 intervention_label = "Treatment") {
   .plain_language(
@@ -439,6 +703,8 @@ PLAIN_LANGUAGE_TABLE_NOTE <- paste0(
     rating_target      = x$rating_target,
     direction          = .plain_language_direction(x$meta),
     outcome_label      = outcome_label %||% x$outcome_name,
-    intervention_label = intervention_label
+    intervention_label = intervention_label,
+    frame_family       = .plain_language_frame_of(x),
+    threshold_zone     = x$threshold_zone
   )
 }

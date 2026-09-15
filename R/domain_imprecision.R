@@ -76,6 +76,93 @@
 #   untouched by this and goes on being made against the null (= 0). With no MID
 #   the both-sides question cannot be asked at all, so that path stops at -1.
 #
+# WHICH SIDES OF THE THRESHOLD THE TEST ASKS ABOUT (`threshold_sides`; v0.5.1)
+# -----------------------------------------------------------------------------
+# Fig 4 asks whether the CI crosses "the threshold or thresholds of interest",
+# and up to 0.5.1 this file only ever asked it two-sidedly: the band was
+# [-T, +T] and either limit crossing counted. That is the right question for an
+# equivalence claim -- is the difference small enough to be unimportant in
+# EITHER direction -- and the wrong one for a non-inferiority claim, which asks
+# only whether the intervention is worse by more than the margin. A CI running
+# far past the BETTER-side threshold is not evidence against non-inferiority,
+# and must not rate the claim down.
+#
+# So `threshold_sides` takes "both" (the default, byte-for-byte the pre-0.5.1
+# behaviour) or "worse_only". Which side is worse comes from `small_values`
+# and from nothing else: .threshold_worse_sign() reads the same argument
+# .ois_target_increase() reads, so an OIS powered for the benefit direction and
+# a threshold tested on the worse side cannot be two different questions about
+# one analysis. Plural argument name on purpose -- grade_meta() already has an
+# `inconsistency_threshold_side` meaning something else entirely (which side of
+# the threshold the study POINT ESTIMATES fall on), and a singular neighbour
+# one word away from it is a trap.
+#
+#   boolean                  | "both" (unchanged)        | "worse_only"
+#   -------------------------+---------------------------+---------------------
+#   crosses_threshold        | T or -T inside the CI     | W inside the CI
+#   crosses_both_thresholds  | -T and +T both inside     | UNCHANGED (two-sided)
+#   within_thresholds        | -T <= lower & upper <= T  | worse-side limit has
+#                            |                           | not reached W
+#   beyond_thresholds        | CI wholly outside the     | CI wholly beyond W on
+#                            | band on one side          | the worse side
+#   crosses_lower / _upper   | as before                 | as before (info only)
+#
+# with W = .threshold_worse_sign(small_values) * T. Boundary conventions are
+# shared: a limit sitting exactly on W does NOT cross it, and the interval is
+# then `beyond`.
+#
+# THE -2 BRANCH IS DELIBERATELY NOT RESTATED ONE-SIDEDLY. Do not "fix" this.
+# -----------------------------------------------------------------------------
+# It looks asymmetric, and the symmetry is a trap. The tempting restatement is
+# that for a non-inferiority question the two thresholds of the -2 branch become
+# the null and the worse-side margin. Take a CI of (-0.5T, +1.5T) with the worse
+# side positive. Two-sided gives `serious` (-1): only +T is crossed. The
+# restatement gives `very_serious` (-2): both 0 and +T lie inside the interval.
+#
+# But non-inferiority is a STRICTLY WEAKER CLAIM ABOUT THE SAME INTERVAL than
+# equivalence is, so switching the question from equivalence to non-inferiority
+# must never INCREASE the downgrade -- and that interval shape, a CI straddling
+# the null with its upper limit past the margin, is the single most common real
+# non-inferiority result. Leaving `crosses_both_thresholds` two-sided keeps the
+# set of intervals earning -2 BY CROSSING BOTH THRESHOLDS exactly as it was,
+# and gives the monotonicity the four clinical questions need in order to be
+# comparable at all: wherever `worse_only` still crosses the threshold,
+# downgrade(worse_only) >= downgrade(both). A grid test in
+# tests/testthat/test-imprecision.R proves it rather than trusting the reading.
+#
+# THE INEQUALITY IS NOT GLOBAL, AND THE EXCEPTION IS FIG 4'S, NOT THIS
+# ARGUMENT'S. Ceasing to cross the threshold moves the interval onto Fig 4's
+# "No" branch, which has two-level rules of its own -- a binary CI ratio at or
+# above the cut-off, a continuous N < 30% of the OIS -- that the crossing
+# branch never consults ("sample size not considered on this path"). So a
+# large, imprecise effect lying wholly on the BETTER side of the margin can
+# rate -2 under `worse_only` where it rated -1 under "both": a log-RR CI of
+# (-1.5, -0.2) with T = 0.5 and small_values = "desirable" records zone
+# `within`, finds a 57% relative effect, and meets the risk-ratio CI-ratio
+# cut-off of 3 at 3.67. That is Fig 4 answering its own question correctly
+# about an interval it was not asked about before, and the grid test pins both
+# instances by name so the next reader knows it is known. It does not weaken
+# the reductio above: the rejected restatement deepened the downgrade ON THE
+# CROSSING BRANCH, where Fig 4 offers no such escape.
+#
+# The null-to-margin region the restatement was reaching for is not left
+# silent. `two_level_manual` below already fires on exactly
+# `crosses_threshold && !crosses_both_thresholds`, and it carries a `worse_only`
+# arm saying that the CI is consistent with the intervention being better AND
+# with it being worse by more than the Threshold. That is Fig 4's own SECOND
+# two-level condition -- a judgment about wording -- surfaced for the reviewer,
+# not a rule Core GRADE 2 does not state, automated.
+#
+# .classify_imprecision() IS NOT MODIFIED, and .IMPRE_FIG4_NODE_IDS GAINS NO
+# ID. All the relabelling travels through the `threshold_label` and
+# `two_level_label` parameters the classifier already has, set at the call site.
+# The route through inst/figures/impre.svg is unchanged: what differs under
+# `worse_only` is the DEFINITION of the threshold at the `node-crosses` box,
+# which is caption-level, not a new branch. tests/testthat/test-flowchart-nodes.R
+# asserts the vocabulary is a subset of the id="pma-..." attributes actually
+# drawn in the SVG, so a new id would need a new SVG element -- and none is
+# needed. State that here so nobody adds one later.
+#
 #   CI ratio (Fig 4 caption): the upper CI limit divided by the lower limit, on
 #   the ratio scale.
 #   "Large effect" means implausibly large, and the body text operationalises it
@@ -200,6 +287,122 @@
 # same data and must record the same thing (R/domain_inconsistency.R).
 PMA_NOT_ASSESSABLE_JUDGMENT <- "not_serious"
 
+# Which sides of the chosen threshold the Fig 4 crossing test asks about. See
+# the "WHICH SIDES OF THE THRESHOLD" section of the file header.
+THRESHOLD_SIDES <- c("both", "worse_only")
+
+# The three positions an interval can hold relative to the threshold it is
+# being tested against, as a machine-readable vocabulary. Emitted as the
+# "threshold_zone" fact so that a caller choosing wording by zone -- the
+# equivalence and non-inferiority plain-language families in
+# R/plain_language.R -- branches on a token rather than parsing the prose of
+# the "threshold_position" fact. Same rule the file already follows for
+# `fig4_path` / `flow_path`.
+#
+# Exhaustive and mutually exclusive over any interval, on both sidedness
+# settings; test-imprecision.R proves that over a grid rather than asserting it.
+PMA_IMPRE_THRESHOLD_ZONES <- c("within", "crosses", "beyond")
+
+# Why neither margin question gets a suggested value, said once.
+#
+# suggest_threshold() offers a placeholder for a threshold of clinical
+# importance, which is a property of the OUTCOME and therefore something a
+# package can stand in for. An equivalence or non-inferiority margin is a
+# property of the REVIEW'S OWN QUESTION, fixed in the protocol before any
+# evidence is read; pre-filling it does not save the reviewer a lookup, it
+# answers the question on their behalf. Cited by both gates that refuse a
+# margin question with no margin -- .check_threshold_sides() here and
+# .resolve_rating_target() in R/rating_target.R -- so a host application can
+# print the same reason instead of inventing one.
+PMA_NO_MARGIN_PLACEHOLDER <- paste0(
+  "pmatools offers no default for an equivalence or a non-inferiority margin, ",
+  "and deliberately suggests no number here. A threshold of clinical ",
+  "importance belongs to the outcome, so a placeholder for it is a starting ",
+  "point to replace. A margin belongs to the review's own question and is ",
+  "fixed in the protocol before any evidence is read, so a pre-filled value ",
+  "would not save you a lookup -- it would answer the question for you."
+)
+
+# Which side of the threshold is the WORSE side for this outcome? Returns +1
+# (the worse side is +Threshold) or -1 (the worse side is -Threshold).
+#
+#   small_values = "desirable"   a small outcome value is good  -> larger is
+#                                worse -> the worse side is +T
+#   small_values = "undesirable" a small outcome value is bad   -> larger is
+#                                better -> the worse side is -T
+#
+# The same reading of the same argument as .ois_target_increase() below, and
+# written once for that reason: an OIS powered for the benefit direction and a
+# threshold tested on the benefit side would be two different questions about
+# one analysis, and nothing downstream would say so.
+#
+# Not re-validated here. assess_imprecision() and grade_meta() both gate
+# `small_values` through .check_small_values() before this can be reached, and
+# an app echoing the resolved worse side on screen calls it before the reviewer
+# can have answered anything -- where an abort would surface as a red box on a
+# tab that is merely waiting for an analysis. An unanswered direction yields +1,
+# which is the pre-0.5.1 reading of Core GRADE 2's own worked example.
+.threshold_worse_sign <- function(small_values) {
+  if (identical(as.character(small_values), "undesirable")) -1 else 1
+}
+
+# The `threshold_sides` gate. Returns the resolved single value.
+#
+# Called twice, and the split is the point. With `thr_eff` omitted only the
+# enum is checked, which is what grade_meta() wants before any domain runs so
+# that a typo aborts on the call rather than on a rating. With `thr_eff`
+# supplied the threshold requirement is checked too, which can only happen once
+# the rating target has resolved which threshold Fig 4 will evaluate against.
+#
+# NO ESCAPE HATCH, for the reason .check_small_values() has none rather than
+# the reason require_threshold exists: rating without a threshold of clinical
+# importance is a legitimate choice, but a MARGIN IS THE QUESTION. "Test only
+# the worse side of a threshold I have not got" is not a request pmatools can
+# honour, so require_threshold = FALSE has nothing to mean here.
+#
+# Both aborts offer NO NUMBER; see PMA_NO_MARGIN_PLACEHOLDER. Classed
+# "pmatools_threshold_gate" so grade_meta_multi() re-raises them rather than
+# demoting them to a per-outcome warning: they are argument errors affecting
+# every outcome in a batch, not data failures.
+.check_threshold_sides <- function(threshold_sides, thr_eff) {
+  # The formal default is the full vector, exactly as match.arg() expects; a
+  # caller forwarding it untouched means "take the first".
+  sides <- if (identical(threshold_sides, THRESHOLD_SIDES)) {
+    THRESHOLD_SIDES[1]
+  } else {
+    threshold_sides
+  }
+  ok <- is.character(sides) && length(sides) == 1L && !is.na(sides) &&
+        sides %in% THRESHOLD_SIDES
+  if (!ok) {
+    rlang::abort(sprintf(paste0(
+      "threshold_sides must be 'both' or 'worse_only' (received %s). 'both' ",
+      "asks whether the confidence interval crosses either side of the ",
+      "threshold, which is the question an equivalence claim asks and the ",
+      "default. 'worse_only' asks whether it crosses the threshold on the ",
+      "worse side alone, which is the question a non-inferiority claim asks; ",
+      "the worse side follows from small_values."),
+      paste(deparse(threshold_sides, width.cutoff = 500L), collapse = "")),
+      class = "pmatools_threshold_gate")
+  }
+
+  if (missing(thr_eff)) return(invisible(sides))
+
+  if (identical(sides, "worse_only") && !.has_mid(thr_eff)) {
+    rlang::abort(paste0(
+      "threshold_sides = 'worse_only' needs a threshold with two sides, and ",
+      "this rating has none: either no threshold was supplied, or the rating ",
+      "target put the rating against the null (Core GRADE 2 Fig 2), and the ",
+      "null has no worse side -- crossing it is crossing it. Supply a margin ",
+      "with threshold (and threshold_scale), and pin the rating target to ",
+      "'little_to_no_difference' so that Fig 2 does not derive the null back. ",
+      PMA_NO_MARGIN_PLACEHOLDER
+    ), class = "pmatools_threshold_gate")
+  }
+
+  invisible(sides)
+}
+
 assess_imprecision <- function(meta_obj,
                                outcome_type       = "relative",
                                ois_events         = NULL,
@@ -234,6 +437,10 @@ assess_imprecision <- function(meta_obj,
                                rating_target      = NULL,
                                threshold_type     = NULL,
                                threshold_for_imprecision = NULL,
+                               # Which sides of the chosen threshold the Fig 4
+                               # crossing test asks about; see the file header.
+                               # "both" is the pre-0.5.1 behaviour exactly.
+                               threshold_sides    = c("both", "worse_only"),
                                # Rare-event corrections; see the file header.
                                # Both default off, so nothing changes for an
                                # analysis that never met the rare-event
@@ -248,6 +455,13 @@ assess_imprecision <- function(meta_obj,
   # "argument is missing".
   if (missing(small_values)) small_values <- NULL
   .check_small_values(small_values)
+
+  # Enum only, here: which threshold Fig 4 will actually evaluate against is
+  # not known until thr_eff resolves below, and the threshold requirement is
+  # checked there. A typo must not survive as far as a rating either way.
+  threshold_sides <- .check_threshold_sides(threshold_sides)
+  one_sided       <- identical(threshold_sides, "worse_only")
+  worse_sign      <- .threshold_worse_sign(small_values)
 
   # One arm with no events at all: Fig 4 has nothing to evaluate. Returned
   # before the CI is even read, because the interval that exists in such a fit
@@ -318,6 +532,11 @@ assess_imprecision <- function(meta_obj,
     threshold_internal
   }
 
+  # Now that the threshold Fig 4 will be applied to is known, the other half of
+  # the threshold_sides gate can run: "worse_only" needs a threshold with two
+  # sides, and the null has none.
+  .check_threshold_sides(threshold_sides, thr_eff)
+
   # A CI "crosses" a threshold T iff T lies inside the CI: lower < T AND upper > T.
   # Four states relative to the [-Threshold, +Threshold] trivial zone:
   #   crosses_both_thresholds : CI contains both -T and +T (lower < -T AND upper > +T)
@@ -343,13 +562,45 @@ assess_imprecision <- function(meta_obj,
   }
   has_mid_zone <- !is.null(mid_zone)
 
+  # The worse side, as a value on the TE scale. NULL when no zone applies, so
+  # that reading it without a zone is an error rather than a silent 0.
+  worse_threshold <- if (has_mid_zone) worse_sign * mid_zone else NULL
+  # Which of the two crossings IS the worse-side crossing. Named so the
+  # one-sided branches below read as the question they ask rather than as an
+  # index into a pair.
+  crosses_worse_threshold <- NA
+
   if (has_mid_zone) {
     crosses_lower_threshold <- (lower < -mid_zone) && (upper > -mid_zone)
     crosses_upper_threshold <- (lower <  mid_zone) && (upper >  mid_zone)
+    # DELIBERATELY TWO-SIDED ON BOTH SETTINGS. See "THE -2 BRANCH IS
+    # DELIBERATELY NOT RESTATED ONE-SIDEDLY" in the file header before
+    # touching this line.
     crosses_both_thresholds <- crosses_lower_threshold && crosses_upper_threshold
     crosses_one_threshold   <- xor(crosses_lower_threshold, crosses_upper_threshold)
-    within_thresholds       <- (lower >= -mid_zone) && (upper <= mid_zone)
-    beyond_thresholds       <- (upper <= -mid_zone) || (lower >= mid_zone)
+    crosses_worse_threshold <- if (worse_sign > 0) {
+      crosses_upper_threshold
+    } else {
+      crosses_lower_threshold
+    }
+    if (one_sided) {
+      # The worse-side limit has not reached W / the whole CI is past W. Same
+      # >= / <= conventions as the two-sided arm: a limit sitting exactly on W
+      # has not crossed it, and the interval is then `beyond`.
+      within_thresholds <- if (worse_sign > 0) {
+        upper <= worse_threshold
+      } else {
+        lower >= worse_threshold
+      }
+      beyond_thresholds <- if (worse_sign > 0) {
+        lower >= worse_threshold
+      } else {
+        upper <= worse_threshold
+      }
+    } else {
+      within_thresholds       <- (lower >= -mid_zone) && (upper <= mid_zone)
+      beyond_thresholds       <- (upper <= -mid_zone) || (lower >= mid_zone)
+    }
   } else {
     crosses_lower_threshold <- NA
     crosses_upper_threshold <- NA
@@ -360,9 +611,14 @@ assess_imprecision <- function(meta_obj,
   }
 
   crosses_threshold <- if (has_threshold) {
-    crosses_lower_threshold || crosses_upper_threshold
+    if (one_sided) {
+      crosses_worse_threshold
+    } else {
+      crosses_lower_threshold || crosses_upper_threshold
+    }
   } else {
-    # Null threshold (target = non-null effect, or no MID available).
+    # Null threshold (target = non-null effect, or no MID available). Not
+    # reachable under "worse_only": .check_threshold_sides() refused it above.
     crosses_null
   }
 
@@ -584,9 +840,30 @@ assess_imprecision <- function(meta_obj,
     # they say "Threshold" -- pmatools' own term for the band, and the word on
     # the Configuration tab that set it. They used to say "MID"; the concept is
     # the same and the vocabulary was not.
-    threshold_label         = if (has_threshold) "the +/-Threshold band"
-                              else "the null threshold",
-    two_level_label         = if (has_threshold) {
+    # The one-sided arms are how `threshold_sides` reaches the reader: the
+    # classifier's own branches are untouched (file header), so every word
+    # that changes under "worse_only" changes here.
+    threshold_label         = if (has_threshold && one_sided) {
+                                sprintf(paste0("the Threshold on the worse ",
+                                               "side (%sThreshold)"),
+                                        if (worse_sign > 0) "+" else "-")
+                              } else if (has_threshold) {
+                                "the +/-Threshold band"
+                              } else {
+                                "the null threshold"
+                              },
+    two_level_label         = if (has_threshold && one_sided) {
+                                paste0("BOTH Thresholds (+/-Threshold) -- this ",
+                                       "branch is deliberately NOT one-sided ",
+                                       "even though the crossing test above ",
+                                       "is: the CI is consistent with the ",
+                                       "intervention being better than the ",
+                                       "Threshold AND with it being worse by ",
+                                       "more than the Threshold, and a weaker ",
+                                       "claim about one interval must never ",
+                                       "earn a deeper downgrade than a ",
+                                       "stronger one")
+                              } else if (has_threshold) {
                                 "TWO thresholds (important benefit and important harm)"
                               } else {
                                 paste0("BOTH Thresholds (+/-Threshold) -- the CI is ",
@@ -642,8 +919,34 @@ assess_imprecision <- function(meta_obj,
   } else {
     " [+/-Threshold zone; rating threshold = null]"
   }
+  # Under "worse_only" the two-sided vocabulary misdescribes the test twice
+  # over: "crosses one Threshold" does not say which one, and "within
+  # Threshold" is simply false of an interval that ran far past the BETTER
+  # side. The replacement strings name the side and the small_values that
+  # chose it, so a reader can check the direction without reading the call.
+  worse_side_suffix <- if (one_sided && has_mid_zone) {
+    sprintf(" [worse side = %sThreshold, from small_values = '%s']",
+            if (worse_sign > 0) "+" else "-", as.character(small_values))
+  } else {
+    ""
+  }
   thresh_str <- if (!has_mid_zone) {
     ""
+  } else if (one_sided) {
+    # crosses_both_thresholds FIRST even here: on that branch it is what
+    # earned the -2, and the string has to say so.
+    if (isTRUE(crosses_both_thresholds)) {
+      paste0("; crosses BOTH Thresholds (the two-level branch stays ",
+             "two-sided)", worse_side_suffix)
+    } else if (isTRUE(crosses_worse_threshold)) {
+      paste0("; crosses the Threshold on the worse side", worse_side_suffix)
+    } else if (isTRUE(within_thresholds)) {
+      paste0("; stays inside the Threshold on the worse side",
+             worse_side_suffix)
+    } else {
+      paste0("; entirely beyond the Threshold on the worse side",
+             worse_side_suffix)
+    }
   } else if (isTRUE(crosses_both_thresholds)) {
     paste0("; crosses BOTH Thresholds", mid_suffix)
   } else if (isTRUE(crosses_one_threshold)) {
@@ -652,6 +955,22 @@ assess_imprecision <- function(meta_obj,
     paste0("; within Threshold (trivial effect)", mid_suffix)
   } else {
     paste0("; beyond Threshold (definitively important effect)", mid_suffix)
+  }
+
+  # The same four-way cascade, collapsed onto the three-value machine
+  # vocabulary a caller can branch on (PMA_IMPRE_THRESHOLD_ZONES). Derived from
+  # the same booleans as the prose above rather than recomputed, so the two
+  # cannot disagree about one interval.
+  threshold_zone <- if (!has_mid_zone) {
+    NULL
+  } else if (isTRUE(crosses_both_thresholds) ||
+             isTRUE(if (one_sided) crosses_worse_threshold
+                    else crosses_one_threshold)) {
+    "crosses"
+  } else if (isTRUE(within_thresholds)) {
+    "within"
+  } else {
+    "beyond"
   }
 
   # Fig 4's "Yes" branch offers TWO reasons to consider rating down two
@@ -664,8 +983,32 @@ assess_imprecision <- function(meta_obj,
   #      related to other 4 grade domains)"
   # The second condition is a judgment about wording, not a computation, so it
   # is surfaced rather than applied.
+  #
+  # Under `threshold_sides = "worse_only"` this prompt is also where the
+  # null-to-margin region surfaces. An interval that crosses the worse-side
+  # Threshold without crossing both is consistent with the intervention being
+  # better AND with it being worse by more than the margin, which is exactly
+  # the uncertainty Fig 4's second condition is about -- and exactly the case
+  # the rejected one-sided -2 rule would have automated (file header).
   two_level_manual <- if (isTRUE(crosses_threshold) &&
-                          !isTRUE(crosses_both_thresholds)) {
+                          !isTRUE(crosses_both_thresholds) && one_sided) {
+    paste0(
+      " [Second Fig 4 two-level condition NOT auto-assessed, and note what ",
+      "this interval says: the CI is consistent with the intervention being ",
+      "better AND with it being worse by more than the Threshold. Core ",
+      "GRADE 2 also says to consider rating down two levels when the 'most ",
+      "appropriate plain language description of results suggests more ",
+      "uncertainty-eg, \"may\" rather than \"likely\"', and this is the ",
+      "interval shape that most often does. It is NOT rated down two levels ",
+      "automatically: the two-level branch is deliberately two-sided, so ",
+      "that asking a non-inferiority question can never earn a deeper ",
+      "downgrade than asking an equivalence question of the same interval. ",
+      "Read the plain language summary in the SoF table (sof_table(style = ",
+      "'bmj')) against the message you intend to convey, and override with ",
+      "imprecision = 'very_serious' + imprecision_rationale if it applies.]"
+    )
+  } else if (isTRUE(crosses_threshold) &&
+             !isTRUE(crosses_both_thresholds)) {
     paste0(
       " [Second Fig 4 two-level condition NOT auto-assessed: Core GRADE 2 ",
       "also says to consider rating down two levels when the 'most ",
@@ -700,6 +1043,14 @@ assess_imprecision <- function(meta_obj,
     if (has_mid_zone) {
       .fact("threshold_position", "Position relative to the threshold",
             sub("^; ", "", thresh_str))
+    } else NULL,
+    # The same position as a token rather than a sentence. Machine-only
+    # (.FACT_KEYS_MACHINE_ONLY): it restates for a renderer what
+    # `threshold_position` already says for a reader, and a bare "within" in a
+    # Summary of Findings footnote would say nothing to anybody. The
+    # equivalence / non-inferiority plain-language families read it.
+    if (has_mid_zone) {
+      .fact("threshold_zone", "Threshold zone", threshold_zone)
     } else NULL,
     .fact(
       "ois", "Optimal information size",

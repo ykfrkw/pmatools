@@ -490,6 +490,112 @@ test_that("the bmj table carries the plain language column and its footnote", {
   expect_no_match(.body_col(fh, 8), "benefit", fixed = TRUE)
 })
 
+# --------------------------------------------------------------------------
+# The two margin families in the table (v0.5.1; SPEC.md 5.5c)
+# --------------------------------------------------------------------------
+
+# A margin rating on the same data as make_binary(): a threshold, the target
+# pinned through the existing manual-override path, and the family named.
+# Built here rather than through make_binary(), which hard-codes
+# threshold_type = "null".
+#
+# The default threshold of 1.05 is chosen against the fixture's own interval
+# (RR 0.75, 95% CI 0.61 to 0.93): it puts the CI wholly clear of the margin,
+# so the zone is `beyond` two-sidedly and `within` on the positive worse side
+# -- the two cases the assertions below are about.
+make_margin <- function(frame, sides = "both", benefit = TRUE,
+                        threshold = 1.05, ...) {
+  ev_e <- c(10, 15, 20)
+  ev_c <- c(15, 20, 25)
+  if (!benefit) { tmp <- ev_e; ev_e <- ev_c; ev_c <- tmp }
+  data <- data.frame(
+    studlab = rep(c("A", "B", "C"), each = 2),
+    treat   = rep(c("experimental", "control"), 3),
+    n       = c(50, 50, 60, 60, 70, 70),
+    event   = c(ev_e[1], ev_c[1], ev_e[2], ev_c[2], ev_e[3], ev_c[3]),
+    stringsAsFactors = FALSE
+  )
+  ma <- run_ma(data, outcome_type = "binary", sm = "RR")
+  quiet_grade(
+    ma, study_design = "RCT", rob = "no",
+    rob_rationale = "Consensus RoB2: all domains low risk",
+    indirectness = "no", outcome_name = "Mortality",
+    small_values = "desirable",
+    threshold_type          = "mid",
+    threshold               = threshold,
+    threshold_scale         = "ratio",
+    rating_target           = "little_to_no_difference",
+    rating_target_rationale = paste(
+      "The review asks whether the difference stays inside the protocol",
+      "margin, not how large the effect is."),
+    threshold_sides         = sides,
+    plain_language_frame    = frame,
+    ...)
+}
+
+test_that("an equivalence rating beyond the margin does not say little to no", {
+  # The point of the third zone value: an interval lying ENTIRELY beyond the
+  # margin does not "may exceed" it, it exceeds it -- and because the target
+  # is pinned, Fig 2 will not flip the wording back to a direction word.
+  g <- make_margin("equivalence")
+  expect_identical(g$threshold_zone, "beyond")
+  txt <- .body_col(sof_table(g, style = "bmj"), 8)
+  expect_match(txt, "lies beyond the equivalence threshold", fixed = TRUE)
+  expect_no_match(txt, "little to no", fixed = TRUE)
+  expect_no_match(txt, "reduces", fixed = TRUE)
+  expect_no_match(txt, "increases", fixed = TRUE)
+})
+
+test_that("a non-inferiority rating says no worse than the comparator", {
+  g <- make_margin("non_inferiority", sides = "worse_only")
+  txt <- .body_col(sof_table(g, style = "bmj"), 8)
+  expect_match(txt, "worse than the comparator", fixed = TRUE)
+  expect_match(txt, "non-inferiority threshold", fixed = TRUE)
+})
+
+test_that("worse_only alone selects the non-inferiority family", {
+  # threshold_sides and the wording travel together by construction, so a
+  # caller that sets the judgment side and forgets the family still gets a
+  # sentence about the right claim.
+  named   <- make_margin("non_inferiority", sides = "worse_only")
+  implied <- make_margin(NULL,              sides = "worse_only")
+  expect_null(implied$plain_language_frame)
+  expect_identical(.body_col(sof_table(implied, style = "bmj"), 8),
+                   .body_col(sof_table(named,   style = "bmj"), 8))
+})
+
+test_that("no margin sentence in the table says MID", {
+  for (frame in PLAIN_LANGUAGE_ZONE_FAMILIES) {
+    for (benefit in c(TRUE, FALSE)) {
+      txt <- .body_col(
+        sof_table(make_margin(frame, benefit = benefit), style = "bmj"), 8)
+      expect_false(grepl("\\bMID\\b", txt),
+                   label = paste(frame, benefit))
+    }
+  }
+})
+
+test_that("a pre-existing-shaped object renders the pre-existing sentence", {
+  # The exact backward-compatibility claim: strip the three fields 0.5.1 added
+  # and the table must read what it read before they existed.
+  g <- make_binary()
+  before <- .body_col(sof_table(g, style = "bmj"), 8)
+  expect_identical(before, "Treatment reduces mortality")
+
+  g$threshold_sides      <- NULL
+  g$threshold_zone       <- NULL
+  g$plain_language_frame <- NULL
+  expect_identical(.body_col(sof_table(g, style = "bmj"), 8), before)
+
+  # And a margin-shaped object whose zone went missing drops the column
+  # rather than guessing, which is the same rule the missing-direction path
+  # follows.
+  h <- make_margin("equivalence")
+  h$threshold_zone <- NULL
+  expect_null(.plain_language_for(h))
+  expect_no_error(sof_table(h, style = "bmj"))
+})
+
 test_that("an object without a rating target drops the column, without error", {
   g <- make_binary()
   g$rating_target <- NULL

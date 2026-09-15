@@ -475,6 +475,8 @@ grade_meta(
   rating_target                    = NULL,
   rating_target_rationale          = NULL,   # REQUIRED with a manual `rating_target`
   require_threshold                = TRUE,
+  threshold_sides                  = c("both", "worse_only"),  # §4.5.1b
+  plain_language_frame             = NULL,   # "equivalence" / "non_inferiority"; §5.5c
 
   outcome_name                     = NULL,
   outcome_type                     = c("relative", "absolute"),
@@ -547,6 +549,9 @@ rating is set up and `export_bundle()` can print it in `results.txt`.
 | `$indirectness_subdomains` | the normalised PICO table, or NULL |
 | `$small_values` (v0.5.1) | the outcome direction the rating was made under, `"desirable"` or `"undesirable"`. Always present, because §4.5.1a makes it required; `export_bundle()` reads it to write the bundled `analysis.R` |
 | `$control_risk` (v0.5.1) | how the one control-arm risk was shared across `threshold_baseline` / `ois_p0` / `baseline_risk`: `value`, `donor`, `inherited`, `note`, and `used` (the number each of the three ended up with). See §4.5.4 |
+| `$threshold_sides` (v0.5.1) | `"both"` or `"worse_only"` — which sides of the threshold Imprecision tested. See §4.5.1b |
+| `$threshold_zone` (v0.5.1) | `"within"` / `"crosses"` / `"beyond"`, **lifted from the Imprecision `threshold_zone` fact rather than recomputed** — a second derivation is a second chance to disagree. `NULL` when the domain recorded no facts (the scalar `imprecision` override) or when no threshold zone applied. See §5.5, §5.5c |
+| `$plain_language_frame` (v0.5.1) | `NULL`, `"equivalence"` or `"non_inferiority"` — which plain-language family the Summary of Findings sentence is drawn from. Presentation only: nothing here reaches a judgment. See §5.5c |
 
 Downstream consumers MUST read pooled numbers from `$meta`, not `$meta_full`, so a refit propagates.
 
@@ -560,7 +565,9 @@ Downstream consumers MUST read pooled numbers from `$meta`, not `$meta_full`, so
 
 `grade_meta_multi()` re-raises the gate abort unchanged rather than recording the outcome as failed, so a batch run cannot be used to get around the gate.
 
-**Vocabulary: "MID" is internal, "threshold" is what users read [v0.5.1].** The argument value stays `threshold_type = "mid"`, and so do the internal names built on it (`has_mid`, `mid_suffix`, `ois_delta`) — renaming them would break callers for a word. But every string a user *reads* says **threshold**: the five `Rating target: …` notes from `.resolve_auto_target()`, the `.check_threshold_type_gate()` abort and its `suggest_threshold()` hint, and the Imprecision Fig 4 labels (`the +/-Threshold band`, `BOTH Thresholds (+/-Threshold)`, `no Threshold was supplied`, `an RRR rather than the threshold`). The two words name one thing, the app's Configuration tab calls it a threshold, and a reviewer meeting both in one notes string had to work out that they were not two. The one exception is text quoted **verbatim** from Core GRADE, which keeps the source's own word — e.g. the gate hint's *"MIDs associated with mortality of 1%…"*.
+**`threshold_sides` [v0.5.1].** A second, independent choice about the same threshold: which of its two sides the Imprecision test asks about. `"both"` (default) is the two-sided question every release up to 0.5.1 asked, and a call that omits the argument is byte-for-byte unchanged. `"worse_only"` asks the one-sided question a non-inferiority claim needs, and **requires a threshold**: `.check_threshold_sides()` aborts with condition class `"pmatools_threshold_gate"` when `worse_only` is combined with a rating whose threshold is the null, whether because none was supplied or because the rating target put the rating against the null. There is **no escape hatch** — the same reasoning as §4.5.1a rather than §4.5.1's: a margin *is* the question, so `require_threshold = FALSE` has nothing to mean here. The abort **offers no number**, and neither does `.resolve_rating_target()`'s, because a margin is a protocol design value and not a convention pmatools can suggest (§5.4). The enum is checked before any domain runs; the threshold requirement is checked once the rating target has resolved the threshold, so both the automated Imprecision path and the scalar `imprecision` override are gated. Full specification in §4.5.1b.
+
+**Vocabulary: "MID" is internal, "threshold" is what users read [v0.5.1].** The argument value stays `threshold_type = "mid"`, and so do the internal names built on it (`has_mid`, `mid_zone`, `mid_suffix`, `ois_delta`) — renaming them would break callers for a word. But every string a user *reads* says **threshold**: the five `Rating target: …` notes from `.resolve_auto_target()`, the `.check_threshold_type_gate()` abort and its `suggest_threshold()` hint, and the Imprecision Fig 4 labels (`the +/-Threshold band`, `BOTH Thresholds (+/-Threshold)`, `no Threshold was supplied`, `an RRR rather than the threshold`). The strings `threshold_sides = "worse_only"` adds keep the rule: `the Threshold on the worse side (+Threshold)`, `crosses the Threshold on the worse side`, `stays inside the Threshold on the worse side`, `entirely beyond the Threshold on the worse side`, `.check_threshold_sides()`'s two aborts, and — in the two plain-language families of §5.5c — `the equivalence threshold` and `the non-inferiority threshold`. **No cell of `PLAIN_LANGUAGE_FRAMES` may contain the word, and `test-plain_language.R` holds a standing guard on that.** The two words name one thing, the app's Configuration tab calls it a threshold, and a reviewer meeting both in one notes string had to work out that they were not two. The one exception is text quoted **verbatim** from Core GRADE, which keeps the source's own word — e.g. the gate hint's *"MIDs associated with mortality of 1%…"*.
 
 #### 4.5.1a Entry gate: `small_values` (v0.5.1 — breaking)
 
@@ -577,6 +584,46 @@ It was optional up to v0.5.0, and two domains guessed in its absence:
 
 `assess_rob()` and `assess_imprecision()` require it as well. They are internal, but a lenient assessor would re-open the same guessing hole one call deeper.
 
+#### 4.5.1b `threshold_sides` and the one-sided question [v0.5.1]
+
+`threshold_type` says *which* threshold the rating is anchored to. `threshold_sides` says **which sides of it the Imprecision test asks about**, and it exists because an equivalence claim and a non-inferiority claim are two different questions about one interval and one margin:
+
+- **equivalence** — is the difference small enough to be unimportant *in either direction*? Two-sided: `threshold_sides = "both"`.
+- **non-inferiority** — is the intervention no worse than the comparator *by more than the margin*? One-sided: `threshold_sides = "worse_only"`. A confidence interval that runs far past the **better**-side threshold is not evidence against non-inferiority, and must not rate the claim down.
+
+The argument is named in the **plural**. `inconsistency_threshold_side` already exists in the same signature meaning something else entirely (which side of the threshold the study *point estimates* fall on, Core GRADE 3 Fig 2 Step 2), and a singular `threshold_side` one word away from it is a trap.
+
+**Which side is worse comes from `small_values`, and from nothing else.** `.threshold_worse_sign()` in `R/domain_imprecision.R` reads the same argument `.ois_target_increase()` reads, written once so that an optimal information size powered for the benefit direction and a threshold tested on the worse side cannot end up being two different questions about one analysis. There is no second direction input to keep in step.
+
+| `small_values` | reading | worse side `W` | sign |
+|---|---|---|---|
+| `"desirable"` | a small value of the outcome is good ⇒ **larger is worse** | `+Threshold` | `+1` |
+| `"undesirable"` | a small value of the outcome is bad ⇒ **larger is better** | `−Threshold` | `−1` |
+
+**The boolean table.** `T` is the threshold on the TE scale (always positive); `W = sign · T`. The two-sided column is the pre-0.5.1 source, unchanged character for character, so `threshold_sides = "both"` is byte-for-byte what it was. Boundary conventions are shared: a limit sitting exactly on `W` does **not** cross it, and the interval is then `beyond`.
+
+| boolean | two-sided (`"both"`) | one-sided (`"worse_only"`) |
+|---|---|---|
+| `crosses_threshold` | `T` or `−T` lies inside the CI | **`W` lies inside the CI** |
+| `crosses_both_thresholds` | `−T` and `+T` both lie inside the CI | **unchanged — still two-sided** |
+| `within_thresholds` | `−T ≤ lower` ∧ `upper ≤ T` | the worse-side limit has not reached `W` |
+| `beyond_thresholds` | the CI lies wholly outside the band on one side | the CI lies wholly beyond `W` on the worse side |
+| `crosses_lower_threshold` / `crosses_upper_threshold` / `crosses_one_threshold` | as before | as before — informational only |
+
+**The `−2` branch stays two-sided, and that is the load-bearing decision of the whole feature.**
+
+It is tempting to restate `crosses_both_thresholds` one-sidedly for a non-inferiority question — to make its two thresholds the null and the worse-side margin — and it is **wrong**. Take a CI of `(−0.5T, +1.5T)` with the worse side positive. The two-sided definition gives `serious` (`−1`): only `+T` is crossed. The one-sided restatement would give `very_serious` (`−2`): both `0` and `+T` lie inside the interval. But **non-inferiority is a strictly weaker claim about the same interval than equivalence is**, so switching the question from equivalence to non-inferiority must never *increase* the downgrade — and that interval shape, a CI straddling the null with its upper limit past the margin, is the single most common real non-inferiority result.
+
+So in `worse_only` mode **only `crosses_threshold` becomes one-sided**. The set of intervals earning `−2` *by crossing both thresholds* is then **unchanged** — `crosses_both_thresholds` is computed identically on both settings — and the monotonicity the comparison between the questions needs holds on Fig 4's "Yes" branch: **wherever `worse_only` still crosses the threshold, `downgrade(worse_only) ≥ downgrade(both)`.** `test-imprecision.R` proves that over a grid of CI bounds × `sm` × `small_values` rather than by inspection, because it is the test that would have caught the rejected restatement.
+
+**The inequality is not global, and the exception is Fig 4's, not `threshold_sides`'.** Ceasing to cross the threshold moves the interval onto Fig 4's "No" branch, which has two-level rules of its own (a binary CI ratio at or above the cut-off; a continuous `N < 30%` of the OIS) that the crossing branch never consults. A large, imprecise effect sitting wholly on the *better* side of the margin can therefore rate `−2` under `worse_only` where it rated `−1` under `both` — for instance a CI of `(−1.5, −0.2)` on the log-RR scale with `T = 0.5` and `small_values = "desirable"`: `worse_only` records zone `within`, finds a 57% relative effect, and meets the risk-ratio CI-ratio cut-off of 3 at 3.67. That is Fig 4 answering its own question correctly about an interval it was never asked about before, not a sidedness bug, and `test-imprecision.R` pins both instances by name so that the next reader knows the behaviour is known. Nothing here weakens the reductio above: the rejected restatement deepened the downgrade **on the crossing branch**, where Fig 4 offers no such escape.
+
+The null-to-margin region that the rejected restatement was reaching for is not left silent: it is surfaced by the existing `two_level_manual` prompt, which fires on exactly `crosses_threshold && !crosses_both_thresholds` and carries a `worse_only` arm saying that the CI is consistent with the intervention being better *and* with it being worse by more than the Threshold. That is Core GRADE 2 Fig 4's own second two-level condition — a judgment about wording — surfaced for the reviewer, not a rule Core GRADE 2 does not state, automated.
+
+**`.classify_imprecision()` is not modified.** Its nine branches are Fig 4 and they stay Fig 4. All relabelling travels through the `threshold_label` and `two_level_label` parameters it already has, set at the call site: under `worse_only` `threshold_label` becomes `"the Threshold on the worse side (+Threshold)"` (with the sign the worse side actually has) and `two_level_label` gains a third arm naming the asymmetry while stating that the branch is deliberately still two-sided.
+
+**No new flowchart node id.** The route through `inst/figures/impre.svg` is unchanged: what differs under `worse_only` is the *definition* of the threshold at the `node-crosses` box, which is caption-level, not a new branch. `.IMPRE_FIG4_NODE_IDS` therefore gains nothing, and it must not: `test-flowchart-nodes.R` asserts the vocabulary is a subset of the `id="pma-…"` attributes actually drawn in the SVG, so a new id needs a new SVG element. That test carries a `worse_only` case whose whole assertion is that it emits only existing ids.
+
 #### 4.5.2 Rating target (Core GRADE 2 Fig 2)
 
 `grade_meta()` derives the target of the rating from the pooled point estimate and `threshold_type`:
@@ -588,6 +635,10 @@ It was optional up to v0.5.0, and two domains guessed in its absence:
 | `"non_null_effect"` | null (0 on the TE scale) |
 
 Supplying `rating_target` manually overrides the derivation and requires `rating_target_rationale`. `print()` shows the target. Objects created before v0.5.0 have no `$rating_target`; consumers must tolerate its absence (the plain language column is simply omitted).
+
+**A margin question pins the target through this existing path [v0.5.1].** An equivalence or a non-inferiority rating is a rating in `"little_to_no_difference"` whatever the point estimate happens to be, so it is expressed as a **manual `rating_target`** with its mandatory rationale — not as a new derivation branch. Nothing had to be added for it: `.resolve_rating_target()` already writes `"Auto-derived target would have been: important_effect"` into `rating_target_note`, so a point estimate lying beyond the margin is **already recorded as a mismatch** between the question asked and the evidence found, and that note already propagates into the Imprecision domain notes, `evidence_profile()`, `grade_report()` and the exported bundle.
+
+Because the target is pinned, `print()` reports it as `manual`, and the pinned-target abort in `.resolve_rating_target()` (`"rating_target = '…' requires a threshold (MID)"`) is the second of the two no-number gates that refuse a margin question with no margin — the first being `.check_threshold_sides()` (§4.5.1b). Neither offers a value. `.check_threshold_type_gate()`, which *does* offer one, is therefore **not called** when `rating_target` is pinned or when `threshold_sides = "worse_only"`: the copyable hint it builds from `suggest_threshold()` is right for a threshold of clinical importance and wrong for a margin (§4.7a).
 
 #### 4.5.3 Indirectness subdomains (per-PICO; Core GRADE 5 reasoning, pmatools scale)
 
@@ -843,6 +894,8 @@ sof_table(
 
 **Plain language summaries** are the **Core GRADE 6 Box 1** statements ("Writing standardised GRADE plain language summaries in summary of findings tables"), carried verbatim. Box 1 supersedes the earlier Core GRADE 2 Table 1 guidance, which it "summarises ... as well as additional guidance related to the null and MID thresholds that are the focus of Core GRADE"; unlike Table 1 it names the direction of the effect on the outcome instead of fixing the wording to "benefit". The statement is selected from **four** inputs: certainty level, `threshold_type`, `rating_target`, and the **sign of the pooled point estimate** (`increases` / `reduces`). An object without `$rating_target` (created before v0.5.0) omits the column rather than guessing, as does an object with no usable direction — Box 1 has no direction-free wording.
 
+**Two further families [v0.5.1], for a margin question.** An equivalence or a non-inferiority rating is not a claim about a direction but a claim about a boundary, and Core GRADE 6 Box 1 has no wording for either. `$plain_language_frame` (or `$threshold_sides == "worse_only"`) selects one of two **pmatools** families whose axis is the threshold zone rather than the direction, and whose every cell is tagged as having no Box 1 counterpart so that it cannot be cited as GRADE wording. §5.5c is the specification: the eighteen cells verbatim, the zone axis, the resolution order, and the rule that a missing zone drops the column.
+
 **Analysis-set footnote.** When the rated analysis is a low-RoB refit (§5.1), the table carries a footnote saying so. `grade_table()` numbers the marker per row, so a table mixing analysis sets says which rows were restricted.
 
 **Arm-level columns for continuous outcomes: removed [v0.6].** A continuous meta-analysis routinely pools endpoint scores together with change-from-baseline scores. The pooled *contrast* survives that; a pooled *control-arm mean* does not, and neither does anything built on one. So a continuous outcome now shows **nothing** in "With control" and "With intervention" unless the Chinn conversion is active, in which case those cells hold the responder rates and only those. The Difference column follows the same rule: for `sm = "SMD"` the standard-deviation string is gone (it restated the Effect column and rested on the same arm means), while for `sm = "MD"` the difference in the outcome's own units **stays**, because that is the pooled contrast itself and mixing endpoint with change scores does not invalidate it.
@@ -969,6 +1022,8 @@ suggest_threshold(meta_obj) -> list(threshold_user, threshold_scale, source,
 Returns a conventional default Threshold for the given `{meta}` object based on `meta_obj$sm`. See §5.4 for the table. Returns `NULL` when `sm` is unrecognized.
 
 For `sm = "MD"`, calls `compute_pooled_sd()` internally and returns `0.20 * sd_pooled`.
+
+**It offers nothing for an equivalence or a non-inferiority margin, and is unchanged by `threshold_sides` [v0.5.1].** The signature still takes only a `{meta}` object, and deliberately: teaching it the four clinical questions of §4.5.1b would put those questions inside the package, and it has a second caller — `.check_threshold_type_gate()` builds its copyable hint from it — that must keep working exactly as it does. What a margin needs is not a value derived from the analysis but a value taken from the protocol, so the package offers **no placeholder for either margin question** and both gates that refuse one (`.check_threshold_sides()`, `.resolve_rating_target()`) abort **with no number in the message**. `PMA_NO_MARGIN_PLACEHOLDER` in `R/domain_imprecision.R` holds that sentence once, cited by both gates, so a host application can print the same reason it does.
 
 ### 4.7b `compute_pooled_sd()` [new helper, exported]
 
@@ -1438,6 +1493,16 @@ Exported but not specified in detail here; see the roxygen pages. They predate t
 (`combine_arms()` in `R/combine_arms.R` **is** exported — see §4.16. Revisions of this list between v0.3 and v0.5.0 wrongly called it internal.)
 
 `evidence_profile(grade, palette, study_design, other_text, other_downgrade)` renders the per-outcome GRADE evidence profile used by both bundle layouts.
+
+**The rating's own question, asked of the whole rare-event suite.** `R/rare_step3.R` holds the helpers that let a host application ask every fitted sparse-data method the question Core GRADE 2 asks the primary — whether its interval crosses the chosen threshold — once each. The full specification is `shiny/SPEC.md` §3.4.14; what belongs here is the signature and the one rule behind it:
+
+```r
+.rare_crosses_threshold(lower, upper, thr = NULL, worse_side = NULL)
+rare_suite_crossing(rare, threshold_internal = NULL, worse_side = NULL)
+rare_suite_crossing_note(cross, threshold_internal = NULL, worse_side = NULL)
+```
+
+`worse_side` is `NULL` (the two-sided question, today's behaviour for every existing caller), `+1` or `−1`. It was added with `threshold_sides` (§4.5.1b) and had to be: the helper exists so that *"the sensitivity answer and the rated answer cannot come from two different rules"*, and under `threshold_sides = "worse_only"` the primary is asked a one-sided question. A suite still asked the two-sided one would report a disagreement the rating never had, or miss one it did. The side is **threaded from the rated object**, never re-derived, and `rare_suite_crossing_note()`'s label then reads *"the chosen threshold on the worse side"*. `.rated_threshold_for_imprecision()` (`R/rating_target.R`) is unchanged: it returns a magnitude, and `thr <= 0` is already its "the threshold is the null" sentinel.
 
 ### 4.13 `indirectness_table()` [v0.5.0]
 
@@ -1946,6 +2011,7 @@ When the Shiny app pre-fills the Threshold input, use these **placeholder defaul
 - **The MID belongs to the outcome, not to the effect measure.** Those same Core GRADE 7 numbers "reflect the gradient of importance across these outcomes"; one default shared by every outcome erases that gradient.
 - **The procedure runs the other way round.** Core GRADE 7 has users read the CI first and pin down a MID only where the verdict turns on it ("whether the MID for mortality is 2%, 1%, or less than 1%, the CI does not cross the MID threshold ... one need not specify a single particular value"). Starting from a pre-filled default inverts that order.
 - **SMD 0.20 is the one sourced value**, and Core GRADE 6 hedges it: "an SMD of 0.2 is the threshold for a small and important effect", but "clinicians may be appropriately sceptical of this threshold, which is limited by large variability in the methods investigators use to calculate the SMD".
+- **A margin is not a convention [v0.5.1].** Every number in the table below is a stand-in for *the smallest effect that would matter* — a property of the outcome, which is why a placeholder for it is defensible as a starting point to replace. An equivalence or a non-inferiority margin is a different kind of object: it is a **design parameter of the review's own question**, fixed in the protocol before any evidence is read, and a tool that pre-fills it has not saved the reviewer a lookup but answered the question on their behalf. So `threshold_sides = "worse_only"` and a pinned `rating_target` both refuse to proceed without a margin and both refuse **with no number in the message** (§4.5.1b, §4.7a), and `suggest_threshold()` is not extended to cover them.
 
 ```r
 suggest_threshold <- function(meta_obj) {
@@ -2100,7 +2166,17 @@ There is no third row. Up to v0.5.0 `small_values = NULL` meant "use the paper's
 
 **Notes** record which Fig 4 path produced the judgment, including which CI-ratio rule fired and the continuous 400-per-group (total N 800) rule of thumb.
 
-**Manual override.** A scalar `imprecision` (with mandatory `imprecision_rationale`) bypasses this assessment entirely (v0.4.0).
+#### One-sided threshold tests (v0.5.1)
+
+`assess_imprecision(threshold_sides = )` takes the same two values `grade_meta()` takes and is specified in full in §4.5.1b: `"both"` is the two-sided question, byte-for-byte unchanged; `"worse_only"` makes **only `crosses_threshold`** one-sided, on the side `.threshold_worse_sign(small_values)` names, and leaves `crosses_both_thresholds` at its two-sided `±T` definition so that the set of intervals earning `−2` can only shrink. The boolean table, the monotonicity argument and the reductio that rules out a one-sided `−2` branch all live in §4.5.1b, which is where a reader looking for *"why is my non-inferiority rating not −2"* should land. `.classify_imprecision()`'s body is untouched and `.IMPRE_FIG4_NODE_IDS` gains no id.
+
+What this section owns is the **output** side of it:
+
+- **The `threshold_position` fact and the `thresh_str` clause of the notes fork.** "crosses one Threshold" is unreadable on a one-sided test (which one?), and "within Threshold" is false of an interval that ran far past the *better* side. Under `worse_only` the three strings are `"crosses the Threshold on the worse side"`, `"stays inside the Threshold on the worse side"` and `"entirely beyond the Threshold on the worse side"`, each suffixed with the side actually chosen and the `small_values` that chose it, so a reader can check the direction without reading the call. `crosses_both_thresholds` is tested **first even under `worse_only`**, because on that branch it is what earned the `−2`, and its string says the two-level branch is deliberately still two-sided.
+- **A machine-readable `threshold_zone` fact beside it.** `PMA_IMPRE_THRESHOLD_ZONES` is `c("within", "crosses", "beyond")`, emitted as the fact `threshold_zone` whenever a threshold zone applies at all — on both sidedness settings, and on the null-threshold path where a Threshold exists but the rating is against the null. The plain-language families of §5.5c must branch on the zone and **must not parse the prose to do it**, which is the same rule §5.6 states for every other fact. The three values are exhaustive and mutually exclusive over any interval; `test-imprecision.R` proves that over a grid rather than asserting it. It is a **machine-only** fact (`.FACT_KEYS_MACHINE_ONLY`): it restates for a renderer what `threshold_position` already says for a reader, and a bare `"within"` in a Summary of Findings footnote would say nothing to anybody.
+- **The Fig 4 path string names the worse side**, through `threshold_label`, and the `two_level_manual` prompt gains a `worse_only` arm naming the null-to-margin region.
+
+**Manual override.** A scalar `imprecision` (with mandatory `imprecision_rationale`) bypasses this assessment entirely (v0.4.0). It bypasses the `threshold_sides` gate with it, which is why `grade_meta()` calls `.check_threshold_sides()` itself once the rating target has resolved rather than relying on `assess_imprecision()` alone; on that branch no facts are recorded, so `$threshold_zone` is `NULL` and the plain-language column that reads it is dropped.
 
 ### 5.5a Publication bias — trim-and-fill is a diagnostic, never a decision
 
@@ -2141,6 +2217,64 @@ The same principle as §5.5a, applied to three diagnostics rather than one. A ho
 - **The comparison runs on a scale whose null is zero** — absolute risk difference per 1,000 for a binary outcome, the internal scale for MD / SMD / RoM. `|OR| = 2.0` and `|OR| = 0.5` are equidistant from the null in fact and four-fold apart on the raw measure, so every zone and magnitude rule would be wrong for one of them. `.pubias_trimfill_scale()` owns the decision; the event-rate map is **injected** rather than reimplemented (the host already owns one), and with none supplied a binary outcome is ⚪ rather than silently converted. No baseline risk is ⚪ for the same reason: a silent scale change is what the split exists to prevent.
 - **Missing results** — the tipping-point algorithm, fully specified in `shiny/SPEC.md` §3.4.8a. Assume the `m` missing studies share one effect `δ`, hold `tau^2` at its observed value, and solve `δ* = (W_tot*(T ± 1.96*se_new) − W_obs*TE_obs) / W_miss` in closed form. Six ordered steps, of which the order is the load-bearing part: `δ = TE_obs` changing the conclusion on precision alone is 🔴 and must be asked before the magnitude comparison, which on its own would call that case reassuring.
 
+### 5.5c Plain language for an equivalence or a non-inferiority question (v0.5.1)
+
+`PLAIN_LANGUAGE_FRAMES` (`R/plain_language.R`) grew two new top-level families, `equivalence` and `non_inferiority`, beside the existing `null` and `mid`. Neither is GRADE wording, and the wording of that disclaimer is part of the specification.
+
+**Core GRADE 6 Box 1 has no counterpart for either question.** Box 1 writes exactly two columns — the null and the MID — and neither of them states a claim about *a margin having been respected*. So every cell of the two new families carries a new provenance tag, documented in the same comment block as `[Box 1]` / `[Table 3]` / `[composed]`:
+
+```
+[pmatools; no Box 1 counterpart]
+```
+
+No cell of either family may claim `[Box 1]` or `[composed]`. `[composed]` is reserved for assembly from a Box 1 qualifier applied to a Box 1 frame, and here there is **no Box 1 frame to apply one to**. What the two families do take from Box 1 is its **grammar** — actor, one certainty adverb, predicate, outcome — and nothing else of it. They must not be cited as GRADE wording. `test-plain_language.R` audits the tag count and the absence of the other tags.
+
+**The axis is the zone, not the direction.** Both questions are about a **boundary**, which is why the existing increase / decrease / little axis misfires on them: "increases mortality" answers a question nobody asked of an equivalence rating. The key is the `threshold_zone` fact of §5.5, read off the object:
+
+| zone | what it says about the interval |
+|---|---|
+| `within` | the CI has not reached the margin (on the worse side, under `threshold_sides = "worse_only"`) |
+| `crosses` | the margin lies inside the CI |
+| `beyond` | the CI lies wholly past the margin |
+
+**Three values, not two,** and the third is the point of it: an interval lying *entirely* beyond an equivalence margin does not "may exceed" the margin, it exceeds it, and because the rating target is pinned (§4.5.2) Fig 2 will not flip the wording back. The families are **direction-free** — direction lives in the Effect column of the table, and a margin question is symmetric about the comparator by construction. `Very low` is unaffected: `PLAIN_LANGUAGE_VERY_LOW` is already zone- and direction-neutral and spans every family, and its early return in `.plain_language()` sits **above** all family resolution. The single-adverb rule (`R/plain_language.R`'s own "One adverb per certainty level" note) is kept: `""` / `"probably"` / `"may"`, one modal per cell, audited.
+
+**The eighteen cells**, as predicates following the actor, with `%s` the outcome:
+
+| family | certainty | zone | predicate |
+|---|---|---|---|
+| `equivalence` | High | `within` | `results in a difference in %s that lies within the equivalence threshold` |
+| | | `crosses` | `results in little to no difference in %s, but a difference beyond the equivalence threshold is not excluded` |
+| | | `beyond` | `results in a difference in %s that lies beyond the equivalence threshold` |
+| | Moderate | `within` | `probably results in a difference in %s that lies within the equivalence threshold` |
+| | | `crosses` | `probably results in little to no difference in %s, but a difference beyond the equivalence threshold is not excluded` |
+| | | `beyond` | `probably results in a difference in %s that lies beyond the equivalence threshold` |
+| | Low | `within` | `may result in a difference in %s that lies within the equivalence threshold` |
+| | | `crosses` | `may result in little to no difference in %s, but a difference beyond the equivalence threshold is not excluded` |
+| | | `beyond` | `may result in a difference in %s that lies beyond the equivalence threshold` |
+| `non_inferiority` | High | `within` | `is not worse than the comparator in %s by more than the non-inferiority threshold` |
+| | | `crosses` | `is not worse than the comparator in %s by more than the non-inferiority threshold, but a larger difference is not excluded` |
+| | | `beyond` | `is worse than the comparator in %s by more than the non-inferiority threshold` |
+| | Moderate | `within` | `is probably not worse than the comparator in %s by more than the non-inferiority threshold` |
+| | | `crosses` | `is probably not worse than the comparator in %s by more than the non-inferiority threshold, but a larger difference is not excluded` |
+| | | `beyond` | `is probably worse than the comparator in %s by more than the non-inferiority threshold` |
+| | Low | `within` | `may be no worse than the comparator in %s by more than the non-inferiority threshold` |
+| | | `crosses` | `may be no worse than the comparator in %s by more than the non-inferiority threshold, but a larger difference is not excluded` |
+| | | `beyond` | `may be worse than the comparator in %s by more than the non-inferiority threshold` |
+
+Every `High × crosses` cell is kept even though the automated path cannot reach it — crossing the rating threshold forces at least `−1`, so certainty is at most Moderate. A **missing** cell returns `NULL` and silently drops the whole column, which is a worse failure than an unreachable string.
+
+**Family resolution, in one place.** `.plain_language()` gained exactly two named, defaulted parameters, `frame_family = NULL` and `threshold_zone = NULL`. `threshold_type` is deliberately **not** widened: it is a value users pass to `grade_meta()`, and adding `"equivalence"` to its enum would make a presentation choice look like a threshold choice. The order is:
+
+1. `frame_family`, when it names a family;
+2. otherwise `threshold_type`, exactly as before.
+
+`.plain_language_for()` resolves the family from a rated object, also in one place: `x$plain_language_frame`, else `"non_inferiority"` when `identical(x$threshold_sides, "worse_only")`, else `NULL`. For the two new families the lookup key is the zone, and a **missing or unrecognised zone returns `NULL` and drops the column** — the same rule the missing-direction path already follows, and for the same reason: there is no zone-free wording to fall back on.
+
+**Backward compatibility is exact, not approximate.** A pre-existing `pmatools` object carries none of `$plain_language_frame`, `$threshold_sides` or `$threshold_zone`, so the resolution above returns `NULL`, the family falls back to `threshold_type`, and the cell reached is the cell that was reached before. `test-sof_bmj.R` asserts a pre-existing-shaped object renders the pre-existing sentence.
+
+**`"equivalence"` is never inferred.** It would be easy to read `threshold_type == "mid"` plus a pinned `"little_to_no_difference"` target as an equivalence question, and it must not be: that combination is a legitimate pre-existing manual override, and reinterpreting it would change the wording of ratings already made. That is precisely why there are **two** new `grade_meta()` arguments rather than one — `threshold_sides` carries the judgment, `plain_language_frame` carries the wording, and neither is derived from the other except for the single `worse_only → non_inferiority` fallback above. `.check_plain_language_frame()` validates the argument and lives in `R/plain_language.R`, the file that owns the families; it is **not** classed `"pmatools_threshold_gate"`, because it changes no judgment and `grade_meta_multi()` should demote it like any other per-outcome failure. `R/sof_bmj.R` needs no change at all.
+
 ### 5.6 Structured domain facts (v0.5.1)
 
 The container is **domain-agnostic**: `.fact(key, label, value, numeric = NA)` builds one row, `.facts(...)` binds the non-`NULL` ones into a tibble, and the assessors attach it to their `make_domain_row(facts = )`. `grade_meta()` collects the non-`NULL` results into `$domain_facts`, keyed by domain name; a domain that records nothing is simply absent from the list. Reached with `domain_facts()` (§4.15).
@@ -2160,7 +2294,8 @@ The container is **domain-agnostic**: `.fact(key, label, value, numeric = NA)` b
 | | `zone_decision` | largest single-zone share |
 | Imprecision | `confidence_interval` | — |
 | | `crosses_null` | — (`"yes"` / `"no"`) |
-| | `threshold_position` | — (omitted when no MID zone applies) |
+| | `threshold_position` | — (omitted when no MID zone applies). Under `threshold_sides = "worse_only"` the `value` names the worse side and the `small_values` that chose it (§5.5) |
+| | `threshold_zone` | — (`"within"` / `"crosses"` / `"beyond"`, `PMA_IMPRE_THRESHOLD_ZONES`; v0.5.1, omitted when no MID zone applies). **Machine-only** — see `.FACT_KEYS_MACHINE_ONLY` below. It is what the plain-language families of §5.5c branch on, so they never parse `threshold_position`'s prose |
 | | `ois` | observed / target ratio; the `value` says `"not applied on this Fig 4 path"` when Fig 4 did not consult it |
 | | `ois_target_rate` | `ois_p1` (v0.5.1; recorded only when `ois_p1` was derived rather than supplied — the `value` names the direction and why it was chosen) |
 | | `ois_sd_source` | `ois_sd` (v0.5.1; recorded only when it was derived rather than supplied — the `value` says whether it is the pooled within-study SD or the SMD's σ = 1) |
@@ -2173,7 +2308,7 @@ The container is **domain-agnostic**: `.fact(key, label, value, numeric = NA)` b
 
 Keys are **stable API**: a consumer branches on `key`, not on the wording of `label` or `value`.
 
-`flow_path` is **machine-only**: `.FACT_KEYS_MACHINE_ONLY` in `R/domain_row.R` lists it and
+`flow_path` and `threshold_zone` are **machine-only**: `.FACT_KEYS_MACHINE_ONLY` in `R/domain_row.R` lists them and
 `.drop_machine_only_facts()` filters it out before facts are rendered as prose, so it
 never reaches a Summary of Findings footnote. Anything else added for a renderer rather
 than a reader belongs in that constant too.
@@ -2287,8 +2422,8 @@ instead.
 
 | File | Coverage |
 |---|---|
-| test-rating_target.R | Core GRADE 2 Fig 2 target derivation, manual override + mandatory rationale, `threshold_type` entry gate |
-| test-imprecision.R | Fig 4 paths (§5.5), CI-ratio rules, OIS branch reachability |
+| test-rating_target.R | Core GRADE 2 Fig 2 target derivation, manual override + mandatory rationale, `threshold_type` entry gate; §4.5.2: the placeholder-offering gate is **not** reached with a pinned `rating_target` or `threshold_sides = "worse_only"`, and neither of the two surviving aborts contains a number |
+| test-imprecision.R | Fig 4 paths (§5.5), CI-ratio rules, OIS branch reachability; §4.5.1b `threshold_sides`: **golden invariance** (`"both"` is `identical()` to the argument omitted, over a grid of CIs × `sm` × `small_values`), **monotonicity** (`downgrade(worse_only) >= downgrade(both)` over the same grid wherever `worse_only` still crosses the threshold — the test that rules out the rejected one-sided `−2` — together with the two named OIS-branch exceptions to the global form), the boolean table on both signs, both `.check_threshold_sides()` aborts, and `threshold_zone` exhaustive and mutually exclusive |
 | test-rob_flowchart.R | Core GRADE 4 Fig 2 (§5.1): dominance gate, the 5 zone rules, `analysis_set`, refit propagation, and Step 2b's rule → leaf mapping (each rule's leaf and `flow_path`, the direction gate reading a shift as "similar", rule 5 leaking no depth, the departure disclosure on both leaves) |
 | test-domain_rob.R | inflation threshold boundaries, `rob_some_concerns`, `rob_overrides`, the `small_values` direction gate deciding rule 2 vs rule 3 (§4.5.1a) |
 | test-indirectness_subdomains.R | PICO table normalisation, worst-case rollup, scalar override |
@@ -2297,7 +2432,7 @@ instead.
 | test-override-rationale.R | every mandatory `*_rationale` (v0.4.0) |
 | test-threshold_absolute.R | `threshold_scale = "ard"` + `threshold_baseline` conversion |
 | test-domain_pubias.R, test-evidence_profile.R, test-grade_report.R, test-plot_forest_rob.R, test-plot_forest_subgroup.R, test-rare_events.R, test-sof_table.R | as named |
-| test-plain_language.R | Core GRADE 6 Box 1 statement selection from certainty × `threshold_type` × `rating_target` × sign; the one-adverb rule; the omit-the-column cases |
+| test-plain_language.R | Core GRADE 6 Box 1 statement selection from certainty × `threshold_type` × `rating_target` × sign; the one-adverb rule; the omit-the-column cases; §5.5c: the golden table for `frame_family = NULL`, all 18 new sentences verbatim, an unrecognised zone dropping the column, `Very low` ignoring family and zone, the single-adverb audit, the `[pmatools; no Box 1 counterpart]` tag audit, and the **standing guard that no cell anywhere in `PLAIN_LANGUAGE_FRAMES` contains "MID"** |
 | test-indirectness_dominance.R | scalar `indirectness` override vs the subdomain worst-case rollup |
 | test-control_risk.R | `baseline_risk` resolution, the complete-case `event.c` / `n.c` filter, `metaprop` fallback |
 | test-version-stamp.R | `.pmatools_version()` under `source()` (vendored) as well as installed |

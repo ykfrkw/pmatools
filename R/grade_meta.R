@@ -329,6 +329,66 @@
 #'   \code{rating_target} is supplied (manual override of the Core GRADE 2
 #'   Fig 2 derivation). See \code{rob_rationale} for how it is recorded.
 #'   Default \code{NULL}.
+#' @param threshold_sides (v0.5.1) Which \strong{sides} of the chosen threshold
+#'   the Imprecision test asks about. \code{threshold_type} says which
+#'   threshold; this says how much of it is being tested. One of:
+#'   \itemize{
+#'     \item \code{"both"} (default): does the CI cross \emph{either} side of
+#'       the threshold? The question an \strong{equivalence} claim asks, and
+#'       the question every release up to 0.5.1 asked. A call that omits the
+#'       argument is unchanged.
+#'     \item \code{"worse_only"}: does the CI cross the threshold on the
+#'       \strong{worse side alone}? The question a \strong{non-inferiority}
+#'       claim asks. A CI running far past the \emph{better}-side threshold is
+#'       not evidence against non-inferiority and no longer rates the claim
+#'       down.
+#'   }
+#'   Which side is worse follows from \code{small_values} and from nothing
+#'   else: \code{"desirable"} (a small outcome value is good) makes the worse
+#'   side \eqn{+}Threshold, \code{"undesirable"} makes it \eqn{-}Threshold.
+#'
+#'   \strong{Only the one-level test becomes one-sided.} The two-level
+#'   ("crosses both thresholds") branch keeps its two-sided \eqn{\pm}Threshold
+#'   definition, deliberately. Non-inferiority is a strictly weaker claim about
+#'   the same interval than equivalence, so asking it must never earn a
+#'   \emph{deeper} downgrade; restating the two-level branch one-sidedly would
+#'   rate a CI of \eqn{(-0.5T, +1.5T)} — a CI straddling the null with its
+#'   upper limit past the margin, the commonest real non-inferiority result —
+#'   two levels down where the two-sided rule rates it one. See SPEC.md
+#'   §4.5.1b, which carries the full argument, and the file header of
+#'   \code{R/domain_imprecision.R}.
+#'
+#'   \strong{A threshold is mandatory}, and there is no escape hatch: the
+#'   margin \emph{is} the question, so \code{require_threshold = FALSE} has
+#'   nothing to mean here. \code{"worse_only"} on a rating whose threshold is
+#'   the null aborts with condition class \code{"pmatools_threshold_gate"},
+#'   and the message offers \strong{no number} — a margin is a protocol design
+#'   value, not a convention (\code{\link{suggest_threshold}} is unchanged and
+#'   suggests nothing for one).
+#' @param plain_language_frame (v0.5.1) Which family of plain-language
+#'   statements the Summary of Findings sentence is drawn from.
+#'   \strong{Presentation only}: nothing selected here reaches a judgment.
+#'   \code{NULL} (default) keeps the Core GRADE 6 Box 1 wording chosen by
+#'   \code{threshold_type}, which is what every rating before 0.5.1 used.
+#'   \code{"equivalence"} and \code{"non_inferiority"} select statements keyed
+#'   by where the CI sits relative to the margin (within / crosses / beyond)
+#'   rather than by the direction of the effect, because both questions are
+#'   about a boundary and not about a direction.
+#'
+#'   \strong{Neither family is GRADE wording.} Core GRADE 6 Box 1 writes only
+#'   a null column and a MID column, and neither states a claim about a margin
+#'   having been respected, so these sentences are \strong{pmatools
+#'   conventions} built on Box 1's grammar and on nothing else of Box 1's. Do
+#'   not cite them as GRADE wording. SPEC.md §5.5c lists all eighteen
+#'   verbatim.
+#'
+#'   \code{"equivalence"} is never inferred from the other arguments:
+#'   \code{threshold_type = "mid"} with a pinned
+#'   \code{rating_target = "little_to_no_difference"} is a legitimate
+#'   pre-existing override, and reading it as an equivalence question would
+#'   change the wording of ratings already made. \code{"non_inferiority"} is
+#'   the one fallback, taken when \code{threshold_sides = "worse_only"} and no
+#'   family was named, because those two travel together by construction.
 #' @param threshold (v0.2) Numeric clinical decision Threshold (a minimally
 #'   important effect). This is a cross-cutting parameter shared by the three
 #'   Threshold-aware domains — it is not a Risk-of-Bias-specific setting:
@@ -596,6 +656,20 @@
 #'     \item{rating_target_note}{How the target was derived (or overridden).}
 #'     \item{rating_target_auto}{\code{TRUE} when the target was derived
 #'       automatically rather than supplied by the user.}
+#'     \item{threshold_sides}{(v0.5.1) \code{"both"} or \code{"worse_only"} —
+#'       which sides of the threshold the Imprecision test asked about.}
+#'     \item{threshold_zone}{(v0.5.1) \code{"within"}, \code{"crosses"} or
+#'       \code{"beyond"} — where the confidence interval sat relative to the
+#'       threshold it was tested against. \strong{Lifted from the Imprecision
+#'       \code{threshold_zone} fact, not recomputed}, so it describes the
+#'       interval the rating was actually made on. \code{NULL} when the domain
+#'       recorded no facts (the scalar \code{imprecision} override) or when no
+#'       threshold zone applied; the plain-language column that reads it is
+#'       then dropped rather than guessed.}
+#'     \item{plain_language_frame}{(v0.5.1) \code{NULL},
+#'       \code{"equivalence"} or \code{"non_inferiority"} — which
+#'       plain-language family the Summary of Findings sentence is drawn from.
+#'       Presentation only.}
 #'     \item{indirectness_subdomains}{The normalised Core GRADE 5 subdomain
 #'       tibble (\code{subdomain}, \code{target}, \code{evidence},
 #'       \code{judgment}, \code{grade_level}), or \code{NULL} when none was
@@ -675,6 +749,15 @@ grade_meta <- function(meta_obj,
                        rating_target                    = NULL,
                        rating_target_rationale          = NULL,
                        require_threshold                = TRUE,
+                       # Which sides of the chosen threshold the Imprecision
+                       # test asks about, and which wording the Summary of
+                       # Findings sentence is drawn from. Both optional with a
+                       # behaviour-preserving default; see SPEC.md 4.5.1b and
+                       # 5.5c. `plain_language_frame` is PRESENTATION ONLY --
+                       # nothing it selects reaches a judgment.
+                       threshold_sides                  = c("both",
+                                                            "worse_only"),
+                       plain_language_frame             = NULL,
                        outcome_name                     = NULL,
                        outcome_type                     = c("relative", "absolute"),
                        ois_events                       = NULL,
@@ -715,6 +798,15 @@ grade_meta <- function(meta_obj,
   study_design      <- match.arg(study_design)
   outcome_type      <- match.arg(outcome_type)
   threshold_type    <- match.arg(threshold_type)
+  # Enum only here, for the same reason threshold_type is resolved here: a typo
+  # must abort before any domain runs rather than on a rating. The threshold
+  # REQUIREMENT for "worse_only" needs the rating target first and is checked
+  # once that has resolved, below.
+  threshold_sides   <- .check_threshold_sides(threshold_sides)
+  # Presentation only, and therefore deliberately NOT classed as a threshold
+  # gate: grade_meta_multi() should demote a bad family like any other
+  # per-outcome failure rather than abandon the batch over a wording choice.
+  .check_plain_language_frame(plain_language_frame)
   # Validated by .check_rob_some_concerns() rather than match.arg() so that a
   # bad value gets the message explaining what the setting does.
   rob_some_concerns <- .check_rob_some_concerns(
@@ -734,8 +826,20 @@ grade_meta <- function(meta_obj,
 
   # --- Core GRADE 2 Fig 2 step 1: the chosen threshold must be explicit ---
   # "mid" means importance is being judged, which is impossible without a MID.
-  .check_threshold_type_gate(meta_obj, threshold_type, threshold,
-                             require_threshold)
+  #
+  # Guarded, since 0.5.1. This gate is the one that OFFERS A NUMBER: it embeds
+  # suggest_threshold()'s actual return value so the caller can paste the
+  # argument out of the message. That is right for a threshold of clinical
+  # importance and wrong for a MARGIN, which is a protocol design value (see
+  # PMA_NO_MARGIN_PLACEHOLDER). A pinned rating_target and
+  # threshold_sides = "worse_only" are the two ways of saying "this is a
+  # margin question", and both are then caught downstream by gates that offer
+  # nothing: .resolve_rating_target()'s existing abort and
+  # .check_threshold_sides(). rating_target.R stays untouched.
+  if (is.null(rating_target) && identical(threshold_sides, "both")) {
+    .check_threshold_type_gate(meta_obj, threshold_type, threshold,
+                               require_threshold)
+  }
 
   # --- the outcome direction must be explicit (v0.5.1) ---
   # Risk of bias and Imprecision both consume it, and both used to guess in its
@@ -850,6 +954,13 @@ grade_meta <- function(meta_obj,
   target_info <- .resolve_rating_target(rating_target, rating_target_rationale,
                                         auto_target, threshold_internal)
 
+  # The other half of the threshold_sides gate, now that the threshold Fig 4
+  # will be applied to is known. Called HERE and not only inside
+  # assess_imprecision(), because the scalar `imprecision` override below
+  # never calls the assessor at all -- and the gate would leak on exactly the
+  # branch where a reviewer is least likely to notice.
+  .check_threshold_sides(threshold_sides, target_info$threshold_for_imprecision)
+
   # --- remaining domain assessments (on the possibly refitted analysis) ---
   d_indir <- assess_indirectness(
     indirectness,
@@ -921,6 +1032,7 @@ grade_meta <- function(meta_obj,
       rating_target      = target_info$target,
       threshold_type     = threshold_type,
       threshold_for_imprecision = target_info$threshold_for_imprecision,
+      threshold_sides    = threshold_sides,
       rare_flow          = rare_flow,
       rare_one_arm_total_zero = rare_one_arm_total_zero
     )
@@ -933,6 +1045,18 @@ grade_meta <- function(meta_obj,
   # for the same reason as the RoB attributes above -- bind_rows() drops it --
   # and recorded so export_bundle() can pin it into the bundled analysis.R.
   ois_p0_used <- attr(d_impre, "ois_p0") %||% ois_p0
+  # Where the interval sat relative to the threshold, LIFTED from the facts the
+  # domain recorded rather than recomputed here. A second derivation is a
+  # second chance to disagree with the first, and the plain-language sentence
+  # that reads this must describe the interval the rating was actually made on.
+  # NULL when the scalar override branch ran (it records no facts) or when no
+  # threshold zone applied; the column that reads it is then dropped.
+  threshold_zone_used <- if (!is.null(impre_facts) &&
+                             "threshold_zone" %in% impre_facts$key) {
+    as.character(impre_facts$value[match("threshold_zone", impre_facts$key)])
+  } else {
+    NULL
+  }
 
   # Record how the rating target was chosen in the Imprecision notes: the
   # target decides which threshold Fig 4 evaluates the CI against, so the two
@@ -1061,6 +1185,13 @@ grade_meta <- function(meta_obj,
       threshold_ard      = threshold_ard,
       threshold_note     = threshold_note,
       threshold_baseline = threshold_p0,
+      # Which sides of the threshold Imprecision tested, where the interval
+      # sat relative to it, and which wording the SoF sentence is drawn from.
+      # All three additive: an object created before 0.5.1 carries none of
+      # them, and every consumer treats their absence as "as before".
+      threshold_sides      = threshold_sides,
+      threshold_zone       = threshold_zone_used,
+      plain_language_frame = plain_language_frame,
       # Kept at the top level (not as a list-column of domain_assessments,
       # which must stay one row per domain with atomic columns).
       indirectness_subdomains = indirectness_sub_tbl,
@@ -1097,10 +1228,19 @@ print.pmatools <- function(x, ...) {
   if (!is.null(x$rating_target)) {
     target_label <- unname(RATING_TARGET_LABELS[x$rating_target])
     if (is.na(target_label)) target_label <- x$rating_target
-    cat(sprintf(" Rating target: %s  (threshold: %s%s)\n",
+    # The existing parenthetical is EXTENDED, never restructured: a default
+    # call must print byte-identically to what it printed before 0.5.1. The
+    # four-question name is deliberately absent -- the package does not know
+    # which of them the caller was asking, only how it was configured.
+    cat(sprintf(" Rating target: %s  (threshold: %s%s%s)\n",
                 target_label,
                 x$threshold_type %||% "?",
-                if (isTRUE(x$rating_target_auto)) ", auto" else ", manual"))
+                if (isTRUE(x$rating_target_auto)) ", auto" else ", manual",
+                if (identical(x$threshold_sides, "worse_only")) {
+                  ", worse side only"
+                } else {
+                  ""
+                }))
   }
   if (isTRUE(x$rob_refit)) {
     cat(sprintf(" Analysis set : low risk of bias studies only (%d of %d studies)\n",

@@ -849,6 +849,23 @@ export_bundle.meta <- function(x,
     rating_target_rationale_arg =
       .arg_lit(grade_args[["rating_target_rationale", exact = TRUE]],
                fallback = .rating_target_rationale_lit(grade)),
+    # threshold_sides / plain_language_frame (v0.5.1). Both fall back to the
+    # RATED OBJECT rather than to the package default, for the reason
+    # small_values and the rare-event flags do: a bundle exported without
+    # grade_args must still reproduce the rating it describes, and a one-sided
+    # rating replayed two-sidedly is a different rating of the same data.
+    threshold_sides  = grade_args[["threshold_sides", exact = TRUE]][["value"]] %||%
+      (grade$threshold_sides %||% "both"),
+    plain_language_frame_arg = .arg_lit(
+      grade_args[["plain_language_frame", exact = TRUE]],
+      fallback = if (is.character(grade$plain_language_frame) &&
+                     length(grade$plain_language_frame) == 1L &&
+                     !is.na(grade$plain_language_frame)) {
+        shQuote(grade$plain_language_frame)
+      } else {
+        "NULL"
+      }
+    ),
     ois_outcome_type = grade$outcome_type,
     ois_events_arg   = .arg_lit(grade_args[["ois_events", exact = TRUE]], fallback = "NULL"),
     ois_n_arg        = .arg_lit(grade_args[["ois_n", exact = TRUE]],      fallback = "NULL"),

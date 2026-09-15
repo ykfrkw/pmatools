@@ -435,3 +435,140 @@ test_that("grade_table with multiple outcomes returns flextable", {
   )
   expect_s3_class(ft, "flextable")
 })
+
+# ---- threshold_sides / plain_language_frame (v0.5.1) ----------------------
+
+# A rating of a margin question, as SPEC.md 4.5.1b maps it: a threshold, the
+# target pinned to "little_to_no_difference" through the existing manual
+# override path, and the sidedness.
+margin_grade <- function(..., sides = "worse_only", frame = NULL) {
+  suppressWarnings(grade_meta(
+    make_metabin(),
+    small_values            = "desirable",
+    threshold               = 1.20,
+    threshold_scale         = "ratio",
+    rating_target           = "little_to_no_difference",
+    rating_target_rationale = paste(
+      "The review asks whether the intervention is no worse than the",
+      "comparator by more than the protocol margin, not how large the",
+      "effect is."),
+    threshold_sides         = sides,
+    plain_language_frame    = frame,
+    outcome_name            = "Mortality",
+    ...))
+}
+
+test_that("the three new fields are stored on the object", {
+  g <- margin_grade(frame = "non_inferiority")
+  expect_identical(g$threshold_sides, "worse_only")
+  expect_identical(g$plain_language_frame, "non_inferiority")
+  expect_true(g$threshold_zone %in% PMA_IMPRE_THRESHOLD_ZONES)
+})
+
+test_that("threshold_sides defaults to 'both' and is recorded as such", {
+  g <- suppressWarnings(grade_meta(make_metabin(), threshold_type = "null",
+                                   small_values = "desirable"))
+  expect_identical(g$threshold_sides, "both")
+  expect_null(g$plain_language_frame)
+  # No threshold at all, so no zone applied and the field is absent.
+  expect_null(g$threshold_zone)
+})
+
+test_that("threshold_zone is lifted from the facts, never recomputed", {
+  g <- margin_grade()
+  facts <- domain_facts(g)[["Imprecision"]]
+  expect_identical(
+    g$threshold_zone,
+    as.character(facts$value[facts$key == "threshold_zone"]))
+})
+
+test_that("a scalar imprecision override leaves threshold_zone NULL", {
+  # That branch never calls assess_imprecision(), so it records no facts and
+  # there is nothing to lift. The column that reads the zone is then dropped.
+  g <- margin_grade(
+    imprecision           = "some_concerns",
+    imprecision_rationale = "Panel judged the interval too wide to act on")
+  expect_null(g$threshold_zone)
+  expect_identical(g$threshold_sides, "worse_only")
+})
+
+test_that("the threshold_sides gate still fires on the override branch", {
+  # The leak this guards: the scalar override bypasses the assessor, so
+  # grade_meta() has to run the gate itself.
+  cnd <- tryCatch(
+    suppressWarnings(grade_meta(
+      make_metabin(), threshold_type = "null", small_values = "desirable",
+      threshold_sides = "worse_only",
+      imprecision = "some_concerns",
+      imprecision_rationale = "Panel judgment")),
+    condition = function(e) e)
+  expect_s3_class(cnd, "pmatools_threshold_gate")
+  expect_match(conditionMessage(cnd), "needs a threshold with two sides",
+               fixed = TRUE)
+})
+
+test_that("an unknown threshold_sides aborts before any domain runs", {
+  expect_error(
+    suppressWarnings(grade_meta(make_metabin(), threshold_type = "null",
+                                small_values = "desirable",
+                                threshold_sides = "one")),
+    "threshold_sides must be", fixed = TRUE)
+})
+
+test_that("an unknown plain_language_frame aborts, but not as a threshold gate", {
+  cnd <- tryCatch(
+    suppressWarnings(grade_meta(make_metabin(), threshold_type = "null",
+                                small_values = "desirable",
+                                plain_language_frame = "superiority")),
+    condition = function(e) e)
+  expect_s3_class(cnd, "error")
+  expect_false(inherits(cnd, "pmatools_threshold_gate"))
+  expect_match(conditionMessage(cnd), "plain_language_frame must be NULL",
+               fixed = TRUE)
+})
+
+test_that("threshold_sides forwards to the Imprecision domain", {
+  worse <- margin_grade(sides = "worse_only")
+  both  <- margin_grade(sides = "both")
+  impre <- function(g) {
+    g$domain_assessments$notes[g$domain_assessments$domain == "Imprecision"]
+  }
+  expect_match(impre(worse), "the Threshold on the worse side", fixed = TRUE)
+  expect_false(grepl("worse side", impre(both), fixed = TRUE))
+})
+
+# ---- print() (v0.5.1) -----------------------------------------------------
+
+test_that("print() for a default call is byte-identical to the pre-0.5.1 form", {
+  # The parenthetical is EXTENDED, not restructured, so a call that names
+  # neither new argument must print exactly what it printed before.
+  g <- suppressWarnings(grade_meta(make_metabin(), threshold_type = "null",
+                                   small_values = "desirable"))
+  out <- capture.output(print(g))
+  target <- grep("Rating target", out, value = TRUE)
+  expect_length(target, 1L)
+  expect_identical(
+    target,
+    " Rating target: Non-null effect  (threshold: null, auto)")
+})
+
+test_that("print() names the worse side only under worse_only", {
+  worse <- capture.output(print(margin_grade(sides = "worse_only")))
+  both  <- capture.output(print(margin_grade(sides = "both")))
+  expect_identical(
+    grep("Rating target", worse, value = TRUE),
+    paste(" Rating target: Little or no difference",
+          " (threshold: mid, manual, worse side only)"))
+  expect_identical(
+    grep("Rating target", both, value = TRUE),
+    paste(" Rating target: Little or no difference",
+          " (threshold: mid, manual)"))
+})
+
+test_that("print() does not name the clinical question", {
+  # The package does not know which of the four questions the caller was
+  # asking, only how the rating was configured, and must not claim otherwise.
+  out <- capture.output(print(margin_grade(frame = "non_inferiority")))
+  expect_false(any(grepl("non-inferiority|non_inferiority|equivalence", out,
+                         ignore.case = TRUE)))
+})

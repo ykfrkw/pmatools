@@ -143,6 +143,10 @@ test_that("analysis.R falls back to sensible GRADE defaults when specs absent", 
   expect_match(txt, "require_threshold       = TRUE",           fixed = TRUE)
   expect_match(txt, "rating_target           = NULL",           fixed = TRUE)
   expect_match(txt, "rating_target_rationale = NULL",           fixed = TRUE)
+  # v0.5.1: both new arguments round-trip at their behaviour-preserving
+  # defaults, so a replay of an ordinary rating is unchanged.
+  expect_match(txt, 'threshold_sides         = "both"',         fixed = TRUE)
+  expect_match(txt, "plain_language_frame    = NULL",           fixed = TRUE)
   expect_match(txt, "pubias_registry_complete = NULL",          fixed = TRUE)
   expect_match(txt, "inconsistency_ci_diff            = NULL",  fixed = TRUE)
   # baseline_risk auto-resolved to the pooled control rate (60/180)
@@ -177,6 +181,64 @@ test_that("analysis.R reproduces a manual rating-target override", {
   # or it would abort on re-run.
   expect_match(txt, "Panel rated certainty in any true effect", fixed = TRUE)
   expect_false(is.null(tryCatch(parse(text = txt), error = function(e) NULL)))
+})
+
+test_that("analysis.R reproduces a one-sided margin rating (v0.5.1)", {
+  # A one-sided rating replayed two-sidedly is a different rating of the same
+  # data, so both new arguments fall back to the RATED OBJECT rather than to
+  # the package default -- the bug small_values had.
+  ma <- make_meta_for_bundle()
+  g <- suppressWarnings(grade_meta(
+    ma,
+    small_values = "desirable", study_design = "RCT", outcome_name = "Test",
+    threshold_type = "mid", threshold = 1.05, threshold_scale = "ratio",
+    rating_target = "little_to_no_difference",
+    rating_target_rationale = "The review asks about a protocol margin",
+    threshold_sides = "worse_only",
+    plain_language_frame = "non_inferiority"
+  ))
+  out_dir <- tempfile(); dir.create(out_dir)
+  # No grade_args at all: the fallbacks are what is under test.
+  zip_path <- export_bundle(ma, g, output_dir = out_dir,
+                            bundle_name = "sides_bundle",
+                            include = c("script"))
+  unz_dir <- tempfile(); dir.create(unz_dir)
+  zip::unzip(zip_path, exdir = unz_dir)
+  txt <- paste(readLines(file.path(unz_dir, "analysis.R"), warn = FALSE),
+               collapse = "\n")
+
+  expect_match(txt, 'threshold_sides         = "worse_only"', fixed = TRUE)
+  expect_match(txt, "plain_language_frame    = 'non_inferiority'", fixed = TRUE)
+  expect_false(is.null(tryCatch(parse(text = txt), error = function(e) NULL)))
+})
+
+test_that("both new argument names are legal grade_args and reach the script", {
+  # export_bundle() rejects a grade_args name it does not know, so this is
+  # what a host application routing the arguments through grade_args needs.
+  expect_true(all(c("threshold_sides", "plain_language_frame") %in%
+                    pmatools:::.grade_arg_names()))
+
+  ma <- make_meta_for_bundle()
+  g <- suppressWarnings(grade_meta(
+    ma, small_values = "desirable", study_design = "RCT", outcome_name = "Test",
+    threshold_type = "mid", threshold = 1.05, threshold_scale = "ratio",
+    rating_target = "little_to_no_difference",
+    rating_target_rationale = "The review asks about a protocol margin",
+    threshold_sides = "worse_only"))
+  out_dir <- tempfile(); dir.create(out_dir)
+  zip_path <- export_bundle(
+    ma, g, output_dir = out_dir, bundle_name = "sides_args_bundle",
+    include = c("script"),
+    grade_args = list(
+      threshold_sides      = list(origin = "scalar", value = "worse_only"),
+      plain_language_frame = list(origin = "scalar", value = "equivalence")
+    ))
+  unz_dir <- tempfile(); dir.create(unz_dir)
+  zip::unzip(zip_path, exdir = unz_dir)
+  txt <- paste(readLines(file.path(unz_dir, "analysis.R"), warn = FALSE),
+               collapse = "\n")
+  expect_match(txt, 'threshold_sides         = "worse_only"', fixed = TRUE)
+  expect_match(txt, "plain_language_frame    = 'equivalence'", fixed = TRUE)
 })
 
 # ---- the control-arm risk survives the round trip ---------------------------

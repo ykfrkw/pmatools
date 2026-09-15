@@ -197,7 +197,22 @@ mk_opposite <- function() {
     null_threshold = quiet_grade(
       mk_binary(), rob = rep("no", 5),
       small_values = "desirable",
-      threshold_type = "null")
+      threshold_type = "null"),
+    # threshold_sides = "worse_only" (v0.5.1). The assertion IS that this
+    # emits only ids already in .IMPRE_FIG4_NODE_IDS: the route through
+    # inst/figures/impre.svg is unchanged and only the DEFINITION of the
+    # threshold at the node-crosses box differs, which is caption-level. A new
+    # id would need a new SVG element (SPEC.md 4.5.1b), and the two assertions
+    # below would fail instead of quietly accepting one.
+    impre_worse_only = quiet_grade(
+      mk_binary(), rob = rep("no", 5),
+      small_values = "desirable",
+      threshold = 1.10, threshold_scale = "ratio",
+      rating_target = "little_to_no_difference",
+      rating_target_rationale = paste(
+        "The review asks whether the intervention is no worse than the",
+        "comparator by more than the protocol margin."),
+      threshold_sides = "worse_only")
   )
 }
 

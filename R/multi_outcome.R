@@ -384,7 +384,10 @@ grade_meta_multi <- function(ma_list,
   if (inherits(e, "pmatools_threshold_gate")) return(TRUE)
   if (inherits(e, "pmatools_direction_gate")) return(TRUE)
   msg <- tryCatch(conditionMessage(e), error = function(...) "")
-  grepl("requires a threshold", msg, fixed = TRUE)
+  # Case-insensitive: the user-facing gates say "Threshold" (the word a
+  # reviewer reads; "MID" is internal vocabulary), older unclassed aborts
+  # said "threshold". Both must reach this net.
+  grepl("requires a threshold", msg, ignore.case = TRUE)
 }
 
 # --------------------------------------------------------------------------

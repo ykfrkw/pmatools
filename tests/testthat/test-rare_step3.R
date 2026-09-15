@@ -256,6 +256,124 @@ test_that("the crossing question uses the +/- band when the threshold is not the
   expect_true(rare_suite_crossing(outside, thr)$primary)
 })
 
+# --------------------------------------------------------------------------
+# worse_side: the suite is asked the primary's question INCLUDING its
+# sidedness (v0.5.1; SPEC.md 4.12, 4.5.1b)
+# --------------------------------------------------------------------------
+
+test_that("worse_side = NULL is identical to today over a grid of intervals", {
+  # The golden invariance for this helper: every existing caller passes no
+  # side, and must keep getting the two-sided answer.
+  thr <- log(1.25)
+  grid <- list(c(0.90, 1.10), c(0.90, 1.40), c(0.60, 0.95), c(0.60, 1.60),
+               c(1.30, 2.00), c(0.40, 0.70), c(0.80, 1.25), c(1.25, 1.90))
+  for (ci in grid) {
+    lo <- log(ci[1])
+    hi <- log(ci[2])
+    two_sided <- ((lo < -thr) && (hi > -thr)) || ((lo < thr) && (hi > thr))
+    expect_identical(.rare_crosses_threshold(lo, hi, thr), two_sided,
+                     info = paste(ci, collapse = " to "))
+    expect_identical(.rare_crosses_threshold(lo, hi, thr, worse_side = NULL),
+                     two_sided, info = paste(ci, collapse = " to "))
+  }
+})
+
+test_that("worse_side asks the one-sided question on that side only", {
+  thr <- log(1.25)
+  # 0.60 to 0.95 crosses the LOWER threshold only.
+  lo <- log(0.60)
+  hi <- log(0.95)
+  expect_true(.rare_crosses_threshold(lo, hi, thr))
+  expect_false(.rare_crosses_threshold(lo, hi, thr, worse_side = 1))
+  expect_true(.rare_crosses_threshold(lo, hi, thr, worse_side = -1))
+
+  # 0.90 to 1.40 crosses the UPPER threshold only: the mirror.
+  lo <- log(0.90)
+  hi <- log(1.40)
+  expect_true(.rare_crosses_threshold(lo, hi, thr))
+  expect_true(.rare_crosses_threshold(lo, hi, thr, worse_side = 1))
+  expect_false(.rare_crosses_threshold(lo, hi, thr, worse_side = -1))
+
+  # Spanning both is still a crossing on either side.
+  lo <- log(0.60)
+  hi <- log(1.60)
+  for (side in list(NULL, 1, -1)) {
+    expect_true(.rare_crosses_threshold(lo, hi, thr, worse_side = side))
+  }
+})
+
+test_that("a null threshold ignores worse_side: the null has no sides", {
+  # The sentinel comes first, so a one-sided question about the null is
+  # answered as the null question rather than as a question about 0 * 1.
+  for (thr in list(NULL, 0, -1)) {
+    for (side in list(NULL, 1, -1)) {
+      expect_true(.rare_crosses_threshold(log(0.80), log(1.20), thr,
+                                          worse_side = side))
+      expect_false(.rare_crosses_threshold(log(1.10), log(1.60), thr,
+                                           worse_side = side))
+    }
+  }
+})
+
+test_that("an unusable worse_side falls back to the two-sided question", {
+  thr <- log(1.25)
+  lo  <- log(0.60)
+  hi  <- log(0.95)
+  for (side in list(NA, NA_real_, 0, Inf, c(1, -1), "left")) {
+    expect_true(.rare_crosses_threshold(lo, hi, thr, worse_side = side),
+                info = paste(deparse(side), collapse = ""))
+  }
+})
+
+test_that("the suite is asked the same one-sided question as the primary", {
+  thr   <- log(1.25)
+  suite <- fake_suite(list(
+    BB_CR    = c(0.75, 0.60, 0.95),   # crosses the lower threshold (0.80)
+    MH_no_cc = c(0.90, 0.85, 0.95)    # crosses neither threshold
+  ))
+  two_sided <- rare_suite_crossing(suite, thr)
+  expect_true(two_sided$primary)
+
+  # Worse side positive: neither interval has reached it, so the suite is
+  # unanimous that the threshold is not crossed - which is the answer the
+  # primary gets under threshold_sides = "worse_only".
+  one_sided <- rare_suite_crossing(suite, thr, worse_side = 1)
+  expect_false(one_sided$primary)
+  expect_true(one_sided$unanimous)
+  expect_identical(one_sided$disagree, character(0))
+
+  # Worse side negative: the primary crosses, the other method does not, and
+  # the disagreement is reported rather than averaged away.
+  mirrored <- rare_suite_crossing(suite, thr, worse_side = -1)
+  expect_true(mirrored$primary)
+  expect_false(mirrored$unanimous)
+  expect_identical(mirrored$disagree, "MH_no_cc")
+})
+
+test_that("the note says the question was asked on the worse side", {
+  thr   <- log(1.25)
+  suite <- fake_suite(list(
+    BB_CR    = c(0.75, 0.60, 0.95),
+    MH_no_cc = c(0.90, 0.85, 0.95)
+  ))
+  cross <- rare_suite_crossing(suite, thr, worse_side = 1)
+  note  <- rare_suite_crossing_note(cross, thr, worse_side = 1)
+  expect_match(note, "does the 95% CI cross the chosen threshold on the worse side?",
+               fixed = TRUE)
+  expect_match(note, "the primary does not cross it", fixed = TRUE)
+
+  # Unchanged where no side was named.
+  plain <- rare_suite_crossing_note(rare_suite_crossing(suite, thr), thr)
+  expect_match(plain, "cross the chosen threshold?", fixed = TRUE)
+  expect_false(grepl("worse side", plain, fixed = TRUE))
+
+  # And the null still wins over the sidedness in the label.
+  null_note <- rare_suite_crossing_note(rare_suite_crossing(suite, 0), 0,
+                                        worse_side = 1)
+  expect_match(null_note, "cross the null?", fixed = TRUE)
+  expect_false(grepl("worse side", null_note, fixed = TRUE))
+})
+
 test_that("a method that produced no usable interval is dropped, not counted", {
   suite <- fake_suite(list(
     BB_CR    = c(0.62, 0.30, 1.28),

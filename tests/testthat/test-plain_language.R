@@ -432,3 +432,405 @@ test_that("an explicit outcome_label overrides the object's outcome_name", {
   expect_identical(.plain_language_for(g, outcome_label = "all cause death"),
                    "Treatment increases all cause death")
 })
+
+# ==========================================================================
+# 8. The two margin families (v0.5.1; SPEC.md 5.5c)
+# ==========================================================================
+#
+# Neither is GRADE wording: Core GRADE 6 Box 1 has no statement for an
+# equivalence or a non-inferiority question, and every cell of both families is
+# tagged accordingly. The golden table comes first, because none of the rest
+# means anything if a call that names no family has stopped reaching the cell
+# it always reached.
+
+# --- 8a. golden table: frame_family = NULL is unchanged ---------------------
+
+test_that("frame_family = NULL reaches exactly the cell it did before", {
+  # Every reachable combination of the two Box 1 families, asserted verbatim.
+  # A zone is passed alongside on purpose: the direction axis must keep
+  # deciding for these families even when a zone is available.
+  # cert | threshold_type | rating_target | direction -> predicate
+  cell <- function(cert, thr, target, dir, predicate) {
+    list(cert = cert, thr = thr, target = target, dir = dir,
+         predicate = predicate)
+  }
+  incr <- "increase"
+  decr <- "decrease"
+  none <- "non_null_effect"
+  litt <- "little_to_no_difference"
+  impt <- "important_effect"
+  golden <- list(
+    cell("High",     "null", none, incr, "increases mortality"),
+    cell("High",     "null", none, decr, "reduces mortality"),
+    cell("High",     "null", litt, NULL,
+         "has little to no effect on mortality"),
+    cell("Moderate", "null", none, incr, "probably increases mortality"),
+    cell("Moderate", "null", none, decr, "probably reduces mortality"),
+    cell("Moderate", "null", litt, NULL,
+         "probably has little to no effect on mortality"),
+    cell("Low",      "null", none, incr, "may increase mortality"),
+    cell("Low",      "null", none, decr, "may reduce mortality"),
+    cell("Low",      "null", litt, NULL,
+         "may have little to no effect on mortality"),
+    cell("High",     "mid",  impt, incr,
+         "results in an important increase in mortality"),
+    cell("High",     "mid",  impt, decr,
+         "results in an important reduction in mortality"),
+    cell("High",     "mid",  litt, NULL,
+         "has little to no important effect on mortality"),
+    cell("Moderate", "mid",  impt, incr,
+         "probably results in an important increase in mortality"),
+    cell("Moderate", "mid",  impt, decr,
+         "probably results in an important reduction in mortality"),
+    cell("Moderate", "mid",  litt, NULL,
+         "probably has little to no important effect on mortality"),
+    cell("Low",      "mid",  impt, incr,
+         "may result in an important increase in mortality"),
+    cell("Low",      "mid",  impt, decr,
+         "may result in an important reduction in mortality"),
+    cell("Low",      "mid",  litt, NULL,
+         "may have little to no important effect on mortality")
+  )
+  for (row in golden) {
+    for (zone in list(NULL, "within", "crosses", "beyond")) {
+      expect_identical(
+        .plain_language(row$cert, row$thr, row$target, direction = row$dir,
+                        outcome_label = "Mortality",
+                        frame_family = NULL, threshold_zone = zone),
+        paste0("Treatment ", row$predicate),
+        info = paste(row$cert, row$thr, row$target,
+                     if (is.null(zone)) "no zone" else zone))
+    }
+  }
+})
+
+# --- 8b. the 18 new sentences, verbatim -------------------------------------
+
+test_that("the equivalence family reads as specified", {
+  say <- function(cert, zone) {
+    .plain_language(cert, "mid", "little_to_no_difference",
+                    outcome_label = "Mortality",
+                    frame_family = "equivalence", threshold_zone = zone)
+  }
+  expect_identical(say("High", "within"), paste(
+    "Treatment results in a difference in mortality that lies within the",
+    "equivalence threshold"))
+  expect_identical(say("High", "crosses"), paste(
+    "Treatment results in little to no difference in mortality, but a",
+    "difference beyond the equivalence threshold is not excluded"))
+  expect_identical(say("High", "beyond"), paste(
+    "Treatment results in a difference in mortality that lies beyond the",
+    "equivalence threshold"))
+
+  expect_identical(say("Moderate", "within"), paste(
+    "Treatment probably results in a difference in mortality that lies within",
+    "the equivalence threshold"))
+  expect_identical(say("Moderate", "crosses"), paste(
+    "Treatment probably results in little to no difference in mortality, but a",
+    "difference beyond the equivalence threshold is not excluded"))
+  expect_identical(say("Moderate", "beyond"), paste(
+    "Treatment probably results in a difference in mortality that lies beyond",
+    "the equivalence threshold"))
+
+  expect_identical(say("Low", "within"), paste(
+    "Treatment may result in a difference in mortality that lies within the",
+    "equivalence threshold"))
+  expect_identical(say("Low", "crosses"), paste(
+    "Treatment may result in little to no difference in mortality, but a",
+    "difference beyond the equivalence threshold is not excluded"))
+  expect_identical(say("Low", "beyond"), paste(
+    "Treatment may result in a difference in mortality that lies beyond the",
+    "equivalence threshold"))
+})
+
+test_that("the non-inferiority family reads as specified", {
+  say <- function(cert, zone) {
+    .plain_language(cert, "mid", "little_to_no_difference",
+                    outcome_label = "Mortality",
+                    frame_family = "non_inferiority", threshold_zone = zone)
+  }
+  expect_identical(say("High", "within"), paste(
+    "Treatment is not worse than the comparator in mortality by more than the",
+    "non-inferiority threshold"))
+  expect_identical(say("High", "crosses"), paste(
+    "Treatment is not worse than the comparator in mortality by more than the",
+    "non-inferiority threshold, but a larger difference is not excluded"))
+  expect_identical(say("High", "beyond"), paste(
+    "Treatment is worse than the comparator in mortality by more than the",
+    "non-inferiority threshold"))
+
+  expect_identical(say("Moderate", "within"), paste(
+    "Treatment is probably not worse than the comparator in mortality by more",
+    "than the non-inferiority threshold"))
+  expect_identical(say("Moderate", "crosses"), paste(
+    "Treatment is probably not worse than the comparator in mortality by more",
+    "than the non-inferiority threshold, but a larger difference is not",
+    "excluded"))
+  expect_identical(say("Moderate", "beyond"), paste(
+    "Treatment is probably worse than the comparator in mortality by more than",
+    "the non-inferiority threshold"))
+
+  expect_identical(say("Low", "within"), paste(
+    "Treatment may be no worse than the comparator in mortality by more than",
+    "the non-inferiority threshold"))
+  expect_identical(say("Low", "crosses"), paste(
+    "Treatment may be no worse than the comparator in mortality by more than",
+    "the non-inferiority threshold, but a larger difference is not excluded"))
+  expect_identical(say("Low", "beyond"), paste(
+    "Treatment may be worse than the comparator in mortality by more than the",
+    "non-inferiority threshold"))
+})
+
+test_that("the actor and the outcome are substituted as in every other family", {
+  expect_identical(
+    .plain_language("Moderate", "mid", "little_to_no_difference",
+                    outcome_label = "HbA1c", intervention_label = "CBT-I",
+                    frame_family = "non_inferiority",
+                    threshold_zone = "within"),
+    paste("CBT-I is probably not worse than the comparator in HbA1c by more",
+          "than the non-inferiority threshold"))
+  # grade_meta()'s own placeholder still counts as a missing label.
+  expect_match(
+    .plain_language("High", "mid", "little_to_no_difference",
+                    outcome_label = "Outcome", frame_family = "equivalence",
+                    threshold_zone = "beyond"),
+    "difference in the outcome that lies beyond", fixed = TRUE)
+})
+
+# --- 8c. the zone axis ------------------------------------------------------
+
+test_that("the margin families ignore the direction entirely", {
+  # Direction-free by design: a margin question is symmetric about the
+  # comparator, and the direction lives in the effect column of the table.
+  for (fam in PLAIN_LANGUAGE_ZONE_FAMILIES) {
+    base <- .plain_language("Moderate", "mid", "little_to_no_difference",
+                            outcome_label = "Mortality", frame_family = fam,
+                            threshold_zone = "crosses")
+    for (dir in list("increase", "decrease", log(2.42), NULL)) {
+      expect_identical(
+        .plain_language("Moderate", "mid", "little_to_no_difference",
+                        direction = dir, outcome_label = "Mortality",
+                        frame_family = fam, threshold_zone = "crosses"),
+        base, info = fam)
+    }
+  }
+})
+
+test_that("a missing or unrecognised zone drops the column", {
+  for (fam in PLAIN_LANGUAGE_ZONE_FAMILIES) {
+    for (zone in list(NULL, NA_character_, "", "middle", "Within", 3)) {
+      expect_null(
+        .plain_language("Moderate", "mid", "little_to_no_difference",
+                        direction = "increase", outcome_label = "Mortality",
+                        frame_family = fam, threshold_zone = zone),
+        info = paste(fam, "/", paste(deparse(zone), collapse = "")))
+    }
+  }
+})
+
+test_that("an unrecognised frame_family falls back to threshold_type", {
+  # Same shape as the zone rule: no abort here, because .plain_language() is
+  # a renderer. grade_meta() is where a bad family is refused.
+  expect_identical(
+    .plain_language("High", "null", "non_null_effect", direction = "increase",
+                    outcome_label = "Mortality", frame_family = "superiority"),
+    "Treatment increases mortality")
+})
+
+test_that("Very low ignores both the family and the zone", {
+  # PLAIN_LANGUAGE_VERY_LOW is already zone- and direction-neutral and spans
+  # every family; its early return sits above all family resolution.
+  expected <- "We are very uncertain about the effect of treatment on mortality"
+  for (fam in c(list(NULL), as.list(PLAIN_LANGUAGE_ZONE_FAMILIES))) {
+    for (zone in list(NULL, "within", "crosses", "beyond", "nonsense")) {
+      expect_identical(
+        .plain_language("Very low", "mid", "little_to_no_difference",
+                        outcome_label = "Mortality", frame_family = fam,
+                        threshold_zone = zone),
+        expected)
+    }
+  }
+})
+
+test_that("the zone vocabulary is the assessor's, not a second copy", {
+  for (fam in PLAIN_LANGUAGE_ZONE_FAMILIES) {
+    for (cert in c("High", "Moderate", "Low")) {
+      expect_identical(sort(names(PLAIN_LANGUAGE_FRAMES[[fam]][[cert]])),
+                       sort(PMA_IMPRE_THRESHOLD_ZONES))
+    }
+  }
+})
+
+test_that("every cell of both new families exists", {
+  # A missing cell returns NULL and silently drops the whole column, so the
+  # unreachable High x crosses cells are kept and asserted too.
+  for (fam in PLAIN_LANGUAGE_ZONE_FAMILIES) {
+    for (cert in c("High", "Moderate", "Low")) {
+      for (zone in PMA_IMPRE_THRESHOLD_ZONES) {
+        cell <- PLAIN_LANGUAGE_FRAMES[[fam]][[cert]][[zone]]
+        expect_true(is.character(cell) && length(cell) == 1L && nzchar(cell),
+                    info = paste(fam, cert, zone))
+        expect_match(cell, "%s", fixed = TRUE, info = paste(fam, cert, zone))
+      }
+    }
+  }
+})
+
+# --- 8d. the audits ---------------------------------------------------------
+
+# Every cell in the table, flattened, with a label for the failure message.
+pl_all_cells <- function() {
+  out <- character(0)
+  for (fam in names(PLAIN_LANGUAGE_FRAMES)) {
+    for (cert in names(PLAIN_LANGUAGE_FRAMES[[fam]])) {
+      cells <- PLAIN_LANGUAGE_FRAMES[[fam]][[cert]]
+      out <- c(out, stats::setNames(
+        unlist(cells, use.names = FALSE),
+        paste(fam, cert, names(cells), sep = "/")))
+    }
+  }
+  out
+}
+
+test_that("no cell anywhere in PLAIN_LANGUAGE_FRAMES says MID", {
+  # A standing guard, not a one-off: "MID" is internal vocabulary and
+  # "Threshold" is what a user reads (SPEC.md 4.5.1). Word-boundary and
+  # case-sensitive, so "amid" and "mid" pass and only the acronym fails.
+  cells <- pl_all_cells()
+  hits  <- names(cells)[grepl("\\bMID\\b", cells)]
+  expect_identical(hits, character(0))
+  # And the same for the two standing strings beside the table.
+  expect_false(grepl("\\bMID\\b", PLAIN_LANGUAGE_VERY_LOW))
+  expect_false(grepl("\\bMID\\b", PLAIN_LANGUAGE_TABLE_NOTE))
+})
+
+test_that("no cell carries two modal adverbs", {
+  # The single-adverb rule: Box 1 prints "probably (likely)" and
+  # "may (possibly)", and pmatools emits only the first word of each pair.
+  cells <- pl_all_cells()
+  modals <- c("probably", "likely", "may", "possibly")
+  for (nm in names(cells)) {
+    found <- modals[vapply(modals,
+                           function(w) grepl(paste0("\\b", w, "\\b"), cells[[nm]]),
+                           logical(1))]
+    expect_lte(length(found), 1L,
+               label = paste0(nm, " carries: ", paste(found, collapse = " + ")))
+  }
+})
+
+test_that("the certainty level and the adverb agree in every family", {
+  for (fam in names(PLAIN_LANGUAGE_FRAMES)) {
+    for (cell in PLAIN_LANGUAGE_FRAMES[[fam]][["High"]]) {
+      expect_false(grepl("\\b(probably|may|likely|possibly)\\b", cell),
+                   info = paste(fam, cell))
+    }
+    for (cell in PLAIN_LANGUAGE_FRAMES[[fam]][["Moderate"]]) {
+      expect_match(cell, "\\bprobably\\b", info = paste(fam, cell))
+    }
+    for (cell in PLAIN_LANGUAGE_FRAMES[[fam]][["Low"]]) {
+      expect_match(cell, "\\bmay\\b", info = paste(fam, cell))
+    }
+  }
+})
+
+test_that("every cell of the two new families carries the provenance tag", {
+  # Read from the source, because the tag is the comment beside the cell: it
+  # exists so that the next editor of THIS FILE cannot add an untagged margin
+  # sentence, which no runtime check could catch.
+  src_path <- test_path("..", "..", "R", "plain_language.R")
+  skip_if_not(file.exists(src_path),
+              "package sources not laid out as expected")
+  src <- readLines(src_path, warn = FALSE)
+
+  tag <- "# [pmatools; no Box 1 counterpart]"
+  # 18 cells, one tag each, plus the entry in the provenance comment block
+  # that documents the tag alongside [Box 1] / [Table 3] / [composed].
+  n_cells <- length(PLAIN_LANGUAGE_ZONE_FAMILIES) * 3L *
+             length(PMA_IMPRE_THRESHOLD_ZONES)
+  expect_identical(n_cells, 18L)
+  expect_gte(sum(grepl(tag, src, fixed = TRUE)), n_cells)
+  expect_true(any(grepl("[pmatools; no Box 1 counterpart]", src,
+                        fixed = TRUE)))
+
+  # The two families must claim neither of the tags reserved for CG6 wording.
+  from <- grep("^  equivalence = list\\(", src)
+  to   <- grep("^PLAIN_LANGUAGE_ZONE_FAMILIES", src)
+  expect_length(from, 1L)
+  expect_length(to, 1L)
+  block <- src[from:to]
+  expect_false(any(grepl("[Box 1]", block, fixed = TRUE)))
+  expect_false(any(grepl("[Table 3]", block, fixed = TRUE)))
+  expect_false(any(grepl("[composed", block, fixed = TRUE)))
+})
+
+# --- 8e. the gate -----------------------------------------------------------
+
+test_that(".check_plain_language_frame accepts NULL and the two families", {
+  expect_null(.check_plain_language_frame(NULL))
+  for (fam in PLAIN_LANGUAGE_ZONE_FAMILIES) {
+    expect_identical(.check_plain_language_frame(fam), fam)
+  }
+})
+
+test_that(".check_plain_language_frame refuses anything else, and is not a threshold gate", {
+  for (bad in list("mid", "null", "superiority", NA_character_, 1, c("a", "b"))) {
+    cnd <- tryCatch(.check_plain_language_frame(bad),
+                    condition = function(e) e)
+    expect_s3_class(cnd, "error")
+    # It changes no judgment, so grade_meta_multi() must be free to demote it
+    # like any other per-outcome failure rather than re-raise it.
+    expect_false(inherits(cnd, "pmatools_threshold_gate"))
+    expect_match(conditionMessage(cnd),
+                 "must be NULL, 'equivalence' or 'non_inferiority'",
+                 fixed = TRUE)
+  }
+})
+
+# --- 8f. resolution off a rated object --------------------------------------
+
+test_that("the family is resolved from the object in one place", {
+  expect_null(.plain_language_frame_of(list()))
+  expect_identical(
+    .plain_language_frame_of(list(plain_language_frame = "equivalence")),
+    "equivalence")
+  # threshold_sides = "worse_only" and non-inferiority travel together.
+  expect_identical(
+    .plain_language_frame_of(list(threshold_sides = "worse_only")),
+    "non_inferiority")
+  expect_null(.plain_language_frame_of(list(threshold_sides = "both")))
+  # An explicit frame wins over the fallback.
+  expect_identical(
+    .plain_language_frame_of(list(threshold_sides = "worse_only",
+                                  plain_language_frame = "equivalence")),
+    "equivalence")
+  # A nonsense field is ignored rather than trusted.
+  expect_null(.plain_language_frame_of(list(plain_language_frame = "bogus")))
+})
+
+test_that("equivalence is never inferred from a pinned target alone", {
+  # The trap this guards: threshold_type = "mid" plus a manually pinned
+  # "little_to_no_difference" target is a legitimate PRE-EXISTING override,
+  # and reading it as an equivalence question would silently change the
+  # wording of ratings already made.
+  pre_existing <- list(
+    certainty      = "Moderate",
+    threshold_type = "mid",
+    rating_target  = "little_to_no_difference",
+    outcome_name   = "Mortality",
+    meta           = NULL
+  )
+  expect_null(.plain_language_frame_of(pre_existing))
+  expect_identical(
+    .plain_language_for(pre_existing),
+    "Treatment probably has little to no important effect on mortality")
+})
+
+test_that("a pre-existing-shaped object has no new fields and is unaffected", {
+  g <- pl_binary(harm = TRUE, outcome_name = "Mortality")
+  before <- .plain_language_for(g)
+  g$threshold_sides      <- NULL
+  g$threshold_zone       <- NULL
+  g$plain_language_frame <- NULL
+  expect_identical(.plain_language_for(g), before)
+  expect_identical(before, "Treatment increases mortality")
+})

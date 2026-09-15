@@ -213,8 +213,12 @@ test_that("a missing MID aborts grade_meta_multi rather than skipping the outcom
   )
 
   # The manual rating-target gate is classed the same way.
+  # Both spellings: the gates say "Threshold", older unclassed aborts said
+  # "threshold", and the text net is the fallback for anything unclassed.
   expect_true(.is_entry_gate(
-    tryCatch(rlang::abort("x requires a threshold (MID)"), error = function(e) e)))
+    tryCatch(rlang::abort("x requires a Threshold"), error = function(e) e)))
+  expect_true(.is_entry_gate(
+    tryCatch(rlang::abort("x requires a threshold"), error = function(e) e)))
 })
 
 test_that("a missing outcome direction aborts the batch too", {
