@@ -1028,11 +1028,25 @@ step3_server <- function(input, output, session, state) {
   # threshold_mode_state     : "absolute" / "relative" (binary ratio SMs only)
   # threshold_abs_state      : absolute threshold, events per 1,000
   # threshold_baseline_state : baseline (control-group) risk, per 1,000
+  # question_state           : which of the four clinical questions the
+  #                            certainty rating answers (PMA_CLINICAL_QUESTIONS)
   THRESHOLD_MODE_DEFAULT   <- "absolute"
   threshold_state          <- shiny::reactiveVal(NA_real_)
   threshold_mode_state     <- shiny::reactiveVal(THRESHOLD_MODE_DEFAULT)
   threshold_abs_state      <- shiny::reactiveVal(NA_real_)
   threshold_baseline_state <- shiny::reactiveVal(NA_real_)
+  # The clinical question. A reactiveVal for exactly the reason the thresholds
+  # above are one: the radio is rendered inside output$threshold_panel, so
+  # leaving Step 3 and coming back destroys it and a statically declared
+  # `selected` would push the default back to the server and silently rate a
+  # non-inferiority review as clinically important superiority.
+  #
+  # ONE KEY, ONE WRITER (shiny/SPEC.md 2.3): this reactiveVal is the single
+  # source of truth and input$clinical_question is mirrored INTO it, never read
+  # directly by anything downstream. Every consumer - the panel copy, the four
+  # gate sites, grade_obj()'s arguments, the SoF footnote - reads
+  # question_state().
+  question_state <- shiny::reactiveVal(PMA_CLINICAL_QUESTION_DEFAULT)
   # display_per_state        : the per-N DISPLAY unit (100 or 1,000), owned by
   # the Configuration tab and read by every rate on Step 3 plus sof_table().
   # Held in a reactiveVal for exactly the reason the thresholds are: leaving
@@ -1073,6 +1087,17 @@ step3_server <- function(input, output, session, state) {
       threshold_abs_state(NA_real_)
       threshold_baseline_state(NA_real_)
     }
+    # The two margin questions get NO suggestion, and suggest_threshold() is
+    # not even called for them. A threshold of clinical importance belongs to
+    # the outcome, so proposing one saves the reviewer a lookup; an equivalence
+    # or non-inferiority margin belongs to the review's own protocol, so
+    # proposing one does not save a lookup - it answers the question. The clear
+    # above still runs, because a fresh analysis must discard the previous
+    # outcome's margin whatever the question is.
+    if (!isTRUE(step3_threshold_copy(shiny::isolate(question_state()),
+                                     obj$sm %||% "")$prefill)) {
+      return(invisible(NULL))
+    }
     s <- tryCatch(suggest_threshold(obj), error = function(e) NULL)
     sug <- step3_threshold_suggestions(s)
     # Only ever prefill a reactiveVal that is still NA: a value the user typed
@@ -1102,6 +1127,12 @@ step3_server <- function(input, output, session, state) {
   # happened by the time the reset lands - and the reset can also be triggered
   # by a change of direction alone, which does not touch state$ma at all.
   state$step3_reset <- function() {
+    # BEFORE the seed, and the order is load-bearing: .seed_thresholds() asks
+    # step3_threshold_copy() whether the question being rated allows a
+    # prefill, so leaving a margin question in force here would suppress the
+    # suggestion for the next outcome - which starts on the default question
+    # and is entitled to one.
+    question_state(PMA_CLINICAL_QUESTION_DEFAULT)
     threshold_seed_key(NA_character_)
     threshold_state(NA_real_)
     threshold_abs_state(NA_real_)
@@ -1304,6 +1335,14 @@ step3_server <- function(input, output, session, state) {
       threshold_mode_state(input$threshold_mode)
     }
   }, ignoreInit = TRUE)
+  # The clinical question, mirrored the same way. pma_clinical_question()
+  # rather than the raw value: a radio reports NULL before it has rendered and
+  # a stale value after an outcome restored from an older build, and the
+  # fallback for both is the default question - which is the pre-0.5.1
+  # behaviour, the only answer that cannot silently change a rating.
+  shiny::observeEvent(input$clinical_question, {
+    question_state(pma_clinical_question(input$clinical_question))
+  }, ignoreInit = TRUE)
   # The per-N display unit. The reactiveVal is the source of truth for the
   # same reason the thresholds are (see its declaration); the coercion is
   # step3_per_unit(), because a radioButtons value arrives as a character.
@@ -1385,6 +1424,63 @@ step3_server <- function(input, output, session, state) {
     .sync_widget("threshold_ratio", threshold_state())
     .sync_widget("threshold_cont",  threshold_state())
   }, ignoreNULL = FALSE)
+
+  # ----- The threshold box follows the clinical question -------------------
+  # A reviewer who starts on the default question (threshold prefilled from
+  # suggest_threshold()) and switches to equivalence or non-inferiority would
+  # otherwise INHERIT THAT PLACEHOLDER AS THEIR MARGIN - a number the app made
+  # up, standing in a box labelled "Equivalence threshold", already ticked
+  # past by a confirmation given for a different configuration. That is the
+  # exact failure the no-default decision exists to prevent, and suppressing
+  # the prefill in .seed_thresholds() alone does not prevent it: the seed has
+  # already run by the time the radio is clicked.
+  #
+  # So the switch is active in both directions:
+  #   into a margin question  -> the two threshold values are CLEARED, and
+  #                              .seed_thresholds() is not re-run (it would
+  #                              decline anyway, but the clear is the point);
+  #   out of one              -> the seed key is reset and .seed_thresholds()
+  #                              re-runs, because its "only ever prefill a
+  #                              reactiveVal that is still NA" rule would
+  #                              otherwise decline to re-offer a suggestion
+  #                              over the margin the reviewer had typed.
+  #
+  # `.question_previous` rather than trusting observeEvent to fire only on a
+  # change: what has to be detected is a change of QUESTION, and this observer
+  # has side effects that must not run on a re-assertion of the same value.
+  .question_previous <- shiny::reactiveVal(PMA_CLINICAL_QUESTION_DEFAULT)
+  shiny::observeEvent(question_state(), {
+    question <- question_state()
+    if (identical(question, shiny::isolate(.question_previous()))) return()
+    .question_previous(question)
+
+    # The reviewer confirmed a configuration that no longer exists: the
+    # threshold means something else now, and on two of the four questions it
+    # has just been emptied. Failing closed is the direction this app errs in
+    # everywhere else (see pma_domain_confirmations()).
+    shiny::updateCheckboxInput(session, "threshold_confirm", value = FALSE)
+
+    # step3_threshold_copy()$prefill is the one statement of which questions
+    # may be prefilled, and .seed_thresholds() asks it too - so the radio and
+    # the seed cannot disagree about it. `sm` is passed empty because prefill
+    # is a property of the question alone; the headings and labels beside it
+    # are the measure-specific part.
+    if (isTRUE(step3_threshold_copy(question, "")$prefill)) {
+      # The control-group risk is NOT part of this. It is a property of the
+      # outcome's data, not of the question asked about it, and
+      # .seed_thresholds() clears it whenever the seed key goes stale - which
+      # would throw away an override the reviewer entered and justified in
+      # writing. Carried across the reseed rather than left to the observer
+      # that re-derives it from the pooled value.
+      baseline <- shiny::isolate(threshold_baseline_state())
+      threshold_seed_key(NA_character_)
+      .seed_thresholds()
+      if (is.finite(baseline)) threshold_baseline_state(baseline)
+    } else {
+      threshold_state(NA_real_)
+      threshold_abs_state(NA_real_)
+    }
+  }, ignoreInit = TRUE)
 
   # Responder-conversion state (continuous outcomes). The app-convention
   # starting value is RESPONDER_P0_DEFAULT, at file scope in
@@ -1666,15 +1762,93 @@ step3_server <- function(input, output, session, state) {
     # Same ordering caveat as the control-group risk above: fall back to the
     # suggestion when the seeding observer has not run yet.
     sug <- step3_threshold_suggestions(sug_obj)
+    # The question, and this one IS a reactive read - the same exception
+    # display_per_state() above is. Everything below depends on it: the
+    # heading, the input label, the body copy, whether the box may carry a
+    # suggested value and whether a source badge belongs over it. Reading it
+    # under isolate() would leave a reviewer who has just picked equivalence
+    # looking at "Decision threshold", a prefilled 1.20 and a badge naming
+    # where that 1.20 came from.
+    #
+    # Safe for the reason the per-N radio is: a question change is a
+    # deliberate click on this tab, never something that happens while a box
+    # is being typed into, so rebuilding the panel destroys no widget mid-edit.
+    # And it cannot loop - the rebuilt radio pushes its own `selected` back to
+    # input$clinical_question, the mirror writes the same value into
+    # question_state(), and a reactiveVal set to the value it already holds
+    # does not invalidate.
+    #
+    # The clear / reseed observer above is created earlier in step3_server()
+    # than this output, so it runs first in the flush: the boxes this render
+    # seeds from are the ones that observer has just settled, not the ones the
+    # previous question left behind.
+    question <- pma_clinical_question(question_state())
+    # state$small_values is read REACTIVELY: the non-inferiority help names the
+    # worse side, a one-sided test whose side the reviewer cannot see is a
+    # silent exit (shiny/SPEC.md 2.3), and Step 2's direction radio is never
+    # something that moves while a box on this tab is being typed into.
+    copy <- step3_threshold_copy(question, sm,
+                                 small_values = state$small_values)
     # In the DISPLAYED unit, and on the whole-number grid the box offers.
+    #
+    # NULL rather than the suggestion whenever the question forbids a prefill.
+    # NULL renders an empty box; NA renders value="NA", which is an invalid
+    # number the browser shows as empty and then reports back as a change the
+    # reviewer did not make.
     .abs_value <- function() {
       v <- shiny::isolate(threshold_abs_state())
-      step3_to_per(step3_quantise_per1000(
-        if (is.finite(v)) v else sug$absolute1000, per), per)
+      if (!is.finite(v)) {
+        if (!isTRUE(copy$prefill)) return(NULL)
+        v <- sug$absolute1000
+      }
+      step3_to_per(step3_quantise_per1000(v, per), per)
     }
     .rel_value <- function() {
       v <- shiny::isolate(threshold_state())
-      if (is.finite(v)) v else round(sug$relative, 4)
+      if (is.finite(v)) return(v)
+      if (!isTRUE(copy$prefill)) return(NULL)
+      round(sug$relative, 4)
+    }
+    # The heading of the Decision-threshold section. The source badge names
+    # where a PREFILLED number came from, so the two margin questions drop it:
+    # there is no source because there is no value, and a badge reading
+    # "source: pmatools convention" over an empty box invites the reviewer to
+    # believe the app has an opinion about their protocol's margin.
+    .threshold_heading <- function() {
+      if (isTRUE(copy$prefill)) {
+        htmltools::tagList(copy$heading, .source_badge(src))
+      } else {
+        copy$heading
+      }
+    }
+    # FIRST on the tab, above the Decision threshold on both branches, and
+    # rendered INSIDE this renderUI rather than as a statically declared radio
+    # in step3_ui(). Both halves of that are load-bearing:
+    #
+    #   - it is read first because it is the question the threshold answers.
+    #     The box below it is labelled from it, may or may not be prefilled by
+    #     it, and on two of the four questions is the claim being rated;
+    #   - it is rendered here because this output depends on state$outcome_gen
+    #     and step3_entries(), so the radio is destroyed and rebuilt from
+    #     question_state() when the outcome changes. A statically declared
+    #     radio would keep reporting the previous outcome's question while the
+    #     next one was being rated.
+    #
+    # `selected` under isolate(), exactly as the threshold boxes seed
+    # themselves: a reactive read would rebuild the panel inside the click
+    # that set it.
+    .question_block <- function() {
+      .config_section(
+        EDU_COPY$config_tab$question_section,
+        shiny::radioButtons(
+          "clinical_question", EDU_COPY$config_tab$question_label,
+          choices = stats::setNames(
+            PMA_CLINICAL_QUESTIONS,
+            unname(EDU_COPY$config_tab$question_labels[
+              PMA_CLINICAL_QUESTIONS])),
+          selected = question),
+        .config_note(EDU_COPY$config_tab$question_intro)
+      )
     }
 
     if (is_binary) {
@@ -1686,10 +1860,12 @@ step3_server <- function(input, output, session, state) {
                              state$rare$effect_scale %||% sm,
                              state$rare_diagnostics)
         },
+        .question_block(),
         .control_risk_block(per),
         shiny::uiOutput("direction_echo"),
+        shiny::uiOutput("question_margin_banner"),
         .config_section(
-          htmltools::tagList("Decision threshold", .source_badge(src)),
+          .threshold_heading(),
           shiny::radioButtons("threshold_mode", "Threshold scale",
             choices = stats::setNames(
               c("absolute", "relative"),
@@ -1699,24 +1875,41 @@ step3_server <- function(input, output, session, state) {
             selected = shiny::isolate(threshold_mode_state())),
           shiny::conditionalPanel(
             "input.threshold_mode == 'absolute'",
-            .config_note(
-              "The smallest difference in events ", step3_per_unit_label(per),
-              " patients that would change a decision. Converted to the ",
-              sm, " scale at the control-group risk above."),
+            # The existing sentence describes a threshold of clinical
+            # importance ("the smallest difference that would change a
+            # decision"), which is not what either margin is. The conversion
+            # half of it applies to all four questions and is kept either way:
+            # the box is in events, the rating is on the sm scale, and the
+            # reviewer has to know which number the two are joined at.
+            if (isTRUE(copy$prefill)) {
+              .config_note(
+                "The smallest difference in events ",
+                step3_per_unit_label(per),
+                " patients that would change a decision. Converted to the ",
+                sm, " scale at the control-group risk above.")
+            } else {
+              htmltools::tagList(
+                .config_note(copy$help),
+                .config_note("Converted to the ", sm,
+                             " scale at the control-group risk above."))
+            },
             shiny::numericInput("threshold_abs",
-              sprintf("Threshold (events %s patients)",
-                      step3_per_unit_label(per)),
+              if (isTRUE(copy$prefill)) {
+                sprintf("Threshold (events %s patients)",
+                        step3_per_unit_label(per))
+              } else {
+                sprintf("%s (events %s patients)", copy$heading,
+                        step3_per_unit_label(per))
+              },
               value = .abs_value(), min = 0,
               max = step3_per_unit(per), step = 1),
             shiny::uiOutput("threshold_equiv")
           ),
           shiny::conditionalPanel(
             "input.threshold_mode == 'relative'",
-            shiny::numericInput("threshold_ratio",
-              EDU_COPY$threshold_labels[[sm]] %||%
-                "Threshold for clinical importance",
+            shiny::numericInput("threshold_ratio", copy$label,
               value = .rel_value(), min = 0, step = 0.01),
-            .config_note(EDU_COPY$threshold_help[[sm]] %||% "")
+            .config_note(copy$help)
           )
         )
       )
@@ -1727,25 +1920,34 @@ step3_server <- function(input, output, session, state) {
         # while the presentation only changes how the SoF displays the effect.
         # The old order put the responder conversion at the top of the tab,
         # which read as though converting were a step on the way to a rating.
+        # The clinical question goes above even the threshold, for the reason
+        # at .question_block().
+        .question_block(),
+        shiny::uiOutput("question_margin_banner"),
         .config_section(
-          htmltools::tagList("Decision threshold", .source_badge(src)),
-          shiny::numericInput("threshold_cont",
-            EDU_COPY$threshold_labels[[sm]] %||%
-              "Threshold for clinical importance",
+          .threshold_heading(),
+          shiny::numericInput("threshold_cont", copy$label,
             value = .rel_value(), min = 0, step = 0.01),
-          .config_note(EDU_COPY$threshold_help[[sm]] %||% ""),
+          .config_note(copy$help),
           .config_note(
             "The certainty rating reads this threshold whichever presentation ",
             "is chosen below: Imprecision compares the confidence interval ",
             "with it on the ", sm, " scale itself. ",
-            if (identical(sm, "SMD")) {
+            if (identical(sm, "SMD") && isTRUE(copy$prefill)) {
               paste0("The 0.20 prefilled above is Core GRADE 6's own ",
                      "threshold for a small and important effect. ")
             } else "",
             "The responder conversion below changes only how the Summary of ",
             "Findings table presents the effect - it never reaches the ",
             "rating."),
-          if (identical(sm, "SMD")) {
+          # Both of these describe a PREFILLED threshold of clinical
+          # importance - what the suggested number means, and that a published
+          # one is better. Neither is true of a margin: nothing was prefilled,
+          # and the published value a reviewer should reach for is their own
+          # protocol, which copy$help has already told them.
+          if (!isTRUE(copy$prefill)) {
+            NULL
+          } else if (identical(sm, "SMD")) {
             htmltools::p(
               class = "pma-card-subtitle", style = "font-style: italic;",
               paste0(
@@ -1778,6 +1980,37 @@ step3_server <- function(input, output, session, state) {
   .threshold_direction <- shiny::reactive(
     step3_threshold_direction(step3_pooled_te(state$ma)))
 
+  # Which side of the absolute threshold is made EXACT by the conversion.
+  #
+  # grade_meta() takes one scalar threshold and judges against the symmetric
+  # band +/- threshold_internal, so exactly one of the two sides can be exact
+  # on the absolute scale (see .threshold_grade_args()). For three of the four
+  # questions the side that matters is the side the pooled effect lies on -
+  # that is the crossing the domains turn on, and .threshold_direction() is it.
+  #
+  # NON-INFERIORITY IS THE EXCEPTION, and it is a real one rather than a
+  # tidiness: the margin is one-sided and the side it is tested on is the WORSE
+  # side, which is not in general the side the effect lies on. An intervention
+  # that comes out better than the comparator has its pooled effect on the
+  # better side while the only threshold anyone is going to compare an interval
+  # with sits on the other one - so converting where the effect lies makes the
+  # exact number the one number the rating never reads.
+  #
+  # One reactive, read by .threshold_grade_args() (which rates), by
+  # output$threshold_equiv and by threshold_summary() (which report what was
+  # rated). Two derivations of this would let the screen name one exact side
+  # and the rating use the other.
+  .threshold_exact_direction <- shiny::reactive({
+    if (!identical(question_state(), "non_inferiority")) {
+      return(.threshold_direction())
+    }
+    if (.threshold_worse_sign(state$small_values) > 0) {
+      "increase"
+    } else {
+      "decrease"
+    }
+  })
+
   output$threshold_equiv <- shiny::renderUI({
     obj <- state$ma
     if (is.null(obj)) return(NULL)
@@ -1798,7 +2031,7 @@ step3_server <- function(input, output, session, state) {
           "%s to convert."),
           format(step3_per_unit(per), big.mark = ","))))
     }
-    dir <- step3_directed_threshold(eq, .threshold_direction())
+    dir <- step3_directed_threshold(eq, .threshold_exact_direction())
     ln  <- .equiv_lines(eq, dir, per)
     .exact_first <- identical(dir$exact_side %||% "increase", "decrease")
     # Body copy under the box it is derived from, NOT a bordered block. It used
@@ -1859,7 +2092,7 @@ step3_server <- function(input, output, session, state) {
           "Absolute threshold: %s (control-group risk missing or invalid)",
           step3_per_label(ta, per)), lines = character()))
       }
-      dir <- step3_directed_threshold(eq, .threshold_direction())
+      dir <- step3_directed_threshold(eq, .threshold_exact_direction())
       ln  <- .equiv_lines(eq, dir, per)
       return(list(
         head = sprintf(
@@ -1983,8 +2216,20 @@ step3_server <- function(input, output, session, state) {
       if (is.finite(ta) && ta > 0) {
         base <- if (is.finite(tb) && tb > 0 && tb < 1000 &&
                     (tb + ta) < 1000) tb / 1000 else NULL
-        direction <- step3_threshold_direction(
-          if (is.null(te_point)) step3_pooled_te(obj) else te_point)
+        # A one-sided margin is converted on the WORSE side, not on the side
+        # the pooled effect lies on: those two differ, and only one of them is
+        # a side the rating ever compares an interval with. See
+        # .threshold_exact_direction(), which is also what the on-screen
+        # conversion reads, so the note below describes the conversion that was
+        # rated. `te_point` still overrides the direction for the other three
+        # questions, which is what lets grade_obj() detect a refit-induced
+        # flip; a worse side does not flip when the estimate does.
+        direction <- if (identical(question_state(), "non_inferiority")) {
+          .threshold_exact_direction()
+        } else {
+          step3_threshold_direction(
+            if (is.null(te_point)) step3_pooled_te(obj) else te_point)
+        }
         dir <- step3_directed_threshold(step3_ard_equivalence(sm, ta, tb),
                                         direction)
         if (!is.null(dir) && is.finite(dir$ratio) && dir$ratio > 1) {
@@ -2648,6 +2893,24 @@ step3_server <- function(input, output, session, state) {
   #
   # Skipped when Imprecision is not assessable at all: there is no primary
   # answer for the other methods to agree or disagree with.
+  #
+  # Which side the primary was asked about is threaded from the RATED OBJECT
+  # rather than from question_state(), and derived here once. The promise
+  # shiny/SPEC.md 3.4.14 makes is that "the sensitivity answer and the rated
+  # answer cannot come from two different rules" - and under
+  # threshold_sides = "worse_only" a two-sided rare-event scan is exactly two
+  # different rules, one of which contradicts the rating printed above it. The
+  # reviewer can also have moved the radio since the rating was computed, so
+  # the live question is the wrong source as well as the redundant one.
+  #
+  # NULL is the two-sided question, which is what every question but
+  # non-inferiority asks and what .rare_crosses_threshold() does by default.
+  .rated_worse_side <- function(g) {
+    if (is.null(g)) return(NULL)
+    if (!identical(as.character(g$threshold_sides), "worse_only")) return(NULL)
+    .threshold_worse_sign(g$small_values)
+  }
+
   .append_rare_crossing_note <- function(g) {
     if (is.null(g) || !.rare_active() || .rare_one_arm_zero() ||
         !inherits(state$rare, "pma_rare_meta")) {
@@ -2655,8 +2918,9 @@ step3_server <- function(input, output, session, state) {
     }
 
     thr_impre <- .rated_threshold_for_imprecision(g)
-    cross <- rare_suite_crossing(state$rare, thr_impre)
-    note  <- rare_suite_crossing_note(cross, thr_impre)
+    ws    <- .rated_worse_side(g)
+    cross <- rare_suite_crossing(state$rare, thr_impre, worse_side = ws)
+    note  <- rare_suite_crossing_note(cross, thr_impre, worse_side = ws)
     if (!is.na(note)) {
       g$domain_assessments <- step3_append_domain_note(
         g$domain_assessments, "Imprecision", note)
@@ -2750,7 +3014,19 @@ step3_server <- function(input, output, session, state) {
     # (output$config_status, the read-only domain blocks and
     # output$final_certainty). No error toast, and no rating computed
     # without a threshold.
-    if (is.null(.threshold_grade_args(obj)$threshold)) return(NULL)
+    #
+    # Gated on threshold_required() as of the four clinical questions: on a
+    # SUPERIORITY question the rating is against the null and no threshold is
+    # needed, so returning NULL here would leave the one question that
+    # legitimately has no number to enter with no rating at all - and with
+    # nothing on screen to explain it, because the three surfaces that explain
+    # a missing rating are the same three that must say nothing on that
+    # question. grade_meta() is safe to call with threshold = NULL under
+    # threshold_type = "null", which is what pma_question_grade_args() passes.
+    if (threshold_required() &&
+        is.null(.threshold_grade_args(obj)$threshold)) {
+      return(NULL)
+    }
 
     # Resolved in the order the reviewer meets the domains on the tab, which
     # is the order they get warned about a missing rationale in. It is not
@@ -2776,6 +3052,15 @@ step3_server <- function(input, output, session, state) {
       list(threshold          = th_args$threshold,
            threshold_scale    = th_args$threshold_scale,
            threshold_baseline = th_args$threshold_baseline),
+      # The clinical question, as the five grade_meta() arguments it picks. One
+      # c() rather than a four-way branch here, because the mapping table has
+      # already answered it (pma_question_grade_args(), R/step3_threshold.R) -
+      # and because these five have to reach PMA_GRADE_ARGS_EXPORTED and the
+      # bundled analysis.R as a set. threshold_type is among them: until 0.5.1
+      # the app never passed it at all and took grade_meta()'s "mid" default,
+      # which is what makes important_superiority byte-identical to the
+      # pre-0.5.1 rating.
+      pma_question_grade_args(question_state()),
       .ois_grade_args(obj),
       pubias$args,
       .rare_grade_args(),
@@ -2826,12 +3111,26 @@ step3_server <- function(input, output, session, state) {
     is.null(.threshold_grade_args(obj)$threshold)
   })
 
+  # What the gate says about a missing threshold, per question: whether one is
+  # required at all, and the three sentences that follow from that.
+  # pma_question_gate_copy() is pure and lives in R/step3_threshold.R, so the
+  # four surfaces below are wiring and nothing more - and the strings can be
+  # audited for the word "MID" without starting a session.
+  #
+  # FOUR SITES READ THIS, and every one of them has to: a blocker with no
+  # matching early return in grade_obj() locks the Next of a question that
+  # needs nothing entered, and an early return with no matching blocker rates
+  # nothing while the Next stands open and the status box says the tab is
+  # complete.
+  question_gate <- shiny::reactive(pma_question_gate_copy(question_state()))
+  threshold_required <- shiny::reactive(isTRUE(question_gate()$required))
+
   config_blockers <- shiny::reactive({
     obj <- state$ma
     if (is.null(obj)) return("run the meta-analysis in Step 2")
     out <- character()
-    if (threshold_missing()) {
-      out <- c(out, "enter a decision threshold above zero")
+    if (threshold_required() && threshold_missing()) {
+      out <- c(out, question_gate()$blocker)
     }
     if (step3_is_binary_outcome(obj, input$outcome_type)) {
       if (!baseline_rationale_ok()) {
@@ -2879,14 +3178,63 @@ step3_server <- function(input, output, session, state) {
         "background: ", PMA_ALERT_BG, "; border-left: 4px solid ",
         PMA_ALERT_FG, "; border-radius: 4px; font-size: 0.9rem;"),
       htmltools::strong("Configuration incomplete. "),
-      if (threshold_missing()) {
-        paste0("No decision threshold is set, so no certainty rating is ",
-               "computed: three of the five domains are judged against it. ")
+      # Mirrors grade_obj()'s early return exactly: the sentence claims no
+      # rating is computed, so it must not appear on the one question where a
+      # rating IS computed with an empty box. question_gate()$status is NULL
+      # for superiority for that reason.
+      if (threshold_required() && threshold_missing()) {
+        question_gate()$status %||% ""
       } else "",
       sprintf("Still to do: %s.", paste(blockers, collapse = "; "))
     )
   })
   shiny::outputOptions(output, "config_status", suspendWhenHidden = FALSE)
+
+  # ----- Configuration tab: the estimate is already past the margin --------
+  # Rendered inside output$threshold_panel on both branches, above the
+  # threshold box. Its own output rather than part of that renderUI because it
+  # has to follow the THRESHOLD as the reviewer types it, and the panel reads
+  # the threshold reactiveVals under isolate() so that it does not rebuild on
+  # every keystroke.
+  #
+  # Derived from the rated object, so the comparison the banner reports is the
+  # comparison the rating made: .rated_threshold_for_imprecision() is the
+  # package's single statement of which threshold Imprecision was handed
+  # (0 when the rating was against the null), and .rated_worse_side() the same
+  # for the sidedness. No new statistics - the pooled estimate and the
+  # converted threshold both already exist.
+  output$question_margin_banner <- shiny::renderUI({
+    copy <- pma_question_beyond_margin_copy(question_state())
+    if (is.null(copy)) return(NULL)
+    g <- grade_obj()
+    if (is.null(g)) return(NULL)
+    thr <- .rated_threshold_for_imprecision(g)
+    if (!is.finite(thr) || thr <= 0) return(NULL)
+    te <- step3_pooled_te(g$meta %||% state$ma)
+    if (!is.finite(te)) return(NULL)
+
+    worse <- .rated_worse_side(g)
+    beyond <- if (is.null(worse)) {
+      # Equivalence: either direction takes the estimate outside the margin.
+      abs(te) > thr
+    } else if (worse > 0) {
+      te > thr
+    } else {
+      te < -thr
+    }
+    if (!beyond) return(NULL)
+
+    htmltools::div(
+      style = paste0(
+        "padding: 0.75rem 1rem; margin-bottom: 1rem; ",
+        "background: ", PMA_ALERT_BG, "; border-left: 4px solid ",
+        PMA_ALERT_FG, "; border-radius: 4px; font-size: 0.9rem;"),
+      htmltools::strong(paste0(copy$headline, " ")),
+      copy$detail
+    )
+  })
+  shiny::outputOptions(output, "question_margin_banner",
+                       suspendWhenHidden = FALSE)
 
   # What confirms a domain: its own checkbox, ticked for the outcome now open,
   # and nothing else. The rule itself is pma_domain_confirmations() in
@@ -3245,7 +3593,10 @@ step3_server <- function(input, output, session, state) {
                     style = "margin: 0 0 0.25rem; font-size: 0.95rem;"),
       htmltools::div(
         style = "font-style: italic; color: hsl(var(--muted-foreground));",
-        rare_suite_crossing_note(cross, thr)),
+        # Same sidedness the rating was made with, off the same object the
+        # table above was computed from - see .rated_worse_side().
+        rare_suite_crossing_note(cross, thr,
+                                 worse_side = .rated_worse_side(g))),
       lapply(seq_len(nrow(tab)), .row)
     )
   })
@@ -3488,11 +3839,13 @@ step3_server <- function(input, output, session, state) {
     if (is.null(state$ma) && !is.null(blocked)) {
       return(list(kind = "blocked", text = blocked))
     }
-    if (!is.null(state$ma) && threshold_missing()) {
-      return(list(kind = "threshold", text = paste0(
-        "The decision threshold is empty. Risk of Bias, Inconsistency and ",
-        "Imprecision are all judged against it, so no rating is computed ",
-        "until it is set on the Configuration tab.")))
+    # The fourth of the four gate sites, and it mirrors the same condition:
+    # grade_obj() returns a rating for a superiority question with an empty
+    # box, so a panel announcing "no rating, the threshold is empty" beside it
+    # would be describing a state the app is not in. question_gate()$no_rating
+    # is NULL on that question, and this branch is skipped with it.
+    if (!is.null(state$ma) && threshold_required() && threshold_missing()) {
+      return(list(kind = "threshold", text = question_gate()$no_rating))
     }
     list(kind = "idle", text = "Run analysis and configure domains.")
   })
@@ -3611,7 +3964,15 @@ step3_server <- function(input, output, session, state) {
     # The rare-event caution goes into the flextable footer as well as onto
     # the page, so it travels into the exported .docx. A NULL note (no rare
     # event here) is filtered by pma_sof_add_notes(), which returns ft as is.
-    ft <- pma_sof_add_notes(ft, alert$note)
+    #
+    # The question note comes FIRST, before the rare-event caution, because it
+    # frames every other footnote under the table: a Low rating means one thing
+    # in a superiority claim and something close to its opposite in an
+    # equivalence one, and a reader who has not been told which claim was rated
+    # has no way to read the rest. Derived from the rated object rather than
+    # from question_state(), so the number in it is the number the rating used.
+    ft <- pma_sof_add_notes(
+      ft, list(pma_question_note(g, per = display_per_state()), alert$note))
     htmltools::tagList(
       pma_rare_event_banner(alert),
       pma_sof_scroller(

@@ -339,10 +339,21 @@ pma_all_question_strings <- function() {
     unlist(EDU_COPY$question_help, use.names = FALSE),
     PMA_QUESTION_RATIONALE[!is.na(PMA_QUESTION_RATIONALE)],
     PMA_QUESTION_NOTE_QUESTIONS,
+    PMA_QUESTION_NOTE_CLOSING,
     step3_worse_side_sentence("desirable"),
     step3_worse_side_sentence("undesirable"),
     step3_worse_side_sentence(NULL)
   )
+  # The gate sentences and the amber banner are on this list for the same
+  # reason the copy deck is: they are strings a reviewer reads, and the Next
+  # gate's is the one they read while stuck. NULL entries are the two
+  # superiority exemptions and drop out of the c().
+  for (q in PMA_CLINICAL_QUESTIONS) {
+    gate <- pma_question_gate_copy(q)
+    out <- c(out, gate$blocker, gate$status, gate$no_rating)
+    banner <- pma_question_beyond_margin_copy(q)
+    out <- c(out, banner$headline, banner$detail)
+  }
   for (q in PMA_CLINICAL_QUESTIONS) {
     for (sm in PMA_TEST_SM) {
       for (sv in list(NULL, "desirable", "undesirable")) {
@@ -701,4 +712,170 @@ test_that("pma_question_note() is NULL-safe", {
                                           class = "pmatools")))
   expect_null(pma_question_note(list(threshold_type = NA_character_)))
   expect_null(pma_question_note(list(threshold_type = "")))
+})
+
+# --------------------------------------------------------------------------
+# The Next gate, per question
+# --------------------------------------------------------------------------
+# pma_question_gate_copy() is what four reactive sites in R/step3_grade.R read:
+# config_blockers(), grade_obj()'s early return, output$config_status and
+# no_rating_reason(). None of the four can be exercised without a Shiny
+# session, so what is pinned here is the CONTRACT between them - `required`,
+# and the three strings that are only reachable when it is TRUE.
+
+test_that("superiority requires no threshold and blocks nothing", {
+  # The single most important property of the gate. Superiority rates against
+  # the null, so an empty threshold box is a complete answer - and a blocker
+  # would lock a Next the reviewer has nothing left to do at, while an early
+  # return in grade_obj() would leave that question with no rating at all.
+  gate <- pma_question_gate_copy("superiority")
+
+  expect_false(gate$required)
+  expect_null(gate$blocker)
+  expect_null(gate$status)
+  expect_null(gate$no_rating)
+})
+
+test_that("the other three questions require a threshold and say which", {
+  for (q in c("important_superiority", "equivalence", "non_inferiority")) {
+    gate <- pma_question_gate_copy(q)
+    expect_true(gate$required, info = q)
+    # All three strings present, or a site reading one of them renders a blank
+    # where a sentence belongs.
+    for (field in c("blocker", "status", "no_rating")) {
+      expect_true(is.character(gate[[field]]) && length(gate[[field]]) == 1L,
+                  info = paste(q, field))
+      expect_true(nzchar(trimws(gate[[field]])), info = paste(q, field))
+    }
+    # config_blockers() joins these into "Still to do: a; b", so a blocker
+    # that opened with a capital would read as a new sentence mid-list.
+    expect_match(gate$blocker, "^[a-z]", info = q)
+    # ... and the status line is pasted in FRONT of that list.
+    expect_match(gate$status, " $", info = q)
+  }
+
+  # Each margin question names its own threshold rather than "the threshold",
+  # in every one of its three sentences: a reviewer reading the Next gate is
+  # looking for which number is missing.
+  eq <- pma_question_gate_copy("equivalence")
+  for (s in c(eq$blocker, eq$status, eq$no_rating)) {
+    expect_match(s, "equivalence threshold", fixed = TRUE)
+  }
+  ni <- pma_question_gate_copy("non_inferiority")
+  for (s in c(ni$blocker, ni$status, ni$no_rating)) {
+    expect_match(s, "non-inferiority threshold", fixed = TRUE)
+  }
+})
+
+test_that("the default question's gate strings are the pre-0.5.1 ones", {
+  # Character for character, not a rewording. important_superiority is the
+  # default, so a reviewer who never opens the radio must see the tab they saw
+  # before - including when they have emptied the box, which is the only state
+  # these three strings are reachable in.
+  gate <- pma_question_gate_copy("important_superiority")
+
+  expect_identical(gate$blocker, "enter a decision threshold above zero")
+  expect_identical(gate$status, paste0(
+    "No decision threshold is set, so no certainty rating is computed: ",
+    "three of the five domains are judged against it. "))
+  expect_identical(gate$no_rating, paste0(
+    "The decision threshold is empty. Risk of Bias, Inconsistency and ",
+    "Imprecision are all judged against it, so no rating is computed ",
+    "until it is set on the Configuration tab."))
+})
+
+test_that("pma_question_gate_copy() falls back to the default question", {
+  # Same rule as every other entry point: a value that is not one of the four
+  # is the default, because the default is the pre-0.5.1 behaviour.
+  for (bad in list(NULL, NA_character_, "", "superior", c("a", "b"), 3)) {
+    expect_identical(pma_question_gate_copy(bad),
+                     pma_question_gate_copy(PMA_CLINICAL_QUESTION_DEFAULT))
+  }
+})
+
+test_that("the amber banner exists only for the two margin questions", {
+  # There is no margin for the estimate to lie beyond on either superiority
+  # question, so there is nothing for the banner to say.
+  expect_null(pma_question_beyond_margin_copy("superiority"))
+  expect_null(pma_question_beyond_margin_copy("important_superiority"))
+  expect_null(pma_question_beyond_margin_copy(NULL))
+  expect_null(pma_question_beyond_margin_copy("nonsense"))
+
+  for (q in c("equivalence", "non_inferiority")) {
+    copy <- pma_question_beyond_margin_copy(q)
+    expect_named(copy, c("headline", "detail"))
+    for (field in names(copy)) {
+      expect_true(nzchar(trimws(copy[[field]])), info = paste(q, field))
+    }
+  }
+
+  eq <- pma_question_beyond_margin_copy("equivalence")
+  expect_match(eq$headline, "equivalence threshold", fixed = TRUE)
+  # The distinction the banner exists for, in both directions: the rating is
+  # still a rating in the claim, and a low certainty is NOT the claim being
+  # uncertain.
+  expect_match(eq$detail, "non-equivalence being reasonably clear",
+               fixed = TRUE)
+  expect_match(eq$detail, "not as equivalence being uncertain", fixed = TRUE)
+
+  ni <- pma_question_beyond_margin_copy("non_inferiority")
+  # Non-inferiority is one-sided, so the banner has to say which side the
+  # estimate is beyond; "beyond the threshold" alone is true of an
+  # intervention that came out better.
+  expect_match(ni$headline, "worse side", fixed = TRUE)
+  expect_match(ni$detail, "inferiority being reasonably clear", fixed = TRUE)
+  expect_match(ni$detail, "not as non-inferiority being uncertain",
+               fixed = TRUE)
+})
+
+# --------------------------------------------------------------------------
+# The default question changes nothing
+# --------------------------------------------------------------------------
+
+test_that("important_superiority reproduces the pre-0.5.1 rating exactly", {
+  # THE REGRESSION THAT MATTERS MOST, and it is asserted against a real
+  # grade_meta() rather than by inspection. Until 0.5.1 the app passed none of
+  # the five question arguments and took grade_meta()'s defaults; the default
+  # question now passes them explicitly. The two calls must produce the same
+  # object, or every reviewer who never opens the new radio gets a different
+  # rating than they got yesterday.
+  skip_if_not_installed("meta")
+  pkg <- pma_vendored_pkg()
+  skip_if(is.null(pkg), "no staged bundle - run Rscript shiny/stage_bundle.R")
+
+  fit <- meta::metabin(
+    event.e = c(10, 12, 9), n.e = c(100, 110, 90),
+    event.c = c(20, 22, 19), n.c = c(100, 110, 90),
+    sm = "RR", random = TRUE, common = FALSE)
+  base <- list(fit, small_values = "desirable", threshold = 1.20,
+               threshold_scale = "ratio", pubias_unpublished = "no")
+
+  # The pre-0.5.1 call: no question arguments at all.
+  before <- suppressWarnings(do.call(pkg$grade_meta, base))
+  # The 0.5.1 call the app now makes on the default question.
+  after <- suppressWarnings(do.call(pkg$grade_meta, c(
+    base, pma_question_grade_args("important_superiority"))))
+
+  # Every rated field, not just the headline: the domain table carries the
+  # judgments, the downgrades and the notes that reach results.txt.
+  expect_identical(after$certainty, before$certainty)
+  expect_identical(after$certainty_score, before$certainty_score)
+  expect_identical(after$domain_assessments, before$domain_assessments)
+  expect_identical(after$rating_target, before$rating_target)
+  expect_identical(after$rating_target_note, before$rating_target_note)
+  expect_identical(after$threshold_type, before$threshold_type)
+  expect_identical(after$threshold_internal, before$threshold_internal)
+  expect_identical(after$threshold_sides, before$threshold_sides)
+  expect_identical(after$threshold_zone, before$threshold_zone)
+  expect_identical(after$plain_language_frame, before$plain_language_frame)
+  # And the footnote the app hangs off the table, which is the one string a
+  # reader of the Summary of Findings would notice changing.
+  expect_identical(pma_question_note(after), pma_question_note(before))
+
+  # A different question on the SAME fit has to differ, or the assertions
+  # above would pass for a mapping table that did nothing at all.
+  ni <- suppressWarnings(do.call(pkg$grade_meta, c(
+    base, pma_question_grade_args("non_inferiority"))))
+  expect_false(identical(ni$threshold_sides, before$threshold_sides))
+  expect_false(identical(pma_question_note(ni), pma_question_note(before)))
 })

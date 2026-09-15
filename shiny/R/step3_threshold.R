@@ -808,10 +808,15 @@ step3_ard_equivalence <- function(sm, abs1000, base1000) {
 # target is pinned. `important_superiority` is the default and reproduces the
 # pre-0.5.1 rating byte for byte.
 #
-# ALL FOUR FUNCTIONS HERE ARE PURE, like everything else in this file: the
-# question comes in as a string, the copy comes out as strings. The reactiveVal
-# that holds the reviewer's answer, the radio that sets it, the reseed observer
-# and the Next gate are R/step3_grade.R's, and they call into these.
+# EVERY FUNCTION HERE IS PURE, like everything else in this file: the question
+# comes in as a string, the copy comes out as strings. The reactiveVal that
+# holds the reviewer's answer, the radio that sets it, the reseed observer and
+# the Next gate are R/step3_grade.R's, and they call into these -
+# pma_question_gate_copy() for what the gate says when the threshold is
+# missing, pma_question_beyond_margin_copy() for the amber banner. Those two
+# are here rather than inline in the server body for one reason: they are the
+# strings the "no MID on screen" audit has to be able to see without starting
+# a session (test-step3-threshold.R).
 #
 # THE ADMISSION RULE for this block: a function belongs here when it maps
 # BETWEEN the question and something the package or the screen already
@@ -1063,6 +1068,127 @@ step3_worse_side_sentence <- function(small_values) {
       "so LOWER values are the worse ones and the threshold is tested on the ",
       "lower-value side.")
   }
+}
+
+# Everything the Next gate and its two status surfaces say about a MISSING
+# threshold, per question. One function rather than four, for the reason
+# pma_question_grade_args() is one function: the four sentences have to agree
+# about whether a threshold is required at all, and four independent lookups
+# are four chances for them not to.
+#
+# Fields:
+#   required       is a threshold required before the five domains are rated?
+#                  FALSE for superiority and TRUE for the other three. This is
+#                  the one field that is not copy, and it is here because the
+#                  three strings below are only reachable when it is TRUE - a
+#                  blocker sentence beside a question that does not block would
+#                  be the worst of the four failures.
+#   blocker        the config_blockers() line. Lower case and imperative, like
+#                  its neighbours: they are joined into "Still to do: a; b".
+#   status         the leading sentence of output$config_status when the
+#                  threshold is missing. Ends with a space: it is pasted in
+#                  front of the "Still to do" line.
+#   no_rating      no_rating_reason()'s text, read on the Final certainty tab
+#                  and above the Summary of Findings preview, where the
+#                  reviewer is looking at the absence of a rating rather than
+#                  at the control that would fix it - so it names the tab.
+#
+# SUPERIORITY RETURNS NULL FOR ALL THREE STRINGS, and that is the point of the
+# function. It rates against the null, so it needs no threshold, and every one
+# of the four gate sites has to know it: a blocker locks a Next the reviewer
+# has nothing left to do at, and an early return in grade_obj() produces no
+# rating at all for the one question that legitimately has no number to enter.
+#
+# The important_superiority strings are the pre-0.5.1 ones, character for
+# character. It is the default question, so a reviewer who never opens the
+# radio must see the tab they saw before - including when they have emptied
+# the box.
+pma_question_gate_copy <- function(question) {
+  question <- pma_clinical_question(question)
+  if (identical(question, "superiority")) {
+    return(list(required = FALSE, blocker = NULL, status = NULL,
+                no_rating = NULL))
+  }
+  if (identical(question, "important_superiority")) {
+    return(list(
+      required = TRUE,
+      blocker  = "enter a decision threshold above zero",
+      status   = paste0(
+        "No decision threshold is set, so no certainty rating is computed: ",
+        "three of the five domains are judged against it. "),
+      no_rating = paste0(
+        "The decision threshold is empty. Risk of Bias, Inconsistency and ",
+        "Imprecision are all judged against it, so no rating is computed ",
+        "until it is set on the Configuration tab.")))
+  }
+  # The two margin questions. The wording differs from the superiority one in
+  # what it says the threshold IS: there, a threshold three domains are judged
+  # against, and a reviewer without one can go and look for a published value.
+  # Here it is the claim being rated - so the app cannot suggest a number, and
+  # the sentence says where the number comes from instead of leaving the
+  # reviewer to wonder why nothing was offered.
+  named <- if (identical(question, "equivalence")) {
+    "equivalence threshold"
+  } else {
+    "non-inferiority threshold"
+  }
+  list(
+    required = TRUE,
+    blocker  = paste0("enter the ", named, " above zero"),
+    status   = paste0(
+      "No ", named, " is set, so no certainty rating is computed: the ",
+      "threshold is the claim being rated, and there is no default for one. "),
+    no_rating = paste0(
+      "The ", named, " is empty. It is the claim the certainty rating is a ",
+      "rating in, so no rating is computed until it is set on the ",
+      "Configuration tab. There is no default for one - enter the margin ",
+      "your protocol specifies."))
+}
+
+# The amber banner on the Configuration tab when the pooled estimate already
+# lies beyond the margin. NULL for the two superiority questions, which have no
+# margin to lie beyond, and for a question the caller has not established the
+# condition for.
+#
+# A LEGITIMATE STATE, not an error, which is why it is a banner and not a
+# blocker: an equivalence review is entitled to find that the two arms are not
+# equivalent. What it is not entitled to is a reader who mistakes the finding
+# for its opposite, and that reader is easy to produce. Certainty is rated in
+# the equivalence claim, so evidence pointing firmly AWAY from equivalence
+# rates the equivalence claim DOWN - and "Low certainty" then reads as
+# "equivalence is uncertain" when what the data say is "non-equivalence is
+# reasonably clear". The banner is the only place that distinction is made on
+# screen.
+#
+# Nothing is computed here: the caller compares the pooled estimate with the
+# converted threshold (both of which it already has) and this supplies the
+# words. `headline` is bolded by the banner, `detail` follows it.
+pma_question_beyond_margin_copy <- function(question) {
+  question <- pma_clinical_question(question)
+  if (!question %in% c("equivalence", "non_inferiority")) return(NULL)
+
+  if (identical(question, "equivalence")) {
+    return(list(
+      headline = "The pooled estimate lies beyond the equivalence threshold.",
+      detail = paste0(
+        "This evidence points away from equivalence rather than towards it. ",
+        "The rating below is still a rating in the equivalence claim, so read ",
+        "a low certainty as non-equivalence being reasonably clear, not as ",
+        "equivalence being uncertain. The Imprecision note records the rating ",
+        "target Core GRADE 2 Fig 2 would have derived from the point ",
+        "estimate.")))
+  }
+  list(
+    headline = paste0(
+      "The pooled estimate lies beyond the non-inferiority threshold on the ",
+      "worse side."),
+    detail = paste0(
+      "This evidence points towards the intervention being worse than the ",
+      "comparator by more than the threshold. The rating below is still a ",
+      "rating in the non-inferiority claim, so read a low certainty as ",
+      "inferiority being reasonably clear, not as non-inferiority being ",
+      "uncertain. The Imprecision note records the rating target Core GRADE ",
+      "2 Fig 2 would have derived from the point estimate."))
 }
 
 # --------------------------------------------------------------------------

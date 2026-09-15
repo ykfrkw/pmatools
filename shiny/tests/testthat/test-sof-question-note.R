@@ -194,6 +194,94 @@ test_that("the note is NULL for anything that was not rated", {
   expect_null(pma_sof_add_notes(NULL, pma_question_note(NULL)))
 })
 
+test_that("closing = FALSE drops only the shared last sentence", {
+  pkg <- pma_skip_without_bundle()
+
+  for (q in PMA_CLINICAL_QUESTIONS) {
+    g <- pma_note_rating(pkg, q)
+    full  <- pma_question_note(g)
+    short <- pma_question_note(g, closing = FALSE)
+    # Nothing but the sentence changes: the short form is the long one with
+    # exactly " <closing>" taken off the end.
+    expect_identical(full, paste0(short, " ", PMA_QUESTION_NOTE_CLOSING),
+                     info = q)
+    expect_false(grepl(PMA_QUESTION_NOTE_CLOSING, short, fixed = TRUE),
+                 info = q)
+    # And the question is still named, which is the part that differs per row.
+    expect_match(short, PMA_QUESTION_NOTE_QUESTIONS[[q]], fixed = TRUE,
+                 info = q)
+  }
+})
+
+test_that("a combined table says what certainty means once, not once per row", {
+  pkg <- pma_skip_without_bundle()
+
+  # Two outcomes asking DIFFERENT questions, which is the case a single
+  # footnote for the table would be false of.
+  outs <- list(
+    "Insomnia severity" = pma_note_rating(pkg, "important_superiority"),
+    "Daytime function"  = pma_note_rating(pkg, "non_inferiority"))
+  footer <- pma_question_notes_footer(outs)
+
+  # One line per outcome, then the closing sentence once.
+  expect_length(footer, 3L)
+  expect_identical(footer[[3]], PMA_QUESTION_NOTE_CLOSING)
+  expect_length(grep(PMA_QUESTION_NOTE_CLOSING, footer, fixed = TRUE), 1L)
+
+  # Each row's line names its own outcome and its own question, so a reader
+  # can tell which is which.
+  expect_match(footer[[1]], "^Insomnia severity: Question rated: ")
+  expect_match(footer[[1]],
+               PMA_QUESTION_NOTE_QUESTIONS[["important_superiority"]],
+               fixed = TRUE)
+  expect_match(footer[[2]], "^Daytime function: Question rated: ")
+  expect_match(footer[[2]],
+               PMA_QUESTION_NOTE_QUESTIONS[["non_inferiority"]], fixed = TRUE)
+  # Only the one-sided question claims one side.
+  expect_match(footer[[2]], "tested on the worse side only", fixed = TRUE)
+  expect_false(grepl("worse side", footer[[1]], fixed = TRUE))
+})
+
+test_that("the combined footer skips rows that were never rated", {
+  pkg <- pma_skip_without_bundle()
+
+  # A not-reported row is a row of the Summary of Findings with no rating at
+  # all, and "Question rated:" against one would be a fabrication. So is a
+  # footer consisting of the closing sentence alone.
+  expect_identical(pma_question_notes_footer(list()), character(0))
+  expect_identical(
+    pma_question_notes_footer(list("Nothing" = list(), "Nor this" = NULL)),
+    character(0))
+
+  mixed <- list("Not reported" = list(),
+                "Mortality"    = pma_note_rating(pkg, "equivalence"))
+  footer <- pma_question_notes_footer(mixed)
+  expect_length(footer, 2L)
+  expect_match(footer[[1]], "^Mortality: ")
+  expect_identical(footer[[2]], PMA_QUESTION_NOTE_CLOSING)
+
+  # The display unit travels, for the same reason pma_question_note() takes
+  # one: the footnote and the table must not print two denominators.
+  ard <- suppressWarnings(do.call(pkg$grade_meta, c(
+    list(pma_note_fit(), small_values = "desirable", threshold = 0.05,
+         threshold_scale = "ard", pubias_unpublished = "no"),
+    pma_question_grade_args("equivalence"))))
+  per100 <- pma_question_notes_footer(list("Mortality" = ard), per = 100L)
+  expect_match(per100[[1]], "Threshold used: 5 per 100", fixed = TRUE)
+})
+
+test_that("an unnamed outcome list still produces a usable footer", {
+  # pma_outcomes_list() always names its entries, but the helper is called
+  # with whatever the caller has; an unnamed row must lose its label rather
+  # than render "NA: Question rated:".
+  pkg <- pma_skip_without_bundle()
+
+  footer <- pma_question_notes_footer(
+    list(pma_note_rating(pkg, "superiority")))
+  expect_length(footer, 2L)
+  expect_match(footer[[1]], "^Question rated: ")
+})
+
 test_that("a pre-0.5.1 object still gets a footnote, and the right one", {
   # None of the three new fields exists on an object rated before the feature,
   # so the note has to describe the question the app was asking then rather

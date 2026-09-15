@@ -26,6 +26,8 @@
 # step3_per_label() out of that file - defined later in app.R's order, which is
 # fine because both are called rather than evaluated at source time - the way
 # every helper here reads PMA_ALERT_* out of R/ui_helpers.R.
+# pma_question_notes_footer() is the combined-table form of it: one note per
+# outcome, because the rows of one table can answer different questions.
 #
 # pma_arm_labels() reads `state`, never `input`, and every SoF helper that
 # needs arm words takes them as an argument defaulting to
@@ -251,7 +253,17 @@ pma_rare_event_alert <- function(g, baseline_risk = NULL, label = NULL,
 # and a hand-built stub does not - and inventing "Question rated: clinically
 # important superiority" for an object that was never rated would be a
 # fabrication, not a default.
-pma_question_note <- function(g, per = STEP3_PER_DEFAULT, question = NULL) {
+#
+# `closing` drops the shared last sentence, PMA_QUESTION_NOTE_CLOSING. It is
+# TRUE for a single-outcome table, where the note is the whole footer and the
+# sentence is the point of it. A COMBINED table carries one note per outcome -
+# the questions can differ per row, so one footnote for the table would be
+# false of some of them - and the closing sentence is identical in every one of
+# those notes, so five outcomes print it five times. The Step 4 path therefore
+# asks for the notes without it and appends the sentence once, below them
+# (pma_question_notes_footer()).
+pma_question_note <- function(g, per = STEP3_PER_DEFAULT, question = NULL,
+                              closing = TRUE) {
   if (is.null(g) || !is.list(g)) return(NULL)
   ttype <- as.character(g$threshold_type)
   if (length(ttype) != 1L || is.na(ttype) || !nzchar(ttype)) return(NULL)
@@ -283,7 +295,52 @@ pma_question_note <- function(g, per = STEP3_PER_DEFAULT, question = NULL) {
   }
 
   paste0("Question rated: ", asked, " ", middle,
-         " Certainty is rated in that claim, not in the size of the effect.")
+         if (isTRUE(closing)) paste0(" ", PMA_QUESTION_NOTE_CLOSING) else "")
+}
+
+# What a certainty rating IS a rating in, said once. The sentence the whole
+# footnote exists for: a reader who takes "Low" as a verdict on the size of the
+# effect has read the table backwards, and on an equivalence question they have
+# read it backwards in the direction that flatters the intervention.
+#
+# A constant because two callers emit it in two places - pma_question_note()
+# ends a single-outcome note with it, and pma_question_notes_footer() appends
+# it once under a combined table's per-outcome notes - and a copy edit applied
+# to one of them would leave a review's own two tables disagreeing about what
+# their certainty ratings mean.
+PMA_QUESTION_NOTE_CLOSING <-
+  "Certainty is rated in that claim, not in the size of the effect."
+
+# The question footnotes for a table of one or more outcomes: one line per
+# rated outcome, then the shared closing sentence once.
+#
+# `outcomes` is a named list of rated objects (a not-reported row has no
+# threshold_type, so pma_question_note() drops it). `per` is the display unit,
+# for the same reason pma_question_note() takes one.
+#
+# One note per outcome rather than one per table, because a combined Summary of
+# Findings can mix questions across its rows: a review may rate superiority of
+# one outcome and non-inferiority of another, and a single footnote would be
+# false of whichever rows it did not describe. The row is named in the note so
+# a reader can tell which is which.
+#
+# character(0) when nothing in the table was rated, so pma_sof_add_notes()
+# leaves the flextable alone.
+pma_question_notes_footer <- function(outcomes, per = STEP3_PER_DEFAULT) {
+  nms <- names(outcomes) %||% rep("", length(outcomes))
+  notes <- character(0)
+  for (i in seq_along(outcomes)) {
+    note <- pma_question_note(outcomes[[i]], per = per, closing = FALSE)
+    if (is.null(note)) next
+    label <- as.character(nms[[i]] %||% "")
+    notes <- c(notes, if (nzchar(trimws(label))) {
+      paste0(label, ": ", note)
+    } else {
+      note
+    })
+  }
+  if (!length(notes)) return(character(0))
+  c(notes, PMA_QUESTION_NOTE_CLOSING)
 }
 
 # The footnote's name for each question. Deliberately NOT the radio labels in

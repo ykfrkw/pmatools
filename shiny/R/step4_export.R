@@ -224,9 +224,25 @@ step4_server <- function(input, output, session, state) {
         label_intervention = arms$intervention,
         label_control      = arms$control
       )
+      # The question footnotes come FIRST, before the rare-event cautions,
+      # because they frame every other line under the table: a Low rating
+      # means one thing in a superiority claim and close to its opposite in an
+      # equivalence one.
+      #
+      # ONE NOTE PER OUTCOME, derived from each SAVED OBJECT rather than from
+      # the live question on the Configuration tab. A combined table can mix
+      # questions across its rows - a review may rate superiority of one
+      # outcome and non-inferiority of another - so a single footnote would be
+      # false of whichever rows it did not describe, and the reviewer's current
+      # radio position describes only the outcome they happen to be rating.
+      # pma_question_notes_footer() also emits the shared closing sentence once
+      # for the table instead of once per row.
       notes <- vapply(combined_rare_alerts(), function(a) a$note,
                       character(1))
-      pma_sof_add_notes(ft, notes)
+      pma_sof_add_notes(ft, c(
+        pma_question_notes_footer(pma_rated_outcomes(outs),
+                                  per = state$display$per %||% 1000),
+        notes))
     },
       error = function(e) {
         structure(list(message = conditionMessage(e)), class = "pma_sof_error")
@@ -362,11 +378,17 @@ step4_server <- function(input, output, session, state) {
   }
 
   # Footnotes for the exported Summary of Findings that the bundler cannot
-  # derive: one rare-event alert per outcome (Core GRADE 6). Built from the
-  # outcomes being exported rather than from combined_rare_alerts(), so the
-  # single rating on screen gets its alert too. Returns character(0) when no
-  # outcome triggers the caution, and the exported analysis.R then carries no
-  # sof_add_notes() call at all.
+  # derive: the clinical question each row's rating answers, then one
+  # rare-event alert per outcome (Core GRADE 6). Built from the outcomes being
+  # exported rather than from combined_rare_alerts(), so the single rating on
+  # screen gets its alert too. Returns character(0) when there is nothing to
+  # say, and the exported analysis.R then carries no sof_add_notes() call at
+  # all.
+  #
+  # Same order and the same per-outcome rule as the on-screen combined table
+  # above, from the same helper: the exported .docx and the preview are one
+  # table rendered twice, and a footer that differed between them would be the
+  # kind of disagreement R/sof_display.R exists to prevent.
   .export_sof_notes <- function(outs) {
     arms   <- pma_arm_labels(state)
     outs   <- pma_rated_outcomes(outs)
@@ -374,7 +396,8 @@ step4_server <- function(input, output, session, state) {
       pma_rare_event_alert(outs[[nm]], label = nm, labels = arms)
     })
     alerts <- alerts[!vapply(alerts, is.null, logical(1))]
-    vapply(alerts, function(a) a$note, character(1))
+    c(pma_question_notes_footer(outs, per = state$display$per %||% 1000),
+      vapply(alerts, function(a) a$note, character(1)))
   }
 
   # Gate the Download button on Steps 2-3 being complete. Without this,

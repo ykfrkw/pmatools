@@ -70,6 +70,57 @@ test_that("Configuration also needs the values it collects to be set", {
   expect_equal(pma_unconfirmed_domains(blocked), "Configuration")
 })
 
+test_that("Configuration's threshold blocker follows the clinical question", {
+  # config_blockers() is a reactive inside step3_server() and cannot be called
+  # here, but its threshold branch is now one line over a pure helper:
+  #   if (threshold_required() && threshold_missing()) blocker
+  # So what has to hold is the helper's half. Superiority contributes NOTHING -
+  # no blocker, and therefore a Configuration domain that confirms on the tick
+  # alone with the threshold box empty.
+  expect_false(pma_question_gate_copy("superiority")$required)
+  expect_null(pma_question_gate_copy("superiority")$blocker)
+
+  # Every other question contributes exactly one line, and it is lower case so
+  # it reads inside "Still to do: %s.".
+  for (q in c("important_superiority", "equivalence", "non_inferiority")) {
+    gate <- pma_question_gate_copy(q)
+    expect_true(gate$required, info = q)
+    expect_match(gate$blocker, "^enter ", info = q)
+  }
+
+  # The word "MID" appears in none of it. The full audit over every string the
+  # feature can emit is in test-step3-threshold.R; this is the gate's own copy,
+  # which is what a reviewer reads while they are stuck.
+  gate_strings <- unlist(lapply(PMA_CLINICAL_QUESTIONS, function(q) {
+    gate <- pma_question_gate_copy(q)
+    c(gate$blocker, gate$status, gate$no_rating)
+  }), use.names = FALSE)
+  expect_gt(length(gate_strings), 0L)
+  expect_identical(
+    gate_strings[grepl("\\bmid\\b", gate_strings, ignore.case = TRUE)],
+    character(0))
+})
+
+test_that("the clinical question is a per-outcome answer, so it is re-asked", {
+  # threshold_confirm is unticked on a question change (an observer in
+  # step3_server()): the reviewer confirmed a configuration that no longer
+  # exists, and on two of the four questions the threshold has just been
+  # emptied. What is checkable without a session is that the two ids the
+  # observer joins are both registered per-outcome, or the freshness guard
+  # could never tell a question answered for this outcome from one left behind
+  # by the last.
+  expect_true("clinical_question" %in% PMA_OUTCOME_INPUT_IDS$configuration)
+  expect_true("threshold_confirm" %in% PMA_OUTCOME_INPUT_IDS$configuration)
+  expect_true(all(c("clinical_question", "threshold_confirm") %in%
+                    pma_outcome_input_ids()))
+
+  # threshold_confirm is a confirmation and is cleared on screen when the
+  # outcome changes; the question is an ANSWER and is restored with the rest of
+  # them, which is the split PMA_OUTCOME_CONFIRM_IDS draws.
+  expect_true("threshold_confirm" %in% PMA_OUTCOME_CONFIRM_IDS)
+  expect_false("clinical_question" %in% PMA_OUTCOME_CONFIRM_IDS)
+})
+
 test_that("an id the caller never reported is not confirmed", {
   # Missing rather than FALSE is what an input whose widget is not on screen
   # looks like; it must read as "not confirmed", not error.

@@ -224,6 +224,100 @@ test_that("a declined low-RoB refit is reproduced as declined", {
                  names(pma_outcome_grade_args(fake_outcome("Mortality"))))
 })
 
+test_that("a banked outcome recovers its own clinical question", {
+  # Two outcomes of one review can answer different questions, so the question
+  # travels ON THE OUTCOME and not in a review-wide setting. What the
+  # multi-outcome analysis.R renders is the per_outcome list and nothing else,
+  # so a question argument missing here comes back as grade_meta()'s default -
+  # and the script then rates certainty in a claim nobody made.
+  ni <- fake_outcome("Mortality", threshold_type = "mid",
+                     threshold_sides = "worse_only",
+                     plain_language_frame = "non_inferiority",
+                     rating_target = "little_to_no_difference",
+                     rating_target_auto = FALSE)
+  args <- pma_outcome_grade_args(ni)
+
+  expect_equal(args$threshold_sides, "worse_only")
+  expect_equal(args$plain_language_frame, "non_inferiority")
+  expect_equal(args$rating_target, "little_to_no_difference")
+  # The rationale is the one of the five grade_meta() does not store as a
+  # field - it is folded into rating_target_note - so it is rebuilt from the
+  # mapping table via the question the object identifies itself as, never
+  # parsed back out of that sentence.
+  expect_equal(args$rating_target_rationale,
+               unname(PMA_QUESTION_RATIONALE[["non_inferiority"]]))
+  expect_equal(pma_question_of(ni), "non_inferiority")
+
+  # An auto-derived target is not an override: recovering it would hand
+  # grade_meta() a pinned target with no rationale, which aborts.
+  auto <- fake_outcome("Mortality", threshold_type = "mid",
+                       rating_target = "important_effect",
+                       rating_target_auto = TRUE)
+  auto_args <- pma_outcome_grade_args(auto)
+  expect_false("rating_target" %in% names(auto_args))
+  expect_false("rating_target_rationale" %in% names(auto_args))
+
+  # Nor is a pre-0.5.1 MANUAL override, which carries no plain_language_frame:
+  # pma_question_of() reads it as the default question, whose rationale is NA,
+  # so neither name is recovered and Fig 2 derives the target again. Inventing
+  # a rationale for somebody else's override would be a fabrication.
+  legacy <- fake_outcome("Mortality", threshold_type = "mid",
+                         rating_target = "little_to_no_difference",
+                         rating_target_auto = FALSE)
+  legacy_args <- pma_outcome_grade_args(legacy)
+  expect_false("rating_target" %in% names(legacy_args))
+  expect_false("rating_target_rationale" %in% names(legacy_args))
+})
+
+test_that("threshold_sides is not recovered from threshold_scale", {
+  # `threshold_sides` is a partial-match neighbour of `threshold_scale`, so an
+  # inexact lookup on an outcome that carries only the latter answers "ratio" -
+  # which grade_meta() rejects as a threshold_sides value, in a script the
+  # reviewer has already downloaded. The same hazard the `threshold` prefix
+  # comment in pma_outcome_grade_args() documents.
+  g <- fake_outcome("Mortality", threshold_scale = "ratio")
+  args <- pma_outcome_grade_args(g)
+  expect_false("threshold_sides" %in% names(args))
+  expect_false("plain_language_frame" %in% names(args))
+})
+
+test_that("every question's arguments reach the per-outcome grade args", {
+  # End to end over all four questions, from the mapping table through banking
+  # to the list the bundled analysis.R renders. The specs the app recorded
+  # beside the grade_meta() call win over anything recovered from the object,
+  # so this is the path an app-banked outcome actually takes.
+  for (q in PMA_CLINICAL_QUESTIONS) {
+    wanted <- pma_question_grade_args(q)
+    specs  <- pma_grade_arg_specs(wanted)
+    g <- fake_outcome("Mortality", specs = specs)
+    args <- pma_outcome_grade_args(g)
+
+    for (nm in names(wanted)) {
+      if (is.null(wanted[[nm]])) next
+      expect_equal(args[[nm]]$value, wanted[[nm]],
+                   info = paste(q, nm))
+    }
+  }
+})
+
+test_that("the exported analysis.R accepts every name the question sets", {
+  # export_bundle() matches grade_args names EXACTLY against grade_meta()'s
+  # arguments and aborts on one it does not know - so a name on
+  # PMA_GRADE_ARGS_EXPORTED that grade_meta() does not have takes the whole
+  # download with it, at the moment the reviewer presses the button. Checked
+  # against the STAGED package, which is what the running app sources.
+  pkg <- pma_vendored_pkg()
+  skip_if(is.null(pkg), "no staged bundle - run Rscript shiny/stage_bundle.R")
+  legal <- pkg$.grade_arg_names()
+
+  expect_true(all(PMA_GRADE_ARGS_EXPORTED %in% legal))
+  for (q in PMA_CLINICAL_QUESTIONS) {
+    specs <- pma_grade_arg_specs(pma_question_grade_args(q))
+    expect_true(length(specs) > 0L, info = q)
+    expect_silent(pkg$.check_grade_arg_names(specs))
+  }
+})
+
 test_that("the specs the app actually passed win over the recovered values", {
   g <- fake_outcome("Mortality", specs = list(
     threshold_type = list(value = "mid", origin = "scalar")),

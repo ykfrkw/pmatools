@@ -204,10 +204,17 @@ PMA_OUTCOME_INPUT_IDS <- list(
   # Step 2 - outcome identity
   identity = c("outcome_name", "small_values", "outcome_type",
                "outcome_follow_up", "outcome_unit"),
-  # Step 3 - Configuration tab (threshold, control-group risk, responder
-  # conversion). Only some of these exist at a time: the binary and continuous
-  # branches of output$threshold_panel build different widgets.
-  configuration = c("threshold_mode", "threshold_abs", "threshold_ratio",
+  # Step 3 - Configuration tab (the clinical question, threshold, control-group
+  # risk, responder conversion). Only some of these exist at a time: the binary
+  # and continuous branches of output$threshold_panel build different widgets.
+  #
+  # `clinical_question` is here for the same reason every other id is: it is an
+  # answer ABOUT THIS OUTCOME. A review can ask superiority of one outcome and
+  # non-inferiority of another, and without the registration the question
+  # chosen for the first would still be reported by the torn-down radio while
+  # the second was being rated - which is a rating in a claim nobody made.
+  configuration = c("clinical_question",
+                    "threshold_mode", "threshold_abs", "threshold_ratio",
                     "threshold_cont", "threshold_baseline_input",
                     "threshold_baseline_rationale", "sof_presentation",
                     "baseline_risk_chinn", "responder_p0_rationale",
@@ -386,6 +393,24 @@ PMA_GRADE_ARGS_EXPORTED <- c(
   "inconsistency_threshold_side", "inconsistency_subgroup_explained",
   "imprecision", "imprecision_rationale",
   "threshold", "threshold_scale", "threshold_baseline",
+  # The five arguments the clinical question picks (pmatools 0.5.1;
+  # pma_question_grade_args() in R/step3_threshold.R). Every one of them has to
+  # be exported, because between them they ARE the question: a script that
+  # replayed four of the five would rate certainty in a different claim from
+  # the one the bundle documents and still print a rating.
+  #
+  # threshold_type is the one that used to be absent because the app never
+  # passed it, and it is the most dangerous omission of the five: grade_meta()
+  # defaults it to "mid", so a superiority rating replayed without it aborts on
+  # the Core GRADE 2 entry gate rather than reproducing anything.
+  #
+  # rating_target and rating_target_rationale travel together or not at all -
+  # a pinned target with no written reason aborts in
+  # .check_override_rationale(). pma_grade_arg_specs() emits only the names the
+  # app actually supplied, and pma_question_grade_args() sets both or neither,
+  # so the pairing holds by construction rather than by a check here.
+  "threshold_type", "rating_target", "rating_target_rationale",
+  "threshold_sides", "plain_language_frame",
   "ois_p0", "ois_rrr", "ois_sd", "ois_events", "ois_n",
   "pubias_small_industry", "pubias_funnel_asymmetry", "pubias_rationale",
   "pubias_unpublished", "pubias_registry_complete",

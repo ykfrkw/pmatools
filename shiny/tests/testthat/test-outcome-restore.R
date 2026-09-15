@@ -32,6 +32,23 @@ test_that("pma_restorable_input_ids() covers Step 3 and excludes what it must", 
   expect_false(anyDuplicated(ids) > 0L)
 })
 
+test_that("the clinical question is restored after Step 3 is rebuilt", {
+  # The question is a reactiveVal mirrored from a radio rendered INSIDE
+  # output$threshold_panel, so leaving Step 3 and coming back destroys the
+  # widget. It is on the restorable list rather than left to the panel's own
+  # render because the panel seeds `selected` under isolate(): both paths put
+  # the same value back, and the registration is what makes the freshness
+  # guard stamp it in the first place.
+  ids <- pma_restorable_input_ids()
+  expect_true("clinical_question" %in% ids)
+
+  # A question chosen for the PREVIOUS outcome is never reinstated - the whole
+  # point of registering it. A review can ask superiority of one outcome and
+  # non-inferiority of another.
+  expect_false(pma_restorable_value("non_inferiority", stamp = 1L, gen = 2L))
+  expect_true(pma_restorable_value("non_inferiority", stamp = 2L, gen = 2L))
+})
+
 test_that("pma_restorable_value() refuses answers from another outcome", {
   # This is the guard. A stale answer is never put back.
   expect_false(pma_restorable_value("some rationale", stamp = 1L, gen = 2L))

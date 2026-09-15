@@ -84,6 +84,76 @@ test_that("pma_arg_spec() treats NA as 'not supplied', never as the string NA", 
   expect_identical(pma_arg_spec(c(1, 2)), list(value = c(1, 2), origin = "vector"))
 })
 
+test_that("the five clinical-question arguments are all exported", {
+  # An argument the app supplies but does not declare here disappears from the
+  # bundled analysis.R, and the script then replays a DIFFERENT QUESTION from
+  # the one the bundle documents - while still printing a rating. Between them
+  # these five are the question, so all five have to be on the registry.
+  expect_true(all(c("threshold_type", "rating_target",
+                    "rating_target_rationale", "threshold_sides",
+                    "plain_language_frame") %in% PMA_GRADE_ARGS_EXPORTED))
+
+  # Every one of them is also a name grade_meta() actually has. export_bundle()
+  # matches these exactly and aborts on a name it does not know, so a typo here
+  # would take the download with it.
+  for (q in PMA_CLINICAL_QUESTIONS) {
+    args <- pma_question_grade_args(q)
+    expect_true(all(names(args) %in% PMA_GRADE_ARGS_EXPORTED), info = q)
+  }
+})
+
+test_that("each question's arguments survive pma_grade_arg_specs()", {
+  for (q in PMA_CLINICAL_QUESTIONS) {
+    args  <- pma_question_grade_args(q)
+    specs <- pma_grade_arg_specs(args)
+
+    # threshold_type and threshold_sides are set on every question, so they
+    # must always arrive with a value rather than a null spec.
+    expect_identical(specs[["threshold_type"]]$value, args$threshold_type,
+                     info = q)
+    expect_identical(specs[["threshold_sides"]]$value, args$threshold_sides,
+                     info = q)
+
+    # rating_target and its rationale travel together or neither: a pinned
+    # target with nothing written down aborts in .check_override_rationale(),
+    # so a script that carried one without the other would not run at all.
+    has_target <- !is.null(specs[["rating_target"]]$value)
+    has_reason <- !is.null(specs[["rating_target_rationale"]]$value)
+    expect_identical(has_target, has_reason, info = q)
+    expect_identical(has_target,
+                     q %in% c("equivalence", "non_inferiority"), info = q)
+    if (has_target) {
+      expect_identical(specs[["rating_target"]]$value,
+                       "little_to_no_difference", info = q)
+      expect_identical(specs[["rating_target_rationale"]]$value,
+                       unname(PMA_QUESTION_RATIONALE[[q]]), info = q)
+    }
+  }
+})
+
+test_that("threshold_sides is not answered by threshold_scale", {
+  # The regression the comment at pma_outcome_grade_args() documents:
+  # `threshold_sides` is a partial-match neighbour of `threshold_scale`, so an
+  # inexact lookup on an object carrying only the latter answers "ratio" - a
+  # value grade_meta() then rejects as a threshold_sides, in a script the
+  # reviewer has already downloaded.
+  specs <- pma_grade_arg_specs(list(threshold_scale = "ratio"))
+  expect_false("threshold_sides" %in% names(specs))
+  expect_null(specs[["threshold_sides"]])
+
+  # ... and the same in the other direction, since either can be supplied
+  # alone.
+  specs <- pma_grade_arg_specs(list(threshold_sides = "worse_only"))
+  expect_false("threshold_scale" %in% names(specs))
+  expect_identical(specs[["threshold_sides"]]$value, "worse_only")
+
+  # rating_target is a strict prefix of rating_target_rationale, which is the
+  # same hazard one argument over.
+  specs <- pma_grade_arg_specs(list(rating_target_rationale = "because"))
+  expect_false("rating_target" %in% names(specs))
+  expect_null(specs[["rating_target"]])
+})
+
 test_that("unknown arguments are dropped rather than smuggled in", {
   specs <- pma_grade_arg_specs(list(not_a_grade_meta_arg = 1,
                                     small_values         = "desirable"))

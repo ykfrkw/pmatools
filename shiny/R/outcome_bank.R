@@ -303,6 +303,50 @@ pma_outcome_grade_args <- function(g) {
     follow_up      = field("follow_up"),
     unit           = field("unit")
   )
+  # The clinical question, recovered from the fields grade_meta() stored for it
+  # (pmatools 0.5.1). Not re-derived from pma_question_of(): that recovers the
+  # NAME of the question, and what the per_outcome list needs is the arguments
+  # the rating was actually made with - which is the same thing only as long as
+  # the mapping table has not been edited since the outcome was banked.
+  #
+  # threshold_sides is the reason `field()` is not optional here: it is a
+  # partial-match neighbour of threshold_scale, so `g$threshold_sides` on an
+  # object that carries threshold_scale and no sides at all answers "ratio" -
+  # which grade_meta() then rejects as a threshold_sides value, in a script the
+  # reviewer has already downloaded. Same hazard the comment above documents
+  # for `threshold`.
+  recovered$threshold_sides      <- field("threshold_sides")
+  recovered$plain_language_frame <- field("plain_language_frame")
+  # A pinned rating target travels WITH its rationale or not at all:
+  # .check_override_rationale() (R/domain_row.R) aborts on a target that
+  # overrides the Fig 2 derivation with nothing written down, so recovering the
+  # target alone turns a banked outcome into a script that cannot run. An
+  # auto-derived target is not an override at all and is left to Fig 2 to
+  # derive again, which is what rating_target_auto records.
+  #
+  # The rationale is the one of the five that is NOT a field of the rated
+  # object: grade_meta() folds it into rating_target_note, beside the target
+  # the derivation would have reached. So it is rebuilt from the mapping table
+  # via the question the object identifies itself as - NOT parsed back out of
+  # that note. A recovered argument must be a value some table states, not a
+  # substring of a sentence written for a human.
+  #
+  # PMA_QUESTION_RATIONALE is NA for the two questions that pin nothing, and
+  # pma_question_of() answers `important_superiority` for a pre-0.5.1 manual
+  # override (it deliberately refuses to read a pinned target as evidence of an
+  # equivalence question). Both cases therefore recover NEITHER name, which is
+  # the safe direction: the specs recorded beside the grade_meta() call win
+  # over everything here anyway, and they are what an app-banked outcome
+  # carries.
+  if (isFALSE(field("rating_target_auto")) &&
+      !is.null(field("rating_target"))) {
+    rationale <- unname(PMA_QUESTION_RATIONALE[[pma_question_of(g)]])
+    if (is.character(rationale) && length(rationale) == 1L &&
+        !is.na(rationale) && nzchar(rationale)) {
+      recovered$rating_target           <- field("rating_target")
+      recovered$rating_target_rationale <- rationale
+    }
+  }
   # The reviewer rated without a MID on purpose; re-running under the gate's
   # default would abort instead of reproducing that decision.
   if (identical(field("threshold_type"), "mid") &&

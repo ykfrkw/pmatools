@@ -260,3 +260,58 @@ test_that("the block still renders without diagnostics or a known method", {
   html <- as.character(.rare_method_block(NULL, "OR", NULL))
   expect_match(html, "rare-event workflow", fixed = TRUE)
 })
+
+# --------------------------------------------------------------------------
+# The sensitivity suite is asked the primary's question, sidedness included
+# --------------------------------------------------------------------------
+# shiny/SPEC.md 3.4.14 promises that "the sensitivity answer and the rated
+# answer cannot come from two different rules", and .rare_crosses_threshold()'s
+# own header says it exists for that. Under threshold_sides = "worse_only" the
+# primary is asked a ONE-SIDED question, so a two-sided scan of the suite is
+# exactly two different rules - and the sentence it produces would contradict
+# the rating printed above it.
+#
+# step3_server() threads that sidedness into both call sites
+# (.append_rare_crossing_note() and output$impre_rare_sensitivity) as a named
+# `worse_side` argument, derived once from the rated object. Neither reactive
+# can be called here, so what is pinned is the ARGUMENT NAME the wiring passes:
+# a package-side rename would otherwise make both calls fail at the moment a
+# reviewer opens the Imprecision tab of a sparse analysis.
+
+test_that("the rare-event crossing helpers take worse_side by name", {
+  for (fn in list(rare_suite_crossing, rare_suite_crossing_note)) {
+    expect_true("worse_side" %in% names(formals(fn)))
+    # NULL is the two-sided question and must stay the DEFAULT, or every
+    # question but non-inferiority would silently change.
+    expect_null(eval(formals(fn)$worse_side))
+  }
+})
+
+test_that("a one-sided scan of the suite differs from a two-sided one", {
+  # The property the threading exists to deliver, asserted on the package
+  # helper the app calls. A CI wholly on the better side of the threshold
+  # crosses it two-sidedly and does not cross it on the worse side.
+  #
+  # threshold_internal is on the TE (log) scale, so 0.18 is about RR 1.20, and
+  # the interval below sits between -0.4 and -0.1 - the BETTER side when the
+  # worse side is the positive one.
+  expect_true(.rare_crosses_threshold(-0.40, -0.10, thr = 0.18))
+  expect_false(.rare_crosses_threshold(-0.40, -0.10, thr = 0.18,
+                                       worse_side = 1))
+  # ... and it does cross when the worse side is the one it is on.
+  expect_true(.rare_crosses_threshold(-0.40, -0.10, thr = 0.18,
+                                      worse_side = -1))
+
+  # The note says which question was asked, so the reviewer can see that the
+  # sensitivity rows and the rating are answering the same one.
+  cross <- list(k_methods = 2L, primary = TRUE, unanimous = TRUE,
+                disagree = character(0))
+  expect_match(rare_suite_crossing_note(cross, 0.18, worse_side = 1),
+               "the chosen threshold on the worse side", fixed = TRUE)
+  # Two-sided by default, and the default must not say "worse side" - that is
+  # what makes every question but non-inferiority byte-identical.
+  expect_match(rare_suite_crossing_note(cross, 0.18), "the chosen threshold",
+               fixed = TRUE)
+  expect_false(grepl("worse side", rare_suite_crossing_note(cross, 0.18),
+                     fixed = TRUE))
+})
