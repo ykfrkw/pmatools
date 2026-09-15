@@ -78,12 +78,15 @@ test_that("the clinical-question copy is complete for all four questions", {
   expect_setequal(names(copy$question_threshold_units),
                   names(EDU_COPY$threshold_labels))
 
-  # question_help covers the three questions whose body copy is its own string.
+  # question_help covers the three questions whose body copy is its own string,
+  # plus `margin_source`, the one instruction the two margin questions share.
   # `important_superiority` is deliberately absent: its help is whatever
   # threshold_help[[sm]] says, which is what keeps the default question
   # byte-identical to the pre-0.5.1 tab. step3_threshold_copy() resolves that.
   expect_setequal(names(EDU_COPY$question_help),
-                  c("superiority", "equivalence", "non_inferiority"))
+                  c("superiority", "equivalence", "non_inferiority",
+                    "margin_source"))
+  expect_true(nzchar(EDU_COPY$question_help$margin_source))
   expect_null(EDU_COPY$question_help$important_superiority)
 })
 

@@ -967,8 +967,7 @@ PMA_QUESTION_RATIONALE <- c(
 # question - and a reviewer who starts on the default and switches to
 # non-inferiority would otherwise inherit that placeholder as their margin,
 # which is the exact failure the no-default decision exists to prevent.
-step3_threshold_copy <- function(question, sm, per = STEP3_PER_DEFAULT,
-                                 small_values = NULL) {
+step3_threshold_copy <- function(question, sm, small_values = NULL) {
   question <- pma_clinical_question(question)
   sm       <- as.character(sm %||% "")[1]
   copy     <- EDU_COPY$config_tab
@@ -995,9 +994,9 @@ step3_threshold_copy <- function(question, sm, per = STEP3_PER_DEFAULT,
     base_label
   )
 
-  # step3_margin_scale_note() is empty for a measure with one input box, so the
-  # parts are filtered before joining rather than pasted blind: a dropped
-  # sentence must not leave a double space behind it on screen.
+  # step3_worse_side_sentence() is empty when Step 2 has not recorded a
+  # direction yet, so the parts are filtered before joining rather than pasted
+  # blind: a dropped sentence must not leave a double space behind it.
   .sentences <- function(...) {
     parts <- c(...)
     paste(parts[nzchar(trimws(parts))], collapse = " ")
@@ -1007,16 +1006,24 @@ step3_threshold_copy <- function(question, sm, per = STEP3_PER_DEFAULT,
     question,
     important_superiority = EDU_COPY$threshold_help[[sm]] %||% "",
     superiority           = EDU_COPY$question_help$superiority,
+    # The scale sentence and PMA_NO_MARGIN_PLACEHOLDER's rationale both failed
+    # shiny/SPEC.md 3.4.11's "delete first" test and are gone. The scale is
+    # already on the input label above ("Equivalence threshold (as a risk ratio
+    # above 1)") and in the threshold_mode radio, which is the same redundancy
+    # the control-group risk box's note was deleted for (SPEC 3.4.11). The
+    # rationale for offering no default is provenance -- "where this number
+    # comes from" -- which that rule deletes outright; it survives in
+    # PMA_NO_MARGIN_PLACEHOLDER and in SPEC 4.7a, where a reader looking for it
+    # will land. What a reviewer cannot answer the box without is the one
+    # sentence that stayed in the deck: enter what the protocol specifies.
     equivalence = .sentences(
       EDU_COPY$question_help$equivalence,
-      step3_margin_scale_note(sm, per),
-      PMA_NO_MARGIN_PLACEHOLDER
+      EDU_COPY$question_help$margin_source
     ),
     non_inferiority = .sentences(
       EDU_COPY$question_help$non_inferiority,
       step3_worse_side_sentence(small_values),
-      step3_margin_scale_note(sm, per),
-      PMA_NO_MARGIN_PLACEHOLDER
+      EDU_COPY$question_help$margin_source
     )
   )
 
@@ -1056,19 +1063,6 @@ step3_worse_side_sentence <- function(small_values) {
       "so LOWER values are the worse ones and the threshold is tested on the ",
       "lower-value side.")
   }
-}
-
-# Where a margin may be typed, for the measures that offer two boxes. Binary
-# ratio measures carry an absolute box as well as a relative one, and the
-# absolute one is the recommended route, so a reviewer holding a margin per
-# 1,000 patients should not have to convert it by hand to enter it. Empty for
-# every other measure, which has one box and nothing to choose between.
-step3_margin_scale_note <- function(sm, per = STEP3_PER_DEFAULT) {
-  if (!sm %in% c("OR", "RR", "HR")) return("")
-  sprintf(paste0(
-    "Enter it on whichever scale your protocol states it on: the absolute ",
-    "box takes it as events %s patients, this box takes it as a ratio."),
-    step3_per_unit_label(per))
 }
 
 # --------------------------------------------------------------------------

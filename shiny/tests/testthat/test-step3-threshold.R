@@ -345,11 +345,9 @@ pma_all_question_strings <- function() {
   )
   for (q in PMA_CLINICAL_QUESTIONS) {
     for (sm in PMA_TEST_SM) {
-      for (per in c(100L, 1000L)) {
-        for (sv in list(NULL, "desirable", "undesirable")) {
-          cp <- step3_threshold_copy(q, sm, per = per, small_values = sv)
-          out <- c(out, cp$heading, cp$label, cp$help)
-        }
+      for (sv in list(NULL, "desirable", "undesirable")) {
+        cp <- step3_threshold_copy(q, sm, small_values = sv)
+        out <- c(out, cp$heading, cp$label, cp$help)
       }
     }
   }
@@ -545,23 +543,48 @@ test_that("step3_threshold_copy() names the question in its heading and label", 
                    "Non-inferiority threshold (in outcome units)")
 })
 
-test_that("the two margin questions cite the package's own no-default reason", {
-  # Verbatim, not paraphrased. PMA_NO_MARGIN_PLACEHOLDER is cited by the two
-  # gates that refuse a margin question with no margin, so the reason on screen
-  # and the reason in the abort are one string.
+test_that("the two margin questions send the reviewer to their protocol", {
+  # One sentence, not PMA_NO_MARGIN_PLACEHOLDER's three. The rationale for
+  # offering no default is provenance -- "where this number comes from" --
+  # which shiny/SPEC.md 3.4.11 deletes from muted copy outright; it lives in
+  # the package constant and in SPEC 4.7a. What survives on screen is the part
+  # a reviewer cannot answer the box without: enter what the protocol says.
   for (q in c("equivalence", "non_inferiority")) {
     for (sm in PMA_TEST_SM) {
-      expect_true(grepl(PMA_NO_MARGIN_PLACEHOLDER,
-                        step3_threshold_copy(q, sm)$help, fixed = TRUE),
-                  info = paste(q, sm))
+      help <- step3_threshold_copy(q, sm)$help
+      expect_match(help, "margin your protocol specifies", fixed = TRUE,
+                   info = paste(q, sm))
+      expect_match(help, "no default", fixed = TRUE, info = paste(q, sm))
+      # The rationale itself must NOT be inlined here, or the box grows the
+      # wall of text that rule exists to prevent.
+      expect_false(grepl(PMA_NO_MARGIN_PLACEHOLDER, help, fixed = TRUE),
+                   info = paste(q, sm))
     }
   }
-  # And the two superiority questions do not: there IS a placeholder for a
-  # threshold of clinical importance, so the sentence would be false there.
+  # And the two superiority questions say neither: there IS a placeholder for
+  # a threshold of clinical importance, so both sentences would be false.
   for (q in c("superiority", "important_superiority")) {
-    expect_false(grepl(PMA_NO_MARGIN_PLACEHOLDER,
-                       step3_threshold_copy(q, "RR")$help, fixed = TRUE),
+    help <- step3_threshold_copy(q, "RR")$help
+    expect_false(grepl("no default", help, fixed = TRUE), info = q)
+    expect_false(grepl(PMA_NO_MARGIN_PLACEHOLDER, help, fixed = TRUE),
                  info = q)
+  }
+})
+
+test_that("no margin help text grows back into a wall of prose", {
+  # A standing cap, so the next copy edit fails here rather than on screen.
+  # shiny/SPEC.md 3.4.11: delete first, shorten second, hide never.
+  for (q in PMA_CLINICAL_QUESTIONS) {
+    for (sm in PMA_TEST_SM) {
+      words <- length(strsplit(trimws(
+        step3_threshold_copy(q, sm, small_values = "desirable")$help),
+        "\\s+")[[1]])
+      # 95, not 70: non-inferiority carries one sentence the others do not
+      # (which side is the worse one), and that echo is mandatory -- a
+      # one-sided test whose side the reviewer cannot see is a silent exit.
+      # The cap is here to catch regrowth, not to squeeze earned content.
+      expect_lt(words, 95L, label = paste(q, sm, "help word count"))
+    }
   }
 })
 
@@ -617,20 +640,15 @@ test_that("non-inferiority copy states the one-sidedness and names the side", {
   expect_equal(.threshold_worse_sign("undesirable"), -1)
 })
 
-test_that("the margin help names the display unit it was given", {
-  # A reviewer who switches from per 1,000 to per 100 must not be reading a
-  # note that still says per 1,000.
-  per1000 <- step3_threshold_copy("equivalence", "RR", per = 1000L)$help
-  per100  <- step3_threshold_copy("equivalence", "RR", per = 100L)$help
-  expect_match(per1000, "events per 1,000 patients", fixed = TRUE)
-  expect_match(per100,  "events per 100 patients", fixed = TRUE)
-
-  # A measure with one input box has nothing to choose between, so the
-  # sentence is dropped - and dropping it must not leave a double space.
-  for (sm in c("SMD", "MD")) {
-    txt <- step3_threshold_copy("equivalence", sm)$help
-    expect_false(grepl("absolute box", txt, fixed = TRUE), info = sm)
-    expect_false(grepl("  ", txt, fixed = TRUE), info = sm)
+test_that("dropping the worse-side sentence leaves no double space behind", {
+  # step3_worse_side_sentence() is empty until Step 2 records a direction, and
+  # the parts are joined by a filter for exactly this reason.
+  for (q in PMA_CLINICAL_QUESTIONS) {
+    for (sm in c("SMD", "MD", "RR")) {
+      txt <- step3_threshold_copy(q, sm, small_values = NULL)$help
+      expect_false(grepl("  ", txt, fixed = TRUE), info = paste(q, sm))
+      expect_identical(txt, trimws(txt), info = paste(q, sm))
+    }
   }
 })
 

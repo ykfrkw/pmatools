@@ -272,6 +272,14 @@ EDU_COPY <- list(
       "confidence interval running far past the threshold on the BETTER side ",
       "never rates down, and that is what separates this question from ",
       "equivalence."
+    ),
+
+    # Shared by the two margin questions and assembled LAST, after the
+    # worse-side echo, because an instruction reads best at the end of the
+    # note. One entry rather than a clause repeated in both, so a copy edit
+    # cannot leave the two questions saying different things.
+    margin_source = paste0(
+      "Enter the margin your protocol specifies; there is no default for one."
     )
   ),
 
