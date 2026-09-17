@@ -1739,6 +1739,28 @@
 
 ## Bug fixes
 
+* **The Chinn footnote said "MID" where every other sentence in the same
+  footer said "Threshold".** `SPEC.md` §4.5.1 settles the vocabulary: "MID"
+  names an internal quantity, and "Threshold" is the word a reader sees. The
+  Chinn/responder footnote had escaped it, and visibly so — it described Core
+  GRADE 6's option 2 as computing "the proportion in each arm improving by
+  more than the MID" two sentences after its own "Threshold definition:"
+  clause, in the same footer, on the same table. It now says Threshold in both
+  places.
+
+  Only the footnote text changes; no number, judgment or column moves. Two
+  occurrences of the word survive in the package, both in roxygen, and both
+  are **verbatim quotations** from Core GRADE 6 and 7 (*"whether the MID for
+  mortality is 2%, 1%, or less than 1%, the CI does not cross the MID
+  threshold"*). Editing a quotation to satisfy a house style is misquoting the
+  source, so those stay, and the guard that now enforces the rule excludes
+  comments and roxygen for exactly that reason. That guard is a source scan in
+  `test-plain_language.R` rather than a call to every builder: a string
+  literal cannot be reached by a test that does not know which argument
+  combination renders it, and a rule about a forbidden word has to fail where
+  the word is typed.
+
+
 * **Shiny app: "Auto-rerun on change" stopped meaning anything the moment Run
   analysis was pressed once.** `input$run_ma` is an actionButton counter — it
   only ever increases, and nothing in the app resets it — but the Step 2

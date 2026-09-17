@@ -834,3 +834,54 @@ test_that("a pre-existing-shaped object has no new fields and is unaffected", {
   expect_identical(.plain_language_for(g), before)
   expect_identical(before, "Treatment increases mortality")
 })
+
+# --------------------------------------------------------------------------
+# "MID" is internal vocabulary: a standing package-wide guard
+# --------------------------------------------------------------------------
+# SPEC.md 4.5.1 settles the vocabulary: "MID" names an internal quantity and
+# "Threshold" is the word a reader sees. The guard above holds the line for
+# PLAIN_LANGUAGE_FRAMES; this one holds it for every other string the package
+# can put in front of a reader -- an abort message, a domain fact, a Summary
+# of Findings footnote -- because those reach a screen by a different route
+# and were where the word actually survived (the Chinn footnote said "more
+# than the MID" while the sentence directly above it said "Threshold
+# definition").
+#
+# Scans source rather than calling every builder: a string literal cannot be
+# reached by a test that does not know the argument combination that renders
+# it, and a rule about a forbidden word has to fail where the word is typed.
+# Comments and roxygen (`#`, `#'`) are excluded on purpose -- the internals
+# keep the name, and the two roxygen occurrences that remain are VERBATIM
+# QUOTATIONS from Core GRADE 6 and 7 ("whether the MID for mortality is 2%,
+# 1%, or less than 1% ..."). Editing a quotation to satisfy a house style is
+# misquoting the source, so the exclusion is a decision and not an oversight.
+
+test_that("no string literal in R/ says MID", {
+  r_dir <- test_path("..", "..", "R")
+  skip_if_not(dir.exists(r_dir), "package sources not laid out as expected")
+
+  offenders <- character(0)
+  for (f in list.files(r_dir, pattern = "[.][Rr]$", full.names = TRUE)) {
+    lines <- readLines(f, warn = FALSE)
+    # Drop whole-line comments and roxygen; a trailing comment after code is
+    # kept, which is the conservative direction for a forbidden-word check.
+    code <- lines[!grepl("^\\s*#", lines)]
+    hits <- grep("\\bMID\\b", code, value = TRUE)
+    if (length(hits) > 0) {
+      offenders <- c(offenders, paste0(basename(f), ": ", trimws(hits)))
+    }
+  }
+  expect_identical(offenders, character(0))
+})
+
+test_that("the Chinn footnote says Threshold, not MID", {
+  # The one that got away, pinned at the rendered string rather than at the
+  # source, so a rewording that reintroduces the word fails here too.
+  note <- .chinn_note(threshold_label = "50 percent improvement in symptoms",
+                      baseline_risk = 0.3)
+  expect_false(grepl("\\bMID\\b", note))
+  expect_match(note, "more than the Threshold", fixed = TRUE)
+  expect_match(note, "uses no Threshold", fixed = TRUE)
+  # The neighbouring sentence it used to contradict.
+  expect_match(note, "Threshold definition:", fixed = TRUE)
+})

@@ -976,8 +976,9 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
     threshold_str,
     " This is NOT Core GRADE 6's option 2, which assumes a normal ",
     "distribution and computes, per study and before pooling, the ",
-    "proportion in each arm improving by more than the MID; Chinn's formula ",
-    "assumes a logistic latent variable, uses no MID and is applied to the ",
+    "proportion in each arm improving by more than the Threshold; Chinn's ",
+    "formula assumes a logistic latent variable, uses no Threshold and is ",
+    "applied to the ",
     "pooled SMD. The two do not generally agree.",
     " ", .chinn_derived_sentence(baseline_risk, label_control)
   )
