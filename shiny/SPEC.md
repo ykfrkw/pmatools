@@ -4,7 +4,7 @@
 
 **Public URL:** https://yuki-furukawa.shinyapps.io/pmatools/
 **Deployment:** shinyapps.io (account: `yuki-furukawa`, appId: `17697029`)
-**App version:** 3.2.0 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9)
+**App version:** 3.3.0 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
 
 ---
 
@@ -182,6 +182,14 @@ Four Step 3 outputs read it, all through the pure helpers in `R/step3_threshold.
 `state$outcome_name` is mirrored only on a successful run and is deliberately never cleared, so the echo must read the live block rather than the mirror; otherwise it prints an outcome name that is no longer in the form.
 
 **Sticky `state$outcome_type`.** Binary/continuous is mirrored into state and re-seeded into the Step 2 radio, like `outcome_name` and `small_values`, because a rebuilt widget otherwise pushes its hard-coded `"binary"` default back on every 3 → 2 → 3 round trip. `grade_obj()` derives `outcome_type` for `grade_meta()` from the fitted object via `step3_is_binary_outcome()` rather than from the raw input.
+
+**The clinical question is deliberately not in the listing above (v0.5.1).** `question_state()` is a `reactiveVal` inside `step3_server()`, exactly like `threshold_state()`, `threshold_mode_state()`, `threshold_abs_state()`, `threshold_baseline_state()` and `display_per_state()`, and for the same reason those are: the radio that sets it is rendered *inside* `output$threshold_panel` (§3.4.10b), so leaving Step 3 and coming back destroys the widget, and a statically declared `selected` would push the default back to the server and silently re-rate a non-inferiority review as clinically important superiority. Promoting it to `state` would gain nothing and cost the one property that makes the set readable — a value in `state` is written from more than one file, and this one has exactly one writer. Step 4 reads the question off the **rated object** instead (`pma_question_of()`), which is the only copy of it that cannot have moved since the rating was computed.
+
+**One key, one writer**, the same rule §3.4.10a states for `state$display$threshold_label`: `question_state()` is the single source of truth and `input$clinical_question` is mirrored *into* it by one `observeEvent`, through `pma_clinical_question()`. Nothing downstream reads the input — the panel copy, the four gate sites of §3.4.10b, `grade_obj()`'s argument list, the worse-side conversion and the Summary of Findings footnote all read the reactiveVal. That is the shape `threshold_mode_state` already had: **reset then mirror**, with `state$step3_reset()` putting the reactiveVal back to `PMA_CLINICAL_QUESTION_DEFAULT` and the mirror re-establishing it from the rebuilt radio.
+
+`clinical_question` is registered in `PMA_OUTCOME_INPUT_IDS$configuration` (`R/outcome_provenance.R`) beside `sof_presentation` and the threshold ids, under the same rule §3.4.10a states: *an id missing from that list is an id whose stale answer survives an outcome change.* A review can ask superiority of one outcome and non-inferiority of another, and without the registration the question chosen for the first would still be reported by the torn-down radio while the second was being rated — a rating in a claim nobody made.
+
+**It is *restorable*, where `threshold_confirm` is a *confirmation*.** Both ids sit in the same `configuration` group and the two are not handled alike. `configuration` is one of `PMA_OUTCOME_RESTORE_GROUPS`, so `clinical_question` is in `pma_restorable_input_ids()` and a rebuild of Step 3 pushes the remembered question back into the freshly built radio — it is an answer *about the outcome*, and a reviewer who has to re-pick it after a 3 → 2 → 3 round trip is being asked a question they already answered. `threshold_confirm` is subtracted from that list by `PMA_OUTCOME_CONFIRM_IDS`, because a confirmation is not an answer but an assertion that the reviewer has just looked at what is on screen. So it is **re-armed rather than restored** — and beyond the rebuild case, it is unticked whenever the question *changes* (§3.4.13): the configuration it confirmed no longer exists. Restoring the answers without the confirmations is what makes that re-tick cheap.
 - `state$grade` recomputes whenever `state$ma` is set OR any Step 3 input changes (debounced 500ms; cheap to compute).
 - Forest/funnel plots are rendered from `state$ma`.
 - SoF preview rendered from `state$grade` and `state$display`.
@@ -875,6 +883,12 @@ Resulting judgment: {{judgment}}
 - `numericInput("ois_n", "Override OIS — target N", value = NA, min = 0)` *(continuous only)*
 - `selectInput("imprecision_override", "Override Imprecision judgment", same options)`
 
+**The verdict now depends on which clinical question is being rated (v0.5.1).** The algorithm above is unchanged — `.classify_imprecision()`'s nine Fig 4 branches are not modified at all (`SPEC.md` §4.5.1b) — but two of its *inputs* now come from §3.4.10b's radio: **which** threshold it is handed (`threshold_type`, and a pinned rating target on the two margin questions) and **which sides** of that threshold it tests (`threshold_sides`). So the same interval and the same number can earn a different downgrade under a different question, legitimately, and the tab has to say which question it answered.
+
+- **A one-sided rating says so, in both places the reviewer reads the judgment from.** Under `threshold_sides = "worse_only"` the Fig 4 path string reads *"the Threshold on the worse side (+Threshold)"* rather than *"the +/-Threshold band"*, and the two-level branch's label states in those words that it is **deliberately not one-sided even though the crossing test above it is**. The `threshold_position` fact forks to match: *"crosses the Threshold on the worse side"* / *"stays inside the Threshold on the worse side"* / *"entirely beyond the Threshold on the worse side"*, each suffixed with `[worse side = ±Threshold, from small_values = '…']`. Both fork inside **`assess_imprecision()`** — the classifier labels at its call to `.classify_imprecision()`, the fact in its own `thresh_str` block — so the tab, the domain notes, the Evidence Profile and the exported `.docx` cannot word it four ways. Under `worse_only` the fact tests `crosses_both_thresholds` **first**, because on that branch it is what earned the `−2`. The two-sided strings are unchanged character for character.
+- **The worse side is echoed on screen, where the number is entered.** `step3_worse_side_sentence()` (`R/step3_threshold.R`) names it in the body copy under the non-inferiority threshold input — *"Step 2 records that smaller values of this outcome are favorable, so HIGHER values are the worse ones…"* — and `.pma_worse_side_words()` names it again in the Summary of Findings footnote (§3.4.9). Both take the sign from the package's `.threshold_worse_sign()` rather than reading `small_values` a second time, so the app can never echo a side the rating did not test. An **unanswered** direction says so and sends the reviewer back to Step 2 rather than printing the fallback reading: *a one-sided test whose side the reviewer cannot see is a silent exit* (§2.3).
+- **Under non-inferiority the absolute threshold is converted on the worse side, not on the side the effect lies on.** `grade_meta()` takes one scalar threshold and judges against the symmetric band, so exactly one of the two sides can be exact on the absolute scale, and for three of the four questions the side that matters is where the pooled effect lies (`.threshold_direction()`) — that is the crossing the domains turn on. Non-inferiority is the exception and a real one: the margin is one-sided and the side tested is the **worse** side, which is not in general where the effect lies. An intervention that comes out better than the comparator has its pooled effect on the better side while the only threshold anyone will compare an interval with sits on the other one, so converting where the effect lies would make the exact number the one number the rating never reads. **One reactive, `.threshold_exact_direction()`, serves all three consumers** — `.threshold_grade_args()` (which rates), `output$threshold_equiv` and `threshold_summary()` (which report what was rated) — so the tab cannot name one exact side while the rating uses the other. `.equiv_lines()`'s `caveat` still fires when the requested direction could not be honoured.
+
 #### 3.4.8 Educational copy — Publication bias
 
 > **How this is judged.** GRADE rates down for publication bias when there is reason to suspect that studies with unfavorable results are missing from the synthesis. The algorithm follows a 2-step decision tree. **Step 1**: are the studies mostly small *and* industry-sponsored? If yes, rate down. **Step 2**: with k ≥ 10 studies, run Egger's test and inspect the funnel plot for asymmetry. With k < 10, Egger's test is underpowered, so the algorithm asks instead whether unpublished studies are documented in trial registries or FDA submissions. Reference: BMJ Core GRADE 4 (Guyatt et al., 2025).
@@ -1095,6 +1109,43 @@ Below the accordion, a `pma-card` with:
   alert and the two footnotes under the table take the same labels, because each
   of them names a column by its header
 
+**The question footnote goes first, before the rare-event alert (v0.5.1).**
+`pma_question_note()` (`R/sof_display.R`, beside `pma_rare_event_alert()`) builds
+one line naming the clinical question the rating answered, the threshold it used
+and the sides it was tested on. It is emitted **ahead of** the rare-event caution
+at all three surfaces, because it frames every other footnote under the table: a
+`Low` means one thing in a superiority claim and close to its opposite in an
+equivalence one, and a reader who has not been told which claim was rated has no
+way to read the rest. The three surfaces are `output$sof_preview` here,
+`output$combined_sof` in Step 4, and the exported `summary_of_findings.docx` /
+`sof_table.docx` — all through `pma_sof_add_notes()`, so the footer the .docx
+carries is the footer the screen showed.
+
+**Every number in it comes off the rated object**, never off the Configuration
+tab's live inputs: `g$threshold` / `g$threshold_ard` for the value,
+`g$rating_target` for whether the rating was against the null at all,
+`g$threshold_sides` and `g$small_values` for the sidedness. Re-deriving any of it
+from the live controls would let the footnote name a number the rating did not
+use — and the reviewer's radio position describes only the outcome they happen to
+be looking at. `NULL` for a NULL or unrated object: `threshold_type` is the
+marker, because `grade_meta()` has always stored it and a hand-built stub does
+not, and inventing *"Question rated: clinically important superiority"* for an
+object that was never rated would be a fabrication rather than a default.
+
+**One note per outcome in a combined table, and the closing sentence once per
+table.** Step 4 calls `pma_question_notes_footer()` instead, which emits one
+labelled line per **rated** outcome: a combined Summary of Findings can mix
+questions across its rows — a review may rate superiority of one outcome and
+non-inferiority of another — so a single footnote would be false of whichever
+rows it did not describe. What every one of those lines would otherwise repeat is
+`PMA_QUESTION_NOTE_CLOSING`, *"Certainty is rated in that claim, not in the size
+of the effect."* — the sentence the whole footnote exists for. It is a **constant**
+emitted **once** per table: `pma_question_note(closing = TRUE)` ends a
+single-outcome note with it, and `pma_question_notes_footer()` asks for the notes
+without it and appends it once below them, so five outcomes do not print it five
+times and a copy edit cannot leave a review's own two tables disagreeing about
+what their certainty ratings mean.
+
 #### 3.4.10 Display options card
 
 - `checkboxInput("prediction", "Show 95% prediction interval in Effect column")`
@@ -1137,6 +1188,98 @@ the one the pooled effect lies on is the silent exit §2.3 forbids.
 - `responder_mode()` in `step3_server()` is the single definition of "the responder route was chosen" and is TRUE for `"responder"` and `"both"` alike; the Next gate, `sof_convert_args()` and the `state$display$convert` mirror all read it rather than the input. `keep_effect_scale_mode()` beside it decodes the one question that separates the two, and is read only by `sof_convert_args()`.
 
 **The choice is banked with the outcome, and it reaches the ZIP.** All five values — `convert_smd_to_or`, `keep_effect_scale`, `baseline_risk`, `threshold_label`, `chinn_invert` — reach `state$display` and are stamped onto the rated object by `pma_bank_export_material()` in `.store_outcome()`, under the `"pmatools_display"` attribute pmatools already reads per outcome. Four of them are written by the `sof_convert_args()` observer in `step3_server()`; `threshold_label` is left to app.R's display observer, which already mirrors the raw input. **One key, one writer**: a second observer writing `state$display$threshold_label` with a different answer invalidates the first forever — the session never goes idle again and no output updates. `threshold_label` needs no guard of its own, because nothing reads it unless `state$display$convert` is `TRUE`, and that is the guarded value. `grade_table()` picks them up **per row**, so the Step 4 preview and the root `summary_of_findings.docx` of the bundle both show the presentation the reviewer chose, and two continuous outcomes in one review can be presented differently. Only the routes that convert stamp anything: an outcome shown as its effect carries no field at all, so nothing reads as a decision that was never made. `keep_effect_scale` is stamped alongside `convert_smd_to_or`, never instead of it, so a banked outcome cannot ask for both scales without asking for the conversion that supplies one of them. A row whose conversion cannot be applied falls back to the unconverted presentation with the reason footnoted rather than failing the export (`SPEC.md` §4.9).
+
+#### 3.4.10b The four clinical questions — Configuration tab (v0.5.1)
+
+Core GRADE 2 rates certainty **in a claim**, and which claim it is has to be settled before the threshold below it means anything. Until 0.5.1 the app asked one claim of every analysis — *is the effect clinically important?* — and a review asking about superiority, equivalence or non-inferiority had no way to say so. `radioButtons("clinical_question", …)` is that answer. The vocabulary is `PMA_CLINICAL_QUESTIONS` (`R/ui_helpers.R`); `pma_question_grade_args()` (`R/step3_threshold.R`) is the one place it turns into `grade_meta()` arguments; everything a reviewer reads about it is in `EDU_COPY$config_tab$question_*` and `EDU_COPY$question_help`.
+
+**Where the block sits, and why both halves of that are load-bearing.** `.question_block()` renders **first on the tab**, above the Decision threshold section on *both* branches of `output$threshold_panel` — above the control-group risk on the binary branch, above the threshold input on the continuous one (and below `.rare_method_block()`, which qualifies every number under it, §3.4.14). It is read first because it is the question the threshold answers: the box below is *labelled* from it, may or may not be *prefilled* by it, and on two of the four questions **is the claim being rated**.
+
+It is rendered **inside that `renderUI`** rather than declared statically in `step3_ui()`, for the same reason §3.4.10a gives for the presentation radio: this output depends on `state$outcome_gen` and `step3_entries()`, so the radio is destroyed and rebuilt from `question_state()` when the outcome changes. A statically declared radio would go on reporting the previous outcome's question while the next one was being rated. `selected` is read under `isolate()`, exactly as the threshold boxes seed themselves.
+
+**`output$threshold_panel` takes a reactive dependency on the question, not an `isolate()`d one.** This is the one place the panel's own rule — *read state under `isolate()`, or a keystroke rebuilds the widget being typed into* — is deliberately broken, and it had to be.
+
+- **Necessary.** Everything the panel renders below the radio is derived from the question: `copy$heading` (the section heading), `copy$label` (the numeric input's label), `copy$help` (the body copy under it), `copy$prefill` (whether `.abs_value()` / `.rel_value()` may fall back to `suggest_threshold()`) and `.threshold_heading()`'s decision about the source badge. Under `isolate()` every one of those froze at the previous rebuild, so a reviewer who had just clicked **Equivalence** was left looking at a heading reading *Decision threshold*, a prefilled `1.20`, and a badge naming where that `1.20` came from. **This was a real bug, found by driving the app** — the rating had changed and the entire tab still described the old question.
+- **Safe, twice over.** A question change is a *deliberate click on this tab*, never something that happens mid-typing — the same exemption the per-N display radio already has — so the rebuild destroys no widget being edited. And it cannot loop: the rebuilt radio pushes its own `selected` back to `input$clinical_question`, the mirror observer writes that same value into `question_state()`, and `ReactiveVal$set` short-circuits on `identical()`, so a reactiveVal set to the value it already holds does not invalidate.
+
+The clear/reseed observer described further down is created **earlier** in `step3_server()` than this output, so it runs first in the flush: the boxes this render seeds from are the ones that observer has just settled, not the ones the previous question left behind.
+
+**The four labels, verbatim** (`EDU_COPY$config_tab$question_labels`, offered in this order — weakest claim first, then the two-sided margin question, then the one-sided one), under the radio label *"Which clinical question does this certainty rating answer?"* and the section heading *"Clinical question"*:
+
+| value | label on screen |
+|---|---|
+| `superiority` | `Superiority - is there any effect at all?` |
+| `important_superiority` | `Clinically important superiority - is the effect large enough to matter?` |
+| `equivalence` | `Equivalence - is the difference small enough to be unimportant in either direction?` |
+| `non_inferiority` | `Non-inferiority - is the intervention no worse than the comparator by more than a set amount?` |
+
+The `superiority` label **deliberately does not mention a threshold**. On that question a threshold is optional, and a label implying otherwise would send a reviewer looking for a protocol value they do not need. The word "MID" appears in none of the four, nor in any string the helpers in `R/step3_threshold.R` can emit; `test-step3-threshold.R` holds that line as a standing audit (the rule is `SPEC.md` §4.5.1).
+
+**`important_superiority` is the default, and it reproduces the pre-0.5.1 app exactly.** `PMA_CLINICAL_QUESTION_DEFAULT` is `"important_superiority"`: `threshold_type = "mid"`, the rating target derived by Core GRADE 2 Fig 2, both sides of the threshold tested, the existing per-measure label and the existing per-measure help verbatim. A reviewer who never opens the radio gets the rating, the Summary of Findings sentence and the footnotes they got before — including when they have emptied the threshold box, where the three gate sentences are the pre-0.5.1 ones character for character. `test-step3-threshold.R` asserts that against a real `grade_meta()` fit: the pre-0.5.1 call and the explicit one agree on the certainty, the domain table, both target fields, every threshold field and the footnote.
+
+**The mapping — nothing in it is a new methodological rule.** Each question picks arguments `grade_meta()` already had, plus `threshold_sides` (`SPEC.md` §4.5.1b) and `plain_language_frame` (`SPEC.md` §5.5c):
+
+| question | `threshold_type` | `rating_target` | `rating_target_rationale` | `threshold_sides` | `plain_language_frame` | threshold required? |
+|---|---|---|---|---|---|---|
+| `superiority` | `"null"` | `NULL` — Fig 2 derives it | `NULL` | `"both"` | `NULL` | **no** |
+| `important_superiority` | `"mid"` | `NULL` — Fig 2 derives it | `NULL` | `"both"` | `NULL` | yes; `suggest_threshold()` may seed it |
+| `equivalence` | `"mid"` | `"little_to_no_difference"` | `PMA_QUESTION_RATIONALE` | `"both"` | `"equivalence"` | yes, **and no default** |
+| `non_inferiority` | `"mid"` | `"little_to_no_difference"` | `PMA_QUESTION_RATIONALE` | `"worse_only"` | `"non_inferiority"` | yes, **and no default** |
+
+`pma_question_grade_args()` always returns all five names, with `NULL` where the question sets none, so `grade_obj()` can `c()` the result straight into its argument list rather than growing a four-way `if` over something the table has already answered. **`threshold_type` is among them and is the dangerous one:** until 0.5.1 the app never passed it at all and took `grade_meta()`'s `"mid"` default, which is exactly what makes `important_superiority` byte-identical — but it also means a `superiority` rating replayed *without* it aborts on the Core GRADE 2 entry gate rather than reproducing anything.
+
+`pma_question_of(g)` is the inverse, recovering the question from a rated object, and its read order is load-bearing: `threshold_sides == "worse_only"` → non-inferiority; else `plain_language_frame` names one of the two margin families; else `threshold_type == "null"` → superiority; else an auto-derived `rating_target == "non_null_effect"` → superiority; else the default, which is what a pre-0.5.1 object is. A pinned `"little_to_no_difference"` is **deliberately not read as evidence of equivalence** — it is also exactly what a legitimate pre-0.5.1 manual override looks like, and inferring the question from it would reword somebody's Summary of Findings sentence to a question they never asked. That is why the feature adds two `grade_meta()` arguments rather than one.
+
+**The Next gate, per question, at four sites.** `pma_question_gate_copy()` is the single answer to *is a threshold required, and what does the tab say when one is missing?* — `required`, plus a `blocker`, a `status` and a `no_rating` string. `threshold_required()` is `isTRUE(question_gate()$required)`, and **four sites read it, every one of which had to**:
+
+| # | site | what it does when the threshold is missing |
+|---|---|---|
+| 1 | `config_blockers()` | adds `question_gate()$blocker`, so Next is disabled |
+| 2 | `grade_obj()`'s early return | returns `NULL` — no rating at all |
+| 3 | `output$config_status` | prefixes the amber box with `question_gate()$status` |
+| 4 | `no_rating_reason()` | the `"threshold"` branch, read on Final certainty and above the SoF preview, which names the tab |
+
+**Superiority is exempt at all four**, and that is the point of routing them through one function. It rates against the null, so it needs no threshold, and `pma_question_gate_copy()` returns `required = FALSE` with `NULL` for all three strings. Miss site 1 and Next is locked at a tab the reviewer has nothing left to do at; miss site 2 and the one question that legitimately has no number to enter produces no rating at all; miss 3 or 4 and the app announces *"no rating, the threshold is empty"* beside a rating it just computed. `grade_meta()` is safe to call with `threshold = NULL` under `threshold_type = "null"`, which is what the mapping passes. The two margin questions get their own wording, which differs from the superiority one in what it says the threshold **is** — there, a threshold three domains are judged against, and a reviewer without one can go and look up a published value; here, the claim being rated, so the sentence says where the number comes from instead of leaving the reviewer to wonder why nothing was offered.
+
+**Neither margin question is prefilled, and switching *into* one clears the box.** `step3_threshold_copy(question, sm)$prefill` is the **one** statement of which questions may be prefilled — `TRUE` for the two superiority questions, `FALSE` for the two margin ones — and both `.seed_thresholds()` and the observer below ask it, so the radio and the seed cannot disagree. A threshold of clinical importance belongs to the *outcome*, so proposing one saves the reviewer a lookup; a margin belongs to the *review's own protocol*, so proposing one does not save a lookup, it answers the question (`SPEC.md` §5.4, §4.7a).
+
+Suppressing the prefill in `.seed_thresholds()` alone does not achieve that: the seed has already run by the time the radio is clicked, so a reviewer who starts on the default and switches to non-inferiority would **inherit `suggest_threshold()`'s placeholder as their protocol margin** — a number the app made up, standing in a box labelled *Non-inferiority threshold*, already ticked past by a confirmation given for a different configuration. So one `observeEvent(question_state())` is active in both directions, guarded by its own `.question_previous()` reactiveVal rather than trusting `observeEvent` to fire only on a change (what has to be detected is a change of *question*, and the observer has side effects that must not run on a re-assertion of the same value):
+
+- **into** a margin question → `threshold_state()` and `threshold_abs_state()` are set to `NA_real_`, and `.seed_thresholds()` is not re-run;
+- **out of** one → `threshold_seed_key(NA_character_)` then `.seed_thresholds()`, because its *"only ever prefill a reactiveVal that is still NA"* rule would otherwise decline to re-offer a suggestion over the margin the reviewer had typed;
+- either way → `threshold_confirm` is unticked (§3.4.13).
+
+**The control-group risk is deliberately carried across the reseed.** On the way out of a margin question the observer reads `threshold_baseline_state()` *before* resetting the seed key and writes it back after `.seed_thresholds()` returns. Without that it is lost: `.seed_thresholds()` clears all three threshold reactiveVals — the baseline included — whenever the seed key goes stale, and the seed key was *just* made stale on purpose. The control-group risk is a property of the **outcome's data**, not of the question asked about it, and a reviewer who replaced the pooled value and justified the replacement in writing (`baseline_rationale_ok()`, itself a Next gate) must not have that thrown away by a click on a radio one section above it. The `.seed_thresholds()` clear still runs, because a *fresh analysis* must discard the previous outcome's margin whatever the question is; what is restored is only the answer the question change had no business touching.
+
+The source badge (`.threshold_heading()`) is dropped on the two margin questions along with the prefill: there is no source because there is no value, and a badge reading *"source: pmatools convention"* over an empty box invites the reviewer to believe the app has an opinion about their protocol's margin.
+
+**The registration checklist.** In §3.4.10a's own register — *an id missing from that list is an id whose stale answer survives an outcome change* — the question needed seven entries, and an omission at any one of them is a distinct silent failure:
+
+| # | file : anchor | added | what is lost without it |
+|---|---|---|---|
+| 1 | `R/outcome_provenance.R` : `PMA_OUTCOME_INPUT_IDS$configuration` | `"clinical_question"` | the torn-down radio reports the previous outcome's question while the next one is rated |
+| 2 | `R/outcome_provenance.R` : `PMA_GRADE_ARGS_EXPORTED` | `threshold_type`, `rating_target`, `rating_target_rationale`, `threshold_sides`, `plain_language_frame` | the bundled `analysis.R` replays four of the five and rates a different claim — or, without `threshold_type`, aborts on the entry gate |
+| 3 | `R/outcome_bank.R` : `pma_outcome_grade_args()` | the same five, read with `field()` — **exact** lookups | `g$threshold_sides` partial-matches `threshold_scale` and answers `"ratio"`, which `grade_meta()` then rejects, in a script the reviewer has already downloaded |
+| 4 | `R/step3_grade.R` : `grade_obj()` args | `pma_question_grade_args(question_state())` | the question is on screen and reaches no rating |
+| 5 | `R/educational_copy.R` : `config_tab$question_*`, `question_help`, `EDU_COPY_SUBTITLE_FIELDS` | the copy deck plus the one line that is a subtitle | see the cap note below |
+| 6 | `R/export_bundle.R` : `.arg_lit()` | slots for the five names | `export_bundle()` rejects a name it does not know, so #2 without this fails loudly |
+| 7 | `R/step3_grade.R` : `threshold_confirm` | unticked on a question change | a confirmation standing for a configuration that no longer exists |
+
+On #3, `rating_target` and `rating_target_rationale` **travel together or neither**: a pinned target with no written reason aborts in `.check_override_rationale()`, so recovering the target alone turns a banked outcome into a script that cannot run.
+
+On #5, `config_tab$question_intro` is the one string that **annotates** the radio, so it is registered in `EDU_COPY_SUBTITLE_FIELDS` and held to the 25-word cap `test-edu-copy.R` enforces (§3.4.11). The section heading, the radio label, the four choice labels, the four threshold headings and the per-measure unit phrases are **widget chrome**, like `threshold_labels`, and are outside the registry for the same reason as those.
+
+The `question_help$*` bodies are outside it too, and that one is an **argued exemption rather than a category**: they render through `.config_note()`, which does hang `.pma-card-subtitle` on them, so pointing at the class would not settle it. The cap exists for a muted line that *annotates* a control — past one desktop line it stops being read, and an annotation nobody reads was not answering the control. These strings do not annotate the threshold input, they **define the question it answers**: which side of the threshold is tested, whether an empty box is a complete answer, and where the number comes from. *Delete first* has already been applied to them and is what produced their current length (see below); what is left is what a reviewer cannot answer the control without, so the 25-word cap would have to take a sentence of that. A standing word cap of **95** in `test-step3-threshold.R` holds them instead, so the next copy edit fails in the test rather than on screen — after §3.4.11's *delete first* pass took equivalence from 120 words to 47 and non-inferiority from 140 to 86. 95 rather than a tighter number because non-inferiority carries one sentence the others do not, the worse-side echo, and that echo is mandatory.
+
+**Why `rating_target_rationale` is a constant.** The package makes it mandatory whenever `rating_target` is pinned, because pinning overrides the Fig 2 derivation and an override wants a written reason. But the reviewer here is not overruling a derivation on a hunch — they are answering a **different question**, and the reason is the same every time: Fig 2 derives its target from the pooled point estimate, which is a reading of *these data*, and an equivalence or non-inferiority claim is fixed in the protocol before any data are read. So `PMA_QUESTION_RATIONALE` states it once per margin question, and `NA_character_` for the two that pin nothing, so a lookup can never yield a rationale for a rating that was not overridden. Asking a reviewer to retype it per outcome does not make the record more auditable; it trains them to type anything, and then the one rationale that should have been specific is `"n/a"` too. The strings carry **no apostrophes**: they are written out as string literals in the bundle's `analysis.R`, where an apostrophe inside a single-quoted argument is a syntax error rather than a typo.
+
+**And it is rebuilt from the mapping table on recovery, not parsed back out of a note.** The rationale is the one of the five that is *not* a field of the rated object: `grade_meta()` folds it into `rating_target_note`, beside the target the derivation would have reached. So `pma_outcome_grade_args()` recovers it by asking `pma_question_of(g)` which question the object identifies itself as and looking the answer up in `PMA_QUESTION_RATIONALE` — never by taking a substring of a sentence written for a human. A recovered argument must be a value some table states. The two cases that recover nothing are the safe ones: the rationale is `NA` for the questions that pin nothing, and `pma_question_of()` answers `important_superiority` for a pre-0.5.1 manual override, so **neither** name is emitted, and the specs recorded beside the `grade_meta()` call — which is what an app-banked outcome carries — win anyway.
+
+**The amber banner: a legitimate state, not an error.** `output$question_margin_banner` renders above the threshold box on both branches when the question is equivalence or non-inferiority **and the pooled estimate already lies beyond the margin**. It is its own output rather than part of `threshold_panel` because it has to follow the threshold as the reviewer types it, and the panel reads the threshold reactiveVals under `isolate()`.
+
+It is a banner and not a blocker because an equivalence review is entitled to find that the two arms are not equivalent. What it is not entitled to is a reader who mistakes the finding for its opposite, and that reader is easy to produce: **certainty is rated *in* the equivalence claim**, so evidence pointing firmly *away* from equivalence rates that claim **down** — and a `Low` then reads as *"equivalence is uncertain"* when what the data say is *"non-equivalence is reasonably clear"*. That is the specific misreading the banner exists to prevent, and it is the only place on screen the distinction is made. `pma_question_beyond_margin_copy()` supplies the words and points the reviewer at the Imprecision note, where `.resolve_rating_target()` has already recorded the target Fig 2 would have derived (`SPEC.md` §4.5.2).
+
+No new statistics. The comparison is derived from the **rated object** — `.rated_threshold_for_imprecision(g)` for the threshold Imprecision was actually handed (`0` when the rating was against the null) and `.rated_worse_side(g)` for the sidedness — against `step3_pooled_te()`. Equivalence tests `abs(te) > thr`; non-inferiority tests only the worse side.
 
 #### 3.4.11 Information design — what is open, what is collapsed, what was deleted
 
@@ -1849,6 +1992,23 @@ stays exactly Core GRADE's question.
   Imprecision domain note, so the export carries it. Computed app-side, like the
   threshold note, because a fitted suite cannot travel through `analysis.R`.
   This costs no new statistics — every fit already exists.
+- **The suite is asked the primary's question *including its sidedness*
+  (v0.5.1).** `.rare_crosses_threshold()` was hard-coded two-sided, and once
+  §3.4.10b let the primary be asked a one-sided question that became exactly the
+  two different rules this helper exists to prevent — one of them contradicting
+  the rating printed above it. `rare_suite_crossing()` and
+  `rare_suite_crossing_note()` therefore take a trailing `worse_side` argument
+  (`NULL` = the two-sided question, which is what every question but
+  non-inferiority asks; `+1` / `−1` = one-sided on that side), and the note's
+  label then reads *"the chosen threshold on the worse side"* (`SPEC.md` §4.5.1b
+  and the rare-event section there). The side is **threaded from the rated
+  object through one derivation** — `.rated_worse_side(g)` in `step3_server()`,
+  which returns `NULL` unless `g$threshold_sides` is `"worse_only"` and
+  otherwise `.threshold_worse_sign(g$small_values)` — and is read by both call
+  sites, `.append_rare_crossing_note()` and `output$impre_rare_sensitivity`.
+  Never from `question_state()`: the live radio is the wrong source as well as
+  the redundant one, because the reviewer can have moved it since the rating was
+  computed.
 - **One arm with no events at all** (`one_arm_total_zero`) has no finite odds
   ratio and no interval to compare with a threshold. `assess_imprecision()`
   returns before it reads the CI, with `IMPRECISION NOT ASSESSABLE` in those
@@ -2237,6 +2397,19 @@ rationale, *or* the checkbox. Two things were wrong with it.
 - Any widget that arrives **preselected** satisfies "substantive input" the
   moment it mounts, which would open the export gate for an outcome nobody had
   looked at.
+
+**`threshold_confirm` unticks on a change of clinical question (v0.5.1).** The
+observer in §3.4.10b calls `updateCheckboxInput(session, "threshold_confirm",
+value = FALSE)` on every *change* of `question_state()` — not on a re-assertion
+of the same value, which is what `.question_previous()` is for. The reviewer
+confirmed a configuration that no longer exists: the threshold means something
+else under the new question (on two of the four it *is* the claim being rated),
+and on two of the four it has just been **emptied** by the same observer. Failing
+closed is the direction this app errs in everywhere else, and it is the same
+reasoning that keeps confirmations out of `pma_restorable_input_ids()` (§2.3) —
+a confirmation is an assertion that the reviewer has just looked at what is on
+screen, so it is re-armed rather than restored, and re-ticking it costs one
+click.
 
 Configuration keeps one extra condition, and only it: `config_blockers()` must
 be empty. That gate is about values being *set* — three of the five domains are

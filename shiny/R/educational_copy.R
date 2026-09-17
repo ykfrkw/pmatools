@@ -246,12 +246,15 @@ EDU_COPY <- list(
   # difference when the pooled estimate sits very near the threshold, and
   # Imprecision is then judged against it after all.
   #
-  # The two margin entries end by quoting PMA_NO_MARGIN_PLACEHOLDER
-  # (R/domain_imprecision.R) verbatim rather than paraphrasing it. That
-  # sentence is the package's single statement of why neither margin gets a
-  # suggested value, and it is cited by the two gates that refuse a margin
-  # question with no margin - so the reason on screen and the reason in the
-  # abort are one string.
+  # The two margin entries close on the shared `margin_source` instruction,
+  # assembled last by step3_threshold_copy(). They deliberately do NOT quote
+  # PMA_NO_MARGIN_PLACEHOLDER (R/domain_imprecision.R): that sentence is the
+  # package's statement of WHY neither margin gets a suggested value, which is
+  # provenance, and shiny/SPEC.md 3.4.11 deletes provenance from muted copy
+  # outright. It survives in the package constant and in SPEC 4.7a, where a
+  # reader looking for it will land, and the two gates that refuse a margin
+  # question still cite it in full. What a reviewer cannot answer the box
+  # without is the instruction, which is what stayed.
   question_help = list(
     superiority = paste0(
       "The rating is against the null, so any effect counts and this box may ",
@@ -359,14 +362,20 @@ EDU_COPY_SUBTITLE_WORD_CAP <- 25L
 #     `.pma-card-subtitle` class on it, so this is the one exemption that
 #     needs arguing rather than pointing at. The cap exists for a MUTED LINE
 #     THAT ANNOTATES A CONTROL: past one desktop line it stops being read, and
-#     an annotation nobody reads was not answering the control. These three
-#     strings do not annotate the threshold input, they DEFINE THE QUESTION it
+#     an annotation nobody reads was not answering the control. These strings
+#     (three per-question bodies plus the shared `margin_source` instruction
+#     the two margin questions close on) do not annotate the input, they
+#     DEFINE THE QUESTION it
 #     answers - which side of the threshold is tested, whether an empty box is
-#     a complete answer, and why no value is offered. Delete-first cannot
-#     apply: a reviewer cannot answer the control without them. Shorten-second
-#     cannot either, because two of the three close by quoting
-#     PMA_NO_MARGIN_PLACEHOLDER verbatim and trimming a quotation is
-#     misquoting it. `config_tab$question_intro`, the one line that really
+#     a complete answer, and where the number comes from. Delete-first has
+#     already been applied and is what produced their current length: the
+#     scale sentence went (the input label above says it) and so did
+#     PMA_NO_MARGIN_PLACEHOLDER's rationale (provenance), taking equivalence
+#     from 120 words to 47 and non-inferiority from 140 to 86. What is left is
+#     what a reviewer cannot answer the control without, so shorten-second
+#     would have to take a sentence of that; a standing 95-word cap in
+#     test-step3-threshold.R holds the line instead.
+#     `config_tab$question_intro`, the one line that really
 #     does annotate the radio, IS registered below and IS capped. The app has
 #     long-form `.config_note()` body copy already - `PMA_RARE_NO_CC_NOTE` and
 #     the two threshold notes in `output$threshold_panel` - and it is

@@ -36,8 +36,21 @@ Four steps, in order:
 |---|---|
 | **1. Data** | load a file, paste a table, or take a bundled sample; map the columns; check the parsed rows |
 | **2. Meta-analysis** | pick the effect measure and labels, pool, read the forest and funnel plots |
-| **3. GRADE** | work through the five domains, each with its algorithm explained and every automatic judgment overridable |
+| **3. GRADE** | say which clinical question the rating answers, set the threshold it turns on, then work through the five domains, each with its algorithm explained and every automatic judgment overridable |
 | **4. Export** | preview the Summary of Findings across every saved outcome, add the next one, then download the reproducible ZIP — data, `analysis.R`, plots, SoF and evidence profile |
+
+**Step 3 opens by asking which clinical question the rating answers** — one of
+*superiority* (is there any effect at all?), *clinically important superiority*
+(is the effect large enough to matter?), *equivalence* (is the difference small
+enough to be unimportant in either direction?) or *non-inferiority* (is it no
+worse than the comparator by more than a set amount?). Clinically important
+superiority is the default and is what earlier versions always assumed, so a
+reviewer who never touches the control gets the rating they got before. The
+choice decides which threshold is read, which sides of it are tested, whether a
+threshold is required at all, and how the Summary of Findings sentence and its
+footnote are worded — it is not a display option. The two margin questions are
+deliberately **never prefilled**: a margin is a value from the review's protocol,
+not something the app can suggest. See [shiny/SPEC.md](shiny/SPEC.md) §3.4.10b.
 
 Outcomes are banked automatically the moment every certainty domain of one is
 confirmed; Step 4 lists them beside the table they build. **+ Add next
@@ -47,7 +60,7 @@ outcome the evidence base turns out to be silent on
 ([`not_reported_outcome()`](#outcomes-no-included-study-reported-v051),
 without writing R).
 
-The app has **its own version** (`shiny/DESCRIPTION`, currently 3.0.0), which
+The app has **its own version** (`shiny/DESCRIPTION`, currently 3.3.0), which
 tracks separately from the package version (0.5.1) in the root `DESCRIPTION`.
 They count different things: the package version counts changes to the
 analysis and rating API, the app version counts changes to the wizard's UI, and
@@ -417,6 +430,53 @@ is not an option.** Core GRADE 7:
 
 A null-threshold rating is a perfectly good systematic review result; it is just
 not a usable input to a recommendation.
+
+#### Which sides of the threshold: `threshold_sides` (v0.5.1)
+
+`threshold_type` says *which* threshold the rating is anchored to.
+`threshold_sides` says **which of its two sides Imprecision tests**, and it is
+what an equivalence claim and a non-inferiority claim disagree about:
+
+```r
+# Equivalence: is the difference small enough to be unimportant EITHER way?
+grade_meta(m, threshold = 1.25, threshold_scale = "ratio",
+           threshold_sides       = "both",        # the default
+           rating_target         = "little_to_no_difference",
+           rating_target_rationale = "The review asks an equivalence question",
+           plain_language_frame  = "equivalence")
+
+# Non-inferiority: is it no worse than the comparator by more than the margin?
+grade_meta(m, threshold = 1.25, threshold_scale = "ratio",
+           threshold_sides       = "worse_only",  # one-sided
+           rating_target         = "little_to_no_difference",
+           rating_target_rationale = "The review asks a non-inferiority question",
+           plain_language_frame  = "non_inferiority")
+```
+
+`"both"` is the default and is the two-sided question every earlier release
+asked, so a call that omits the argument is unchanged. `"worse_only"` stops a
+confidence interval that runs far past the **better**-side threshold from rating
+the claim down — that is not evidence against non-inferiority. Which side is
+worse comes from `small_values` and from nothing else: `"desirable"` (a small
+value is good) makes the worse side `+threshold`, `"undesirable"` makes it
+`−threshold`. `"worse_only"` **requires** a threshold and refuses without one,
+with no number in the message, because a margin is a design parameter of the
+review's own question and not a convention `suggest_threshold()` can propose.
+
+**Only the one-level test becomes one-sided.** `crosses_both_thresholds` — the
+two-level `−2` branch — keeps its two-sided definition deliberately:
+non-inferiority is a strictly weaker claim about the same interval than
+equivalence, so asking it must never earn a *deeper* downgrade. `SPEC.md`
+§4.5.1b has the boolean table, the worked reductio, and the two named
+non-crossing-branch exceptions to the global monotonicity inequality.
+
+`plain_language_frame` is presentation only — it selects one of two new
+plain-language families keyed by the threshold *zone* (`within` / `crosses` /
+`beyond`) rather than by the direction of the effect. Core GRADE 6 Box 1 has no
+wording for either question, so every cell of both families is tagged as having
+no Box 1 counterpart and **must not be cited as GRADE wording** (`SPEC.md`
+§5.5c). The rated object gains `$threshold_sides`, `$plain_language_frame` and
+`$threshold_zone`.
 
 ### 1. Risk of Bias (5-rule MECE zone-based decision; aligned with BMJ Core GRADE 4)
 
@@ -1665,6 +1725,22 @@ each statement frame there is tagged with its provenance (quoted from Box 1 or
 Table 3, composed from the qualifier list, or quoted minus the parenthesised
 alternative).
 
+**Two further families, for a margin question, and neither is GRADE wording**
+(v0.5.1). An equivalence or a non-inferiority rating is a claim about a
+*boundary*, not about a direction, so the increase / reduce / little axis above
+misfires on it. `plain_language_frame = "equivalence"` / `"non_inferiority"`
+selects a family keyed by the threshold **zone** instead — `within` (the CI has
+not reached the margin), `crosses` (the margin lies inside the CI), `beyond` (the
+CI lies wholly past it) — read off the rated object's `$threshold_zone`. Core
+GRADE 6 Box 1 writes only its two columns — the null and the minimal important
+difference — and states no claim about *a margin having been respected*, so
+every cell of both families is tagged
+`[pmatools; no Box 1 counterpart]` in the source: they borrow Box 1's grammar —
+actor, one certainty adverb, predicate, outcome — and nothing else of it, and
+**must not be cited as GRADE wording**. A missing or unrecognised zone omits the
+column rather than guessing, the same rule the direction-free case follows.
+`SPEC.md` §5.5c has all eighteen cells.
+
 **Chinn's formula is not Core GRADE 6's option 2.** When
 `convert_smd_to_or = TRUE` dichotomises a continuous outcome, the footnote says
 which method was used, because the two are genuinely different:
@@ -2174,6 +2250,9 @@ grade_meta(
   require_threshold = TRUE,        # FALSE restores the pre-0.5 MID-free behaviour
   rating_target     = NULL,        # manual override; needs rating_target_rationale
   rating_target_rationale = NULL,
+  threshold_sides   = "both",      # "both" | "worse_only" (one-sided; v0.5.1)
+  plain_language_frame = NULL,     # "equivalence" | "non_inferiority" (v0.5.1);
+                                   #   presentation only, reaches no judgment
 
   ## Risk of Bias
   rob           = NULL,            # scalar | vector length k | column name | NULL
@@ -2248,6 +2327,9 @@ grade_meta(
 | `$rob_refit` | whether the refit actually happened (v0.5) |
 | `$rating_target` | `"important_effect"` / `"little_to_no_difference"` / `"non_null_effect"` (v0.5) |
 | `$rating_target_note`, `$rating_target_auto`, `$threshold_type` | how the target was arrived at (v0.5) |
+| `$threshold_sides` | `"both"` or `"worse_only"` — which sides of the threshold Imprecision tested (v0.5.1) |
+| `$threshold_zone` | `"within"` / `"crosses"` / `"beyond"`, lifted from the Imprecision facts; `NULL` when no threshold zone applied (v0.5.1) |
+| `$plain_language_frame` | `NULL`, `"equivalence"` or `"non_inferiority"` — which plain-language family the SoF sentence is drawn from (v0.5.1) |
 | `$indirectness_subdomains` | normalized PICO subdomain table, when supplied (v0.5) |
 
 ### `sof_table(x, style, palette, per, prediction, follow_up, unit, ...)`
