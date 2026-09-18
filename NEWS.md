@@ -1,4 +1,4 @@
-# pmatools 0.5.1 (development version)
+# pmatools 0.5.1
 
 ## Breaking changes
 
