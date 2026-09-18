@@ -1739,6 +1739,41 @@
 
 ## Bug fixes
 
+* **Shiny app: switching the clinical question left the threshold box showing
+  the previous question's number.** Picking Equivalence or Non-inferiority on
+  the Configuration tab cleared the threshold server-side and unticked the
+  confirmation, exactly as intended — but the numeric input went on
+  *displaying* the suggested value for the question before it. The reviewer
+  was left looking at a filled box above a status line reading *"No
+  non-inferiority threshold is set, so no certainty rating is computed"*,
+  beside a disabled Next, with nothing on screen to say what the app wanted.
+
+  **The rating was never affected.** The margin `grade_meta()` received was
+  `NA`, not the stale suggestion, and the Next gate held — so the failure this
+  guards against, a placeholder silently becoming somebody's protocol margin,
+  did not happen. What was wrong was that the tab contradicted itself.
+
+  The cause was a flush-order race, and the mistaken premise behind it is
+  worth recording because two comments asserted it: that an observer created
+  earlier in `step3_server()` than an output therefore runs before it. It does
+  not — Shiny invalidates dependents in lexicographic order of context id, so
+  `"1739" < "470"`. `output$threshold_panel` read the stored threshold under
+  `isolate()`, won the race against the observer that was about to clear it,
+  and nothing invalidated the render a second time. `threshold_seed_key` now
+  records which analysis **and which question** the stored thresholds belong
+  to, and the render refuses to display a value belonging to another, so the
+  panel is correct whatever the flush order. A margin typed against the
+  current question still survives an unrelated re-render.
+
+  Found by driving the deployed app rather than by either suite: all 1802 app
+  tests passed over it, because none of them drove a question change through
+  the *rendered* panel — the pure helpers and the server state were both
+  already right. `test-step3-question-panel.R` closes that gap, and its header
+  is candid that `MockShinySession` settles observers too eagerly to lose the
+  race the way production did, so the regression is pinned by putting the
+  render in front of the seeder with an observer priority instead.
+
+
 * **The Chinn footnote said "MID" where every other sentence in the same
   footer said "Threshold".** `SPEC.md` §4.5.1 settles the vocabulary: "MID"
   names an internal quantity, and "Threshold" is the word a reader sees. The

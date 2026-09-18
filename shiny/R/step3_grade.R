@@ -64,6 +64,24 @@ STEP3_INDIR_ANSWER_TO_LEVEL <- c(
   x
 }
 
+# ----- Which (analysis, question) a stored threshold belongs to -----------
+# The identity the Configuration tab's threshold reactiveVals are stamped with.
+# A threshold is only meaningful on one scale AND under one clinical question,
+# so both go in the key: an OR of 1.25 must not silently become an SMD
+# threshold of 1.25, and a threshold of clinical importance suggested for the
+# default question must not silently become somebody's non-inferiority margin.
+#
+# Two callers, and it is one function so they cannot disagree:
+# .seed_thresholds() stamps the key it clears and reseeds for, and
+# output$threshold_panel compares the stamp against the combination it is
+# rendering. That comparison is what makes the render SELF-SUFFICIENT - a
+# stored value whose stamp names a different question is not offered, whatever
+# order the flush put the render and the clear/reseed observer in.
+step3_threshold_seed_key <- function(ma_obj, question) {
+  paste(class(ma_obj)[1], ma_obj$sm %||% "",
+        pma_clinical_question(question), sep = "/")
+}
+
 # ----- Egger's regression: one tier, one threshold, two call sites --------
 # Single tier. pmatools 0.5 removed the p < 0.01 -> "very_serious" (-2) rule
 # because Core GRADE 4 never rates down two levels for publication bias. Named
@@ -1066,10 +1084,18 @@ step3_server <- function(input, output, session, state) {
   # isolate(): a plain observe() also depended on them, so clearing the
   # threshold field immediately re-seeded it from suggest_threshold() and the
   # "no threshold" state was unreachable. Seed once per analysis instead.
-  # Which analysis the current thresholds were seeded for. A threshold is
-  # only meaningful on one scale, so when the summary measure changes (OR ->
-  # SMD, say) the old value is discarded and the new suggestion applied;
-  # otherwise an OR of 1.25 would silently become an SMD threshold of 1.25.
+  # Which analysis AND WHICH QUESTION the current thresholds were seeded for -
+  # step3_threshold_seed_key(), at file scope, is the one spelling of it. A
+  # threshold is only meaningful on one scale, so when the summary measure
+  # changes (OR -> SMD, say) the old value is discarded and the new suggestion
+  # applied; otherwise an OR of 1.25 would silently become an SMD threshold of
+  # 1.25. The question is in the key for the same reason: a suggestion offered
+  # for a threshold of clinical importance is not a non-inferiority margin, so
+  # a change of question makes the stored values stale exactly as a change of
+  # scale does - and, because the key is what output$threshold_panel checks
+  # before it offers a stored number, it is also what stops the panel
+  # re-offering the previous question's value when it renders before the
+  # clear/reseed observer below has run.
   threshold_seed_key <- shiny::reactiveVal(NA_character_)
 
   # Prefill the threshold reactiveVals from suggest_threshold(). Extracted
@@ -1078,8 +1104,24 @@ step3_server <- function(input, output, session, state) {
   # for this analysis by the time the reset lands.
   .seed_thresholds <- function() {
     obj <- shiny::isolate(state$ma)
-    if (is.null(obj)) return(invisible(NULL))
-    key <- paste(class(obj)[1], obj$sm %||% "", sep = "/")
+    question <- shiny::isolate(question_state())
+    if (is.null(obj)) {
+      # There is no analysis, so there is nothing to key a threshold TO - and a
+      # threshold that cannot be keyed cannot be shown to belong to the
+      # question now being asked. Void the key and the two values; the observer
+      # on state$ma seeds from scratch as soon as Step 2 produces one.
+      #
+      # This branch used to be a bare return, and the caller that needed it -
+      # the question-change observer - cleared the two values itself. It does
+      # not any more, so the clear is asserted here: a reviewer who changes the
+      # question while Step 2 is momentarily empty (a required field cleared,
+      # say) must not carry the previous question's number into the new one.
+      threshold_seed_key(NA_character_)
+      threshold_state(NA_real_)
+      threshold_abs_state(NA_real_)
+      return(invisible(NULL))
+    }
+    key <- step3_threshold_seed_key(obj, question)
     fresh <- !identical(key, shiny::isolate(threshold_seed_key()))
     if (fresh) {
       threshold_seed_key(key)
@@ -1093,9 +1135,9 @@ step3_server <- function(input, output, session, state) {
     # or non-inferiority margin belongs to the review's own protocol, so
     # proposing one does not save a lookup - it answers the question. The clear
     # above still runs, because a fresh analysis must discard the previous
-    # outcome's margin whatever the question is.
-    if (!isTRUE(step3_threshold_copy(shiny::isolate(question_state()),
-                                     obj$sm %||% "")$prefill)) {
+    # outcome's margin whatever the question is - and, since the question is
+    # part of the key, so must a change of question.
+    if (!isTRUE(step3_threshold_copy(question, obj$sm %||% "")$prefill)) {
       return(invisible(NULL))
     }
     s <- tryCatch(suggest_threshold(obj), error = function(e) NULL)
@@ -1435,15 +1477,25 @@ step3_server <- function(input, output, session, state) {
   # the prefill in .seed_thresholds() alone does not prevent it: the seed has
   # already run by the time the radio is clicked.
   #
-  # So the switch is active in both directions:
-  #   into a margin question  -> the two threshold values are CLEARED, and
-  #                              .seed_thresholds() is not re-run (it would
-  #                              decline anyway, but the clear is the point);
-  #   out of one              -> the seed key is reset and .seed_thresholds()
-  #                              re-runs, because its "only ever prefill a
-  #                              reactiveVal that is still NA" rule would
-  #                              otherwise decline to re-offer a suggestion
-  #                              over the margin the reviewer had typed.
+  # So the switch is active in both directions, and BOTH go through
+  # .seed_thresholds(). That is what the question in the seed key buys: a
+  # change of question makes the stored key stale by itself, so the clear is
+  # .seed_thresholds()'s own "fresh seed" branch, and the prefill rule it
+  # already asks about is what decides whether a suggestion follows the clear:
+  #   into a margin question  -> cleared, and nothing offered in their place,
+  #                              because step3_threshold_copy()$prefill is
+  #                              FALSE for both margin questions;
+  #   out of one              -> cleared, then re-seeded, because the clear has
+  #                              removed the margin the reviewer had typed and
+  #                              "only ever prefill a reactiveVal that is still
+  #                              NA" would otherwise decline to re-offer the
+  #                              suggestion over it.
+  #
+  # An earlier version cleared the two values by hand on the way in and left
+  # the seed key alone. The values were right, but an unstamped key is a key
+  # that still names the PREVIOUS question, and output$threshold_panel reads
+  # the key to decide whether a stored number is its own - so the panel went
+  # on displaying the suggestion it had rendered a moment earlier.
   #
   # `.question_previous` rather than trusting observeEvent to fire only on a
   # change: what has to be detected is a change of QUESTION, and this observer
@@ -1461,25 +1513,19 @@ step3_server <- function(input, output, session, state) {
     shiny::updateCheckboxInput(session, "threshold_confirm", value = FALSE)
 
     # step3_threshold_copy()$prefill is the one statement of which questions
-    # may be prefilled, and .seed_thresholds() asks it too - so the radio and
-    # the seed cannot disagree about it. `sm` is passed empty because prefill
-    # is a property of the question alone; the headings and labels beside it
-    # are the measure-specific part.
-    if (isTRUE(step3_threshold_copy(question, "")$prefill)) {
-      # The control-group risk is NOT part of this. It is a property of the
-      # outcome's data, not of the question asked about it, and
-      # .seed_thresholds() clears it whenever the seed key goes stale - which
-      # would throw away an override the reviewer entered and justified in
-      # writing. Carried across the reseed rather than left to the observer
-      # that re-derives it from the pooled value.
-      baseline <- shiny::isolate(threshold_baseline_state())
-      threshold_seed_key(NA_character_)
-      .seed_thresholds()
-      if (is.finite(baseline)) threshold_baseline_state(baseline)
-    } else {
-      threshold_state(NA_real_)
-      threshold_abs_state(NA_real_)
-    }
+    # may be prefilled, and .seed_thresholds() is the only thing that asks it
+    # here - so the radio and the seed cannot disagree about it, and this
+    # observer does not need a second reading of the rule to branch on.
+    #
+    # The control-group risk is NOT part of this. It is a property of the
+    # outcome's data, not of the question asked about it, and
+    # .seed_thresholds() clears it whenever the seed key goes stale - which
+    # would throw away an override the reviewer entered and justified in
+    # writing. Carried across the reseed rather than left to the observer
+    # that re-derives it from the pooled value.
+    baseline <- shiny::isolate(threshold_baseline_state())
+    .seed_thresholds()
+    if (is.finite(baseline)) threshold_baseline_state(baseline)
   }, ignoreInit = TRUE)
 
   # Responder-conversion state (continuous outcomes). The app-convention
@@ -1715,12 +1761,13 @@ step3_server <- function(input, output, session, state) {
   output$threshold_panel <- shiny::renderUI({
     # Re-render when the outcome changes, so the seeds below are read AFTER
     # app.R's provenance guard has reset them rather than before. The guard
-    # bumps outcome_gen and calls state$step3_reset() in one observer, which
-    # runs later in the flush than this output (it is created later, at
-    # app.R:252 vs step3_server() at app.R:189) - so on a change of state$ma
-    # alone this panel rebuilds from the PREVIOUS outcome's thresholds. Taking
-    # a dependency on the generation forces a second render once the reset has
-    # landed.
+    # bumps outcome_gen and calls state$step3_reset() in one observer, so on a
+    # change of state$ma alone this panel rebuilds from the PREVIOUS outcome's
+    # thresholds. The dependency on the generation is what forces a second
+    # render once the reset has landed: the bump invalidates this output
+    # whether it ran before the guard or after, which is the whole reason it is
+    # a REACTIVE read. Nothing here rests on which of the two runs first - see
+    # the seed-key note below for why that is never assumed.
     #
     # This is the load-bearing half of the fix. The updateNumericInput()
     # observers above cannot cover this case on their own: the reviewer is
@@ -1778,10 +1825,23 @@ step3_server <- function(input, output, session, state) {
     # question_state(), and a reactiveVal set to the value it already holds
     # does not invalidate.
     #
-    # The clear / reseed observer above is created earlier in step3_server()
-    # than this output, so it runs first in the flush: the boxes this render
-    # seeds from are the ones that observer has just settled, not the ones the
-    # previous question left behind.
+    # THIS RENDER DOES NOT ASSUME IT RUNS AFTER THE CLEAR / RESEED OBSERVER
+    # ABOVE. It used to - the comment here claimed the observer was created
+    # earlier in step3_server() and therefore ran first in the flush - and that
+    # premise is simply false: both this output and that observer depend on
+    # question_state(), Shiny invalidates a reactive's dependents in the
+    # lexicographic order of their context ids, and creation order does not
+    # decide it. When this render won, it read the previous question's
+    # threshold under isolate() and drew a filled box; the observer then set
+    # the reactiveVals to NA and nothing invalidated this output a second time,
+    # so the reviewer was left with a prefilled Non-inferiority threshold box
+    # over a status line reading "No non-inferiority threshold is set" and a
+    # disabled Next.
+    #
+    # The fix is the seed key, not an ordering: .abs_value() / .rel_value()
+    # below offer a stored value only when the key it was stamped with names
+    # the combination being rendered here, so a value belonging to another
+    # question is never displayed whichever of the two runs first.
     question <- pma_clinical_question(question_state())
     # state$small_values is read REACTIVELY: the non-inferiority help names the
     # worse side, a one-sided test whose side the reviewer cannot see is a
@@ -1789,24 +1849,44 @@ step3_server <- function(input, output, session, state) {
     # something that moves while a box on this tab is being typed into.
     copy <- step3_threshold_copy(question, sm,
                                  small_values = state$small_values)
+    # Is the number in the threshold reactiveVals this render's own? It is
+    # exactly when the key it was stamped with names the analysis AND the
+    # question being rendered here. A mismatch means one of two things and both
+    # have the same answer: the stored value was seeded for a different
+    # analysis, or - the case that matters - the reviewer has just changed the
+    # question and the clear / reseed observer has not run yet. Either way the
+    # value is not this question's, so the seeders below fall through to the
+    # prefill rule instead of displaying it.
+    #
+    # isolate(), like every other read of these reactiveVals here: a reactive
+    # dependency would rebuild the panel on every keystroke and destroy the
+    # widget being typed into. It is safe because the key changes only when the
+    # analysis or the question does, and BOTH of those already invalidate this
+    # output through state$ma / question_state() above.
+    stored_is_this_questions <- identical(
+      shiny::isolate(threshold_seed_key()),
+      step3_threshold_seed_key(obj, question))
     # In the DISPLAYED unit, and on the whole-number grid the box offers.
     #
     # NULL rather than the suggestion whenever the question forbids a prefill.
     # NULL renders an empty box; NA renders value="NA", which is an invalid
     # number the browser shows as empty and then reports back as a change the
-    # reviewer did not make.
+    # reviewer did not make - so an unusable suggestion returns NULL too.
     .abs_value <- function() {
       v <- shiny::isolate(threshold_abs_state())
+      if (!stored_is_this_questions) v <- NA_real_
       if (!is.finite(v)) {
         if (!isTRUE(copy$prefill)) return(NULL)
         v <- sug$absolute1000
+        if (!is.finite(v)) return(NULL)
       }
       step3_to_per(step3_quantise_per1000(v, per), per)
     }
     .rel_value <- function() {
       v <- shiny::isolate(threshold_state())
-      if (is.finite(v)) return(v)
+      if (stored_is_this_questions && is.finite(v)) return(v)
       if (!isTRUE(copy$prefill)) return(NULL)
+      if (!is.finite(sug$relative)) return(NULL)
       round(sug$relative, 4)
     }
     # The heading of the Decision-threshold section. The source badge names
