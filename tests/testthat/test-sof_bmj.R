@@ -847,6 +847,122 @@ test_that("a binary object with no baseline risk still falls back to '-'", {
   expect_identical(.body_col(ft, 5), "-")
 })
 
+# --- a mean difference against the endpoint control arms (0.5.2) -----------
+#
+# run_ma() reads an optional `score_type` column. When it marks which studies
+# reported endpoint scores, a mean difference's "With control" cell is the
+# pooled mean of THOSE studies' control arms, "With intervention" is that value
+# plus the pooled MD with the MD's CI, and the Effect cell - which repeated the
+# Difference cell word for word - is left empty in the BMJ layout.
+
+# Five studies: three endpoint, two change-from-baseline. The change studies'
+# control means (-1, 0) would drag a mixed average far from any endpoint value.
+make_md_scored <- function(score_type = c("endpoint", "endpoint", "change",
+                                          "endpoint", "change")) {
+  d <- data.frame(
+    studlab = rep(paste0("S", 1:5), each = 2),
+    treat   = rep(c("experimental", "control"), 5),
+    n       = c(50, 50, 60, 60, 40, 40, 80, 80, 30, 30),
+    mean    = c(10, 14, 11, 15, -4, -1, 9, 13, -3, 0),
+    sd      = c(5, 5, 6, 6, 4, 4, 5, 5, 3, 3),
+    stringsAsFactors = FALSE)
+  if (!is.null(score_type)) d$score_type <- rep(score_type, each = 2)
+  ma <- run_ma(d, "continuous", sm = "MD")
+  quiet_grade(ma, study_design = "RCT", rob = "no",
+              rob_rationale = "Consensus RoB2: all domains low risk",
+              small_values = "desirable", indirectness = "no",
+              outcome_name = "Depression", outcome_type = "absolute",
+              threshold_type = "null")
+}
+
+# The reference by hand: inverse-variance weights n / SD^2 over the endpoint
+# control arms S1, S2, S4 only.
+md_expected_reference <- function() {
+  n <- c(50, 60, 80); m <- c(14, 15, 13); sd <- c(5, 6, 5)
+  w <- n / sd^2
+  sum(w * m) / sum(w)
+}
+
+test_that("the control value pools the endpoint control arms only", {
+  g   <- make_md_scored()
+  arm <- .sof_arm_cells(g$meta, NULL, ci_sep = " to ")
+  ref <- md_expected_reference()
+  expect_true(arm$reference)
+  expect_identical(arm$cer, formatC(ref, format = "f", digits = 2))
+
+  # Intervention = reference + MD, and its interval is the MD's interval
+  # shifted by the same reference.
+  est <- .pooled_estimate(g$meta)
+  expect_identical(arm$ier, sprintf(
+    "%s\n(%s to %s)",
+    formatC(ref + est$est, format = "f", digits = 2),
+    formatC(ref + est$lower, format = "f", digits = 2),
+    formatC(ref + est$upper, format = "f", digits = 2)))
+})
+
+test_that("the bmj MD row fills the arm cells and leaves Effect empty", {
+  ft <- sof_table(make_md_scored(), style = "bmj", unit = "points")
+  expect_identical(.body_col(ft, 3), "")
+  expect_identical(.body_col(ft, 4),
+                   formatC(md_expected_reference(), format = "f", digits = 2))
+  expect_match(.body_col(ft, 5), "^[0-9.]+\n\\([0-9.]+ to [0-9.]+\\)$")
+  # The MD itself survives once, in the Difference cell.
+  expect_match(.body_col(ft, 6), "^[0-9.]+ (more|fewer) points \\(")
+  expect_match(.footer_text(ft), "studies reporting endpoint scores",
+               fixed = TRUE)
+})
+
+test_that("the gradepro MD row fills the arm cells and keeps its Effect", {
+  ft <- sof_table(make_md_scored(), unit = "points")
+  expect_identical(.body_col(ft, 3),
+                   formatC(md_expected_reference(), format = "f", digits = 2))
+  expect_match(.body_col(ft, 4), "^[0-9.]+\n\\([0-9.]+; [0-9.]+\\)$")
+  # No Difference column in this layout, so the MD stays in Effect.
+  expect_match(.body_col(ft, 5), "^MD ")
+  expect_match(.footer_text(ft), "studies reporting endpoint scores",
+               fixed = TRUE)
+})
+
+test_that("grade_table footnotes the reference by outcome, in both styles", {
+  set <- list("Depression" = make_md_scored())
+  for (style in c("bmj", "gradepro")) {
+    ft <- grade_table(set, style = style, unit = "points")
+    expect_match(.footer_text(ft), "Mean difference (Depression):",
+                 fixed = TRUE)
+  }
+})
+
+test_that("no score_type, or no endpoint study, leaves the arm cells empty", {
+  for (g in list(make_md_scored(score_type = NULL),
+                 make_md_scored(score_type = rep("change", 5)),
+                 make_md_scored(score_type = rep(NA, 5)))) {
+    ft <- sof_table(g, style = "bmj", unit = "points")
+    expect_identical(.body_col(ft, 4), "")
+    expect_identical(.body_col(ft, 5), "")
+    expect_no_match(.footer_text(ft), "endpoint scores", fixed = TRUE)
+    # The Effect cell is still empty: the duplicate is a property of the MD
+    # layout, not of the reference.
+    expect_identical(.body_col(ft, 3), "")
+  }
+})
+
+test_that("an SMD gets no reference even when score_type is marked", {
+  d <- data.frame(
+    studlab = rep(c("A", "B", "C"), each = 2),
+    treat   = rep(c("experimental", "control"), 3),
+    n = rep(50, 6), mean = c(10, 14, 11, 15, 9, 13), sd = rep(5, 6),
+    score_type = "endpoint", stringsAsFactors = FALSE)
+  g <- quiet_grade(run_ma(d, "continuous", sm = "SMD"),
+                   study_design = "RCT", rob = "no",
+                   rob_rationale = "Consensus RoB2: all domains low risk",
+                   small_values = "desirable", indirectness = "no",
+                   outcome_name = "Depression", outcome_type = "absolute",
+                   threshold_type = "null")
+  ft <- sof_table(g, style = "bmj")
+  expect_identical(.body_col(ft, 4), "")
+  expect_match(.body_col(ft, 3), "Standardised mean difference")
+})
+
 # --- an overridden domain reaches the footer (0.5.1) ------------------------
 #
 # The bug this closes: a reviewer overrode publication bias, the certainty cell

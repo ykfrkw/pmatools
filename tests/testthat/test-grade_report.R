@@ -82,9 +82,11 @@ test_that("the docx report starts each rationale section on its own page", {
   xml <- paste(readLines(file.path(ex, "word", "document.xml"),
                          warn = FALSE), collapse = "")
 
-  # One break opens "Domain-by-Domain Rationale" after the full-width Summary
-  # of Findings table, and one opens every per-outcome section after the
-  # first: length(outcomes) breaks in total. The title and "Summary of
+  # "Domain-by-Domain Rationale" opens a new page because it opens a new
+  # SECTION: the Summary of Findings above it is landscape and the rationale is
+  # portrait, and the section break between them is a next-page break. Every
+  # per-outcome section after the first then opens with an explicit page
+  # break, so length(outcomes) - 1 of those. The title and "Summary of
   # Findings" take none -- the document already starts a page and a break
   # before them would open on a near-empty one.
   #
@@ -92,9 +94,45 @@ test_that("the docx report starts each rationale section on its own page", {
   # the PREVIOUS table's footnotes. <w:keepNext/> does not: officer's heading
   # styles already carry it (in word/styles.xml, not here) and Word drops
   # keep-with-next when the block that follows cannot fit a page of its own.
-  breaks <- gregexpr('w:br w:type="page"', xml, fixed = TRUE)[[1]]
-  breaks <- if (breaks[1] == -1L) 0L else length(breaks)
-  expect_equal(breaks, length(outcomes))
+  count <- function(pattern) {
+    hits <- gregexpr(pattern, xml)[[1]]
+    if (hits[1] == -1L) 0L else length(hits)
+  }
+  expect_equal(count('w:br w:type="page"'), length(outcomes) - 1L)
+  # One section break inside the body (the landscape SoF), and the body's own
+  # closing sectPr (the portrait rationale).
+  expect_equal(count("<w:sectPr"), 2L)
+})
+
+test_that("the docx report puts the Summary of Findings on a landscape page", {
+  skip_if_not_installed("officer")
+  skip_if_not_installed("flextable")
+  skip_if_not_installed("zip")
+
+  outcomes <- make_outcomes_gr()
+  out_dir  <- tempfile("grade_report_orient_")
+  path <- grade_report(outcomes, primary = "Outcome 1", format = "docx",
+                       output_dir = out_dir, output_file = "orient")[[1]]
+
+  ex <- tempfile(); dir.create(ex)
+  zip::unzip(path, files = "word/document.xml", exdir = ex)
+  xml <- paste(readLines(file.path(ex, "word", "document.xml"),
+                         warn = FALSE), collapse = "")
+
+  # Sections in document order: the title and the SoF table, then the
+  # rationale.
+  orients <- regmatches(xml, gregexpr('w:orient="[a-z]+"', xml))[[1]]
+  expect_equal(orients, c('w:orient="landscape"', 'w:orient="portrait"'))
+
+  # Every table fits between the margins of the section it sits in: the SoF
+  # within a landscape A4 text block, each domain table within a portrait one.
+  grids <- regmatches(xml, gregexpr("<w:tblGrid>.*?</w:tblGrid>", xml))[[1]]
+  widths <- vapply(grids, function(g) {
+    sum(as.numeric(regmatches(g, gregexpr('(?<=w:w=")[0-9]+', g,
+                                          perl = TRUE))[[1]])) / 1440
+  }, numeric(1), USE.NAMES = FALSE)
+  expect_lte(widths[1], .docx_text_width("landscape") + 0.01)
+  expect_true(all(widths[-1] <= .docx_text_width("portrait") + 0.01))
 })
 
 test_that("grade_report handles multiple formats in one call", {

@@ -344,6 +344,17 @@
                                     prediction = prediction)
   diff_cell   <- .format_difference(meta_obj, g$baseline_risk, per, unit,
                                     g$outcome_type)
+  # A mean difference is ONE number printed twice in this layout: the Effect
+  # cell and the Difference cell both hold the pooled MD (95% CI). The
+  # Difference cell keeps it, beside the control and intervention values it
+  # is the gap between, and the Effect cell is left empty. Only while the
+  # Difference cell actually holds it ("-" means it could not be formatted),
+  # and only on the unconverted presentation: a responder row's Effect cell
+  # carries the derived odds ratio, which must ride under the pooled estimate
+  # it was derived from (see below).
+  md_effect_dup <- identical(as.character(meta_obj$sm %||% ""), "MD") &&
+    nzchar(diff_cell) && !identical(diff_cell, "-")
+  effect_own  <- if (md_effect_dup) "" else effect_cell
   cer_cell    <- cer_str %||% arm$cer
   ier_cell    <- ier_str %||% arm$ier
   split       <- NULL
@@ -372,7 +383,7 @@
       # for an MD that includes a Difference cell in the outcome's own units,
       # which is a pooled contrast and belongs beside the pooled estimate.
       split <- list(
-        top    = list(effect = effect_cell, cer = "", ier = "",
+        top    = list(effect = effect_own, cer = "", ier = "",
                       diff = diff_cell),
         bottom = list(effect = or_line, cer = cer_cell, ier = ier_cell,
                       diff = rd_cell))
@@ -382,6 +393,8 @@
     # single-row form is these joins, and the content is identical.
     effect_cell <- join(effect_cell, or_line)
     diff_cell   <- join(diff_cell, rd_cell)
+  } else {
+    effect_cell <- effect_own
   }
 
   list(
@@ -399,7 +412,11 @@
     # footer's "Absolute effects: ..." sentence describes. A continuous outcome
     # that was not converted has two empty cells, and a sentence explaining how
     # a rate was computed is noise over them.
-    has_rates = !is.null(chinn) || !isTRUE(arm$continuous)
+    has_rates = !is.null(chinn) || !isTRUE(arm$continuous),
+    # Whether the arm columns hold an endpoint reference and the value built on
+    # it (.control_endpoint_reference()), which needs a footnote of its own.
+    # A caller-supplied pair (a Chinn conversion) replaces them, so it cannot.
+    has_reference = is.null(cer_str) && isTRUE(arm$reference)
   )
 }
 
@@ -625,6 +642,10 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
     ft, values = .bmj_base_note(label_intervention, prediction,
                                 rate_arms = isTRUE(vals$has_rates),
                                 label_control = label_control))
+  if (isTRUE(vals$has_reference)) {
+    ft <- flextable::add_footer_lines(
+      ft, values = .cont_reference_note(label_intervention, label_control))
+  }
 
   for (i in seq_along(fact_notes)) {
     ft <- flextable::add_footer_lines(
@@ -831,6 +852,13 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
       rate_arms = any(vapply(rated_vals, function(v) isTRUE(v$has_rates),
                              logical(1))),
       label_control = label_control))
+
+  ref_nms <- names(Filter(function(v) isTRUE(v$has_reference), rated_vals))
+  if (length(ref_nms) > 0L) {
+    ft <- flextable::add_footer_lines(
+      ft, values = .cont_reference_note(label_intervention, label_control,
+                                        outcomes = ref_nms))
+  }
 
   # What "Not reported" means, stated once for the table however many such rows
   # it has.

@@ -4,7 +4,7 @@
 
 **Public URL:** https://yuki-furukawa.shinyapps.io/pmatools/
 **Deployment:** shinyapps.io (account: `yuki-furukawa`, appId: `17697029`)
-**App version:** 3.3.0 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
+**App version:** 3.4.0 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.3.0 → 3.4.0 is the optional Score type mapping (§3.3.3); 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
 
 ---
 
@@ -354,10 +354,19 @@ One `pma_card("Model configuration")` holding a `bslib::accordion(multiple = FAL
 | Panel (`value`) | Contents | Open on build |
 |---|---|---|
 | Outcome (`outcome`) | `outcome_name`, `small_values`, `outcome_type`, `outcome_follow_up`, `outcome_unit` (continuous only) | always |
-| Data mapping (`mapping`) | `col_studlab`, `col_treat`, `arm_assignment_ui`, `col_n`, `col_event` (binary) / `col_mean` + `col_sd` (continuous) | never |
+| Data mapping (`mapping`) | `col_studlab`, `col_treat`, `arm_assignment_ui`, `col_n`, `col_event` (binary) / `col_mean` + `col_sd` + `col_score_type` (continuous) | never |
 | Model details (`model`) | `sm_bin` / `sm_cont_ui`, `model`, `method`, `method_tau`, `random_ci`, `incr` | never |
 | Subgroup (`subgroup`) | `subgroup_col`, `subgroup_order_ui` | never |
 
+- **`col_score_type` is optional and never required** [3.4.0]. It names the
+  column saying which studies reported endpoint or change-from-baseline
+  scores; it defaults to a column called `score_type` when the data has one,
+  else `(none)`. The chosen column is copied into the canonical `score_type`
+  before `run_ma()`, and `(none)` removes one the data already carries, since
+  `run_ma()` reads that column by name. It only changes the Summary of
+  Findings of a mean difference (root `SPEC.md` §4.6): the control value comes
+  from the endpoint studies' control arms. It is not in
+  `PMA_STEP2_MAPPING_ALL`.
 - **Exactly one panel is open at a time** (`multiple = FALSE`), and on arrival
   it is Outcome — the only panel holding something no default can supply.
   Opening another closes it, so the sidebar is never taller than the question

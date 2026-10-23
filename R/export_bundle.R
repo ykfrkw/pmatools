@@ -406,11 +406,14 @@ export_bundle.meta <- function(x,
 
 # Write a flextable into a landscape-orientation .docx using officer directly.
 # Avoids flextable::save_as_docx(pr_section = ...), whose argument is not
-# present in older flextable versions.
+# present in older flextable versions. The table is narrowed to the landscape
+# text width first (.ft_fit_width(), house_style.R): the BMJ Summary of
+# Findings with its plain-language column and the GRADEpro one with domain
+# columns are both wider than a landscape page.
 .save_landscape_docx <- function(ft, path) {
   doc <- officer::read_docx()
-  doc <- flextable::body_add_flextable(doc, ft)
-  doc <- officer::body_end_section_landscape(doc, w = 11, h = 8.5)
+  doc <- flextable::body_add_flextable(doc, .ft_fit_width(ft, "landscape"))
+  doc <- .docx_last_section(doc, "landscape")
   print(doc, target = path)
   invisible(path)
 }
@@ -436,6 +439,14 @@ export_bundle.meta <- function(x,
     c <- data.frame(studlab = studlab, treat = "control",
                     n = ma$n.c, mean = ma$mean.c, sd = ma$sd.c,
                     stringsAsFactors = FALSE)
+    # The score types decide the Summary of Findings' control value for a mean
+    # difference, so the reconstructed data carries them for analysis.R to
+    # re-read (run_ma() picks the column up by name).
+    st <- attr(ma, "pmatools_score_type")
+    if (!is.null(st)) {
+      e$score_type <- unname(st[as.character(studlab)])
+      c$score_type <- e$score_type
+    }
     return(rbind(e, c))
   }
   NULL

@@ -246,7 +246,16 @@ step2_ui <- function(state = NULL) {
                 shiny::selectInput("col_mean", "Mean",
                                    choices = NULL),
                 shiny::selectInput("col_sd",   "SD",
-                                   choices = NULL)
+                                   choices = NULL),
+                # Optional. Says which studies reported endpoint scores, so a
+                # mean difference's Summary of Findings row can give a control
+                # value from those studies' control arms (sof_table.R,
+                # .control_endpoint_reference()). Not a required field: with
+                # "(none)" the two arm cells stay empty, as they always were.
+                shiny::selectInput("col_score_type",
+                                   "Score type (endpoint / change)",
+                                   choices = c("(none)" = ""), selected = "",
+                                   selectize = FALSE)
               )
             ),
 
@@ -574,6 +583,7 @@ step2_server <- function(input, output, session, state) {
     cur_mean    <- shiny::isolate(input$col_mean)
     cur_sd      <- shiny::isolate(input$col_sd)
     cur_sub     <- shiny::isolate(input$subgroup_col)
+    cur_score   <- shiny::isolate(input$col_score_type)
 
     studlab_selected <- .pick_current(cur_studlab, all_cols, studlab_default)
     treat_selected   <- .pick_current(cur_treat, all_cols, treat_default)
@@ -593,6 +603,12 @@ step2_server <- function(input, output, session, state) {
                              selected = .pick_current(cur_mean, numeric_cols, mean_default))
     shiny::updateSelectInput(session, "col_sd",    choices = numeric_choices,
                              selected = .pick_current(cur_sd, numeric_cols, sd_default))
+    shiny::updateSelectInput(session, "col_score_type",
+                             choices  = stats::setNames(c("", all_cols),
+                                                        c("(none)", all_cols)),
+                             selected = .pick_current(
+                               cur_score, all_cols,
+                               .pick(c("score_type"), all_cols)))
     shiny::updateSelectInput(session, "subgroup_col",
                              choices  = c("(none)" = "", factor_cols),
                              selected = if (!is.null(cur_sub)) cur_sub else "")
@@ -695,6 +711,7 @@ step2_server <- function(input, output, session, state) {
       col_event      = input$col_event,
       col_mean       = input$col_mean,
       col_sd         = input$col_sd,
+      col_score_type = input$col_score_type %||% "",
       subgroup_col   = if (nzchar(input$subgroup_col %||% "")) input$subgroup_col else NULL,
       subgroup_order = input$subgroup_order,
       # Booleans, not the values themselves: the raw outcome name would make
@@ -915,6 +932,15 @@ step2_server <- function(input, output, session, state) {
       if (!is.null(args$col_sd) && nzchar(args$col_sd) &&
           args$col_sd != "sd" && args$col_sd %in% names(study_data)) {
         study_data$sd <- study_data[[args$col_sd]]
+      }
+      # run_ma() reads the canonical `score_type` column whenever it is
+      # present, so "(none)" has to remove one the data already carries, and
+      # a differently named column is copied in under the canonical name.
+      score_col <- args$col_score_type %||% ""
+      if (nzchar(score_col) && score_col %in% names(study_data)) {
+        study_data$score_type <- study_data[[score_col]]
+      } else {
+        study_data$score_type <- NULL
       }
     }
 

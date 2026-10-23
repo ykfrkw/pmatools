@@ -1,3 +1,39 @@
+# pmatools 0.5.2
+
+## Changes to exported tables
+
+* **A mean difference can show the comparison group and the intervention
+  group again.** Add an optional `score_type` column (`"endpoint"` or
+  `"change"`) to the study data. `run_ma()` reads it without being asked and
+  attaches it to the fit; the Summary of Findings then fills "With control"
+  with the inverse-variance pooled mean of the control arms of the
+  **endpoint** studies only, and "With intervention" with that value plus the
+  pooled MD and the MD's 95% CI. Change-score studies still count in the MD.
+  A footnote states the derivation. Without the column (or with no endpoint
+  study, or for an SMD) the two cells stay empty, as in 0.5.1. The column
+  passes through `ingest_data()` (aliases `endpoint_or_change`,
+  `measure_type`), into a bundle's `data_long.csv`, and so into the bundled
+  `analysis.R`. A value other than `endpoint` / `change` / blank aborts, as do
+  two arms of one study that disagree.
+
+* **The BMJ Effect cell of a mean-difference row is now empty.** It repeated
+  the Difference cell beside it word for word; the MD stays in Difference. A
+  responder-converted single row keeps its Effect cell, which carries the
+  derived odds ratio. The CSV mirror of the multi-outcome table follows the
+  `.docx`. The GRADEpro layout is unchanged.
+
+* **Word output: wide tables are landscape and fit the page.** Every `.docx`
+  is now A4 with 0.75 in margins, and each table is narrowed to the text width
+  when it is wider: the BMJ table with its plain-language column (10.3 in) and
+  the GRADEpro table with domain columns (11.3 in) were cut off at the right
+  margin of the landscape page. `grade_report()` mixes orientations — the
+  title and the Summary of Findings on a landscape page, the domain-by-domain
+  rationale on portrait pages. The stand-alone table files
+  (`sof_table.docx`, `grade_table.docx`, `summary_of_findings.docx`,
+  `evidence_profile.docx`, `indirectness_table.docx`) are landscape
+  throughout. They were US Letter landscape before; they are now A4, the
+  page size of the portrait sections.
+
 # pmatools 0.5.1
 
 ## Breaking changes

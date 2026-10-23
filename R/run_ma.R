@@ -27,6 +27,11 @@
 #'   `TRUE` if k >= 3, else `FALSE`.
 #' @param incr Continuity correction for zero events (binary). Default 0.5.
 #' @param subgroup Optional column name in `data` for subgroup analysis.
+#'   A `score_type` column, when `data` carries one, is read without being
+#'   named: it says whether each continuous study reported endpoint
+#'   (`"endpoint"`) or change-from-baseline (`"change"`) scores, and is
+#'   attached to the result as `attr(, "pmatools_score_type")` for the Summary
+#'   of Findings (see \code{\link{sof_table}}). It does not change the fit.
 #' @param experimental_label,control_label Values of `treat` identifying the
 #'   intervention (experimental) and comparator (control) arms. Supplied values
 #'   must exist in `data$treat` and be distinct. If NULL, the function looks
@@ -111,6 +116,10 @@ run_ma <- function(data,
     subgroup_vec <- sub_lookup[[subgroup]][match(wide$studlab, sub_lookup$studlab)]
   }
 
+  score_type_vec <- if (outcome_type == "continuous") {
+    .score_type_by_study(data, wide$studlab)
+  } else NULL
+
   if (outcome_type == "binary") {
     if (is.null(method)) {
       method <- if (sm == "OR") "Inverse" else "MH"
@@ -154,7 +163,58 @@ run_ma <- function(data,
     prediction = prediction
   )
   if (!is.null(subgroup_vec)) args$subgroup <- subgroup_vec
-  do.call(meta::metacont, args)
+  ma <- do.call(meta::metacont, args)
+  if (!is.null(score_type_vec)) attr(ma, "pmatools_score_type") <- score_type_vec
+  ma
+}
+
+# --------------------------------------------------------------------------
+# Endpoint or change-from-baseline, per study
+# --------------------------------------------------------------------------
+# The Summary of Findings fills "With control" for a mean difference only from
+# control arms that reported ENDPOINT scores (.control_endpoint_reference(),
+# sof_table.R): a pooled average of endpoint and change scores is not a value
+# any patient has. This reads the optional `score_type` column into one value
+# per study, named by studlab so a low-RoB refit -- which keeps a subset of the
+# studies -- can still look its studies up.
+#
+# Blank / NA means "not stated" and keeps the study out of the reference, as
+# does an absent column (NULL is returned and the cells stay empty). Any other
+# word aborts: a misspelt "endpiont" read as "not stated" would silently drop a
+# study from the reference. Arms of one study that disagree abort for the same
+# reason -- there is no rule for which of the two to believe.
+PMA_SCORE_TYPES <- c("endpoint", "change")
+
+.score_type_by_study <- function(data, studlab) {
+  if (!"score_type" %in% names(data)) return(NULL)
+  raw <- tolower(trimws(as.character(data$score_type)))
+  raw[is.na(raw) | !nzchar(raw)] <- NA_character_
+
+  bad <- setdiff(unique(raw[!is.na(raw)]), PMA_SCORE_TYPES)
+  if (length(bad) > 0L) {
+    rlang::abort(sprintf(
+      paste0("run_ma(): the score_type column holds %s. Use \"endpoint\" or ",
+             "\"change\" (change from baseline), or leave the cell blank."),
+      paste0("\"", bad, "\"", collapse = ", ")))
+  }
+
+  labs <- as.character(data$studlab)
+  per_study <- tapply(raw, labs, function(v) unique(v[!is.na(v)]),
+                      simplify = FALSE)
+  conflict <- names(per_study)[lengths(per_study) > 1L]
+  if (length(conflict) > 0L) {
+    rlang::abort(sprintf(
+      paste0("run_ma(): the arms of %s disagree on score_type. One study ",
+             "reports one kind of score; give both arms the same value."),
+      paste(utils::head(conflict, 5L), collapse = ", ")))
+  }
+
+  out <- vapply(as.character(studlab), function(s) {
+    v <- per_study[[s]]
+    if (length(v) == 0L) NA_character_ else v
+  }, character(1))
+  names(out) <- as.character(studlab)
+  out
 }
 
 # --------------------------------------------------------------------------

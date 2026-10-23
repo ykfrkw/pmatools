@@ -107,7 +107,8 @@ PMA_ROLE_LABELS <- c(
   outcome      = "Outcome",
   rob          = "Risk of bias",
   indirectness = "Indirectness",
-  subgroup     = "Subgroup"
+  subgroup     = "Subgroup",
+  score_type   = "Score type"
 )
 
 # The columns the analysis actually reads, in role order, restricted to those

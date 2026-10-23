@@ -144,6 +144,70 @@ PMA_CORE_GRADE_DOIS <- c(
   officer::body_add_par(doc, text, style = style)
 }
 
+# Portrait for prose, landscape for the wide tables. A Summary of Findings or an
+# evidence profile runs to seven or more columns and is cut off at the right
+# edge of a portrait page; a whole document turned landscape puts every
+# paragraph of rationale on a page too wide to read. So a writer builds its
+# document in runs of blocks and closes each run as a section of the
+# orientation that run needs: .docx_end_section() closes everything written
+# since the previous close, and .docx_last_section() sets the orientation of
+# whatever follows the final close (Word keeps that one in the body's own
+# sectPr, which officer exposes separately).
+#
+# A4, the page officer's default template already uses, in both orientations:
+# a document whose portrait sections are A4 and landscape sections US Letter
+# prints on two paper sizes. Margins are narrower than the template's 2.5 cm so
+# a nine-column table keeps a readable column width once it is fitted.
+PMA_DOCX_PAGE   <- c(short = 21 / 2.54, long = 29.7 / 2.54)
+PMA_DOCX_MARGIN <- 0.75
+
+.docx_section_props <- function(orient = c("portrait", "landscape")) {
+  orient <- match.arg(orient)
+  landscape <- identical(orient, "landscape")
+  officer::prop_section(
+    page_size = officer::page_size(
+      width  = if (landscape) PMA_DOCX_PAGE[["long"]] else PMA_DOCX_PAGE[["short"]],
+      height = if (landscape) PMA_DOCX_PAGE[["short"]] else PMA_DOCX_PAGE[["long"]],
+      orient = orient),
+    page_margins = officer::page_mar(
+      top = PMA_DOCX_MARGIN, bottom = PMA_DOCX_MARGIN,
+      left = PMA_DOCX_MARGIN, right = PMA_DOCX_MARGIN,
+      header = 0.4, footer = 0.4, gutter = 0),
+    type = "nextPage")
+}
+
+.docx_end_section <- function(doc, orient = c("portrait", "landscape")) {
+  officer::body_end_block_section(
+    doc, officer::block_section(.docx_section_props(orient)))
+}
+
+.docx_last_section <- function(doc, orient = c("portrait", "landscape")) {
+  officer::body_set_default_section(doc, .docx_section_props(orient))
+}
+
+# Width, in inches, between the margins of a page in that orientation.
+.docx_text_width <- function(orient = c("portrait", "landscape")) {
+  orient <- match.arg(orient)
+  side <- if (identical(orient, "landscape")) "long" else "short"
+  PMA_DOCX_PAGE[[side]] - 2 * PMA_DOCX_MARGIN
+}
+
+# Shrink every column of `ft` by one factor when the table is wider than the
+# text block, so it is never cut off at the margin. A table that fits is
+# returned untouched: the column widths each table builder sets are its
+# design, and this only ever narrows them.
+.ft_fit_width <- function(ft, orient = c("portrait", "landscape")) {
+  avail  <- .docx_text_width(orient)
+  widths <- dim(ft)$widths
+  total  <- sum(widths)
+  if (!is.finite(total) || total <= avail) return(ft)
+  scaled <- widths * (avail / total)
+  for (j in seq_along(scaled)) {
+    ft <- flextable::width(ft, j = j, width = scaled[[j]])
+  }
+  ft
+}
+
 # ==========================================================================
 # VERSION STAMP FOR PROVENANCE LINES IN EXPORTED ARTIFACTS
 # ==========================================================================

@@ -20,7 +20,7 @@ file, or a multi-line character string (clipboard paste).}
 
 \item{mapping}{Optional named list mapping canonical column names to user
 column names. Keys: \code{studlab}, \code{treat}, \code{n}, \code{event}, \code{mean}, \code{sd}, \code{rob},
-\code{indirectness}, \code{subgroup}, plus wide-format pairs \code{n_e}/\code{n_c},
+\code{indirectness}, \code{subgroup}, \code{score_type}, plus wide-format pairs \code{n_e}/\code{n_c},
 \code{event_e}/\code{event_c}, \code{mean_e}/\code{mean_c}, \code{sd_e}/\code{sd_c}.}
 
 \item{experimental_label, control_label}{Optional. Values of \code{treat} to
