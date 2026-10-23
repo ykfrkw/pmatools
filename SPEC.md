@@ -2,8 +2,8 @@
 
 > Authoritative specification for the pmatools R package. Implementation MUST conform to this document. UI-side concerns (Shiny wizard, educational copy, accordion layout) are specified separately in [`shiny/SPEC.md`](shiny/SPEC.md), which governs the app in this repository's `shiny/` directory.
 
-**Version target:** 0.5.1
-**Document history:** this file was written for v0.2.0 and has been updated in place for v0.5.0 and v0.5.1; section numbering is preserved so the diff stays readable. Sections that still describe v0.2 behaviour verbatim are marked **[v0.2 — superseded]** with a pointer to the section that governs.
+**Version target:** 0.5.2
+**Document history:** this file was written for v0.2.0 and has been updated in place for v0.5.0, v0.5.1 and v0.5.2; section numbering is preserved so the diff stays readable. Sections that still describe v0.2 behaviour verbatim are marked **[v0.2 — superseded]** with a pointer to the section that governs.
 
 **Backward compatibility:** v0.2 introduced no breaking changes. v0.4.0 and v0.5.0 did — see `NEWS.md`, which is authoritative for the change list. The three that most affect callers:
 
@@ -97,6 +97,7 @@ One row per **study × arm**. Required columns:
 | `rob` | chr | Risk of bias label (Cochrane RoB 2, ROBINS-I or GRADE level; §4.11 `rob_strata()`). Per-study. |
 | `indirectness` | chr | Indirectness label (`low` / `some` / `high`; read through the same `rob_strata()` table). Per-study. |
 | `subgroup` | chr / fct | Subgroup variable. Per-study. |
+| `score_type` | chr | `"endpoint"` or `"change"` (change from baseline), case-insensitive; blank / `NA` = not stated. Per-study, continuous outcomes only [0.5.2]. Read by `run_ma()` without being named, attached to the fit as `attr(, "pmatools_score_type")` (named by `studlab`, carried through the low-RoB refit), and used only by the Summary of Findings (§4.6). Any other word aborts; arms of one study that disagree abort. |
 
 **`outcome` column semantics.** `ingest_data()` recognises `outcome` and validates arm pairing within each (`studlab`, `outcome`) pair rather than within `studlab` alone; its diagnostics name the unit accordingly. `run_ma()` still **aborts** on data holding more than one outcome — `run_ma_multi()` splits on this column and is the only supported way to batch (§4.10). Data without an `outcome` column behaves exactly as before.
 
@@ -122,7 +123,7 @@ One row per **study**. Required columns:
 | `mean_e`, `mean_c` | num | Means |
 | `sd_e`, `sd_c` | num | Standard deviations |
 
-Optional columns (`rob`, `indirectness`, `subgroup`) are per-study (single column). An `outcome` column is accepted here too, but the multi-outcome workflow (§4.10) consumes the canonical **long** tibble that `ingest_data()` returns.
+Optional columns (`rob`, `indirectness`, `subgroup`, `score_type`) are per-study (single column). An `outcome` column is accepted here too, but the multi-outcome workflow (§4.10) consumes the canonical **long** tibble that `ingest_data()` returns.
 
 ### 3.3 Format auto-detection
 
@@ -219,6 +220,7 @@ both `treat` and `subgroup`; `treat` claims it).
 | `rob` | no | `risk_of_bias`, `rob_d`, `rob_overall`, `rob_judgment`, `rob_judgement` |
 | `indirectness` | no | `indir` |
 | `subgroup` | no | `group`, `stratum` |
+| `score_type` | no | `endpoint_or_change`, `measure_type` |
 
 `required` is what `.validate_long()` aborts without. Long format only: wide
 input has fixed canonical pair names and no alias mechanism to report on.
@@ -899,6 +901,10 @@ sof_table(
 **Analysis-set footnote.** When the rated analysis is a low-RoB refit (§5.1), the table carries a footnote saying so. `grade_table()` numbers the marker per row, so a table mixing analysis sets says which rows were restricted.
 
 **Arm-level columns for continuous outcomes: removed [v0.6].** A continuous meta-analysis routinely pools endpoint scores together with change-from-baseline scores. The pooled *contrast* survives that; a pooled *control-arm mean* does not, and neither does anything built on one. So a continuous outcome now shows **nothing** in "With control" and "With intervention" unless the Chinn conversion is active, in which case those cells hold the responder rates and only those. The Difference column follows the same rule: for `sm = "SMD"` the standard-deviation string is gone (it restated the Effect column and rested on the same arm means), while for `sm = "MD"` the difference in the outcome's own units **stays**, because that is the pooled contrast itself and mixing endpoint with change scores does not invalidate it.
+
+**Mean difference against the endpoint control arms [0.5.2].** One exception to the paragraph above. When the data carry a `score_type` column (§3.1) and at least one study is marked `"endpoint"`, a **mean difference** row fills the two arm cells again: "With control" is the pooled mean of the control arms of the **endpoint** studies only (inverse-variance weights `n / SD²`, fixed whatever model produced the effect; sample-size weights when a control SD is unusable; studies in `meta_obj$exclude` held out), and "With intervention" is that value plus the pooled MD, its 95% CI the MD's CI shifted by the same value — the control value is treated as fixed. Change-score studies still count in the MD and take no part in the control value, so the objection above does not arise: the reference is one kind of score. Two decimals, no unit (the unit rides on the Difference cell). A footnote states the derivation in both layouts and, in `grade_table()`, names the outcomes it applies to. Without the column, with no endpoint study, and for an SMD (whose difference cannot be added to a mean on the outcome's scale) the cells stay empty as above. Built by `.control_endpoint_reference()` and `.sof_arm_cells()` in `R/sof_table.R`.
+
+**The BMJ Effect cell of a mean-difference row is empty [0.5.2].** In the BMJ layout the Effect column and the Difference column both printed the pooled MD with its CI. The Difference cell keeps it — it sits beside the control and intervention values it is the gap between — and the Effect cell is left blank. The column itself stays, because other rows of the table may need it. Two exceptions keep the Effect cell: a row whose Difference cell is `"-"` (no usable estimate), and a Chinn-converted single-row presentation, whose Effect cell carries the derived odds ratio under the pooled estimate it was derived from. The GRADEpro layout has no Difference column and keeps the MD in Effect.
 
 This also retired a mislabel. `pma_sof_unit()` returns `"standard deviation units"` for an SMD, which is right for the Difference column it was written for; the same value reached the arm cells, where a control mean already re-expressed on the outcome's own scale by the reference SD printed as *"13.89 standard deviation units"*.
 

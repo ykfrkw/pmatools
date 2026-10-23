@@ -61,7 +61,7 @@ outcome the evidence base turns out to be silent on
 without writing R).
 
 The app has **its own version** (`shiny/DESCRIPTION`, currently 3.3.0), which
-tracks separately from the package version (0.5.1) in the root `DESCRIPTION`.
+tracks separately from the package version (0.5.2) in the root `DESCRIPTION`.
 They count different things: the package version counts changes to the
 analysis and rating API, the app version counts changes to the wizard's UI, and
 a release of one usually is not a release of the other. `shiny/DESCRIPTION` is
@@ -1652,6 +1652,11 @@ grade_report(
 )
 ```
 
+The Word report mixes page orientations (v0.5.2): the title and the Summary of
+Findings sit on a landscape A4 page, the domain-by-domain rationale on portrait
+pages, and every table is narrowed to the text width when it would otherwise
+run past the margin. The stand-alone table files in a bundle are landscape A4.
+
 ### `evidence_profile()` — single-outcome Evidence Profile (Core GRADE series)
 
 Evidence Profile layout of the BMJ 2025 Core GRADE series for one outcome:
@@ -1757,21 +1762,28 @@ improvement larger than the MID within each arm ... They can then pool these
 proportions across studies." Option 2 is **not implemented** in pmatools; the
 two approaches will not in general give the same numbers.
 
-**Arm-level columns for continuous outcomes** (v0.5.1) implement Core GRADE 6's
-"preferred approach ... to provide information about the outcome in the
+**Arm-level columns for continuous outcomes** (v0.5.2). Core GRADE 6 calls it
+the preferred approach "to provide information about the outcome in the
 comparison group ..., the intervention group ..., and the difference between the
-two". Both arm cells used to be driven off `baseline_risk`, which is meaningful
-only for a binary outcome with a relative effect measure, so a `metacont`
-analysis filled them with `-`. The control cell is now the inverse-variance
-weighted mean of the control arms (weights `n / SD²`), and the intervention cell
-is that value plus the pooled difference, its interval coming from the pooled
-difference alone; an SMD is multiplied by the pooled within-arm SD of the
-control arms (Cochrane Handbook 15.5.3.2) first, since SD units cannot be added
-to a mean on the original scale. Both derivations are footnoted, the Difference
-column keeps the SMD in SD units on this path, and binary tables are unchanged.
-In the GRADEpro layout the arm headers fall back to "With control" / "With
-intervention" when the cells hold means, because the rate wording and the `per`
-denominator would misdescribe them.
+two". A continuous analysis routinely pools endpoint scores with
+change-from-baseline scores, and an average over both kinds of control arm is
+not a value any patient has, so by default the two arm cells of a continuous
+row are empty. For a **mean difference** you can fill them by marking each
+study's scores in an optional `score_type` column (`"endpoint"` / `"change"`):
+
+```r
+dat$score_type <- c("endpoint", "endpoint", "change", "change", ...)  # per row
+ma <- run_ma(ingest_data(dat), "continuous", sm = "MD")   # read automatically
+sof_table(grade_meta(ma, ...), style = "bmj", unit = "points")
+```
+
+"With control" is then the pooled mean of the control arms of the endpoint
+studies only (inverse-variance weights `n / SD²`), "With intervention" is that
+value plus the pooled MD with the MD's 95% CI, and a footnote says so. In the
+BMJ layout the MD appears once, in the Difference cell; the Effect cell, which
+repeated it, is left empty. In the GRADEpro layout the arm headers read "With
+control" / "With intervention", because the rate wording and the `per`
+denominator would misdescribe a mean.
 
 **Absolute effects on the responder path** (v0.6). When
 `convert_smd_to_or = TRUE` fills the arm columns with responder proportions,

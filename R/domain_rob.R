@@ -1854,6 +1854,9 @@ rob_strata <- function(x, arg = "rob") {
       "but the full analysis is retained."
     )))
   }
+  # update() rebuilds the object, and with it drops pmatools' own attributes.
+  # The score types are keyed by studlab, so the full vector serves the subset.
+  attr(refit, "pmatools_score_type") <- attr(meta_obj, "pmatools_score_type")
   if (is.null(refit$k) || !is.finite(refit$k) || refit$k < 2L) {
     return(skip(paste0(
       "Risk of bias: refitting on low risk of bias studies left fewer than 2 ",

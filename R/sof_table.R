@@ -327,6 +327,10 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
       "computed from baseline risk and pooled relative effect.")
   )
   ft <- flextable::add_footer_lines(ft, values = base_note)
+  if (isTRUE(arm$reference)) {
+    ft <- flextable::add_footer_lines(
+      ft, values = .cont_reference_note(label_intervention, label_control))
+  }
 
   # What actually drove each downgrade, keyed to the [n] markers on the
   # certainty cell.
@@ -1096,7 +1100,8 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
 # two. For a binary outcome the first two come from grade_meta()'s
 # baseline_risk and the pooled relative effect.
 #
-# A continuous outcome gets neither, and the two cells are left blank. Until
+# A continuous outcome gets neither, and the two cells are left blank (the one
+# exception, a mean difference whose endpoint studies are marked, follows). Until
 # v0.6 they were filled from the arm-level summaries a metacont object carries:
 # an inverse-variance weighted mean of the control arms, and that mean plus the
 # pooled difference (re-expressed through a pooled within-arm reference SD when
@@ -1114,22 +1119,113 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
 # cells they fed. The pooled contrast is untouched: an MD still reports its
 # difference in the outcome's own units (.format_difference(), sof_bmj.R).
 
+# The exception, and the reason the paragraph above says "rested on": a MEAN
+# DIFFERENCE row whose data say which studies reported endpoint scores
+# (run_ma()'s `score_type` column, attached as attr(, "pmatools_score_type")).
+# A pooled mean over endpoint control arms alone is one kind of score and does
+# read as "the outcome in the comparison group"; the intervention cell is that
+# value plus the pooled MD, so the three cells of "Absolute effects" read as
+# control, intervention and the difference between them, as Core GRADE 6 asks.
+# Change-score studies still count in the MD -- the contrast survives the mix --
+# and simply take no part in the reference. An SMD gets nothing: its difference
+# is in SD units and cannot be added to a mean on the outcome's own scale
+# without a reference SD this table does not have.
+#
+# The control arms are pooled with fixed inverse-variance weights (n / SD^2),
+# whatever model the effect estimate used: a random-effects control mean would
+# need a tau^2 for the between-study spread of arm means, which is not the
+# contrast-level tau^2 the model estimated. With unusable control SDs the
+# weights fall back to the arm sizes. Studies held out of the pool
+# (meta_obj$exclude) are held out here too. Returns NULL -- and the cells stay
+# empty -- when the attribute is absent or no endpoint control arm is usable.
+.control_endpoint_reference <- function(meta_obj) {
+  if (!identical(as.character(meta_obj$sm %||% ""), "MD")) return(NULL)
+  types <- attr(meta_obj, "pmatools_score_type")
+  if (is.null(types)) return(NULL)
+
+  labs   <- as.character(meta_obj$studlab)
+  mean_c <- as.numeric(meta_obj$mean.c %||% numeric(0))
+  n_c    <- as.numeric(meta_obj$n.c %||% numeric(0))
+  sd_c   <- as.numeric(meta_obj$sd.c %||% rep(NA_real_, length(mean_c)))
+  if (length(mean_c) == 0L || length(mean_c) != length(labs) ||
+      length(n_c) != length(labs) || length(sd_c) != length(labs)) {
+    return(NULL)
+  }
+
+  is_endpoint <- unname(types[labs]) %in% "endpoint"
+  keep <- is_endpoint & is.finite(mean_c) & is.finite(n_c) & n_c > 0
+  excl <- meta_obj$exclude
+  if (!is.null(excl) && length(excl) == length(labs)) {
+    keep <- keep & !(is.logical(excl) & !is.na(excl) & excl)
+  }
+  if (!any(keep)) return(NULL)
+
+  iv <- keep & is.finite(sd_c) & sd_c > 0
+  if (all(iv[keep])) {
+    w <- n_c[iv] / sd_c[iv]^2
+    return(list(mean = sum(w * mean_c[iv]) / sum(w), k = sum(keep),
+                weighting = "inverse-variance"))
+  }
+  w <- n_c[keep]
+  list(mean = sum(w * mean_c[keep]) / sum(w), k = sum(keep),
+       weighting = "sample-size")
+}
+
+# Footnote for a table with at least one row filled from
+# .control_endpoint_reference(). `outcomes` names the rows when the table holds
+# more than one outcome, and is NULL for a single-outcome table.
+.cont_reference_note <- function(label_intervention = "intervention",
+                                 label_control = "control",
+                                 outcomes = NULL) {
+  paste0(
+    "Mean difference",
+    if (length(outcomes) > 0L) paste0(" (", paste(outcomes, collapse = ", "), ")"),
+    ": the ", label_control, " value is the pooled mean of the ",
+    label_control, " arms of the studies reporting endpoint scores ",
+    "(inverse-variance weights n/SD^2, fixed whatever model the effect uses); ",
+    "studies reporting change from baseline contribute to the mean difference ",
+    "but not to this value. The ", label_intervention, " value is the ",
+    label_control, " value plus the pooled mean difference, and its 95% CI is ",
+    "that of the mean difference, the ", label_control,
+    " value being treated as fixed."
+  )
+}
+
 # The pair of arm cells for any outcome. `continuous` tells the caller which
 # kind it got, since the column headers differ: the rate wording and the `per`
 # denominator would misdescribe a pair of cells belonging to an outcome that
-# has no rates at all.
+# has no rates at all. `reference` is TRUE when a mean difference's cells were
+# filled from the endpoint control arms, which is what the caller's footnote
+# keys on.
 .sof_arm_cells <- function(meta_obj, baseline_risk, per = 1000,
-                           big_mark = TRUE, ci_sep = "; ") {
+                           big_mark = TRUE, ci_sep = "; ", digits = 2L) {
   sm <- as.character(meta_obj$sm %||% "")
   if (sm %in% c("MD", "SMD")) {
+    ref    <- .control_endpoint_reference(meta_obj)
+    pooled <- .pooled_estimate(meta_obj)
+    est    <- pooled$est
+    if (!is.null(ref) && !is.null(est) && length(est) == 1L &&
+        is.finite(est)) {
+      fmt <- function(v) formatC(v, format = "f", digits = digits)
+      ier <- fmt(ref$mean + est)
+      lo  <- pooled$lower
+      hi  <- pooled$upper
+      if (length(lo) == 1L && length(hi) == 1L &&
+          is.finite(lo) && is.finite(hi)) {
+        b   <- sort(c(ref$mean + lo, ref$mean + hi))
+        ier <- sprintf("%s\n(%s%s%s)", ier, fmt(b[1]), ci_sep, fmt(b[2]))
+      }
+      return(list(cer = fmt(ref$mean), ier = ier, continuous = TRUE,
+                  reference = TRUE))
+    }
     # Empty strings rather than "-": "-" is this table's mark for a number that
     # was expected and could not be computed, and here none was expected.
-    return(list(cer = "", ier = "", continuous = TRUE))
+    return(list(cer = "", ier = "", continuous = TRUE, reference = FALSE))
   }
   list(cer = .format_cer(baseline_risk, per, big_mark = big_mark),
        ier = .format_ier(meta_obj, baseline_risk, per,
                          big_mark = big_mark, ci_sep = ci_sep),
-       continuous = FALSE)
+       continuous = FALSE, reference = FALSE)
 }
 
 # --------------------------------------------------------------------------

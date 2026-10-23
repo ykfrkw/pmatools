@@ -6,7 +6,7 @@
 library(testthat)
 
 ROLE_ORDER <- c("studlab", "treat", "n", "event", "mean", "sd",
-                "outcome", "rob", "indirectness", "subgroup")
+                "outcome", "rob", "indirectness", "subgroup", "score_type")
 
 # The column that filled `role`, or NA.
 filled_by <- function(detected, role) detected$column[match(role, detected$role)]

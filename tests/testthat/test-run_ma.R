@@ -196,3 +196,57 @@ test_that("forcing hakn on below k = 3 warns but is still applied", {
   )
   expect_equal(forced$method.random.ci, "HK")
 })
+
+# --- score_type (0.5.2) -------------------------------------------------------
+
+make_scored <- function(score_type) {
+  d <- make_long_continuous()
+  d$score_type <- score_type[match(d$studlab, unique(d$studlab))]
+  d
+}
+
+test_that("a score_type column is attached per study, by studlab", {
+  d  <- make_scored(c("Endpoint", " change ", NA))
+  ma <- run_ma(d, outcome_type = "continuous", sm = "MD")
+  st <- attr(ma, "pmatools_score_type")
+  expect_identical(unname(st), c("endpoint", "change", NA_character_))
+  expect_identical(names(st), as.character(ma$studlab))
+})
+
+test_that("no score_type column means no attribute", {
+  ma <- run_ma(make_long_continuous(), outcome_type = "continuous", sm = "MD")
+  expect_null(attr(ma, "pmatools_score_type"))
+})
+
+test_that("an unknown score_type word aborts rather than being dropped", {
+  expect_error(
+    run_ma(make_scored(c("endpoint", "endpiont", "change")),
+           outcome_type = "continuous", sm = "MD"),
+    "endpiont")
+})
+
+test_that("arms of one study that disagree on score_type abort", {
+  d <- make_scored(c("endpoint", "change", "change"))
+  d$score_type[d$studlab == unique(d$studlab)[1] & d$treat == "control"] <-
+    "change"
+  expect_error(run_ma(d, outcome_type = "continuous", sm = "MD"),
+               "disagree on score_type")
+})
+
+test_that("the low risk-of-bias refit keeps the score types", {
+  d  <- make_scored(c("endpoint", "endpoint", "change"))
+  # Study A, rated high risk of bias, carries most of the weight and an
+  # inflated benefit, so Core GRADE 4 Fig 2 sends the analysis to the low
+  # risk-of-bias studies.
+  d$n[d$studlab == "A"] <- 600
+  d$mean[d$studlab == "A" & d$treat == "experimental"] <- 6
+  ma <- run_ma(d, outcome_type = "continuous", sm = "MD")
+  g  <- suppressWarnings(suppressMessages(grade_meta(
+    ma, study_design = "RCT", rob = c("high", "low", "low"),
+    small_values = "desirable", indirectness = "no",
+    outcome_name = "Test", outcome_type = "absolute",
+    threshold_type = "null")))
+  expect_lt(g$meta$k, ma$k)
+  expect_identical(attr(g$meta, "pmatools_score_type"),
+                   attr(ma, "pmatools_score_type"))
+})

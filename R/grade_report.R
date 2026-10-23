@@ -313,7 +313,15 @@ grade_report <- function(outcomes,
       cer, ier, eff, cert))
   }
 
-  c(hdr, sep, rows)
+  ref_nms <- nms[vapply(seq_along(outcomes), function(i) {
+    !.is_not_reported(outcomes[[i]]) && isTRUE(arms[[i]]$reference)
+  }, logical(1))]
+  ref_note <- if (length(ref_nms) > 0L) {
+    c("", paste0("*", .cont_reference_note(label_intervention, label_control,
+                                           outcomes = ref_nms), "*"))
+  }
+
+  c(hdr, sep, rows, ref_note)
 }
 
 # --------------------------------------------------------------------------
@@ -343,11 +351,15 @@ grade_report <- function(outcomes,
                     prediction = prediction,
                     label_intervention = label_intervention,
                     label_control      = label_control)
-  doc <- flextable::body_add_flextable(doc, ft)
-  doc <- officer::body_add_par(doc, "", style = "Normal")
+  doc <- flextable::body_add_flextable(doc, .ft_fit_width(ft, "landscape"))
+  # The title, the disclaimer and the Summary of Findings share a LANDSCAPE
+  # section: the table is too wide for a portrait page, and the two lines above
+  # it are too short to earn one of their own. The section break starts the
+  # rationale on a new page, so its heading needs no break of its own.
+  doc <- .docx_end_section(doc, "landscape")
 
   doc <- .docx_add_heading(doc, "Domain-by-Domain Rationale",
-                           style = "heading 2", page_break = TRUE)
+                           style = "heading 2", page_break = FALSE)
 
   nms <- names(outcomes)
   if (is.null(nms)) nms <- vapply(outcomes, function(g) g$outcome_name, character(1))
@@ -405,12 +417,15 @@ grade_report <- function(outcomes,
     ft_detail <- flextable::width(ft_detail, j = 1, width = 1.2)
     ft_detail <- flextable::width(ft_detail, j = 2, width = 1.0)
     ft_detail <- flextable::width(ft_detail, j = 3, width = 0.8)
-    ft_detail <- flextable::width(ft_detail, j = 4, width = 4.0)
+    ft_detail <- flextable::width(ft_detail, j = 4, width = 3.7)
     ft_detail <- flextable::bg(ft_detail,   bg = "#F0F0F0", part = "header")
     ft_detail <- flextable::bold(ft_detail, part = "header")
-    doc <- flextable::body_add_flextable(doc, ft_detail)
+    doc <- flextable::body_add_flextable(doc,
+                                         .ft_fit_width(ft_detail, "portrait"))
     doc <- officer::body_add_par(doc, "", style = "Normal")
   }
+  # The rationale is prose with four-column tables: portrait.
+  doc <- .docx_last_section(doc, "portrait")
 
   print(doc, target = path)
   path

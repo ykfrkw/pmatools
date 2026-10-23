@@ -5,7 +5,7 @@
 #
 # Canonical long columns:
 #   studlab, treat, n, [event], [mean], [sd], [outcome], [rob],
-#   [indirectness], [subgroup]
+#   [indirectness], [subgroup], [score_type]
 
 #' Ingest study-level data into canonical long format
 #'
@@ -14,7 +14,7 @@
 #' @param format One of `"auto"` (default), `"long"`, or `"wide"`.
 #' @param mapping Optional named list mapping canonical column names to user
 #'   column names. Keys: `studlab`, `treat`, `n`, `event`, `mean`, `sd`, `rob`,
-#'   `indirectness`, `subgroup`, plus wide-format pairs `n_e`/`n_c`,
+#'   `indirectness`, `subgroup`, `score_type`, plus wide-format pairs `n_e`/`n_c`,
 #'   `event_e`/`event_c`, `mean_e`/`mean_c`, `sd_e`/`sd_c`.
 #' @param experimental_label,control_label Optional. Values of `treat` to
 #'   identify experimental and control arms in long format. If NULL, inferred
@@ -269,7 +269,10 @@ PMA_INGEST_ROLE_ALIASES <- list(
   rob          = c("risk_of_bias", "rob_d", "rob_overall", "rob_judgment",
                    "rob_judgement"),
   indirectness = c("indir"),
-  subgroup     = c("group", "stratum")
+  subgroup     = c("group", "stratum"),
+  # Whether a continuous study reported endpoint ("endpoint") or
+  # change-from-baseline ("change") scores. Read by run_ma() and nothing else.
+  score_type   = c("endpoint_or_change", "measure_type")
 )
 
 # The roles .validate_long() refuses to proceed without.
@@ -307,7 +310,7 @@ PMA_INGEST_REQUIRED_ROLES <- c("studlab", "treat", "n")
 #' @return A data.frame with one row per role, in role order, and columns:
 #'   \describe{
 #'     \item{role}{the canonical name (`studlab`, `treat`, `n`, `event`,
-#'       `mean`, `sd`, `outcome`, `rob`, `indirectness`, `subgroup`).}
+#'       `mean`, `sd`, `outcome`, `rob`, `indirectness`, `subgroup`, `score_type`).}
 #'     \item{column}{the source column that fills it, or `NA` when none does.}
 #'     \item{matched_by}{`"canonical"` when the column already carried the
 #'       role's own name, `"alias"` when it was renamed, `NA` when unfilled.}

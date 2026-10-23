@@ -401,6 +401,15 @@ grade_table <- function(outcomes,
   )
   ft <- flextable::add_footer_lines(ft, values = footnote)
 
+  # Mean-difference rows whose arm cells were filled from the endpoint control
+  # arms. A converted row's pair came from the responder conversion instead.
+  ref_nms <- names(Filter(function(a) isTRUE(a$reference), arms))
+  if (length(ref_nms) > 0L) {
+    ft <- flextable::add_footer_lines(
+      ft, values = .cont_reference_note(label_intervention, label_control,
+                                        outcomes = ref_nms))
+  }
+
   # What "Not reported" means, stated once for the table however many such rows
   # it has.
   if (.has_not_reported(outcomes)) {

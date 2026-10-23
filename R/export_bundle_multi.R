@@ -603,10 +603,12 @@ export_bundle.pmatools_set <- function(x,
     ft <- evidence_profile(g, other_text = .other_text(g, other_text),
                            other_downgrade = .other_downgrade(g,
                                                               other_downgrade))
-    doc <- flextable::body_add_flextable(doc, ft)
+    doc <- flextable::body_add_flextable(doc, .ft_fit_width(ft, "landscape"))
     doc <- officer::body_add_par(doc, "", style = "Normal")
   }
-  doc <- officer::body_end_section_landscape(doc, w = 11, h = 8.5)
+  # Landscape throughout: every outcome is a heading and a nine-column table,
+  # and the title above the first is too short to earn a portrait page.
+  doc <- .docx_last_section(doc, "landscape")
   print(doc, target = path)
   invisible(path)
 }

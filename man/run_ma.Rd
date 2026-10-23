@@ -51,7 +51,12 @@ common-effects (default \code{FALSE}) pooling.}
 
 \item{incr}{Continuity correction for zero events (binary). Default 0.5.}
 
-\item{subgroup}{Optional column name in \code{data} for subgroup analysis.}
+\item{subgroup}{Optional column name in \code{data} for subgroup analysis.
+A \code{score_type} column, when \code{data} carries one, is read without being
+named: it says whether each continuous study reported endpoint
+(\code{"endpoint"}) or change-from-baseline (\code{"change"}) scores, and is
+attached to the result as \code{attr(, "pmatools_score_type")} for the Summary
+of Findings (see \code{\link{sof_table}}). It does not change the fit.}
 
 \item{experimental_label, control_label}{Values of \code{treat} identifying the
 intervention (experimental) and comparator (control) arms. Supplied values

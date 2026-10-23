@@ -1035,3 +1035,51 @@ test_that("the multi-outcome script carries threshold_baseline through", {
   expect_match(txt, "threshold_baseline", fixed = TRUE)
   expect_match(txt, "threshold_baseline = 0.12", fixed = TRUE)
 })
+
+# --- every bundled table fits its page (0.5.2) -------------------------------
+#
+# The BMJ table with its plain-language column was 10.3 in wide and the
+# GRADEpro table with domain columns 11.3 in, on a landscape page with about
+# 9 in between the margins: the right-hand columns were cut off in Word.
+
+docx_layout <- function(path) {
+  ex <- tempfile(); dir.create(ex)
+  zip::unzip(path, files = "word/document.xml", exdir = ex)
+  xml <- paste(readLines(file.path(ex, "word", "document.xml"), warn = FALSE),
+               collapse = "")
+  grids <- regmatches(xml, gregexpr("<w:tblGrid>.*?</w:tblGrid>", xml))[[1]]
+  list(
+    orient = regmatches(xml, gregexpr('(?<=w:orient=")[a-z]+', xml,
+                                      perl = TRUE))[[1]],
+    widths = vapply(grids, function(g) {
+      sum(as.numeric(regmatches(g, gregexpr('(?<=w:w=")[0-9]+', g,
+                                            perl = TRUE))[[1]])) / 1440
+    }, numeric(1), USE.NAMES = FALSE))
+}
+
+test_that("every table in the bundle is landscape and within the margins", {
+  g <- grade_for_style()
+  for (style in c("bmj", "gradepro")) {
+    d <- bundle_with_style(g, paste0("fit_", style), style = style)
+    for (f in c("sof_table.docx", "grade_table.docx")) {
+      lay <- docx_layout(file.path(d, f))
+      expect_identical(lay$orient, "landscape", info = paste(style, f))
+      expect_true(all(lay$widths <= .docx_text_width("landscape") + 0.01),
+                  info = paste(style, f))
+    }
+  }
+})
+
+test_that(".ft_fit_width narrows a wide table and leaves a narrow one alone", {
+  wide <- flextable::width(flextable::flextable(data.frame(a = 1, b = 2)),
+                           width = 6)
+  fitted <- .ft_fit_width(wide, "landscape")
+  expect_equal(sum(dim(fitted)$widths), .docx_text_width("landscape"))
+  # Proportions are kept: both columns were equal and stay equal.
+  expect_equal(dim(fitted)$widths[[1]], dim(fitted)$widths[[2]])
+
+  narrow <- flextable::width(flextable::flextable(data.frame(a = 1)),
+                             width = 2)
+  expect_identical(dim(.ft_fit_width(narrow, "portrait"))$widths,
+                   dim(narrow)$widths)
+})
