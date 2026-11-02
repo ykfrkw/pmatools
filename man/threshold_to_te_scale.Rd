@@ -41,8 +41,8 @@ branching like ARD-vs-ratio in OIS).}
 only when an \code{"ard"} Threshold was converted to the ratio scale.}
 \item{threshold_note}{Human-readable conversion note (eg,
 \code{"Absolute threshold 50 per 1000 at baseline risk 180 per 1000
-      (equivalent RR 1.28)"}). Non-\code{NULL} only on ARD-to-ratio
-conversion.}
+      (equivalent RR 1.28)"}). Non-\code{NULL} on ARD-to-ratio conversion,
+and when a ratio threshold below 1 was replaced by its reciprocal.}
 \item{threshold_baseline}{The baseline risk actually used for the
 conversion. Non-\code{NULL} only on ARD-to-ratio conversion.}
 }
@@ -66,7 +66,10 @@ rate of \code{meta_obj}; an error is raised if neither is available):
 approximation for HR is accurate only for low event rates / short
 follow-up; interpret with care.
 }
-\code{threshold_internal} is then \eqn{\log T}. For non-ratio effect
+\code{threshold_internal} is then \eqn{\log T}. A ratio threshold below 1
+(eg, 0.8) is replaced by its reciprocal (1.25), which is the same distance
+from the null on the log scale, and \code{threshold_note} says so; a
+non-positive ratio threshold is an error. For non-ratio effect
 measures, \code{threshold_scale = "ard"} keeps the previous pass-through
 behaviour (\code{threshold_internal = threshold}).
 }
