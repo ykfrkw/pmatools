@@ -61,6 +61,22 @@ unchanged input.
   `pubias.svg` gains the Q0 node, its "No" leaf and edges. Read routes through
   `domain_facts()`, not by matching ids.
 
+* **feat!: `rob_some_concerns` defaults to `"low"` again.** By owner
+  decision, studies rated `"some concerns"` now count on the **low** risk of
+  bias side unless you pass `rob_some_concerns = "high"` (the default in 0.5.1
+  and 0.5.2). This changes the high-RoB weight share and therefore the
+  Fig 7-2 dominance gate — evidence that 0.5.x called dominated can now be
+  undominated, and is then not rated down — and it changes which studies form
+  the low risk of bias pool, so the "substantial differences" answer and the
+  `low_only` analysis set (and its refit) can move too. Core GRADE gives no
+  fold for "some concerns"; `"high"` remains for reviewers who read it as the
+  stricter worked boundary ("at least one item" at high risk of bias). The
+  rated object now records `$rob_some_concerns`, which `export_bundle()`
+  writes into the bundled `analysis.R` when the call did not pass the
+  argument. The Shiny app's radio defaults to `"low"` as well. A 0.5.1/0.5.2
+  rating that relied on the default reproduces only with
+  `rob_some_concerns = "high"`.
+
 ## New features
 
 * **`rob_direction_check = FALSE`** in `assess_rob()` and `grade_meta()`.
@@ -87,6 +103,8 @@ unchanged input.
   prints its answer under the chart ("Important effect: …", read off the last
   rating; assumed yes before one exists), and ends at the result without
   asking anything when it is no.
+* The "Where do studies rated 'some concerns' belong?" radio defaults to
+  "Some concerns count as low risk of bias", matching the package.
 
 ## Documentation and provenance
 

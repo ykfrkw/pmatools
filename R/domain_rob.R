@@ -21,19 +21,19 @@
 # --------------------------------------------------------------------------
 # Step 0. Binary classification of each study
 #
-#   rob_some_concerns = "high" (default) : {not_serious}          -> low
-#                                          {serious, very_serious} -> high
-#   rob_some_concerns = "low"            : {not_serious, serious} -> low
+#   rob_some_concerns = "low" (default)  : {not_serious, serious} -> low
 #                                          {very_serious}         -> high
+#   rob_some_concerns = "high"           : {not_serious}          -> low
+#                                          {serious, very_serious} -> high
 #
-#   THE DEFAULT IS "high" as of 0.5.1, and it was "low" before. Two reasons,
-#   and neither is that the source settles it (it does not -- see PROVENANCE
-#   below). First, "some concerns" is the judgment RoB 2 gives a study it
-#   cannot call low risk of bias; folding it low asserts the one thing the
-#   assessment declined to say. Second, of Core GRADE 4's three worked
-#   examples for the low/high boundary, the one it states first calls a trial
-#   high risk of bias "if at least one item was rated as high risk of bias" --
-#   the reading a some-concerns study most often meets.
+#   THE DEFAULT IS "low" as of 0.6.0, by owner decision: a study rated "some
+#   concerns" counts on the low risk of bias side unless the reviewer says
+#   otherwise. (It was "high" in 0.5.1 and 0.5.2, and "low" before that.) The
+#   source does not settle the fold either way -- see PROVENANCE below -- so
+#   the default is a pmatools choice, not a Core GRADE rule. "high" remains
+#   available for reviewers who read "some concerns" as the stricter of Core
+#   GRADE 4's worked boundaries, which calls a trial high risk of bias "if at
+#   least one item was rated as high risk of bias".
 #
 #   PROVENANCE: the binary verdict is Core GRADE's (verbatim, Core GRADE 4:
 #   "For simplicity, however, Core GRADE users can assess the overall risk of
@@ -348,9 +348,10 @@ PMA_ROB_INFLATION_THRESHOLD <- 0.20
 #' @param rob Scalar GRADE level, per-study vector, or column name in
 #'   `meta_obj$data`.
 #' @param meta_obj A `meta::metagen`-like object.
-#' @param rob_some_concerns `"high"` (default) or `"low"`: which side of the
-#'   binary low/high classification `"serious"` studies are folded into.
-#'   The default was `"low"` up to 0.5.1.
+#' @param rob_some_concerns `"low"` (default) or `"high"`: which side of the
+#'   binary low/high classification `"serious"` (Cochrane "some concerns")
+#'   studies are folded into. The default is `"low"` as of 0.6.0; it was
+#'   `"high"` in 0.5.1 and 0.5.2, and `"low"` before that.
 #' @param rob_overrides Named character vector of study-level Risk-of-Bias
 #'   overrides, keyed on `meta_obj$studlab`. Every key needs a matching
 #'   rationale in `rob_override_rationale`.
@@ -382,7 +383,7 @@ PMA_ROB_INFLATION_THRESHOLD <- 0.20
 #'   `update.meta(subset = )`, or `NULL`).
 #' @noRd
 assess_rob <- function(rob, meta_obj,
-                       rob_some_concerns       = "high",
+                       rob_some_concerns       = "low",
                        rob_overrides           = NULL,
                        rob_override_rationale  = NULL,
                        rob_dominant_threshold  = 0.55,
@@ -599,7 +600,7 @@ assess_rob <- function(rob, meta_obj,
 # Binary low/high fold of the normalised levels. Shared by .flowchart_rob()
 # (which classifies the pooled studies) and assess_rob() (which classifies the
 # studies {meta} dropped, so that "high_idx" is complete in studlab space).
-.rob_high_levels <- function(some_concerns_as = "high") {
+.rob_high_levels <- function(some_concerns_as = "low") {
   high_levels <- c("very_serious", "extremely_serious")
   if (identical(some_concerns_as, "high")) {
     high_levels <- c(high_levels, "serious")
@@ -622,11 +623,11 @@ assess_rob <- function(rob, meta_obj,
 }
 
 .check_rob_some_concerns <- function(x) {
-  # NULL is "not supplied", and the default it resolves to moved from "low" to
-  # "high" in 0.5.1 (see the Step 0 block at the top of this file). This is the
-  # single place that decides it: assess_rob() and grade_meta() both route
-  # through here, so the two cannot drift.
-  if (is.null(x)) return("high")
+  # NULL is "not supplied", and the default it resolves to is "low" as of
+  # 0.6.0 ("high" in 0.5.1-0.5.2; see the Step 0 block at the top of this
+  # file). This is the single place that decides it: assess_rob() and
+  # grade_meta() both route through here, so the two cannot drift.
+  if (is.null(x)) return("low")
   x <- as.character(x)[1]
   if (!x %in% c("low", "high")) {
     rlang::abort(paste0(
@@ -765,7 +766,7 @@ assess_rob <- function(rob, meta_obj,
                            inflation_threshold = PMA_ROB_INFLATION_THRESHOLD,
                            small_values = NULL,
                            threshold_internal = NULL,
-                           some_concerns_as = "high",
+                           some_concerns_as = "low",
                            override_notes = NULL,
                            direction_check = FALSE) {
 

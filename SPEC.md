@@ -443,7 +443,7 @@ grade_meta(
   # --- Risk of bias (Core GRADE Guide Fig 7-2; §5.1) ---
   rob                              = NULL,   # per-study vector, or scalar override
   rob_rationale                    = NULL,   # REQUIRED with a scalar `rob`
-  rob_some_concerns                = c("high", "low"), # which side "some concerns" folds into
+  rob_some_concerns                = c("low", "high"), # which side "some concerns" folds into (default "low", v0.6.0)
   rob_overrides                    = NULL,   # named chr vector keyed on studlab
   rob_override_rationale           = NULL,   # named chr vector, one per override (REQUIRED)
   rob_dominant_threshold           = 0.55,   # weight share for the Fig 7-2 dominance gate (`>=`)
@@ -547,6 +547,7 @@ rating is set up and `export_bundle()` can print it in `results.txt`.
 | `$meta_full` | the all-studies analysis |
 | `$rob_analysis_set` | `"all"` or `"low_only"` |
 | `$rob_refit` | logical; whether a refit actually took place |
+| `$rob_some_concerns` (v0.6.0) | `"low"` or `"high"`, the fold the rating used (§5.1 Step 0). `export_bundle()` falls back to it |
 | `$rob_direction_check` (v0.6.0) | logical; whether the legacy direction check (§5.1 Step 2c) was requested. `export_bundle()` reads it |
 | `$threshold_type` | `"mid"` or `"null"` |
 | `$rating_target` | `"important_effect"` / `"little_to_no_difference"` / `"non_null_effect"` |
@@ -1676,21 +1677,23 @@ The Guide's figure differs from the BMJ one in exactly one place that matters: *
 
 | `rob_some_concerns` | low | high |
 |---|---|---|
-| `"high"` (default since 0.5.1) | `not_serious` | `serious`, `very_serious`, `extremely_serious` |
-| `"low"` (the default up to 0.5.1) | `not_serious`, `serious` | `very_serious`, `extremely_serious` |
+| `"low"` (default as of 0.6.0; also up to 0.5.0) | `not_serious`, `serious` | `very_serious`, `extremely_serious` |
+| `"high"` (the default in 0.5.1 and 0.5.2) | `not_serious` | `serious`, `very_serious`, `extremely_serious` |
 
-**The default is `"high"`, and it is pmatools' choice rather than the source's.**
-Core GRADE 4 defines no fold — the phrase "some concerns" does not occur in it,
-and it declines to settle the low/high boundary at all ("may be an issue that
-will be impossible to resolve"). So the default is a decision this package has
-to make, and it is the conservative one: `"some concerns"` is what RoB 2
-returns for a study it declines to call low risk of bias, and folding it low
-asserts the one thing the assessment would not. It also matches the first of
-the three worked boundaries Core GRADE 4 quotes ("if at least one item was
-rated as high risk of bias"), and the Shiny app, which has offered `"high"` as
-its default since the control existed — the two disagreed until 0.5.1.
-`.check_rob_some_concerns(NULL)` is the single place that resolves it, so
-`assess_rob()` and `grade_meta()` cannot drift.
+**The default is `"low"` as of 0.6.0, by owner decision, and it is pmatools'
+choice rather than the source's.** Core GRADE 4 defines no fold — the phrase
+"some concerns" does not occur in it, and it declines to settle the low/high
+boundary at all ("may be an issue that will be impossible to resolve") — so the
+default is a decision this package has to make. A `"some concerns"` study counts
+on the low risk of bias side unless the reviewer says otherwise. `"high"`
+remains available for reviewers who read "some concerns" as the stricter of the
+three worked boundaries Core GRADE 4 quotes ("if at least one item was rated as
+high risk of bias"). The Shiny app defaults to `"low"` too. A rating made with
+0.5.1 or 0.5.2 that omitted the argument reproduces only with
+`rob_some_concerns = "high"`; the rated object records the fold it used as
+`$rob_some_concerns`, which `export_bundle()` writes into `analysis.R` when the
+call did not pass it. `.check_rob_some_concerns(NULL)` is the single place that
+resolves the default, so `assess_rob()` and `grade_meta()` cannot drift.
 
 `rob_overrides` (named by `studlab`) are applied **before** the fold; each override requires a rationale, and a key matching no study label aborts rather than being silently ignored.
 
