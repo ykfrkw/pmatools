@@ -12,6 +12,10 @@
 * The Configuration tab no longer says the outcome direction "sets the bias
   direction Risk of Bias checks": since 0.6.0 Risk of bias checks no bias
   direction by default. It now says what the direction is used for.
+* Answers now always sit below the flowchart on every domain tab. Risk of
+  Bias's "some concerns" choice and Indirectness's four questions moved below
+  their chart; Inconsistency's subgroup question is now directly under the
+  verdict, above the forest plot.
 
 # pmatools 0.7.2
 

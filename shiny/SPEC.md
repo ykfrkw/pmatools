@@ -2386,6 +2386,19 @@ Three renderings of the same file, all through `pma_flowchart()` in
 | inside the collapsed "How is this judged?" accordion | none | the plain diagram, as reference |
 | **above the Publication bias wizard**, always visible | the answers so far, from `step3_pubias_flow_ids()` | that tab asks one question at a time, so the chart is what says how much is left; it has to light up before any rating exists. The under-the-verdict copy is suppressed there (`flowchart = FALSE`) so the figure is drawn once |
 
+**The chart comes first; the questions follow it (0.7.3).** On all five domain
+tabs the order is header → reference → threshold block → evaluation and flowchart
+(plus anything that qualifies it, such as `impre_rare_sensitivity`) → the domain's
+inputs → editors, plots, override, confirmation and navigation. Risk of Bias puts the
+`rob_some_concerns` radio under `rob_evaluation`; Inconsistency puts the
+`subgroup_explained` question directly under `incon_evaluation`, above the forest
+plot; Indirectness draws `indir_flowchart` above its four Fig 8-2 questions;
+Imprecision's inputs and the Publication bias wizard already sat below their charts.
+The chart frames which node a question answers, and a question that appears
+conditionally (Inconsistency Step 3, the Publication bias wizard) then opens below
+what the reviewer is reading instead of pushing it down the page.
+`tests/testthat/test-flowchart-ui.R` pins the source order.
+
 `pma_flowchart()` reads `_pmatools_inst/figures/<figkey>.svg` (staged path first, a
 local-development fallback second — the same shape `step1_data.R` uses for `extdata`,
 and deliberately **not** `system.file()`, which `stage_bundle.R` does not rewrite for
@@ -2455,10 +2468,10 @@ Guide's Fig 8-2 asks them (package `SPEC.md` §4.5.3), and draws the figure.
   route is a best guess (the legacy scale never said whether the outcome was a
   surrogate); the level is what is guaranteed, and the reviewer sees the
   choice it landed on.
-- **The figure** is `output$indir_flowchart`, rendered under the subdomain
-  table by the same `pma_flowchart_details()` the other domains use, with the
-  `flow_path` fact of `domain_facts(g, "Indirectness")` — the union of every
-  row's route, so up to four routes are lit at once. Unrated, it is the plain
+- **The figure** is `output$indir_flowchart`, rendered above the four
+  questions (§3.4.12) by the same `pma_flowchart_details()` the other domains
+  use, with the `flow_path` fact of `domain_facts(g, "Indirectness")` — the
+  union of every row's route, so up to four routes are lit at once. Unrated, it is the plain
   figure. `PMA_FLOWCHART_FIGS[["Indirectness"]]` names `assess_indirectness()`
   and carries a `departure` sentence: the worst-case combination of the four
   branches is pmatools', and the Guide's "very close" footnote in brief.

@@ -160,11 +160,34 @@ test_that("pma_flowchart_details() renders open, with the chart inside", {
                fixed = TRUE)
 })
 
-test_that("the Indirectness tab draws Fig 8-2 under the subdomain table", {
+test_that("the Indirectness tab draws Fig 8-2", {
   src <- paste(readLines(file.path(PMA_APP_ROOT, "R", "step3_grade.R"),
                          warn = FALSE), collapse = "\n")
   expect_match(src, 'shiny::uiOutput("indir_flowchart")', fixed = TRUE)
   expect_match(src, 'pma_flowchart_details("Indirectness"', fixed = TRUE)
+})
+
+# House rule: on every domain tab the chart comes first and the questions the
+# reviewer answers follow it. Checked on source order, which is render order
+# inside each tabPanel.
+test_that("every domain tab places its questions below its flowchart", {
+  src <- paste(readLines(file.path(PMA_APP_ROOT, "R", "step3_grade.R"),
+                         warn = FALSE), collapse = "\n")
+  position_of <- function(pattern) {
+    position <- regexpr(pattern, src, fixed = TRUE)[[1]]
+    expect_gt(position, 0)
+    position
+  }
+  expect_lt(position_of('shiny::uiOutput("rob_evaluation")'),
+            position_of('shiny::radioButtons("rob_some_concerns"'))
+  expect_lt(position_of('shiny::uiOutput("incon_evaluation")'),
+            position_of('shiny::radioButtons("subgroup_explained"'))
+  # The subgroup question sits directly under the verdict, not under the
+  # forest plot.
+  expect_lt(position_of('shiny::radioButtons("subgroup_explained"'),
+            position_of('shiny::imageOutput("incon_forest"'))
+  expect_lt(position_of('shiny::uiOutput("indir_flowchart")'),
+            position_of('shiny::radioButtons("indir_population"'))
 })
 
 test_that("www/flowchart.js is loaded by Step 3 and is idempotent by design", {
