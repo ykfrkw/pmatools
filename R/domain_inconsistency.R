@@ -592,8 +592,9 @@ assess_inconsistency <- function(meta_obj,
   f_zone_counts <- .fact(
     "zone_counts", "Study estimates relative to the chosen threshold",
     if (M > 0) {
-      sprintf("%d above, %d within, %d below (threshold +/-%.3g, k = %d)",
-              n_above, n_trivial, n_below, M, n_total)
+      sprintf("%d above, %d within, %d below (threshold %s, k = %d)",
+              n_above, n_trivial, n_below,
+              .threshold_words(M, .rob_scale(meta_obj$sm)), n_total)
     } else {
       sprintf("%d above, %d below (threshold: the null, k = %d)",
               n_above, n_below, n_total)

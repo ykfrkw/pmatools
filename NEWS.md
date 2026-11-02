@@ -1,3 +1,18 @@
+# pmatools 0.7.3
+
+## Bug fixes
+
+* The Inconsistency zone-count fact (the Evidence Profile footnote "Study
+  estimates relative to the chosen threshold") printed a ratio threshold as
+  its log value ("threshold +/-0.339"); it now reads "threshold OR 1.4 (or
+  0.712 on the other side)", like the domain notes since 0.7.2.
+
+## Shiny app
+
+* The Configuration tab no longer says the outcome direction "sets the bias
+  direction Risk of Bias checks": since 0.6.0 Risk of bias checks no bias
+  direction by default. It now says what the direction is used for.
+
 # pmatools 0.7.2
 
 ## Bug fixes
