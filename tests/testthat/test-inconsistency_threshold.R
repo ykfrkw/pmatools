@@ -169,7 +169,7 @@ test_that("auto Step 2 with Threshold: all studies above Threshold -> majority_o
   g <- grade_meta(m, threshold = 1.20, threshold_scale = "ratio", small_values = "desirable")
   row <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   expect_equal(row$judgment, "not_serious")
-  expect_true(grepl("vs +/-Threshold", row$notes, fixed = TRUE))
+  expect_true(grepl("vs threshold ", row$notes, fixed = TRUE))
 })
 
 test_that("auto Step 2 with Threshold: zone tally distinguishes opposite from majority", {
@@ -280,7 +280,7 @@ test_that("a MID target makes both domains use +/-MID", {
   g <- grade_meta(m, threshold = 1.20, threshold_scale = "ratio", small_values = "desirable")
   incon <- g$domain_assessments[g$domain_assessments$domain == "Inconsistency", ]
   impre <- g$domain_assessments[g$domain_assessments$domain == "Imprecision", ]
-  expect_match(incon$notes, "vs +/-Threshold", fixed = TRUE)
+  expect_match(incon$notes, "vs threshold ", fixed = TRUE)
   expect_match(incon$notes, "same as Imprecision", fixed = TRUE)
   expect_match(impre$notes, "the +/-Threshold band", fixed = TRUE)
 })

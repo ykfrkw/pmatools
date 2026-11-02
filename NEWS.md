@@ -1,3 +1,15 @@
+# pmatools 0.7.2
+
+## Bug fixes
+
+* **Threshold notes now use the ratio the reviewer entered.** For OR, RR, HR
+  and RoM the Risk of bias, Inconsistency and Publication bias (Q0) notes
+  printed the threshold as its log value ("+/-0.223 on the analysis scale",
+  or "+/-1.25 (log OR scale)", which mislabelled the ratio). They now read
+  "OR 1.25 (or 0.8 on the other side)", beside an estimate already shown as an
+  OR. Difference measures are unchanged ("+/-0.2 (SMD)"). Wording only: no
+  judgment changes.
+
 # pmatools 0.7.1
 
 ## Bug fixes

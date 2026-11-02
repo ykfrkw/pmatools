@@ -534,7 +534,8 @@ assess_inconsistency <- function(meta_obj,
   # estimates of studies in relation to chosen threshold"), which is the same
   # one the Imprecision domain rates against.
   threshold_label <- if (M > 0) {
-    sprintf("vs +/-Threshold = +/-%g (chosen threshold; same as Imprecision)", M)
+    sprintf("vs threshold %s (chosen threshold; same as Imprecision)",
+            .threshold_words(M, .rob_scale(meta_obj$sm)))
   } else {
     paste0("vs null = 0 (chosen threshold is the null; same as Imprecision)")
   }

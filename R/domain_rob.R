@@ -1186,6 +1186,19 @@ assess_rob <- function(rob, meta_obj,
   )
 }
 
+# A positive threshold M (analysis scale) in the units the reviewer entered:
+# a ratio measure reads "OR 1.25 (or 0.8 on the other side)", never the log
+# value, which nobody types in; a difference measure reads "+/-0.2 (SMD)".
+# Shared with the publication-bias Q0 note (R/domain_pubias.R).
+.threshold_words <- function(M, scale) {
+  if (scale$log_scale) {
+    sprintf("%s %s (or %s on the other side)", scale$sm_label,
+            format(signif(exp(M), 3)), format(signif(exp(-M), 3)))
+  } else {
+    sprintf("+/-%s (%s)", format(signif(M, 3)), scale$sm_label)
+  }
+}
+
 # Half-width of the trivial zone. NULL / NA / non-positive thresholds collapse
 # the zone to {0}, so only a sign change separates the zones.
 .rob_zone_bound <- function(threshold_internal) {
@@ -1208,11 +1221,7 @@ assess_rob <- function(rob, meta_obj,
 # The threshold sentence both readings print.
 .rob_threshold_note <- function(M, scale, sm) {
   if (M > 0) {
-    scale_label <- if (scale$log_scale) {
-      paste0("log ", scale$sm_label, " scale")
-    } else scale$sm_label
-    sprintf("Threshold = +/-%s (%s)", format(scale$disp(M), nsmall = 0),
-            scale_label)
+    sprintf("Threshold = %s", .threshold_words(M, scale))
   } else {
     "Threshold not supplied; trivial zone collapsed to {0} (sign-flip rule only)"
   }
