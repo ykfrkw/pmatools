@@ -2,7 +2,7 @@
 
 > Authoritative specification for the pmatools R package. Implementation MUST conform to this document. UI-side concerns (Shiny wizard, educational copy, accordion layout) are specified separately in [`shiny/SPEC.md`](shiny/SPEC.md), which governs the app in this repository's `shiny/` directory.
 
-**Version target:** 0.6.0
+**Version target:** 0.7.0
 **Document history:** this file was written for v0.2.0 and has been updated in place for v0.5.0, v0.5.1, v0.5.2 and v0.6.0; section numbering is preserved so the diff stays readable. Sections that still describe v0.2 behaviour verbatim are marked **[v0.2 — superseded]** with a pointer to the section that governs.
 
 **Backward compatibility:** v0.2 introduced no breaking changes. v0.4.0 and v0.5.0 did — see `NEWS.md`, which is authoritative for the change list. The three that most affect callers:
@@ -457,7 +457,7 @@ grade_meta(
   indirectness                     = NULL,   # scalar judgment, or override of the subdomain table
   indirectness_dominant_threshold  = 0.55,   # weight share for per-study aggregation (pmatools convention)
   indirectness_rationale           = NULL,   # REQUIRED with a scalar override other than "no"
-  indirectness_subdomains          = NULL,   # PICO data.frame
+  indirectness_subdomains          = NULL,   # PICO data.frame, Fig 8-2 answer codes
 
   # --- Inconsistency (Core GRADE 3; §5.2) ---
   inconsistency                    = NULL,
@@ -646,18 +646,27 @@ Supplying `rating_target` manually overrides the derivation and requires `rating
 
 Because the target is pinned, `print()` reports it as `manual`, and the pinned-target abort in `.resolve_rating_target()` (`"rating_target = '…' requires a threshold (MID)"`) is the second of the two no-number gates that refuse a margin question with no margin — the first being `.check_threshold_sides()` (§4.5.1b). Neither offers a value. `.check_threshold_type_gate()`, which *does* offer one, is therefore **not called** when `rating_target` is pinned or when `threshold_sides = "worse_only"`: the copyable hint it builds from `suggest_threshold()` is right for a threshold of clinical importance and wrong for a margin (§4.7a).
 
-#### 4.5.3 Indirectness subdomains (per-PICO; Core GRADE 5 reasoning, pmatools scale)
+#### 4.5.3 Indirectness subdomains (per-PICO; Core GRADE Guide Fig 8-2) [0.7.0]
 
-`indirectness_subdomains` is a data.frame with columns `subdomain`, `target`, `evidence`, `judgment`, one row per PICO element (Population / Intervention / Comparison / Outcome). Asking the question per element is Core GRADE 5's; **the 4-point scale below and the question wording "Is the evidence sufficiently direct?" are pmatools conventions** and do not appear in the article body, which instead grades the *likelihood* of rating down per element (Table 2: Low / Intermediate / Substantial / High likelihood). `judgment` uses the 4-point scale:
+`indirectness_subdomains` is a data.frame with columns `subdomain`, `target`, `evidence`, `judgment`, one row per PICO element. Asking the question per element is Core GRADE 5's; **the questions and answers are the living Core GRADE Guide's Fig 8-2** ("Decision-algorithm for assessing indirectness in core GRADE", chapter 8, online 2025-2026), and one `judgment` code per row encodes that row's whole route through the figure. The subdomain label picks the branch (case-insensitive): `Population`, `Intervention`, `Comparison` or `Comparator`, `Outcome`. Any other label is accepted with the Population / Intervention / Comparison codes and is not drawn on the figure.
 
-| Judgment | Levels down |
-|---|---|
-| `"yes"` | 0 |
-| `"probably_yes"` | 0 |
-| `"probably_no"` | 1 |
-| `"no"` | 2 |
+| Branch | `judgment` | Fig 8-2 route | Levels down |
+|---|---|---|---|
+| Population / Intervention / Comparison | `"no_difference"` | differences versus the target? No | 0 |
+| | `"similar"` | Yes, and the biological or social factors are sufficiently similar | 0 |
+| | `"dissimilar"` | Yes; factors not similar - dissimilar | 1 |
+| | `"very_dissimilar"` | Yes; factors not similar - very dissimilar | 2 |
+| Outcome | `"similar_definition"` | not a surrogate; criteria and time frames similar to the target | 0 |
+| | `"different_definition"` | not a surrogate; they differ | 1 |
+| | `"surrogate_very_close"` | surrogate, very close in the causal pathway (the Guide's footnote: some surrogates always represent a patient-important outcome) | 0 |
+| | `"surrogate_close"` | surrogate, close | 1 |
+| | `"surrogate_far"` | surrogate, far | 2 |
 
-Aliases such as `"Probably No"` are normalised. The domain judgment defaults to the **worst case across subdomains**; a scalar `indirectness` still overrides it, and then requires `indirectness_rationale`. The normalised table is returned as `$indirectness_subdomains`; `domain_assessments` keeps its one-row-per-domain schema. `indirectness_table()` (§4.13) renders the table. The worst-case fold is symmetric across the four elements and therefore does not reproduce Core GRADE 5 Table 2's asymmetric likelihood gradient (Population lowest, Outcome highest); the rendered footer says so.
+An Outcome code on another row, or a Population / Intervention / Comparison code on the Outcome row, **aborts** (`.check_indirectness_answer_element()`): it names a route the figure does not have. Case and separator variants (`"Very dissimilar"`, `"surrogate-far"`) are normalised.
+
+**Legacy scale (not breaking).** pmatools' pre-Fig-8-2 answers to "Is the evidence sufficiently direct?" - a **pmatools convention** that appears nowhere in Core GRADE - are still accepted on any row with unchanged levels: `"yes"` and `"probably_yes"` 0, `"probably_no"` 1, `"no"` 2 (aliases such as `"Probably No"` normalised). On a Population / Intervention / Comparison row they are drawn on the routes `no_difference` / `similar` / `dissimilar` / `very_dissimilar` (`INDIRECTNESS_LEGACY_TO_PIC`); on the Outcome row the legacy scale never said whether the outcome was a surrogate, so the answer determines no route and the domain notes say so.
+
+The domain judgment defaults to the **worst case across subdomains**. That fold is pmatools': Fig 8-2 draws four parallel branches and does not say how they combine. It is symmetric across the four elements and therefore does not reproduce Core GRADE 5 Table 2's asymmetric likelihood gradient (Population lowest, Outcome highest); the rendered footer says so. A scalar `indirectness` still overrides the fold, and then requires `indirectness_rationale`. The normalised table is returned as `$indirectness_subdomains`; `domain_assessments` keeps its one-row-per-domain schema; the domain notes name each row's route in plain words. `indirectness_table()` (§4.13) renders the table, and the route is recorded as the `flow_path` fact (§5.6, §5.7) - including under an override, because the answers still walked the figure. The scalar, per-study and column-name shapes record no `flow_path`.
 
 #### 4.5.4 One control-arm risk, three arguments [v0.5.1]
 
@@ -920,7 +929,7 @@ The rest of this note describes what those cells held **before v0.6** and is kep
 
 - **The signal is the `"Manual override (<judgment>): <rationale>"` head** that `make_domain_row()` writes, parsed back by `.parse_override_note()` in `R/domain_row.R`, **not** `auto == FALSE`. `auto == FALSE` also means "the reviewer supplied an input the algorithm cannot compute" — an answered `pubias_small_industry`, say — where the flowchart still decided the judgment and the facts still explain it. `auto` is checked as a corroborating guard, so a domain note that merely quotes the phrase does not trigger it.
 - **Only the override clause travels**, up to the first `" | "`. Behind that separator is the automatic note, which is flowchart prose written for a reader following the figure and is far too long for a table footer; its numbers are already in the facts.
-- **It is not keyed on a domain name.** Every domain can be overridden. `.rated_down_fact_domains()` therefore admits a rated-down domain that carries an override even when it emits no facts at all, which is how **Indirectness** — the one domain with no facts — stopped being able to rate the evidence down and explain nothing.
+- **It is not keyed on a domain name.** Every domain can be overridden. `.rated_down_fact_domains()` therefore admits a rated-down domain that carries an override even when it emits no facts at all, which is how **Indirectness** — the one domain with no readable facts, its only fact being the machine-only Fig 8-2 `flow_path` — stopped being able to rate the evidence down and explain nothing.
 
 **Not-reported outcomes.** `sof_table()` **aborts** on a `pmatools_not_reported` (§4.14) with a message pointing at `grade_table()`.
 
@@ -1520,9 +1529,9 @@ rare_suite_crossing_note(cross, threshold_internal = NULL, worse_side = NULL)
 indirectness_table(x, summary_text = NULL, ...) -> flextable
 ```
 
-Renders `x$indirectness_subdomains` (§4.5.3): target question, evidence found, a colour-graded 4-option judgment row with the recorded answer ticked, and a merged "Judgment across subdomains" row carrying the overall judgment. Aborts with a message telling the caller how to record subdomains when `x` has none.
+Renders `x$indirectness_subdomains` (§4.5.3): target question, evidence found, the Fig 8-2 answer in words (a legacy answer says it is on the pre-Fig-8-2 scale), three colour-graded leaf columns - Do not rate down / Rate down once / Rate down twice - with the leaf the answer reached ticked, and a merged "Judgment across subdomains" row carrying the overall judgment. Up to 0.5.2 the ticked columns were the four legacy answers. Aborts with a message telling the caller how to record subdomains when `x` has none.
 
-**Attribution (§4.13).** This is a **pmatools table layout implementing Core GRADE 5's per-PICO reasoning — not a Core GRADE 5 publication table.** The article body carries exactly two tables: Table 1 (an adaptation of a summary of findings table) and Table 2 ("Summary of indirectness issues": PICO element / Reason for rating down / Examples / Likelihood of rating down). Nothing of this shape appears there, and the strings "sufficiently direct", "probably yes" and "probably no" occur nowhere in it. *(The online supplementary appendices have not been checked.)* This attribution is stated **here and in `?indirectness_table`'s `@section Attribution`** — the two places a reader looks it up once — and no longer in the rendered footer, where it rode along on every exported copy of the table describing the tool rather than the evidence. The footer carries what a reader needs in order to read the table in front of them: the provenance line the disclaimer hangs off ("implemented by pmatools from the per-PICO reasoning in Core GRADE 5"), the mark key, the rate-down rule, the worst-case default, and the Table 2 likelihood gradient (Population "Low" → Intervention "Intermediate" → Comparison "Substantial" → Outcome "High likelihood"), which the symmetric worst-case fold does not reproduce.
+**Attribution (§4.13).** The questions and answers are the Core GRADE Guide's Fig 8-2 (§4.5.3); the **table layout** and the worst-case fold into its closing row are pmatools'. This is a **pmatools table layout implementing Core GRADE 5's per-PICO reasoning — not a Core GRADE 5 publication table.** The article body carries exactly two tables: Table 1 (an adaptation of a summary of findings table) and Table 2 ("Summary of indirectness issues": PICO element / Reason for rating down / Examples / Likelihood of rating down). Nothing of this shape appears there, and the strings "sufficiently direct", "probably yes" and "probably no" occur nowhere in it. *(The online supplementary appendices have not been checked.)* This attribution is stated **here and in `?indirectness_table`'s `@section Attribution`** — the two places a reader looks it up once — and no longer in the rendered footer, where it rode along on every exported copy of the table describing the tool rather than the evidence. The footer carries what a reader needs in order to read the table in front of them: the provenance line the disclaimer hangs off ("implemented by pmatools from the per-PICO reasoning in Core GRADE 5"), the mark key, the rate-down rule, the worst-case default, and the Table 2 likelihood gradient (Population "Low" → Intervention "Intermediate" → Comparison "Substantial" → Outcome "High likelihood"), which the symmetric worst-case fold does not reproduce.
 
 ### 4.14 `not_reported_outcome()` / `add_not_reported()` [v0.5.1]
 
@@ -2285,7 +2294,7 @@ The container is **domain-agnostic**: `.fact(key, label, value, numeric = NA)` b
 | Publication bias | `important_effect` | 1 / 0 — the Q0 answer (v0.6.0; §5.5d); the `value` says whether it was computed or supplied |
 | | `k` | effective study count (`.pubias_effective_k()`). The `value` is the **bare count** as of 0.5.1; it used to read `"12 (Q2 threshold: 10)"`, and a SoF footnote is the one place a reader meets that string with no flowchart beside it to say what a "Q2" is. The threshold survives in the prose note (`"k = 12 >= 10"`) |
 | | `egger_p` | Egger p value, recorded only when the test actually ran |
-| Indirectness | none recorded | its judgment is a gradient, not a flowchart branch — the structured record is `x$indirectness_subdomains` |
+| Indirectness | `flow_path` only | recorded only when assessed from `indirectness_subdomains`: the union of the Fig 8-2 routes of every row, in vocabulary order. The fuller structured record is `x$indirectness_subdomains`. Being machine-only, it never makes Indirectness a footnoted domain on its own (`.rated_down_fact_domains()` counts readable facts) |
 | Risk of bias, Inconsistency, Imprecision, Publication bias | `flow_path` | the flowchart path taken; see §5.7 |
 
 Keys are **stable API**: a consumer branches on `key`, not on the wording of `label` or `value`.
@@ -2297,12 +2306,27 @@ than a reader belongs in that constant too.
 
 ### 5.7 Decision flowcharts and the node vocabulary (v0.5.1)
 
-Four domains route their judgment through a flowchart and ship a drawing of it:
+All five domains route their judgment through a flowchart and ship a drawing of it:
 Risk of bias (Core GRADE Guide Fig 7-2, formerly Core GRADE 4 Fig 2), Inconsistency
-(Core GRADE 3 Fig 2), Imprecision (Core GRADE 2 Fig 4) and Publication bias (Core GRADE
-Guide Fig 9-1, formerly Core GRADE 4 Fig 5). Indirectness does not:
-Core GRADE 5 Table 2 grades it on a gradient across the four PICO elements, so there is
-no branch to draw or to record.
+(Core GRADE 3 Fig 2), Imprecision (Core GRADE 2 Fig 4), Publication bias (Core GRADE
+Guide Fig 9-1, formerly Core GRADE 4 Fig 5) and, since 0.7.0, Indirectness (Core GRADE
+Guide Fig 8-2, `inst/figures/indirect.svg`).
+Up to 0.5.2 Indirectness had none, because the BMJ Core GRADE 5 paper grades it on a
+gradient (Table 2) and draws no algorithm; the Guide's chapter 8 added one.
+
+**Indirectness - Fig 8-2.** Four parallel branches under one root. Population,
+Intervention and Comparison each have a question node, a "no" leaf (do not rate down)
+and a "yes" edge into one shared similarity node, whose three leaves are do not rate
+down / rate down once / rate down twice. Outcome asks whether the outcome is a
+surrogate: yes leads to the pathway node (very close / close / far), no to the
+definition node (yes / no). The drawing places the definition node below the pathway
+leaves rather than beside them, for room. Departures, stated in the caption and the
+`<desc>`: the worst-case combination of the branches is pmatools', and legacy-scale
+answers are drawn as described in §4.5.3. The caption carries the Guide's "very close"
+footnote in brief. Only the subdomain-table shape walks the figure; its `flow_path` is the
+**union** of every row's route (`.indirectness_flow_path()`), in vocabulary order rather
+than traversal order, because several routes are lit at once. The app draws it on the
+Indirectness tab under the subdomain table rather than under a verdict.
 
 **These are pmatools' own diagrams, not reproductions of the BMJ figures.** They differ
 from the source on purpose — the Risk-of-Bias chart's substantial-differences node is
@@ -2371,8 +2395,9 @@ package documents.
 `id="pma-<figkey>-<kind>-<slug>"` with `<kind>` one of `node`, `edge`, `leaf`. Each
 assessor declares the ids it can emit as a constant beside itself —
 `.ROB_FIG2_NODE_IDS`, `.INCON_FIG2_NODE_IDS`, `.IMPRE_FIG4_NODE_IDS`,
-`.PUBIAS_FIG5_NODE_IDS` — and every `return()` records the ids it traversed in the
-`flow_path` fact, space-separated, in order.
+`.PUBIAS_FIG5_NODE_IDS`, `.INDIRECT_FIG82_NODE_IDS` — and every `return()` records the
+ids it traversed in the `flow_path` fact, space-separated, in order (Indirectness: the
+union of its rows' routes, in vocabulary order).
 
 `tests/testthat/test-flowchart-nodes.R` holds the two halves together: the constant
 must be a subset of the ids actually present in the SVG, an emitted `flow_path` must

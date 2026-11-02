@@ -101,10 +101,10 @@ make_domain_row <- function(domain, judgment, auto, notes = NA_character_,
 # instead of it. Callers that want "how many high risk of bias studies?" or
 # "what was I2?" should read the facts rather than regex the sentences.
 #
-# Only Risk of bias, Inconsistency and Imprecision emit facts today;
-# Indirectness and Publication bias keep prose-only notes. The container is
-# domain-agnostic so they can adopt it without a change here or in the
-# renderers.
+# Every domain can emit facts. Indirectness emits only its machine-only
+# flow_path, and only when it was assessed from a subdomain table. The
+# container is domain-agnostic, so a domain adopts it without a change here or
+# in the renderers.
 # --------------------------------------------------------------------------
 
 # One structured fact behind a domain judgment.

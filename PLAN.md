@@ -33,7 +33,7 @@
 
 ---
 
-## 実装ステータス（v0.6.0）
+## 実装ステータス（v0.7.0）
 
 ### v0.1.0 既存
 - [x] パッケージ骨格（DESCRIPTION, NAMESPACE）
@@ -182,6 +182,15 @@ The authority is the `# pmatools 0.6.0` section of [NEWS.md](NEWS.md).
 - [x] `rob_some_concerns` defaults to `"low"` in the package and the app
   (**breaking**, owner decision; `"high"` was the 0.5.1-0.5.2 default). The
   rated object records `$rob_some_concerns` for `export_bundle()` (SPEC §5.1)
+
+### v0.7.0 追加
+
+The authority is the `# pmatools 0.7.0` section of [NEWS.md](NEWS.md).
+
+- [x] Indirectness follows Core GRADE Guide Fig 8-2: per-PICO decision
+  algorithm (similarity / surrogate pathway / outcome definition) with
+  `indirect.svg` and its flow_path; the legacy 4-point subdomain scale is
+  mapped level-for-level
 
 ---
 

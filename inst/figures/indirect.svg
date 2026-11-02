@@ -1,0 +1,275 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 746" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="indirect-title indirect-desc">
+  <title id="indirect-title">Indirectness: the Core GRADE Guide Figure 8-2 decision as pmatools implements it</title>
+  <desc id="indirect-desc">Flowchart. The question of interest is compared with the PICO of the available studies along four parallel branches. Population, Intervention and Comparator each ask whether there are differences versus the target - in age, condition or disease, or the population over time; in dose, duration, route, operator skill, non-adherence, switching or changing technology; in the comparator&#8217;s dose, duration, route or quality of administration. No means do not rate down. Yes leads to a shared question: are the biological or social factors sufficiently similar that one would anticipate a similar impact on the target outcome? Yes means do not rate down; no, dissimilar, means rate down once; no, very dissimilar, means rate down twice. The Outcome branch asks whether the outcome is a surrogate of the outcome of interest. If it is, how far is the surrogate placed in the putative causal pathway from the patient-important endpoints? Very close means do not rate down (some surrogates are so directly linked to the disease process that they always represent a patient-important outcome), close means rate down once, and far means rate down twice. If it is not a surrogate, are the criteria used to define outcomes and the time frames for measurement similar to the target? Yes means do not rate down; no means rate down once. This is pmatools&#8217; operationalisation of the living Core GRADE Guide Figure 8-2, not a reproduction of the published figure: the figure does not say how its four branches combine, and pmatools takes the worst case across them; and answers on pmatools&#8217; legacy four-point scale (yes, probably yes, probably no, no) are drawn on the Population, Intervention and Comparison routes as no difference, similar, dissimilar and very dissimilar, while on the Outcome branch they determine no route beyond the surrogate question.</desc>
+  <style>
+    .pma-fc-node rect, .pma-fc-leaf rect {
+      fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2;
+    }
+    .pma-fc-edge path { stroke: #cbd5e1; stroke-width: 1.5; fill: none; }
+    .pma-fc-node text, .pma-fc-leaf text, .pma-fc-edge text {
+      fill: #475569; font-size: 13px; font-weight: 400;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+    }
+    .pma-fc-edge-label { font-size: 12px; }
+    .pma-fc-caption { fill: #64748b; font-size: 12px; font-style: italic;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif; }
+    .pma-fc-heading { fill: #0f172a; font-size: 14px; font-weight: 600;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif; }
+    .pma-fc-on.pma-fc-node rect, .pma-fc-on.pma-fc-leaf rect {
+      stroke: #0f172a; stroke-width: 2.5;
+    }
+    .pma-fc-on.pma-fc-edge path { stroke: #0f172a; stroke-width: 3; }
+    .pma-fc-on text { fill: #0f172a; font-weight: 600; }
+  </style>
+  <text class="pma-fc-heading" x="20" y="26">Indirectness &#8212; Core GRADE Guide Fig 8-2, as pmatools implements it</text>
+  <g id="pma-indirect-edge-root-population" class="pma-fc-edge">
+    <path d="M 115 83 L 115 120"/>
+    <path d="M 110.5 113 L 115 120 L 119.5 113"/>
+  </g>
+  <g id="pma-indirect-edge-population-no" class="pma-fc-edge">
+    <path d="M 165 227 L 165 280"/>
+    <path d="M 160.5 273 L 165 280 L 169.5 273"/>
+    <text class="pma-fc-edge-label" x="173" y="257.5" text-anchor="start">No</text>
+  </g>
+  <g id="pma-indirect-edge-population-yes" class="pma-fc-edge">
+    <path d="M 65 227 L 65 375"/>
+    <path d="M 60.5 368 L 65 375 L 69.5 368"/>
+    <text class="pma-fc-edge-label" x="73" y="257.5" text-anchor="start">Yes</text>
+  </g>
+  <g id="pma-indirect-edge-root-intervention" class="pma-fc-edge">
+    <path d="M 315 83 L 315 120"/>
+    <path d="M 310.5 113 L 315 120 L 319.5 113"/>
+  </g>
+  <g id="pma-indirect-edge-intervention-no" class="pma-fc-edge">
+    <path d="M 365 244 L 365 280"/>
+    <path d="M 360.5 273 L 365 280 L 369.5 273"/>
+    <text class="pma-fc-edge-label" x="373" y="266" text-anchor="start">No</text>
+  </g>
+  <g id="pma-indirect-edge-intervention-yes" class="pma-fc-edge">
+    <path d="M 265 244 L 265 375"/>
+    <path d="M 260.5 368 L 265 375 L 269.5 368"/>
+    <text class="pma-fc-edge-label" x="273" y="266" text-anchor="start">Yes</text>
+  </g>
+  <g id="pma-indirect-edge-root-comparison" class="pma-fc-edge">
+    <path d="M 515 83 L 515 120"/>
+    <path d="M 510.5 113 L 515 120 L 519.5 113"/>
+  </g>
+  <g id="pma-indirect-edge-comparison-no" class="pma-fc-edge">
+    <path d="M 565 227 L 565 280"/>
+    <path d="M 560.5 273 L 565 280 L 569.5 273"/>
+    <text class="pma-fc-edge-label" x="573" y="257.5" text-anchor="start">No</text>
+  </g>
+  <g id="pma-indirect-edge-comparison-yes" class="pma-fc-edge">
+    <path d="M 465 227 L 465 375"/>
+    <path d="M 460.5 368 L 465 375 L 469.5 368"/>
+    <text class="pma-fc-edge-label" x="473" y="257.5" text-anchor="start">Yes</text>
+  </g>
+  <g id="pma-indirect-edge-similarity-yes" class="pma-fc-edge">
+    <path d="M 105 448 L 105 500"/>
+    <path d="M 100.5 493 L 105 500 L 109.5 493"/>
+    <text class="pma-fc-edge-label" x="113" y="478" text-anchor="start">Yes</text>
+  </g>
+  <g id="pma-indirect-edge-similarity-dissimilar" class="pma-fc-edge">
+    <path d="M 285 448 L 285 500"/>
+    <path d="M 280.5 493 L 285 500 L 289.5 493"/>
+    <text class="pma-fc-edge-label" x="293" y="478" text-anchor="start">No: dissimilar</text>
+  </g>
+  <g id="pma-indirect-edge-similarity-verydissimilar" class="pma-fc-edge">
+    <path d="M 470 448 L 470 500"/>
+    <path d="M 465.5 493 L 470 500 L 474.5 493"/>
+    <text class="pma-fc-edge-label" x="478" y="478" text-anchor="start">No: very dissimilar</text>
+  </g>
+  <g id="pma-indirect-edge-root-outcome" class="pma-fc-edge">
+    <path d="M 755 83 L 755 120"/>
+    <path d="M 750.5 113 L 755 120 L 759.5 113"/>
+  </g>
+  <g id="pma-indirect-edge-surrogate-yes" class="pma-fc-edge">
+    <path d="M 680 193 L 680 235"/>
+    <path d="M 675.5 228 L 680 235 L 684.5 228"/>
+    <text class="pma-fc-edge-label" x="688" y="218" text-anchor="start">Yes</text>
+  </g>
+  <g id="pma-indirect-edge-surrogate-no" class="pma-fc-edge">
+    <path d="M 880 156.5 L 925 156.5 L 925 455"/>
+    <path d="M 920.5 448 L 925 455 L 929.5 448"/>
+    <text class="pma-fc-edge-label" x="888" y="149.5" text-anchor="start">No</text>
+  </g>
+  <g id="pma-indirect-edge-pathway-veryclose" class="pma-fc-edge">
+    <path d="M 672.5 308 L 672.5 360"/>
+    <path d="M 668 353 L 672.5 360 L 677 353"/>
+    <text class="pma-fc-edge-label" x="678.5" y="338" text-anchor="start">Very close*</text>
+  </g>
+  <g id="pma-indirect-edge-pathway-close" class="pma-fc-edge">
+    <path d="M 767.5 308 L 767.5 360"/>
+    <path d="M 763 353 L 767.5 360 L 772 353"/>
+    <text class="pma-fc-edge-label" x="773.5" y="338" text-anchor="start">Close</text>
+  </g>
+  <g id="pma-indirect-edge-pathway-far" class="pma-fc-edge">
+    <path d="M 862.5 308 L 862.5 360"/>
+    <path d="M 858 353 L 862.5 360 L 867 353"/>
+    <text class="pma-fc-edge-label" x="868.5" y="338" text-anchor="start">Far</text>
+  </g>
+  <g id="pma-indirect-edge-definition-yes" class="pma-fc-edge">
+    <path d="M 705 528 L 705 575"/>
+    <path d="M 700.5 568 L 705 575 L 709.5 568"/>
+    <text class="pma-fc-edge-label" x="713" y="555.5" text-anchor="start">Yes</text>
+  </g>
+  <g id="pma-indirect-edge-definition-no" class="pma-fc-edge">
+    <path d="M 865 528 L 865 575"/>
+    <path d="M 860.5 568 L 865 575 L 869.5 568"/>
+    <text class="pma-fc-edge-label" x="873" y="555.5" text-anchor="start">No</text>
+  </g>
+  <g id="pma-indirect-node-root" class="pma-fc-node">
+    <rect x="20" y="44" width="920" height="39" rx="6" ry="6"/>
+    <text x="480" y="67" text-anchor="middle">
+      <tspan x="480" dy="0">Compare the question of interest with the PICO of the available studies</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-node-population" class="pma-fc-node">
+    <rect x="20" y="120" width="190" height="107" rx="6" ry="6"/>
+    <text x="115" y="143" text-anchor="middle">
+      <tspan x="115" dy="0">Population</tspan>
+      <tspan x="115" dy="17">Differences in age,</tspan>
+      <tspan x="115" dy="17">condition or disease, or</tspan>
+      <tspan x="115" dy="17">in the population over</tspan>
+      <tspan x="115" dy="17">time, versus the target?</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-leaf-population-nodown" class="pma-fc-leaf">
+    <rect x="120" y="280" width="90" height="56" rx="6" ry="6"/>
+    <text x="165" y="303" text-anchor="middle">
+      <tspan x="165" dy="0">Do not</tspan>
+      <tspan x="165" dy="17">rate down</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-node-intervention" class="pma-fc-node">
+    <rect x="220" y="120" width="190" height="124" rx="6" ry="6"/>
+    <text x="315" y="143" text-anchor="middle">
+      <tspan x="315" dy="0">Intervention</tspan>
+      <tspan x="315" dy="17">Differences in dose,</tspan>
+      <tspan x="315" dy="17">duration, route or operator</tspan>
+      <tspan x="315" dy="17">skill, or non-adherence,</tspan>
+      <tspan x="315" dy="17">switching or changing</tspan>
+      <tspan x="315" dy="17">technology, versus target?</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-leaf-intervention-nodown" class="pma-fc-leaf">
+    <rect x="320" y="280" width="90" height="56" rx="6" ry="6"/>
+    <text x="365" y="303" text-anchor="middle">
+      <tspan x="365" dy="0">Do not</tspan>
+      <tspan x="365" dy="17">rate down</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-node-comparison" class="pma-fc-node">
+    <rect x="420" y="120" width="190" height="107" rx="6" ry="6"/>
+    <text x="515" y="143" text-anchor="middle">
+      <tspan x="515" dy="0">Comparator</tspan>
+      <tspan x="515" dy="17">Differences in dose,</tspan>
+      <tspan x="515" dy="17">duration and route, or</tspan>
+      <tspan x="515" dy="17">quality of administration,</tspan>
+      <tspan x="515" dy="17">versus the target?</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-leaf-comparison-nodown" class="pma-fc-leaf">
+    <rect x="520" y="280" width="90" height="56" rx="6" ry="6"/>
+    <text x="565" y="303" text-anchor="middle">
+      <tspan x="565" dy="0">Do not</tspan>
+      <tspan x="565" dy="17">rate down</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-node-similarity" class="pma-fc-node">
+    <rect x="20" y="375" width="590" height="73" rx="6" ry="6"/>
+    <text x="315" y="398" text-anchor="middle">
+      <tspan x="315" dy="0">Are the biological or social factors sufficiently similar that one would</tspan>
+      <tspan x="315" dy="17">anticipate a similar impact on the target outcome across study patient /</tspan>
+      <tspan x="315" dy="17">intervention / comparator versus the target?</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-leaf-similarity-nodown" class="pma-fc-leaf">
+    <rect x="20" y="500" width="170" height="39" rx="6" ry="6"/>
+    <text x="105" y="523" text-anchor="middle">
+      <tspan x="105" dy="0">Do not rate down</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-leaf-similarity-down1" class="pma-fc-leaf">
+    <rect x="200" y="500" width="170" height="39" rx="6" ry="6"/>
+    <text x="285" y="523" text-anchor="middle">
+      <tspan x="285" dy="0">Rate down once</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-leaf-similarity-down2" class="pma-fc-leaf">
+    <rect x="380" y="500" width="180" height="39" rx="6" ry="6"/>
+    <text x="470" y="523" text-anchor="middle">
+      <tspan x="470" dy="0">Rate down twice</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-node-surrogate" class="pma-fc-node">
+    <rect x="630" y="120" width="250" height="73" rx="6" ry="6"/>
+    <text x="755" y="143" text-anchor="middle">
+      <tspan x="755" dy="0">Outcome</tspan>
+      <tspan x="755" dy="17">Is the outcome a surrogate</tspan>
+      <tspan x="755" dy="17">of the outcome of interest?</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-node-pathway" class="pma-fc-node">
+    <rect x="630" y="235" width="275" height="73" rx="6" ry="6"/>
+    <text x="767.5" y="258" text-anchor="middle">
+      <tspan x="767.5" dy="0">How far is the surrogate placed in the</tspan>
+      <tspan x="767.5" dy="17">putative causal pathway from the</tspan>
+      <tspan x="767.5" dy="17">patient-important endpoints?</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-leaf-pathway-nodown" class="pma-fc-leaf">
+    <rect x="630" y="360" width="85" height="56" rx="6" ry="6"/>
+    <text x="672.5" y="383" text-anchor="middle">
+      <tspan x="672.5" dy="0">Do not</tspan>
+      <tspan x="672.5" dy="17">rate down</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-leaf-pathway-down1" class="pma-fc-leaf">
+    <rect x="725" y="360" width="85" height="56" rx="6" ry="6"/>
+    <text x="767.5" y="383" text-anchor="middle">
+      <tspan x="767.5" dy="0">Rate down</tspan>
+      <tspan x="767.5" dy="17">once</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-leaf-pathway-down2" class="pma-fc-leaf">
+    <rect x="820" y="360" width="85" height="56" rx="6" ry="6"/>
+    <text x="862.5" y="383" text-anchor="middle">
+      <tspan x="862.5" dy="0">Rate down</tspan>
+      <tspan x="862.5" dy="17">twice</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-node-definition" class="pma-fc-node">
+    <rect x="630" y="455" width="310" height="73" rx="6" ry="6"/>
+    <text x="785" y="478" text-anchor="middle">
+      <tspan x="785" dy="0">Are the criteria used to define outcomes,</tspan>
+      <tspan x="785" dy="17">and the time frames for measurement,</tspan>
+      <tspan x="785" dy="17">similar to the target?</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-leaf-definition-nodown" class="pma-fc-leaf">
+    <rect x="630" y="575" width="150" height="39" rx="6" ry="6"/>
+    <text x="705" y="598" text-anchor="middle">
+      <tspan x="705" dy="0">Do not rate down</tspan>
+    </text>
+  </g>
+  <g id="pma-indirect-leaf-definition-down1" class="pma-fc-leaf">
+    <rect x="790" y="575" width="150" height="39" rx="6" ry="6"/>
+    <text x="865" y="598" text-anchor="middle">
+      <tspan x="865" dy="0">Rate down once</tspan>
+    </text>
+  </g>
+  <text class="pma-fc-caption" x="20" y="650">
+    <tspan x="20" dy="0">* Very close: some surrogates are so directly linked to the disease process that they always represent a</tspan>
+    <tspan x="20" dy="16">patient-important outcome (for example, a hip fracture diagnosed on radiograph).</tspan>
+  </text>
+  <text class="pma-fc-caption" x="20" y="694">
+    <tspan x="20" dy="0">After the living Core GRADE Guide (2025-2026), chapter 8, Fig 8-2. pmatools&#8217; operationalisation, not a reproduction:</tspan>
+    <tspan x="20" dy="16">pmatools combines the four branches worst-case, which the figure does not specify, and draws answers on its</tspan>
+    <tspan x="20" dy="16">pre-Fig-8-2 legacy scale on the Population / Intervention / Comparison routes; on Outcome they stop at the first question.</tspan>
+  </text>
+</svg>
+

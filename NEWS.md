@@ -1,3 +1,55 @@
+# pmatools 0.7.0
+
+## New features
+
+* **Indirectness follows the Core GRADE Guide's Fig 8-2.** The living Core
+  GRADE Guide (chapter 8, online 2025-2026) gives indirectness a decision
+  algorithm, "Decision-algorithm for assessing indirectness in core GRADE",
+  and `indirectness_subdomains$judgment` now takes its answers: one code per
+  row encodes the whole route. Population, Intervention and Comparison (or
+  Comparator) rows take `no_difference` and `similar` (do not rate down),
+  `dissimilar` (rate down once) and `very_dissimilar` (rate down twice). The
+  Outcome row takes `similar_definition` and `surrogate_very_close` (do not
+  rate down), `different_definition` and `surrogate_close` (once), and
+  `surrogate_far` (twice). An answer from the other branch aborts. The four
+  branches are still combined worst-case, which is pmatools' choice: the
+  figure draws them in parallel and does not say how they combine.
+
+* **Not breaking: the old answers still work.** `yes`, `probably_yes`,
+  `probably_no` and `no` (pmatools' own pre-Fig-8-2 scale for "Is the
+  evidence sufficiently direct?") are still accepted on any row and rate
+  exactly as before.
+
+* **Indirectness has a flowchart.** `inst/figures/indirect.svg` draws Fig 8-2
+  as pmatools implements it, and `?grade_flowcharts` shows it. An assessment
+  from a subdomain table records the route every row took as a `flow_path`
+  fact, so `domain_facts(g, "Indirectness")` is no longer always `NULL`. A
+  scalar, per-study or column-name `indirectness` still records nothing.
+  Legacy answers are drawn on the Population / Intervention / Comparison
+  routes as no difference / similar / dissimilar / very dissimilar. On the
+  Outcome row a legacy answer cannot say whether the outcome was a surrogate,
+  so its route is left undetermined and the domain notes say so. The domain
+  notes now name each row's route in plain words.
+
+## Changes to exported tables
+
+* **`indirectness_table()` shows the answer and the leaf it reached.** The
+  four ticked answer columns (Yes / Probably yes / Probably no / No) are
+  replaced by an "Answer" column carrying the Fig 8-2 answer in words (for
+  example "Surrogate, far from patient-important outcome") and three ticked
+  leaf columns: Do not rate down / Rate down once / Rate down twice. The
+  table keeps its six columns and its closing "Judgment across subdomains"
+  row. With every subdomain at "do not rate down", the closing row's
+  description now says so. Before, it named no subdomain.
+
+## Shiny app (3.6.0)
+
+* The Indirectness tab asks the four questions in Fig 8-2's words and offers
+  its answers (4 on Population, Intervention and Comparator; 5 on Outcome),
+  and it draws the figure under the subdomain table with every route the
+  answers took lit up. The input ids are unchanged. An answer remembered on
+  the old scale is restored to the Fig 8-2 choice that rates the same.
+
 # pmatools 0.6.0
 
 Risk of bias and publication bias now follow the **Core GRADE Guide**

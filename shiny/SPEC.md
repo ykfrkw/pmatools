@@ -4,7 +4,7 @@
 
 **Public URL:** https://yuki-furukawa.shinyapps.io/pmatools/
 **Deployment:** shinyapps.io (account: `yuki-furukawa`, appId: `17697029`)
-**App version:** 3.5.0 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.4.0 → 3.5.0 is the Core GRADE Guide flowcharts (risk of bias Fig 7-2, publication bias Fig 9-1 and its computed first node, §3.4.12); 3.3.0 → 3.4.0 is the optional Score type mapping (§3.3.3); 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
+**App version:** 3.6.0 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.5.0 → 3.6.0 is the Indirectness flowchart (Core GRADE Guide Fig 8-2, §3.4.12a); 3.4.0 → 3.5.0 is the Core GRADE Guide flowcharts (risk of bias Fig 7-2, publication bias Fig 9-1 and its computed first node, §3.4.12); 3.3.0 → 3.4.0 is the optional Score type mapping (§3.3.3); 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
 
 ---
 
@@ -1351,10 +1351,9 @@ as a rating rather than as a broken build.
 
 **The five "How is this judged?" accordions are deleted.** `pma_how_collapse()`
 and the five `EDU_COPY$domains$*$how` bodies (≈600 words) are gone with their
-accessor `edu_domain_how()` and the live `output$rob_how_body`. Four of the five
-domains draw their algorithm as a flowchart with the branch taken lit up;
-Indirectness has no flowchart and its PICO question labels and subdomain table
-carry the same ground. `pma_reference()` still names the source paper on every
+accessor `edu_domain_how()` and the live `output$rob_how_body`. All five
+domains draw their algorithm as a flowchart with the branch taken lit up
+(Indirectness since 0.7.0, §3.4.12a). `pma_reference()` still names the source paper on every
 tab, and is now the only pointer to it.
 
 **Citation style [v0.5.1].** Every reference the app renders is written in one
@@ -1593,7 +1592,7 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
   decides anything (0.5.1, breaking).** `pubias_registry_complete = "yes"`
   ("reporting bias is unlikely; do not rate down") is the pmatools
   short-circuit and is forwarded to `grade_meta()`. `"no"` ("reporting bias is
-  possible; go on to the Figure 5 nodes") is sent as `NULL` and decides
+  possible; go on to the Figure 9-1 nodes") is sent as `NULL` and decides
   nothing on its own. Two things went with that:
   - the app-level post-override that rewrote a `"no"` into a forced rate-down 1
     **regardless of the remaining nodes** is deleted. Core GRADE 4 Fig 5 has no
@@ -1819,7 +1818,8 @@ Configuration tab"* sentence is now the tab's own name as a link, built by
 so three copies of one `actionLink` id would collide.
 
 **Indirectness: the default is on screen.** All four PICO radios are
-**preselected to `"yes"`** (0.5.1), and so is the **overall rating**, to
+**preselected to `"yes"`** (0.5.1; since 0.7.0 to the Fig 8-2
+answers in `STEP3_INDIR_DEFAULT_ANSWERS`, §3.4.12a), and so is the **overall rating**, to
 `STEP3_INDIR_DEFAULT_LEVEL` (`"not_serious"`, `R/step3_threshold.R`). Leaving
 them blank used to send `indirectness = "no"` to `grade_meta()` while the
 screen showed four unanswered questions — the domain scored no downgrade
@@ -2371,10 +2371,11 @@ work" instead.
 
 ### 3.4.12 Domain flowcharts (v0.5.1)
 
-Each of the four flowcharted domains — Risk of Bias, Inconsistency, Imprecision,
+Each of the five domains — Risk of Bias, Inconsistency, Indirectness, Imprecision,
 Publication bias — shows the decision tree it was judged by, **with the path this
-analysis actually took highlighted**. Indirectness has no flowchart; Core GRADE 5
-Table 2 is a gradient, and its `indir_subdomain_table` stays the visual.
+analysis actually took highlighted**. Indirectness joined in the development
+version (§3.4.12a); up to 0.5.2 it had none, because the BMJ Core GRADE 5 paper
+draws no algorithm.
 
 Three renderings of the same file, all through `pma_flowchart()` in
 `R/judgment_display.R`:
@@ -2408,6 +2409,7 @@ printed.
 `pma_algorithm_source(domain)` supplies the caption naming the implementing function, so
 the app and the roxygen topic `?grade_flowcharts` quote the same file and function.
 
+
 **Risk of bias and publication bias cite the Core GRADE Guide (0.6.0).** The
 `PMA_FLOWCHART_FIGS` sources read "Core GRADE Guide Fig 7-2 (formerly Core GRADE 4
 Fig 2)" and "Core GRADE Guide Fig 9-1 (formerly Core GRADE 4 Fig 5)". The risk of
@@ -2417,6 +2419,49 @@ in either direction); the publication-bias one says the first node is computed. 
 app shows **only** the Guide's flowchart: it has no `rob_direction_check` control, and
 no caption mentions the five legacy direction rules or a two-level rule 5 —
 `tests/testthat/test-flowchart-ui.R` pins both.
+
+### 3.4.12a Indirectness — Core GRADE Guide Fig 8-2 [0.7.0]
+
+The Indirectness tab asks the four PICO questions as the living Core GRADE
+Guide's Fig 8-2 asks them (package `SPEC.md` §4.5.3), and draws the figure.
+
+- **Input ids are unchanged** — `indir_population`, `indir_intervention`,
+  `indir_comparator`, `indir_outcome` — so `PMA_OUTCOME_INPUT_IDS`, the
+  freshness guard and the restore path need no new registration. Their
+  **choices** are now Fig 8-2 answer codes, one per route, stacked rather than
+  inline because each label is a phrase: Population / Intervention / Comparator
+  offer `STEP3_INDIR_PIC_ANSWERS` (no differences; differences but factors
+  sufficiently similar; dissimilar; very dissimilar), Outcome offers
+  `STEP3_INDIR_OUTCOME_ANSWERS` (not a surrogate with similar or differing
+  definition and time frames; a surrogate very close / close / far). The radio
+  labels carry the figure's question wording in short; the help lines under
+  them (`EDU_COPY$domains$indirectness$population`, `$similarity`,
+  `$surrogate`, `$gradient`) carry Core GRADE's tests.
+- **Defaults** are `STEP3_INDIR_DEFAULT_ANSWERS`: `no_difference` on the three
+  P/I/C radios and `similar_definition` on Outcome — the "do not rate down"
+  answer each branch reaches without a second question. They fold to
+  `STEP3_INDIR_DEFAULT_LEVEL`, so the preselected overall rating still owes no
+  rationale.
+- `STEP3_INDIR_ANSWER_TO_LEVEL` maps the nine codes onto levels for the
+  rationale gate; `test-indirectness-fold.R` pins it against the package's
+  `INDIRECTNESS_ANSWER_TO_GRADE`.
+- **Legacy values are upgraded, level-preserving.** A remembered answer on the
+  pre-Fig-8-2 scale (`yes` / `probably_yes` / `probably_no` / `no`) is put back
+  through `step3_indir_upgrade_answer()` (`R/step3_threshold.R`) before
+  `sendInputMessage()`, and `indir_subdomains()` applies the same map, so a
+  radio is never sent a value it no longer offers. P/I/C: `no_difference` /
+  `similar` / `dissimilar` / `very_dissimilar`. Outcome: `similar_definition` /
+  `surrogate_very_close` / `surrogate_close` / `surrogate_far`. The Outcome
+  route is a best guess (the legacy scale never said whether the outcome was a
+  surrogate); the level is what is guaranteed, and the reviewer sees the
+  choice it landed on.
+- **The figure** is `output$indir_flowchart`, rendered under the subdomain
+  table by the same `pma_flowchart_details()` the other domains use, with the
+  `flow_path` fact of `domain_facts(g, "Indirectness")` — the union of every
+  row's route, so up to four routes are lit at once. Unrated, it is the plain
+  figure. `PMA_FLOWCHART_FIGS[["Indirectness"]]` names `assess_indirectness()`
+  and carries a `departure` sentence: the worst-case combination of the four
+  branches is pmatools', and the Guide's "very close" footnote in brief.
 
 ### 3.4.13 Confirmation, progress and the forward path (v0.5.1)
 

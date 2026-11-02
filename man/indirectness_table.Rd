@@ -23,35 +23,34 @@ A \code{flextable} object suitable for printing, Word export, etc.
 \description{
 Renders the Population / Intervention / Comparison / Outcome subdomain
 judgments recorded by \code{\link{grade_meta}}: one row per subdomain with
-its target question, the evidence found, and the 4-point judgment ("Is the
-evidence sufficiently direct?"), plus a closing row with the overall domain
-judgment.
+its target question, the evidence found, the answer given on the living
+Core GRADE Guide's Fig 8-2 decision algorithm in words, and a mark under
+the leaf that answer reached (do not rate down / rate down once / rate down
+twice), plus a closing row with the overall domain judgment.
 }
 \section{Attribution}{
 
-This table layout is a \strong{pmatools} implementation of the per-PICO
-reasoning Core GRADE 5 describes; \strong{it is not a Core GRADE 5
-publication table}. The published article carries only two tables: Table 1
-(an adaptation of a summary of findings table) and Table 2 ("Summary of
-indirectness issues", with the columns PICO element / Reason for rating down
-/ Examples / Likelihood of rating down). No table of the shape rendered here
-appears in the article body (the online supplementary appendices have not
-been checked).
+The per-element questions and their answers are the Core GRADE Guide's
+(chapter 8, Fig 8-2; see \code{\link{grade_flowcharts}}). The
+\strong{table layout} is a \strong{pmatools} implementation; it is not a
+Core GRADE publication table. Core GRADE 5 carries only Table 1 (an
+adaptation of a summary of findings table) and Table 2 ("Summary of
+indirectness issues", with the columns PICO element / Reason for rating
+down / Examples / Likelihood of rating down).
 
-The 4-point answer scale (\code{"yes"} / \code{"probably_yes"} /
-\code{"probably_no"} / \code{"no"}) and the question wording "Is the
-evidence sufficiently direct?" are likewise \strong{pmatools conventions}.
-Core GRADE 5 does not pose a yes/no directness question; it asks how likely
-it is that the effect differs substantially between the target PICO and the
-available evidence, and Table 2 grades that answer as "Low" /
-"Intermediate" / "Substantial" / "High likelihood" of rating down.
+The \strong{worst-case fold} into the closing row is also pmatools': Fig
+8-2 draws four parallel branches and does not say how they combine. Answers
+on pmatools' pre-Fig-8-2 legacy scale (\code{"yes"} /
+\code{"probably_yes"} / \code{"probably_no"} / \code{"no"}, the answer to
+"Is the evidence sufficiently direct?") are shown as such, under the leaf
+their level reaches.
 
 Core GRADE 5 Table 2 also treats the four PICO elements
 \emph{asymmetrically}: Population carries a "Low likelihood" of rating down,
 Intervention "Intermediate", Comparison "Substantial", and Outcome "High
-likelihood". This table (and the worst-case fold behind it) treats the four
-elements symmetrically, so a "probably no" on Population weighs the same as
-one on Outcome. The table footer repeats this caveat.
+likelihood". The worst-case fold treats the four elements symmetrically,
+so a dissimilar population weighs the same as a close surrogate. The table
+footer repeats this caveat.
 }
 
 \examples{
@@ -67,7 +66,8 @@ g <- grade_meta(
                   "Both LMWH and unfractionated heparin.",
                   "All trials used placebo injections.",
                   "Screening detected asymptomatic cases too."),
-    judgment  = c("yes", "yes", "yes", "probably_no")
+    judgment  = c("no_difference", "similar", "no_difference",
+                  "different_definition")
   )
 )
 indirectness_table(g)

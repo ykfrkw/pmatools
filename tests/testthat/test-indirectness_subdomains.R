@@ -419,3 +419,199 @@ test_that("analysis.R omits the scalar override when the worst case stands", {
   expect_true(grepl("indirectness_subdomains = data.frame", txt, fixed = TRUE))
   expect_silent(parse(script))
 })
+
+# ---- Core GRADE Guide Fig 8-2 answer codes --------------------------------
+
+fig82_subdomains <- function(population = "no_difference",
+                             intervention = "no_difference",
+                             comparison = "no_difference",
+                             outcome = "similar_definition") {
+  data.frame(
+    subdomain = c("Population", "Intervention", "Comparison", "Outcome"),
+    judgment  = c(population, intervention, comparison, outcome),
+    stringsAsFactors = FALSE
+  )
+}
+
+test_that("each Fig 8-2 code maps to the level of the leaf it reaches", {
+  pic <- c(no_difference = "not_serious", similar = "not_serious",
+           dissimilar = "serious", very_dissimilar = "very_serious")
+  for (code in names(pic)) {
+    g <- grade_with_subdomains(fig82_subdomains(intervention = code))
+    expect_equal(indir_row(g)$judgment, unname(pic[code]), info = code)
+  }
+  out <- c(similar_definition = "not_serious",
+           different_definition = "serious",
+           surrogate_very_close = "not_serious",
+           surrogate_close = "serious",
+           surrogate_far = "very_serious")
+  for (code in names(out)) {
+    g <- grade_with_subdomains(fig82_subdomains(outcome = code))
+    expect_equal(indir_row(g)$judgment, unname(out[code]), info = code)
+  }
+})
+
+test_that("Fig 8-2 codes accept case and separator variants", {
+  sub <- fig82_subdomains(population = "No difference",
+                          comparison = "Very-Dissimilar",
+                          outcome = "Surrogate far")
+  g <- grade_with_subdomains(sub)
+  expect_equal(g$indirectness_subdomains$judgment,
+               c("no_difference", "no_difference", "very_dissimilar",
+                 "surrogate_far"))
+  expect_equal(indir_row(g)$judgment, "very_serious")
+})
+
+test_that("a Comparator label is the comparison element", {
+  sub <- fig82_subdomains(comparison = "dissimilar")
+  sub$subdomain[3] <- "Comparator"
+  g <- grade_with_subdomains(sub)
+  expect_equal(indir_row(g)$judgment, "serious")
+  f <- domain_facts(g, "Indirectness")
+  expect_match(f$value[f$key == "flow_path"], "pma-indirect-node-comparison",
+               fixed = TRUE)
+})
+
+test_that("an answer from the other branch of the figure aborts", {
+  expect_error(
+    grade_with_subdomains(fig82_subdomains(outcome = "similar")),
+    regexp = "cannot be used on the 'Outcome' row")
+  expect_error(
+    grade_with_subdomains(fig82_subdomains(population = "surrogate_far")),
+    regexp = "cannot be used on the 'Population' row")
+  # A custom label is not the Outcome branch, so Outcome codes are refused.
+  expect_error(
+    grade_with_subdomains(data.frame(subdomain = "Setting",
+                                     judgment = "surrogate_close")),
+    regexp = "Outcome branch")
+  # Element matching is case-insensitive.
+  expect_error(
+    grade_with_subdomains(data.frame(subdomain = "outcome",
+                                     judgment = "very_dissimilar")),
+    regexp = "cannot be used on the 'outcome' row")
+})
+
+test_that("legacy answers keep their levels on every row", {
+  legacy <- c(yes = "not_serious", probably_yes = "not_serious",
+              probably_no = "serious", no = "very_serious")
+  for (ans in names(legacy)) {
+    for (row in 1:4) {
+      sub <- fig82_subdomains()
+      sub$judgment[row] <- ans
+      g <- grade_with_subdomains(sub)
+      expect_equal(indir_row(g)$judgment, unname(legacy[ans]),
+                   info = paste(ans, row))
+    }
+  }
+  # And the legacy-to-route map preserves the level it draws.
+  map <- pmatools:::INDIRECTNESS_LEGACY_TO_PIC
+  expect_identical(
+    unname(pmatools:::INDIRECTNESS_ANSWER_TO_GRADE[names(map)]),
+    unname(pmatools:::INDIRECTNESS_ANSWER_TO_GRADE[unname(map)]))
+})
+
+test_that("flow_path is the union of every row's route", {
+  g <- grade_with_subdomains(fig82_subdomains(
+    population = "no_difference", intervention = "similar",
+    comparison = "very_dissimilar", outcome = "surrogate_close"))
+  f <- domain_facts(g, "Indirectness")
+  ids <- strsplit(f$value[f$key == "flow_path"], " ", fixed = TRUE)[[1L]]
+  expected <- unique(c(
+    pmatools:::.indirectness_row_route("population", "no_difference"),
+    pmatools:::.indirectness_row_route("intervention", "similar"),
+    pmatools:::.indirectness_row_route("comparison", "very_dissimilar"),
+    pmatools:::.indirectness_row_route("outcome", "surrogate_close")))
+  expect_setequal(ids, expected)
+  expect_false(anyDuplicated(ids) > 0L)
+  expect_true(all(c("pma-indirect-leaf-population-nodown",
+                    "pma-indirect-leaf-similarity-nodown",
+                    "pma-indirect-leaf-similarity-down2",
+                    "pma-indirect-leaf-pathway-down1") %in% ids))
+  # Not the routes nobody took.
+  expect_false("pma-indirect-node-definition" %in% ids)
+  expect_false("pma-indirect-leaf-similarity-down1" %in% ids)
+})
+
+test_that("legacy P/I/C answers are drawn on their Fig 8-2 routes", {
+  g <- grade_with_subdomains(bmj_subdomains(outcome_judgment = "yes"))
+  f <- domain_facts(g, "Indirectness")
+  ids <- strsplit(f$value[f$key == "flow_path"], " ", fixed = TRUE)[[1L]]
+  # yes -> no_difference on all three P/I/C rows.
+  expect_true(all(paste0("pma-indirect-leaf-",
+                         c("population", "intervention", "comparison"),
+                         "-nodown") %in% ids))
+  # The legacy Outcome answer stops at the surrogate question.
+  expect_true("pma-indirect-node-surrogate" %in% ids)
+  expect_false(any(c("pma-indirect-node-pathway",
+                     "pma-indirect-node-definition") %in% ids))
+  expect_match(indir_row(g)$notes,
+               "route through Core GRADE Guide Fig 8-2 was not determined",
+               fixed = TRUE)
+  expect_match(indir_row(g)$notes, "pre-Fig-8-2 scale", fixed = TRUE)
+})
+
+test_that("domain notes name each row's route in plain words", {
+  g <- grade_with_subdomains(fig82_subdomains(
+    intervention = "dissimilar", outcome = "surrogate_far"))
+  notes <- indir_row(g)$notes
+  expect_match(notes,
+               "Intervention: differences; factors dissimilar (rate down once)",
+               fixed = TRUE)
+  expect_match(notes, paste0("Outcome: surrogate, far from patient-important ",
+                             "outcome (rate down twice)"),
+               fixed = TRUE)
+  expect_false(grepl(" | ", notes, fixed = TRUE))
+  expect_false(grepl("was not determined", notes, fixed = TRUE))
+})
+
+test_that("an override keeps the route it overrode", {
+  g <- grade_with_subdomains(
+    fig82_subdomains(outcome = "surrogate_close"),
+    indirectness = "very_serious",
+    indirectness_rationale = "Panel judged the surrogate far, not close")
+  expect_equal(indir_row(g)$judgment, "very_serious")
+  f <- domain_facts(g, "Indirectness")
+  expect_match(f$value[f$key == "flow_path"],
+               "pma-indirect-leaf-pathway-down1", fixed = TRUE)
+})
+
+test_that("scalar indirectness records no flow_path", {
+  g <- suppressWarnings(grade_meta(make_metabin_ind(), threshold_type = "null",
+                                   small_values = "desirable",
+                                   indirectness = "very_serious",
+                                   indirectness_rationale = "Older population"))
+  expect_null(domain_facts(g, "Indirectness"))
+})
+
+test_that("indirectness_table renders Fig 8-2 answers readably", {
+  skip_if_not_installed("flextable")
+  g <- grade_with_subdomains(fig82_subdomains(
+    comparison = "very_dissimilar", outcome = "surrogate_far"))
+  ft <- indirectness_table(g)
+  answers <- as.character(ft$body$dataset[[3]])
+  expect_true("Differences; factors very dissimilar" %in% answers)
+  expect_true("Surrogate, far from patient-important outcome" %in% answers)
+  expect_true("No difference from the target" %in% answers)
+  # The mark sits under the leaf each answer reached.
+  twice <- as.character(ft$body$dataset[[6]])
+  expect_identical(twice[3:4], rep("\u2611", 2))
+  expect_identical(twice[1], "\u2610")
+
+  # Legacy answers say which scale they are on.
+  g2 <- grade_with_subdomains(bmj_subdomains())
+  expect_true("Probably no, on the pre-Fig 8-2 scale" %in%
+                as.character(indirectness_table(g2)$body$dataset[[3]]))
+})
+
+test_that("the machine-only flow_path does not count as a footnote reason", {
+  # Indirectness's only fact is its Fig 8-2 route, which no prose renderer
+  # prints. Counting it would give the domain a footnote marker with nothing
+  # under it.
+  g <- grade_with_subdomains(fig82_subdomains(outcome = "surrogate_close"))
+  expect_false("Indirectness" %in% pmatools:::.rated_down_fact_domains(g))
+
+  g2 <- grade_with_subdomains(fig82_subdomains(outcome = "surrogate_close"),
+                              indirectness = "very_serious",
+                              indirectness_rationale = "Surrogate is far")
+  expect_true("Indirectness" %in% pmatools:::.rated_down_fact_domains(g2))
+})

@@ -15,7 +15,8 @@
 #       "extremely_serious")
 #   (b) length-k vector of per-study GRADE levels (weight-share aggregation)
 #   (c) column name in meta_obj$data (expanded to (b))
-#   (d) `indirectness_subdomains`: a PICO subdomain table (Core GRADE 5)
+#   (d) `indirectness_subdomains`: a PICO subdomain table, each row answered
+#       on the living Core GRADE Guide's Fig 8-2 (or on the legacy scale)
 #
 # (b)/(c) Per-study aggregation: weight-share dominance, not worst case
 # ---------------------------------------------------------------------------
@@ -52,23 +53,56 @@
 # The subdomain table (d) keeps its worst-case fold: subdomains are facets of
 # one judgment, not units of evidence, so weighting them is meaningless.
 #
-# (d) Subdomain judgments — a pmatools implementation of Core GRADE 5's
-#     per-PICO reasoning (NOT a Core GRADE 5 publication format)
+# (d) Subdomain judgments - the living Core GRADE Guide's Fig 8-2
 # ---------------------------------------------------------------------------
-# ATTRIBUTION. Core GRADE 5 asks the indirectness question separately for each
-# PICO element, and pmatools implements that as a per-subdomain table. The
-# TABLE ITSELF, the 4-point answer scale and the question wording "Is the
-# evidence sufficiently direct?" are pmatools conventions: the published
-# article body carries only Table 1 (an adapted summary of findings table) and
-# Table 2 ("Summary of indirectness issues"), and contains none of the strings
-# "sufficiently direct", "probably yes" or "probably no". (The online
-# supplementary appendices have not been checked.)
+# ATTRIBUTION. Asking the indirectness question separately for each PICO
+# element is Core GRADE 5's, and since the living Core GRADE Guide (chapter 8,
+# online 2025-2026) the per-element questions and their answers are the
+# Guide's too: its Fig 8-2, "Decision-algorithm for assessing indirectness in
+# core GRADE", is a four-branch decision tree, and the answer codes below
+# encode its routes one-to-one. What remains pmatools' is (i) the TABLE that
+# carries one answer per element, (ii) the worst-case fold that combines the
+# four branches (the figure draws four parallel branches and does not say how
+# they combine), and (iii) the legacy 4-point scale described further down.
 #
-# HOW CORE GRADE 5 ACTUALLY POSES THE QUESTION. It does not ask a yes/no
-# directness question; it asks how likely it is that the effect differs
-# substantially between the target PICO and the available evidence, and Table 2
-# grades that likelihood per PICO element (verbatim column header: "Likelihood
-# of rating down"), asymmetrically:
+# Fig 8-2, as encoded here (one answer per row encodes the whole route):
+#
+#   Population / Intervention / Comparison (any non-outcome label):
+#     "Are there differences ... versus the target?"
+#       No                                          no_difference   not_serious
+#       Yes -> "Are the biological or social factors sufficiently similar ...?"
+#         Yes                                       similar         not_serious
+#         No, dissimilar                            dissimilar      serious
+#         No, very dissimilar                       very_dissimilar very_serious
+#
+#   Outcome:
+#     "Is the outcome a surrogate of the outcome of interest?"
+#       No -> "Are the criteria used to define outcomes and time frames ...
+#              similar to the target?"
+#         Yes                                       similar_definition    not_serious
+#         No                                        different_definition  serious
+#       Yes -> "How far is the surrogate outcome placed in the putative
+#               causal pathway from the patient-important endpoints?"
+#         Very close (footnote *)                   surrogate_very_close  not_serious
+#         Close                                     surrogate_close       serious
+#         Far                                       surrogate_far         very_serious
+#
+# The footnote * is the Guide's: some surrogates are so directly linked to the
+# disease process that they always represent a patient-important outcome.
+#
+# A P/I/C code on the Outcome row, or an Outcome code on any other row, is a
+# route the figure does not have and aborts. The element is read from the
+# subdomain label (.indirectness_element()); a label that names no PICO
+# element is accepted with the P/I/C codes, and its route is not drawn.
+#
+# The figure is inst/figures/indirect.svg (data-raw/build_figures.R), and an
+# assessment from the subdomain table records the union of the element ids
+# every row traversed as its "flow_path" fact, exactly like the four
+# flowcharted domains. The scalar, per-study and column-name shapes record no
+# flow_path: they never walk the figure.
+#
+# Core GRADE 5 Table 2 also grades how LIKELY each element is to warrant rating
+# down (verbatim column header: "Likelihood of rating down"), asymmetrically:
 #
 #   Population   -> "Low likelihood because relative effects are typically
 #                    similar across populations"
@@ -85,23 +119,27 @@
 # The worst-case fold below is SYMMETRIC across the four elements and therefore
 # does not reproduce that gradient; users must weigh it themselves.
 #
-# Rating down two levels: Core GRADE 5 (verbatim) — "Although one might
+# Rating down two levels: Core GRADE 5 (verbatim) - "Although one might
 # consider rating down more than one level for indirectness for any PICO
-# element, this possibility is typically more salient for surrogate outcomes"
-# and "the decision to rate down one or two levels depends on one's
-# understanding of the likelihood that change in the patient important outcome
-# will follow change in the surrogate".
+# element, this possibility is typically more salient for surrogate outcomes".
+# Fig 8-2 makes that concrete: "far" surrogates and "very dissimilar"
+# populations, interventions or comparators rate down twice.
 #
-# Each subdomain (typically Population / Intervention / Comparison / Outcome,
-# but any set is accepted) answers the pmatools 4-point scale. Each answer maps
-# to a GRADE level:
+# THE LEGACY 4-POINT SCALE (pmatools' own, before Fig 8-2). Up to 0.5.x each
+# subdomain answered "Is the evidence sufficiently direct?" on a pmatools
+# scale that appears nowhere in Core GRADE. It is still accepted, with its
+# levels unchanged, so stored analyses and scripts keep rating the same:
 #
-#   answer          | meaning                          | GRADE level
-#   ----------------|----------------------------------|---------------
-#   yes             | directly applicable              | no
-#   probably_yes    | minor, unimportant differences   | no
-#   probably_no     | important differences            | some_concerns  (-1)
-#   no              | evidence is not applicable       | serious        (-2)
+#   answer          | GRADE level    | Fig 8-2 route it is drawn on (P/I/C)
+#   ----------------|----------------|-------------------------------------
+#   yes             | not_serious    | no_difference
+#   probably_yes    | not_serious    | similar
+#   probably_no     | serious        | dissimilar
+#   no              | very_serious   | very_dissimilar
+#
+# On the Outcome row a legacy answer does not say whether the outcome was a
+# surrogate, so it determines no route: only the root and the surrogate
+# question are lit, and the notes say the route was not determined.
 #
 # NOTE ON VOCABULARY. The level names are shared with Risk of bias and are Core
 # GRADE's own words ("not serious; serious; very serious; or, rarely, extremely
@@ -117,29 +155,71 @@
 # override that default; a value different from the default requires
 # `indirectness_rationale` (Core GRADE transparency principle). Supplying the
 # same value as the default is a harmless restatement and needs no rationale.
-# "No override" is `indirectness = NULL` (or the argument left out): NULL — not
-# the string "no" — is what grade_meta() defaults to, so callers that always
+# "No override" is `indirectness = NULL` (or the argument left out): NULL - not
+# the string "no" - is what grade_meta() defaults to, so callers that always
 # pass every argument do not accidentally override the subdomain worst case.
+#
+# ADMISSION RULE. Anything that reads or writes the indirectness judgment
+# itself (answer vocabulary, fold, notes, flow_path) belongs here. Rendering
+# the subdomain table belongs in R/indirectness_table.R; drawing the figure in
+# data-raw/build_figures.R; the Shiny tab in shiny/R/step3_grade.R.
 
-# 4-point subdomain answer scale (Core GRADE 5)
-INDIRECTNESS_ANSWERS <- c("yes", "probably_yes", "probably_no", "no")
+# Fig 8-2 answer codes (living Core GRADE Guide, chapter 8).
+INDIRECTNESS_PIC_ANSWERS <- c("no_difference", "similar", "dissimilar",
+                              "very_dissimilar")
+INDIRECTNESS_OUTCOME_ANSWERS <- c("similar_definition", "different_definition",
+                                  "surrogate_very_close", "surrogate_close",
+                                  "surrogate_far")
+# pmatools' pre-Fig-8-2 scale; accepted on any row, levels unchanged.
+INDIRECTNESS_LEGACY_ANSWERS <- c("yes", "probably_yes", "probably_no", "no")
 
-# Answer -> GRADE level contribution (see the table above). The keys are the
-# 4-point answers to "Is the evidence sufficiently direct?", NOT GRADE levels;
-# only the values moved when the level vocabulary did.
+# Every accepted answer, Fig 8-2 codes first.
+INDIRECTNESS_ANSWERS <- c(INDIRECTNESS_PIC_ANSWERS,
+                          INDIRECTNESS_OUTCOME_ANSWERS,
+                          INDIRECTNESS_LEGACY_ANSWERS)
+
+# Answer -> GRADE level contribution (see the trees above).
 INDIRECTNESS_ANSWER_TO_GRADE <- c(
-  yes          = "not_serious",
-  probably_yes = "not_serious",
-  probably_no  = "serious",
-  no           = "very_serious"
+  no_difference        = "not_serious",
+  similar              = "not_serious",
+  dissimilar           = "serious",
+  very_dissimilar      = "very_serious",
+  similar_definition   = "not_serious",
+  different_definition = "serious",
+  surrogate_very_close = "not_serious",
+  surrogate_close      = "serious",
+  surrogate_far        = "very_serious",
+  yes                  = "not_serious",
+  probably_yes         = "not_serious",
+  probably_no          = "serious",
+  no                   = "very_serious"
 )
 
-# Human-readable answer labels (table rendering / domain notes)
+# Human-readable answer labels (table rendering / domain notes). Kept free of
+# " | " so .first_sentence() keeps a whole note.
 INDIRECTNESS_ANSWER_LABELS <- c(
-  yes          = "Yes",
-  probably_yes = "Probably yes",
-  probably_no  = "Probably no",
-  no           = "No"
+  no_difference        = "No difference from the target",
+  similar              = "Differences; factors sufficiently similar",
+  dissimilar           = "Differences; factors dissimilar",
+  very_dissimilar      = "Differences; factors very dissimilar",
+  similar_definition   = "Not a surrogate; definition and time frame similar",
+  different_definition = "Not a surrogate; definition or time frame differs",
+  surrogate_very_close = "Surrogate, very close to patient-important outcome",
+  surrogate_close      = "Surrogate, close to patient-important outcome",
+  surrogate_far        = "Surrogate, far from patient-important outcome",
+  yes                  = "Yes, on the pre-Fig 8-2 scale",
+  probably_yes         = "Probably yes, on the pre-Fig 8-2 scale",
+  probably_no          = "Probably no, on the pre-Fig 8-2 scale",
+  no                   = "No, on the pre-Fig 8-2 scale"
+)
+
+# Legacy answer -> the Fig 8-2 P/I/C code whose route it is drawn on. Level-
+# preserving by construction (the test suite pins that).
+INDIRECTNESS_LEGACY_TO_PIC <- c(
+  yes          = "no_difference",
+  probably_yes = "similar",
+  probably_no  = "dissimilar",
+  no           = "very_dissimilar"
 )
 
 # The domain notes used to carry their own copy of the level -> wording table.
@@ -374,9 +454,9 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
 # Subdomain (PICO) assessment — Core GRADE 5
 # --------------------------------------------------------------------------
 
-# Map a user-supplied 4-point answer to its canonical form. Accepts case and
-# separator variants ("Probably No", "probably-no", "PROBABLY YES", ...) in the
-# spirit of .normalize_rob_level().
+# Map a user-supplied answer to its canonical code. Accepts case and
+# separator variants ("Probably No", "very-dissimilar", "Surrogate far", ...)
+# in the spirit of .normalize_rob_level().
 .normalize_indirectness_answer <- function(x) {
   if (is.null(x)) {
     rlang::abort("indirectness_subdomains$judgment must not be NULL.")
@@ -386,16 +466,13 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
   key <- gsub("[[:space:]._-]+", "_", key)
 
   alias <- c(
-    yes            = "yes",
-    y              = "yes",
-    probably_yes   = "probably_yes",
-    prob_yes       = "probably_yes",
-    py             = "probably_yes",
-    probably_no    = "probably_no",
-    prob_no        = "probably_no",
-    pn             = "probably_no",
-    no             = "no",
-    n              = "no"
+    stats::setNames(INDIRECTNESS_ANSWERS, INDIRECTNESS_ANSWERS),
+    y        = "yes",
+    prob_yes = "probably_yes",
+    py       = "probably_yes",
+    prob_no  = "probably_no",
+    pn       = "probably_no",
+    n        = "no"
   )
 
   out <- unname(alias[key])
@@ -404,11 +481,55 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
     rlang::abort(paste0(
       "indirectness_subdomains$judgment contains invalid value(s): ",
       paste(unique(bad), collapse = ", "),
-      ". Use one of: ", paste(INDIRECTNESS_ANSWERS, collapse = ", "),
-      " (aliases such as 'Probably No' are accepted)."
+      ". Use the Core GRADE Guide Fig 8-2 codes - Population / Intervention ",
+      "/ Comparison: ", paste(INDIRECTNESS_PIC_ANSWERS, collapse = ", "),
+      "; Outcome: ", paste(INDIRECTNESS_OUTCOME_ANSWERS, collapse = ", "),
+      " - or the legacy scale: ",
+      paste(INDIRECTNESS_LEGACY_ANSWERS, collapse = ", "),
+      " (case and separator variants such as 'Probably No' are accepted)."
     ))
   }
   out
+}
+
+# Which Fig 8-2 branch a subdomain label names: "population",
+# "intervention", "comparison" (also "comparator"), "outcome", or NA for a
+# label that names no PICO element. Case-insensitive, exact after trimming.
+.indirectness_element <- function(label) {
+  key <- tolower(trimws(as.character(label)))
+  out <- rep(NA_character_, length(key))
+  out[key == "population"]                    <- "population"
+  out[key == "intervention"]                  <- "intervention"
+  out[key %in% c("comparison", "comparator")] <- "comparison"
+  out[key == "outcome"]                       <- "outcome"
+  out
+}
+
+# Refuse a route the figure does not have: an Outcome code on a non-outcome
+# row, or a Population / Intervention / Comparison code on the Outcome row.
+.check_indirectness_answer_element <- function(subdomain, judgment) {
+  is_outcome  <- .indirectness_element(subdomain) %in% "outcome"
+  bad_outcome <- is_outcome & judgment %in% INDIRECTNESS_PIC_ANSWERS
+  bad_other   <- !is_outcome & judgment %in% INDIRECTNESS_OUTCOME_ANSWERS
+  if (any(bad_outcome)) {
+    rlang::abort(paste0(
+      "indirectness_subdomains: '", judgment[bad_outcome][1], "' answers the ",
+      "Population / Intervention / Comparison branch of Core GRADE Guide ",
+      "Fig 8-2 and cannot be used on the '", subdomain[bad_outcome][1],
+      "' row. The Outcome branch takes: ",
+      paste(INDIRECTNESS_OUTCOME_ANSWERS, collapse = ", "), "."
+    ))
+  }
+  if (any(bad_other)) {
+    rlang::abort(paste0(
+      "indirectness_subdomains: '", judgment[bad_other][1], "' answers the ",
+      "Outcome branch of Core GRADE Guide Fig 8-2 and cannot be used on the '",
+      subdomain[bad_other][1], "' row. Population / Intervention / ",
+      "Comparison rows take: ",
+      paste(INDIRECTNESS_PIC_ANSWERS, collapse = ", "), "."
+    ))
+  }
+  invisible(TRUE)
 }
 
 # Normalise the subdomain input (data.frame / tibble / list) into a tibble with
@@ -454,6 +575,7 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
   }
 
   judgment <- .normalize_indirectness_answer(tbl$judgment)
+  .check_indirectness_answer_element(sub, judgment)
 
   opt_col <- function(nm) {
     if (!nm %in% names(tbl)) return(rep(NA_character_, nrow(tbl)))
@@ -520,30 +642,175 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
   levels_here[which.min(.grade_level_downgrade(levels_here))]
 }
 
-# Compact one-line summary of the subdomain judgments for the domain notes.
-# Kept free of " | " so .first_sentence() (evidence_profile footnotes) keeps
-# the whole summary.
-.indirectness_subdomain_notes <- function(sub_tbl, worst) {
-  parts <- paste0(sub_tbl$subdomain, ": ",
-                  tolower(unname(INDIRECTNESS_ANSWER_LABELS[sub_tbl$judgment])))
-  paste0("Subdomains - ", paste(parts, collapse = "; "),
-         ". Overall (worst case): ", .indirectness_level_label(worst),
-         " indirectness.")
+# --------------------------------------------------------------------------
+# Fig 8-2 node vocabulary (inst/figures/indirect.svg)
+#
+# Every id below is a <g id="..."> in that file, drawn by
+# data-raw/build_figures.R. tests/testthat/test-flowchart-nodes.R asserts that
+# every id here is drawn and that no emitted flow_path names an id that is not
+# here, exactly as for the four other figures.
+# --------------------------------------------------------------------------
+.INDIRECT_FIG82_NODE_IDS <- c(
+  "pma-indirect-node-root",
+  # Population / Intervention / Comparison: one question each, one "no" leaf
+  # each, and a "yes" edge each into the shared similarity node.
+  unlist(lapply(c("population", "intervention", "comparison"), function(el) {
+    c(paste0("pma-indirect-edge-root-", el),
+      paste0("pma-indirect-node-", el),
+      paste0("pma-indirect-edge-", el, "-no"),
+      paste0("pma-indirect-leaf-", el, "-nodown"),
+      paste0("pma-indirect-edge-", el, "-yes"))
+  })),
+  "pma-indirect-node-similarity",
+  "pma-indirect-edge-similarity-yes",
+  "pma-indirect-leaf-similarity-nodown",
+  "pma-indirect-edge-similarity-dissimilar",
+  "pma-indirect-leaf-similarity-down1",
+  "pma-indirect-edge-similarity-verydissimilar",
+  "pma-indirect-leaf-similarity-down2",
+  # Outcome.
+  "pma-indirect-edge-root-outcome",
+  "pma-indirect-node-surrogate",
+  "pma-indirect-edge-surrogate-no",
+  "pma-indirect-node-definition",
+  "pma-indirect-edge-definition-yes",
+  "pma-indirect-leaf-definition-nodown",
+  "pma-indirect-edge-definition-no",
+  "pma-indirect-leaf-definition-down1",
+  "pma-indirect-edge-surrogate-yes",
+  "pma-indirect-node-pathway",
+  "pma-indirect-edge-pathway-veryclose",
+  "pma-indirect-leaf-pathway-nodown",
+  "pma-indirect-edge-pathway-close",
+  "pma-indirect-leaf-pathway-down1",
+  "pma-indirect-edge-pathway-far",
+  "pma-indirect-leaf-pathway-down2"
+)
+
+# The ids one row traverses. Legacy answers on a P/I/C row are drawn on the
+# route INDIRECTNESS_LEGACY_TO_PIC names; on the Outcome row they stop at the
+# surrogate question, because that scale never said whether the outcome was a
+# surrogate. A label naming no PICO element is not drawn beyond the root.
+.indirectness_row_route <- function(element, judgment) {
+  root <- "pma-indirect-node-root"
+  if (is.na(element)) return(root)
+  if (identical(element, "outcome")) {
+    head <- c(root, "pma-indirect-edge-root-outcome",
+              "pma-indirect-node-surrogate")
+    tail <- switch(judgment,
+      similar_definition   = c("pma-indirect-edge-surrogate-no",
+                               "pma-indirect-node-definition",
+                               "pma-indirect-edge-definition-yes",
+                               "pma-indirect-leaf-definition-nodown"),
+      different_definition = c("pma-indirect-edge-surrogate-no",
+                               "pma-indirect-node-definition",
+                               "pma-indirect-edge-definition-no",
+                               "pma-indirect-leaf-definition-down1"),
+      surrogate_very_close = c("pma-indirect-edge-surrogate-yes",
+                               "pma-indirect-node-pathway",
+                               "pma-indirect-edge-pathway-veryclose",
+                               "pma-indirect-leaf-pathway-nodown"),
+      surrogate_close      = c("pma-indirect-edge-surrogate-yes",
+                               "pma-indirect-node-pathway",
+                               "pma-indirect-edge-pathway-close",
+                               "pma-indirect-leaf-pathway-down1"),
+      surrogate_far        = c("pma-indirect-edge-surrogate-yes",
+                               "pma-indirect-node-pathway",
+                               "pma-indirect-edge-pathway-far",
+                               "pma-indirect-leaf-pathway-down2"),
+      character(0))
+    return(c(head, tail))
+  }
+  code <- if (judgment %in% INDIRECTNESS_LEGACY_ANSWERS) {
+    unname(INDIRECTNESS_LEGACY_TO_PIC[judgment])
+  } else {
+    judgment
+  }
+  head <- c(root, paste0("pma-indirect-edge-root-", element),
+            paste0("pma-indirect-node-", element))
+  if (identical(code, "no_difference")) {
+    return(c(head, paste0("pma-indirect-edge-", element, "-no"),
+             paste0("pma-indirect-leaf-", element, "-nodown")))
+  }
+  similarity <- c(paste0("pma-indirect-edge-", element, "-yes"),
+                  "pma-indirect-node-similarity")
+  tail <- switch(code,
+    similar         = c("pma-indirect-edge-similarity-yes",
+                        "pma-indirect-leaf-similarity-nodown"),
+    dissimilar      = c("pma-indirect-edge-similarity-dissimilar",
+                        "pma-indirect-leaf-similarity-down1"),
+    very_dissimilar = c("pma-indirect-edge-similarity-verydissimilar",
+                        "pma-indirect-leaf-similarity-down2"))
+  c(head, similarity, tail)
 }
 
-# Core GRADE 5 subdomain assessment, with optional scalar override.
+# Union of every row's route, in the vocabulary's order so the fact is stable
+# whatever order the rows arrive in.
+.indirectness_flow_path <- function(sub_tbl) {
+  elements <- .indirectness_element(sub_tbl$subdomain)
+  ids <- unique(unlist(Map(.indirectness_row_route, elements,
+                           sub_tbl$judgment), use.names = FALSE))
+  .INDIRECT_FIG82_NODE_IDS[.INDIRECT_FIG82_NODE_IDS %in% ids]
+}
+
+# Lower-case only the first letter, so "Fig" inside a label survives.
+.lc_first <- function(x) {
+  paste0(tolower(substr(x, 1L, 1L)), substr(x, 2L, nchar(x)))
+}
+
+# What a level reads as on the figure's leaves.
+.indirectness_leaf_words <- function(level) {
+  unname(c(not_serious  = "do not rate down",
+           serious      = "rate down once",
+           very_serious = "rate down twice")[level])
+}
+
+# Compact one-line summary of the subdomain judgments for the domain notes:
+# each row's Fig 8-2 route in plain words and the leaf it reached. Kept free
+# of " | " so .first_sentence() (evidence_profile footnotes) keeps the whole
+# summary.
+.indirectness_subdomain_notes <- function(sub_tbl, worst) {
+  parts <- paste0(
+    sub_tbl$subdomain, ": ",
+    .lc_first(unname(INDIRECTNESS_ANSWER_LABELS[sub_tbl$judgment])),
+    " (", .indirectness_leaf_words(sub_tbl$grade_level), ")")
+  elements <- .indirectness_element(sub_tbl$subdomain)
+  legacy_outcome <- elements %in% "outcome" &
+    sub_tbl$judgment %in% INDIRECTNESS_LEGACY_ANSWERS
+  unplaced <- is.na(elements)
+  extra <- c(
+    if (any(legacy_outcome)) paste0(
+      "The Outcome route through Core GRADE Guide Fig 8-2 was not ",
+      "determined, because the answer used the pre-Fig-8-2 scale, which does ",
+      "not say whether the outcome is a surrogate."),
+    if (any(unplaced)) paste0(
+      "Not drawn on Fig 8-2 (no PICO element named): ",
+      paste(sub_tbl$subdomain[unplaced], collapse = ", "), ".")
+  )
+  paste0("Subdomains (Core GRADE Guide Fig 8-2) - ",
+         paste(parts, collapse = "; "),
+         ". Overall (worst case): ", .indirectness_level_label(worst),
+         " indirectness.",
+         if (length(extra)) paste0(" ", paste(extra, collapse = " ")) else "")
+}
+
+# Fig 8-2 subdomain assessment, with optional scalar override.
 .assess_indirectness_subdomains <- function(subdomains, indirectness = NULL,
                                             rationale = NULL) {
   sub_tbl <- .normalize_indirectness_subdomains(subdomains)
   worst   <- .indirectness_worst_case(sub_tbl)
   notes   <- .indirectness_subdomain_notes(sub_tbl, worst)
+  # The route is recorded on an override too: the subdomain answers still
+  # walked the figure, and the override is stated in the notes beside it.
+  facts   <- .facts(.flow_path_fact(.indirectness_flow_path(sub_tbl)))
 
   if (is.null(indirectness)) {
     return(make_domain_row(
       domain   = "Indirectness",
       judgment = worst,
       auto     = FALSE,
-      notes    = notes
+      notes    = notes,
+      facts    = facts
     ))
   }
 
@@ -575,7 +842,8 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
       judgment  = worst,
       auto      = FALSE,
       notes     = notes,
-      rationale = rationale
+      rationale = rationale,
+      facts     = facts
     ))
   }
 
@@ -597,6 +865,7 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
     notes     = paste0(notes, " Worst-case default (",
                        .indirectness_level_label(worst),
                        " indirectness) replaced by user judgment."),
-    rationale = rationale
+    rationale = rationale,
+    facts     = facts
   )
 }

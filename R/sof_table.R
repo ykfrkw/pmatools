@@ -517,8 +517,9 @@ sof_add_notes <- function(x, notes) {
 # domain_assessments order. A domain that did not rate down needs no
 # explanation in the footer.
 #
-# "Something to say" is facts OR a reviewer's override rationale. Indirectness
-# emits no facts at all, so before 0.5.1 a panel that rated it down by hand got
+# "Something to say" is readable facts OR a reviewer's override rationale.
+# Indirectness emits no readable facts (only its machine-only Fig 8-2
+# flow_path), so before 0.5.1 a panel that rated it down by hand got
 # a "Due to indirectness" sentence with nothing under it saying why -- the one
 # case where the footer had a reason available and printed none.
 .rated_down_fact_domains <- function(x) {
@@ -527,8 +528,12 @@ sof_add_notes <- function(x, notes) {
   all_facts <- x$domain_facts %||% list()
   dg   <- domain_rows$downgrade
   doms <- domain_rows$domain[!is.na(dg) & dg < 0]
+  # Machine-only facts are not a reason a reader can be shown: Indirectness's
+  # only fact is its Fig 8-2 flow_path, which every prose renderer drops.
   has_reason <- vapply(doms, function(dm) {
-    dm %in% names(all_facts) || !is.null(.domain_override_note(x, dm))
+    readable <- .drop_machine_only_facts(all_facts[[dm]])
+    (!is.null(readable) && nrow(readable) > 0L) ||
+      !is.null(.domain_override_note(x, dm))
   }, logical(1))
   doms[has_reason]
 }

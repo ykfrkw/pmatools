@@ -41,7 +41,8 @@ quiet_grade <- function(...) suppressWarnings(grade_meta(...))
 
 .man_fig_dir <- file.path("..", "..", "man", "figures")
 
-FIGKEYS <- c(rob = "rob", incon = "incon", impre = "impre", pubias = "pubias")
+FIGKEYS <- c(rob = "rob", incon = "incon", impre = "impre", pubias = "pubias",
+             indirect = "indirect")
 
 # Every id="pma-..." in the file, in order of appearance.
 .svg_ids <- function(path) {
@@ -56,7 +57,8 @@ FIGKEYS <- c(rob = "rob", incon = "incon", impre = "impre", pubias = "pubias")
   rob    = pmatools:::.ROB_FIG2_NODE_IDS,
   incon  = pmatools:::.INCON_FIG2_NODE_IDS,
   impre  = pmatools:::.IMPRE_FIG4_NODE_IDS,
-  pubias = pmatools:::.PUBIAS_FIG5_NODE_IDS
+  pubias = pmatools:::.PUBIAS_FIG5_NODE_IDS,
+  indirect = pmatools:::.INDIRECT_FIG82_NODE_IDS
 )
 
 # --------------------------------------------------------------------------
@@ -282,9 +284,10 @@ test_that("the flow_path fact is not scalar-numeric", {
   expect_true(is.na(f$numeric[f$key == "flow_path"]))
 })
 
-test_that("Indirectness records no facts, and that is on purpose", {
-  # Core GRADE 5 Table 2 is a gradient, not a flowchart; the subdomain table
-  # is the structured record instead. See ?grade_flowcharts.
+test_that("Indirectness records no facts unless a subdomain table walked Fig 8-2", {
+  # The scalar / per-study / column-name shapes never walk the figure, so a
+  # rating with no indirectness_subdomains has nothing to record. The
+  # subdomain-table route is tested in its own section below.
   expect_null(domain_facts(.cases()$rob_dominated, "Indirectness"))
 })
 
@@ -679,4 +682,78 @@ test_that("the rate-down leaf says what the Guide's leaf says", {
   expect_false(grepl("two-level", svg, fixed = TRUE))
   # The legacy check is disclosed as not drawn.
   expect_match(svg, "is not drawn", fixed = TRUE)
+})
+
+# --------------------------------------------------------------------------
+# Indirectness - living Core GRADE Guide Fig 8-2 (inst/figures/indirect.svg)
+# --------------------------------------------------------------------------
+
+.indir_flow <- function(subdomain, judgment) {
+  row <- pmatools:::.assess_indirectness_subdomains(
+    data.frame(subdomain = subdomain, judgment = judgment,
+               stringsAsFactors = FALSE))
+  f <- attr(row, "facts")
+  strsplit(f$value[f$key == "flow_path"], " ", fixed = TRUE)[[1L]]
+}
+
+test_that("the indirectness vocabulary is fully reachable, every leaf included", {
+  pic <- c("no_difference", "similar", "dissimilar", "very_dissimilar")
+  out <- c("similar_definition", "different_definition",
+           "surrogate_very_close", "surrogate_close", "surrogate_far")
+  seen <- character(0)
+  for (el in c("Population", "Intervention", "Comparison")) {
+    for (code in pic) seen <- union(seen, .indir_flow(el, code))
+  }
+  for (code in out) seen <- union(seen, .indir_flow("Outcome", code))
+
+  expect_identical(setdiff(seen, .vocab$indirect), character(0))
+  expect_identical(setdiff(.vocab$indirect, seen), character(0))
+
+  # Every leaf the figure draws is reached by some answer.
+  skip_if(is.na(.fig_dir), "inst/figures not available in this layout")
+  drawn  <- .svg_ids(file.path(.fig_dir, "indirect.svg"))
+  leaves <- drawn[startsWith(drawn, "pma-indirect-leaf-")]
+  expect_gt(length(leaves), 0L)
+  expect_identical(setdiff(leaves, seen), character(0))
+  # And the figure draws nothing the assessor can never light.
+  expect_identical(setdiff(drawn, .vocab$indirect), character(0))
+})
+
+test_that("each Fig 8-2 answer ends on the leaf of its own level", {
+  leaf_of <- function(ids) ids[startsWith(ids, "pma-indirect-leaf-")]
+  expect_identical(leaf_of(.indir_flow("Population", "no_difference")),
+                   "pma-indirect-leaf-population-nodown")
+  expect_identical(leaf_of(.indir_flow("Comparator", "very_dissimilar")),
+                   "pma-indirect-leaf-similarity-down2")
+  expect_identical(leaf_of(.indir_flow("Outcome", "surrogate_far")),
+                   "pma-indirect-leaf-pathway-down2")
+  expect_identical(leaf_of(.indir_flow("Outcome", "different_definition")),
+                   "pma-indirect-leaf-definition-down1")
+  # A "Comparator" label lights the comparison branch.
+  expect_true("pma-indirect-node-comparison" %in%
+                .indir_flow("Comparator", "similar"))
+})
+
+test_that("a legacy Outcome answer lights only the root and the surrogate question", {
+  ids <- .indir_flow("Outcome", "probably_no")
+  expect_identical(ids, c("pma-indirect-node-root",
+                          "pma-indirect-edge-root-outcome",
+                          "pma-indirect-node-surrogate"))
+})
+
+test_that("grade_meta() records the Fig 8-2 route as an Indirectness flow_path", {
+  g <- quiet_grade(
+    mk_binary(), rob = rep("no", 5),
+    small_values = "desirable",
+    threshold = 1.10, threshold_scale = "ratio",
+    indirectness_subdomains = data.frame(
+      subdomain = c("Population", "Intervention", "Comparison", "Outcome"),
+      judgment  = c("no_difference", "similar", "no_difference",
+                    "surrogate_close"),
+      stringsAsFactors = FALSE))
+  ids <- .flow_path(g, "Indirectness")
+  expect_true(length(ids) >= 3L && all(nzchar(ids)))
+  expect_identical(setdiff(ids, .vocab$indirect), character(0))
+  expect_true("pma-indirect-leaf-pathway-down1" %in% ids)
+  expect_true(is.na(domain_facts(g, "Indirectness")$numeric))
 })
