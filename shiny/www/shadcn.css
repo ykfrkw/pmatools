@@ -244,7 +244,7 @@ a.pma-domain-jump { font-weight: 600; text-decoration: underline; }
   color: var(--grade-high-fg);
 }
 
-/* Risk-of-bias analysis set (Core GRADE 4 Fig 2).
+/* Risk-of-bias analysis set (Core GRADE Guide Fig 7-2).
    A state notice, not an error: muted surface, neutral text, and the same
    amber accent the .pma-banner uses so the two read as one family. */
 .pma-analysis-set {

@@ -428,9 +428,9 @@ step3_ui <- function(state = NULL) {
                 "Some concerns count as low risk of bias"            = "low"),
               selected = rob_some_concerns_default),
             htmltools::p(class = "pma-card-subtitle",
-              paste0("Core GRADE 4 rates risk of bias from a two-way split: ",
+              paste0("Core GRADE rates risk of bias from a two-way split: ",
                      "the studies are sorted into low and high risk of bias, ",
-                     "and Fig 2 asks whether the high risk of bias group ",
+                     "and Guide Fig 7-2 asks whether the high risk of bias group ",
                      "dominates the evidence. RoB 2 returns three judgments, ",
                      "so \"some concerns\" has to be assigned to one of the ",
                      "two sides before that question can be asked. A study ",
@@ -3565,7 +3565,7 @@ step3_server <- function(input, output, session, state) {
   output$pubias_chip <- shiny::renderUI(
     pma_downgrade_chip(domain_judgment("Publication bias") %||% "not_serious"))
 
-  # ----- Risk-of-bias analysis set (Core GRADE 4 Fig 2) -------------------
+  # ----- Risk-of-bias analysis set (Core GRADE Guide Fig 7-2) -------------------
   # Display only: these three outputs read the rated object and change no
   # judgment, no number and no rating. They exist because grade_meta() can
   # refit the analysis on the low risk-of-bias subset and only says so via

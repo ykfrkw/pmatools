@@ -339,7 +339,7 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
       ft, values = sprintf("[%d] %s", i, fact_notes[i]))
   }
 
-  # Risk-of-bias analysis set (Core GRADE 4 Fig 2). A refit silently changes
+  # Risk-of-bias analysis set (Core GRADE Guide Fig 7-2). A refit silently changes
   # every number in this table, so it must always be stated; the unapplied
   # recommendation is stated too, so the reader knows the shown estimate is
   # not the one the flowchart points at.
@@ -439,11 +439,11 @@ sof_add_notes <- function(x, notes) {
     k_full <- x$meta_full$k %||% k_low
     return(sprintf(paste0(
       "Effect estimate restricted to low risk of bias studies (n = %d of %d) ",
-      "per Core GRADE 4 Fig 2."), k_low, k_full))
+      "per Core GRADE Guide Fig 7-2."), k_low, k_full))
   }
   if (identical(x$rob_analysis_set, "low_only")) {
     return(paste0(
-      "Core GRADE 4 Fig 2 recommends restricting the analysis to low risk of ",
+      "Core GRADE Guide Fig 7-2 recommends restricting the analysis to low risk of ",
       "bias studies; the effect estimate shown includes all studies ",
       "(rob_refit = FALSE)."
     ))

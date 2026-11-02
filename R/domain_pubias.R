@@ -1,87 +1,93 @@
 # domain_pubias.R - Publication bias domain assessment
 #
-# BMJ 2025 Core GRADE 4 Figure 5 flowchart, faithfully.
+# v0.6: Core GRADE Guide Fig 9-1 (Guyatt G, et al. Core GRADE Guide,
+# https://core-grade.gitbook.io/org, accessed 2026-11-02), which replaces BMJ
+# 2025 Core GRADE 4 Fig 5. The Guide adds one node in front of Fig 5's four
+# and rewords Q3; the rest is unchanged.
 #
-# Fig 5 has exactly four decision nodes and no entry-level rule-out:
-#   1. "Most or all studies small and industry sponsored"
-#   2. "Is statistical analysis of publication bias feasible? (ie, meta-analysis
-#       was performed, >=10 studies)"
-#   3. "Visual asymmetry of funnel plot and/or statistical test strongly
-#       suggests publication bias"
-#   4. "Documentation of unpublished studies (eg, in registry of FDA)"
+# This file owns the publication-bias judgment: it reads a {meta} object, the
+# reviewer's answers to the nodes the algorithm cannot compute, and the
+# rating-target threshold grade_meta() resolved (R/rating_target.R), and hands
+# back one make_domain_row() tibble (R/domain_row.R) with its facts. The Shiny
+# wizard (shiny/R/step3_pubias.R, step3_threshold.R) mirrors its evaluation
+# order and must move with it. A function belongs here when it decides the
+# publication-bias judgment; trim-and-fill and the missing-results displays,
+# which decide nothing, live in R/pubias_trimfill.R and R/pubias_missing.R.
+#
+# Guide Fig 9-1, verbatim nodes:
+#   Q0. "Did the studies show an important effect?"       No -> Do not rate down
+#   Q1. "Are most or all of the studies small and industry sponsored?"
+#                                                          Yes -> Rate down
+#   Q2. "Are there enough studies (>=10) to examine funnel plot asymmetry?"
+#   Q3. "Does visual inspection of funnel plot demonstrate substantial
+#        asymmetry? and/or Is funnel plot asymmetry statistically
+#        significant?"                                     Yes -> Rate down
+#   Q4. "Did the review team discover and document unpublished studies of
+#        sufficient size to appreciably influence effect estimates (e.g.,
+#        registry of FDA)"                                 Yes -> Rate down
 # Every leaf is "Rate down" / "Do not rate down"; the figure never rates down
 # two levels for publication bias.
 #
 # pmatools implementation:
 #
-#   Q1. pubias_small_industry == "yes"
-#         -> "serious" (-1)
+#   Q0. Important effect? Auto-derived unless pubias_important_effect is given:
+#         YES iff the pooled point estimate lies beyond the rating-target
+#         threshold (threshold_chosen, analysis scale, measured from the null
+#         on either side, strict `>`). With a null threshold (NULL / NA / 0)
+#         any non-null estimate is "yes", so the node effectively always
+#         answers yes and the note says so. An unavailable estimate is
+#         assumed "yes" (conservative). NO -> "not_serious", stop.
+#         The "Q0:" note prefix keeps Fig 5's Q1-Q4 prefixes where exports
+#         already have them.
+#         A manual "no" overrides the derivation and needs pubias_rationale;
+#         a manual "yes" only removes a reason not to look and needs none.
+#
+#   Q1. pubias_small_industry == "yes" -> "serious" (-1)
 #         else -> registry check, then Q2 (default "no" assumption with note)
 #
 #   [After Q1] pubias_registry_complete == "yes"
-#         -> "not_serious" (a pmatools convenience input, NOT a node of Fig 5; see
-#            the note text). It is evaluated AFTER Q1 (v0.5) so that a body of
-#            small industry-sponsored trials still rates down even when the
-#            user asserts complete registry coverage.
+#         -> "not_serious" (a pmatools convenience input, NOT a node of Fig
+#            9-1 or of Fig 5; see the note text). Evaluated AFTER Q1 so that a
+#            body of small industry-sponsored trials still rates down.
 #
-#   Q2. k >= 10 ?
-#         YES -> Q3 (.pubias_statistical)
-#         NO  -> Q4 (.pubias_registry)
+#   Q2. k >= 10 ?  YES -> Q3 (.pubias_statistical)  NO -> Q4 (.pubias_registry)
 #
-#   Q3 (k >= 10): asymmetry detection
-#         pubias_funnel_asymmetry "yes" (manual) -> "serious" (-1)
-#         pubias_funnel_asymmetry "no"  (manual) -> "not_serious"
-#         auto Egger p < 0.05                    -> "serious"  (-1)
-#         auto Egger p >= 0.05                   -> "not_serious"
-#         Egger fails to run                     -> "not_serious" + prominent
-#           "QUALITATIVE ASSESSMENT REQUIRED" note (propagated to SoF /
-#           Evidence Profile / grade_table / grade_report footnotes)
+#   Q3 (k >= 10): pubias_funnel_asymmetry "yes"/"no" (manual, needs
+#       pubias_rationale), else Egger p < 0.05 -> "serious"; a test that fails
+#       to run -> "not_serious" + "QUALITATIVE ASSESSMENT REQUIRED". The
+#       p-value cut-off is a pmatools convention: the Guide's "statistically
+#       significant" names no alpha, and Fig 5 asked only whether asymmetry
+#       "strongly suggests publication bias".
 #
-#       The p-value cut-off is NOT in the source. Core GRADE 4 Fig 5 asks only
-#       whether asymmetry "strongly suggests publication bias" -- a qualitative
-#       judgment with no significance threshold. p < 0.05 is a pmatools
-#       operational convention and is labelled as such in the domain notes.
-#       The former p < 0.01 -> "very_serious" (-2) tier was removed in v0.5: Core
-#       GRADE 4 never describes a two-level publication-bias downgrade.
-#
-#   Q4 (k < 10):
-#         pubias_unpublished == "yes" -> "serious" (-1)
-#         pubias_unpublished == "no"  -> "not_serious"
-#         NULL -> assume "no" (the answer) with warning
+#   Q4 (k < 10): pubias_unpublished "yes" -> "serious"; "no" -> "not_serious";
+#       NULL -> assume "no" with a warning.
 #
 # Rate down at most ONE level: "very_serious" (-2) is reachable only through a
 # scalar override elsewhere in the package, never from this flowchart.
 #
-# Trim-and-fill is not used to drive the GRADE judgment. The {meta}
-# trim-and-fill computation remains available via plot_trimfill_forest() for
-# the Reporting bias tab in the companion Shiny app, and R/pubias_trimfill.R
-# turns it into a stated diagnostic -- still a display, still not a decision.
-# See the block comment there.
+# Trim-and-fill is not used to drive the GRADE judgment; see R/pubias_trimfill.R.
 
 # --------------------------------------------------------------------------
 # Flowchart node vocabulary (inst/figures/pubias.svg)
 #
-# See the note on .ROB_FIG2_NODE_IDS in domain_rob.R. The registry node is NOT
-# a node of Core GRADE 4 Fig 5 -- the figure's only registry node is Q4,
-# reached when k < 10 -- and the figure's caption and long description say so
-# in words. They used to say it by drawing that one box with a dashed outline
-# as well, which reads as "provisional" or "not yet reached" to anyone who has
-# not read the caption, on a chart whose whole job is to show which boxes the
-# analysis went through.
+# See the note on .ROB_FIG2_NODE_IDS in domain_rob.R. The constant keeps its
+# FIG5 name for the same reason. The registry node is NOT a node of the
+# source -- its only registry node is Q4, reached when k < 10 -- and the box
+# says so on its own third line.
 #
-# The ids keep their q1..q4 slugs, but the FIGURE no longer prints those
-# numbers: it interleaves the registry node between Q1 and Q2, so numbering on
-# screen described neither Fig 5 nor the route. The "Q1:" - "Q4:" prefixes in
-# the notes below are unaffected -- they are the exported record.
+# The ids keep their q0..q4 slugs, but the FIGURE prints no numbers: it
+# interleaves the registry node between Q1 and Q2, so numbering on screen
+# described neither the source nor the route. The "Q0:" - "Q4:" prefixes in
+# the notes are unaffected -- they are the exported record.
 #
 # There is no "qualitative assessment required" leaf. Both branches that used
-# to have one (an Egger test that would not run, and a Q4 nobody answered)
-# judge the domain "no", so they light the "do not rate down" leaf they
-# actually reach. What made them different from an answered "no" is a caveat,
-# not a decision, and it travels in the note and in an rlang::warn() where a
-# reader can act on it -- a leaf in a picture cannot be read by a pipeline and
-# was not read by anything else either.
+# to have one judge the domain "no", so they light the "do not rate down" leaf
+# they actually reach; the caveat travels in the note and in an rlang::warn().
 .PUBIAS_FIG5_NODE_IDS <- c(
+  "pma-pubias-node-q0",
+  "pma-pubias-edge-q0-no",
+  "pma-pubias-leaf-nodown-q0",
+  "pma-pubias-edge-q0-yes",
   "pma-pubias-node-q1",
   "pma-pubias-edge-q1-yes",
   "pma-pubias-leaf-down1-q1",
@@ -105,24 +111,21 @@
   "pma-pubias-leaf-nodown-q4"
 )
 
+# Every path past Q0 starts here.
+.PUBIAS_FLOW_Q0_YES <- c("pma-pubias-node-q0", "pma-pubias-edge-q0-yes")
+
 # Everything past Q1 has come through the registry node, whether or not the
 # reviewer answered it.
-.PUBIAS_FLOW_TO_Q2 <- c("pma-pubias-node-q1", "pma-pubias-edge-q1-no",
+.PUBIAS_FLOW_TO_Q2 <- c(.PUBIAS_FLOW_Q0_YES,
+                        "pma-pubias-node-q1", "pma-pubias-edge-q1-no",
                         "pma-pubias-node-registry",
                         "pma-pubias-edge-registry-no",
                         "pma-pubias-node-q2")
 
 # The study count the flowchart's Q2 actually branches on. Recorded on every
 # path: k is the one number the reviewer needs to see to check that Q2 was
-# answered the way they expect, and until v0.5.1 this domain recorded nothing
-# at all, so it was only available by re-reading the note.
-#
-# The value is the bare count. It used to read "12 (Q2 threshold: 10)", which
-# is the one place in the package that still printed a Fig 5 question number on
-# a surface the reviewer reads -- a SoF footnote, where nothing else names a
-# "Q2" and the flowchart is not on the page to say what one is. The threshold
-# is still stated in the prose note ("k = 12 >= 10"), where the sentence around
-# it makes it mean something.
+# answered the way they expect. The bare count, because a SoF footnote has no
+# flowchart beside it to say what a "Q2" is.
 .pubias_k_fact <- function(k) {
   .fact("k", "Studies contributing a usable estimate",
         sprintf("%d", as.integer(k)), as.numeric(k))
@@ -163,6 +166,80 @@
   note
 }
 
+# "yes" / "no" / NULL, or an abort naming the argument.
+.check_pubias_yes_no <- function(x, arg) {
+  if (is.null(x)) return(invisible(NULL))
+  if (!is.character(x) || length(x) != 1L || is.na(x) ||
+      !x %in% c("yes", "no")) {
+    rlang::abort(paste0(arg, " must be 'yes' or 'no'."))
+  }
+  invisible(x)
+}
+
+# --------------------------------------------------------------------------
+# Q0: "Did the studies show an important effect?" (Guide Fig 9-1, first node)
+#
+# Answered from the pooled point estimate of the analysis being rated and the
+# rating-target threshold grade_meta() resolved: +/-MID for an important-effect
+# or little-or-no-difference target, the null for a non-null-effect target.
+# The comparison is strict, matching the rating target's own |TE| > MID.
+#
+# Publication bias inflates apparent effects, so an evidence body that shows
+# no important effect has nothing for it to have manufactured -- that is the
+# reading the node encodes, and why "yes" is the safe assumption whenever the
+# estimate cannot be read.
+# --------------------------------------------------------------------------
+.pubias_important_effect <- function(meta_obj, threshold_chosen = NULL,
+                                     manual = NULL) {
+  te    <- .pooled_te(meta_obj)
+  M     <- if (.has_mid(threshold_chosen)) threshold_chosen else 0
+  scale <- .rob_scale(meta_obj$sm)
+  te_txt <- if (is.finite(te)) {
+    sprintf("%s %s", scale$sm_label, .rob_fact_num(scale$disp(te)))
+  } else "not available"
+  thr_txt <- if (M > 0) {
+    sprintf("beyond the threshold (+/-%s on the analysis scale)",
+            format(signif(M, 3)))
+  } else "away from the null (null threshold)"
+
+  if (!is.null(manual)) {
+    note <- sprintf(paste0(
+      "Q0 (manual): the studies %s an important effect (pubias_important_",
+      "effect = '%s'; pooled estimate %s)%s"),
+      if (manual == "yes") "show" else "do not show", manual, te_txt,
+      if (manual == "yes") ". " else " -> do not rate down. ")
+    return(list(answer = manual, auto = FALSE, note = note,
+                fact = .fact("important_effect",
+                             "Did the studies show an important effect?",
+                             sprintf("%s (manual)", manual),
+                             as.numeric(manual == "yes"))))
+  }
+
+  if (!is.finite(te)) {
+    answer <- "yes"
+    why    <- paste0("the pooled estimate is not available, so an important ",
+                     "effect is assumed (conservative)")
+  } else if (M > 0) {
+    answer <- if (abs(te) > M) "yes" else "no"
+    why    <- sprintf("pooled estimate %s (|TE| = %s) %s %s", te_txt,
+                      format(signif(abs(te), 3)),
+                      if (answer == "yes") "lies" else "does not lie", thr_txt)
+  } else {
+    answer <- if (abs(te) > 0) "yes" else "no"
+    why    <- sprintf(paste0(
+      "pooled estimate %s compared with the null (the rating target sets no ",
+      "threshold); with a null threshold this node effectively always answers ",
+      "yes"), te_txt)
+  }
+  note <- sprintf("Q0 (auto): %s -> important effect: %s%s", why, answer,
+                  if (answer == "yes") ". " else "; do not rate down. ")
+  list(answer = answer, auto = TRUE, note = note,
+       fact = .fact("important_effect",
+                    "Did the studies show an important effect?",
+                    sprintf("%s (auto; %s)", answer, why),
+                    as.numeric(answer == "yes")))
+}
+
 assess_pubias <- function(meta_obj,
                           pubias_small_industry    = NULL,
                           pubias_funnel_asymmetry  = NULL,
@@ -171,61 +248,101 @@ assess_pubias <- function(meta_obj,
                           rationale                = NULL,
                           # Rare-event routing; see the Q2 gate below. Defaults
                           # off, so an ordinary analysis is unaffected.
-                          rare_flow                = FALSE) {
+                          rare_flow                = FALSE,
+                          # Q0. The threshold is the rating target's (analysis
+                          # scale); NULL means a null threshold.
+                          pubias_important_effect  = NULL,
+                          threshold_chosen         = NULL) {
   k <- .pubias_effective_k(meta_obj)
   if (is.null(k) || is.na(k)) k <- 0L
 
+  # Every input is validated before Q0 can stop the walk, so a malformed
+  # answer aborts whether or not its node is reached.
+  .check_pubias_yes_no(pubias_important_effect,  "pubias_important_effect")
+  .check_pubias_yes_no(pubias_small_industry,    "pubias_small_industry")
+  .check_pubias_yes_no(pubias_funnel_asymmetry,  "pubias_funnel_asymmetry")
+  .check_pubias_yes_no(pubias_unpublished,       "pubias_unpublished")
+  .check_pubias_yes_no(pubias_registry_complete, "pubias_registry_complete")
+
   # v0.4.0 (breaking): pubias_funnel_asymmetry is the explicit override path
   # (a manual visual judgment replaces the automated Egger's test), so it
-  # always requires pubias_rationale. The other inputs
-  # (pubias_small_industry / pubias_unpublished / pubias_registry_complete)
-  # supply information the automated path cannot know and are not overrides.
+  # always requires pubias_rationale. v0.6: so does a manual "no" at Q0, which
+  # replaces the derivation and ends the assessment. The other inputs supply
+  # information the automated path cannot know and are not overrides.
   if (!is.null(pubias_funnel_asymmetry)) {
     .check_override_rationale(rationale, "pubias_rationale",
                               "Publication bias")
   }
-
-  # Validate up front; the registry input is consumed after Q1 (see below).
-  if (!is.null(pubias_registry_complete) &&
-      !pubias_registry_complete %in% c("yes", "no")) {
-    rlang::abort("pubias_registry_complete must be 'yes' or 'no'.")
+  if (identical(pubias_important_effect, "no")) {
+    .check_override_rationale(rationale, "pubias_rationale",
+                              "Publication bias (important effect)")
   }
 
-  # --- Q1: Small + industry-sponsored (Core GRADE 4 Fig 5, first node) ------
+  # --- Q0: important effect? (Guide Fig 9-1, first node) -------------------
+  q0 <- .pubias_important_effect(meta_obj, threshold_chosen,
+                                 pubias_important_effect)
+  if (identical(q0$answer, "no")) {
+    supplied <- c(
+      pubias_small_industry    = !is.null(pubias_small_industry),
+      pubias_registry_complete = !is.null(pubias_registry_complete),
+      pubias_funnel_asymmetry  = !is.null(pubias_funnel_asymmetry),
+      pubias_unpublished       = !is.null(pubias_unpublished))
+    return(make_domain_row(
+      domain    = "Publication bias",
+      judgment  = "not_serious",
+      auto      = q0$auto,
+      notes     = paste0(
+        q0$note,
+        "Per Core GRADE Guide Fig 9-1 the remaining nodes are not evaluated.",
+        if (any(supplied)) {
+          paste0(" Supplied but not evaluated: ",
+                 paste(names(supplied)[supplied], collapse = ", "), ".")
+        } else ""
+      ),
+      rationale = if (!q0$auto) rationale else NULL,
+      facts     = .facts(.pubias_k_fact(k), q0$fact, .flow_path_fact(c(
+        "pma-pubias-node-q0", "pma-pubias-edge-q0-no",
+        "pma-pubias-leaf-nodown-q0")))
+    ))
+  }
+  q0_note <- q0$note
+
+  # --- Q1: Small + industry-sponsored ----------------------------------------
   if (!is.null(pubias_small_industry)) {
-    if (!pubias_small_industry %in% c("yes", "no")) {
-      rlang::abort("pubias_small_industry must be 'yes' or 'no'.")
-    }
     if (pubias_small_industry == "yes") {
       return(make_domain_row(
         domain   = "Publication bias",
         judgment = "serious",
         auto     = FALSE,
         notes    = paste0(
+          q0_note,
           "Q1: Most/all studies are small AND industry-sponsored ",
           "-> rate down 1 (serious).",
           if (identical(pubias_registry_complete, "yes")) paste0(
             " pubias_registry_complete = 'yes' was also supplied, but it is ",
-            "evaluated only after Q1: Core GRADE 4 Fig 5 begins with the ",
-            "small-and-industry-sponsored node, and asserting registry ",
-            "coverage does not remove that concern."
+            "evaluated only after Q1: the flowchart's small-and-industry-",
+            "sponsored node comes first, and asserting registry coverage ",
+            "does not remove that concern."
           ) else ""
         ),
-        facts    = .facts(.pubias_k_fact(k), .flow_path_fact(c(
+        facts    = .facts(.pubias_k_fact(k), q0$fact, .flow_path_fact(c(
+          .PUBIAS_FLOW_Q0_YES,
           "pma-pubias-node-q1", "pma-pubias-edge-q1-yes",
           "pma-pubias-leaf-down1-q1")))
       ))
     }
-    q1_note <- "Q1: Not dominated by small industry-sponsored studies. "
+    q1_note <- paste0(q0_note,
+                      "Q1: Not dominated by small industry-sponsored studies. ")
   } else {
-    q1_note <- "Q1: pubias_small_industry not specified; assumed 'no'. "
+    q1_note <- paste0(q0_note,
+                      "Q1: pubias_small_industry not specified; assumed 'no'. ")
   }
 
   # --- Post-Q1: user-asserted complete pre-registration coverage ------------
-  # Not a node of Core GRADE 4 Fig 5. The figure's only registry node is Q4
-  # ("Documentation of unpublished studies"), reached when k < 10. This input
-  # records the USER'S claim that every registered trial can be accounted for
-  # and short-circuits the remaining nodes; the note says whose claim it is.
+  # Not a node of the source. Its only registry node is Q4, reached when
+  # k < 10. This input records the USER'S claim that every registered trial
+  # can be accounted for and short-circuits the remaining nodes; the note says
+  # whose claim it is.
   if (identical(pubias_registry_complete, "yes")) {
     return(make_domain_row(
       domain   = "Publication bias",
@@ -235,47 +352,58 @@ assess_pubias <- function(meta_obj,
         q1_note,
         "pubias_registry_complete = 'yes': the user asserts that ",
         "pre-registration is universal in this field and that all registered ",
-        "trials are accounted for, so the remaining Fig 5 nodes are not ",
+        "trials are accounted for, so the remaining nodes are not ",
         "evaluated -> do not rate down. This rule-out is a pmatools input, ",
-        "not a decision node of Core GRADE 4 Fig 5, and rests entirely on ",
-        "that assertion."
+        "not a decision node of Core GRADE Guide Fig 9-1 (or of Core GRADE 4 ",
+        "Fig 5), and rests entirely on that assertion."
       ),
-      facts     = .facts(.pubias_k_fact(k), .flow_path_fact(c(
+      facts     = .facts(.pubias_k_fact(k), q0$fact, .flow_path_fact(c(
+        .PUBIAS_FLOW_Q0_YES,
         "pma-pubias-node-q1", "pma-pubias-edge-q1-no",
         "pma-pubias-node-registry", "pma-pubias-edge-registry-yes",
         "pma-pubias-leaf-nodown-registry")))
     ))
   }
 
-  # --- Q2: Statistical feasibility (k >= 10) --------------------------------
-  # Fig 5's Q2 asks whether a statistical analysis is FEASIBLE, and answers it
-  # with a study count because k < 10 is the usual reason it is not. A
-  # rare-event analysis is the other reason: Egger's regression of the effect
-  # on its standard error breaks down on sparse binary data, where the two are
-  # mathematically coupled through the cell counts and the test acquires a
-  # false-positive rate that has nothing to do with publication bias.
-  #
-  # So `rare_flow` sends the assessment down the same "no" edge k < 10 takes,
-  # which asks about registries and unpublished studies instead. This adds NO
-  # node to Fig 5. It routes to a node the figure already has, for the reason
-  # the figure already has it, and the note says which of the two conditions
-  # sent it there.
+  # --- Q2: enough studies (k >= 10) to examine funnel plot asymmetry? -------
+  # k < 10 is the usual reason a funnel-plot analysis is not possible. A
+  # rare-event analysis is the other: Egger's regression of the effect on its
+  # standard error breaks down on sparse binary data, where the two are
+  # mathematically coupled through the cell counts. So `rare_flow` sends the
+  # assessment down the same "no" edge k < 10 takes. This adds NO node; the
+  # note says which of the two conditions sent it there.
   if (k >= 10 && !isTRUE(rare_flow)) {
-    return(.pubias_statistical(
+    row <- .pubias_statistical(
       meta_obj                = meta_obj,
       k                       = k,
       pubias_funnel_asymmetry = pubias_funnel_asymmetry,
       q1_note                 = q1_note,
       rationale               = rationale
-    ))
+    )
   } else {
-    return(.pubias_registry(
+    row <- .pubias_registry(
       k                  = k,
       pubias_unpublished = pubias_unpublished,
       q1_note            = q1_note,
       rare_flow          = isTRUE(rare_flow) && k >= 10
-    ))
+    )
   }
+  .pubias_add_fact(row, q0$fact)
+}
+
+# Insert one fact after the k fact of a row the Q2 branches built, so Q0's
+# answer is recorded on every path without threading it through both.
+.pubias_add_fact <- function(row, fact) {
+  facts <- attr(row, "facts")
+  if (is.null(facts) || is.null(fact)) return(row)
+  at <- match("k", facts$key)
+  attr(row, "facts") <- if (is.na(at)) {
+    .facts(fact, facts)
+  } else {
+    dplyr::bind_rows(facts[seq_len(at), ], fact,
+                     facts[-seq_len(at), ])
+  }
+  row
 }
 
 .pubias_effective_k <- function(meta_obj) {
@@ -290,17 +418,17 @@ assess_pubias <- function(meta_obj,
 # --------------------------------------------------------------------------
 # Q3: k >= 10 -- statistical / visual asymmetry branch (single-tier Egger)
 #
-# Core GRADE 4 Fig 5 phrases this node qualitatively ("strongly suggests
-# publication bias") and gives no p-value cut-off; p < 0.05 below is a
+# Guide Fig 9-1 asks whether asymmetry is "statistically significant"
+# (Core GRADE 4 Fig 5: "strongly suggests"); neither names an alpha, so p < 0.05 is a
 # pmatools operational convention, stated as such in the domain note. The
 # figure has a single "Rate down" leaf here, so the judgment never exceeds
 # one level.
 # --------------------------------------------------------------------------
 .PUBIAS_EGGER_CONVENTION <- paste0(
   "The p < 0.05 cut-off is a pmatools operational convention, not a Core ",
-  "GRADE criterion: Core GRADE 4 Fig 5 asks qualitatively whether funnel-plot ",
-  "asymmetry and/or a statistical test 'strongly suggests publication bias' ",
-  "and specifies no p-value threshold, nor any two-level downgrade."
+  "GRADE criterion: Core GRADE Guide Fig 9-1 asks whether funnel-plot ",
+  "asymmetry is substantial on visual inspection and/or statistically ",
+  "significant, and specifies no p-value threshold, nor any two-level ", "downgrade."
 )
 .pubias_statistical <- function(meta_obj, k, pubias_funnel_asymmetry, q1_note,
                                 rationale = NULL) {
@@ -442,8 +570,8 @@ assess_pubias <- function(meta_obj,
   q2_note <- if (isTRUE(rare_flow)) {
     sprintf(paste0("Q2: Statistical analysis not feasible despite k = %d >= ",
                    "10 -- this is a rare-event analysis, and Egger's ",
-                   "regression loses validity on sparse binary data. Fig 5's ",
-                   "'no' edge is taken for the reason the figure already has ",
+                   "regression loses validity on sparse binary data. The ",
+                   "flowchart's 'no' edge is taken for the reason it already has ",
                    "it. "), k)
   } else {
     sprintf("Q2: Statistical analysis not feasible (k = %d < 10). ", k)
@@ -509,7 +637,7 @@ assess_pubias <- function(meta_obj,
       .pubias_k_fact(k),
       if (isTRUE(rare_flow)) {
         .fact("rare_flow", "Rare-event analysis",
-              paste0("yes - Fig 5's k < 10 route was taken at k = ", k,
+              paste0("yes - the k < 10 route was taken at k = ", k,
                      " because Egger's test loses validity on sparse binary ",
                      "data"))
       } else NULL,

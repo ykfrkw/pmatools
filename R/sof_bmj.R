@@ -652,7 +652,7 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
       ft, values = sprintf("[%d] %s", i, fact_notes[i]))
   }
 
-  # Risk-of-bias analysis set (Core GRADE 4 Fig 2). A refit silently changes
+  # Risk-of-bias analysis set (Core GRADE Guide Fig 7-2). A refit silently changes
   # every number in this table, so it must always be stated — in this style
   # too.
   rob_set_note <- .rob_analysis_set_note(x)

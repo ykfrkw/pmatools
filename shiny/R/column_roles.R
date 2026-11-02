@@ -13,7 +13,7 @@
 #     carries -- which is what step1_data.R hides the rest of the preview
 #     against. pma_load_summary() states what was loaded, as the sentence the
 #     Step 1 banner carries.
-#   - The risk-of-bias analysis set (Core GRADE 4 Fig 2). When the flowchart
+#   - The risk-of-bias analysis set (Core GRADE Guide Fig 7-2). When the flowchart
 #     reaches "use low risk of bias studies only", pmatools refits on that
 #     subset and reports it through an R-level message() that never reaches a
 #     browser. These helpers put the dropped studies on screen instead.
@@ -131,7 +131,7 @@ pma_load_summary <- function(data) {
 }
 
 # --------------------------------------------------------------------------
-# Risk-of-bias analysis set (Core GRADE 4 Fig 2)
+# Risk-of-bias analysis set (Core GRADE Guide Fig 7-2)
 # --------------------------------------------------------------------------
 # pmatools 0.5 refits the meta-analysis on the low risk-of-bias subset when
 # the flowchart reaches "use low risk of bias studies only" (rob_refit =
@@ -208,7 +208,7 @@ pma_analysis_set_banner <- function(g) {
   if (is.null(info)) return(NULL)
 
   rule <- paste0(
-    "Core GRADE 4 Fig 2 recommends restricting the analysis to low ",
+    "Core GRADE Guide Fig 7-2 recommends restricting the analysis to low ",
     "risk-of-bias studies when they and the high risk-of-bias studies give ",
     "substantially different estimates.")
 

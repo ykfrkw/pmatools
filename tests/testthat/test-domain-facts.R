@@ -100,9 +100,12 @@ test_that("grade_meta() records facts for the four flowcharted domains", {
     expect_gt(nrow(f), 0L)
   }
 
+  # Dominated evidence under Core GRADE Guide Fig 7-2 records no estimate
+  # comparison; the legacy direction check does.
   expect_true(all(c("high_rob_studies", "high_rob_weight_share",
-                    "estimate_shift", "fig2_branch") %in%
+                    "fig2_branch") %in%
                     g$domain_facts[["Risk of bias"]]$key))
+  expect_false("estimate_shift" %in% g$domain_facts[["Risk of bias"]]$key)
   expect_true(all(c("i2", "tau2", "q_pvalue", "zone_counts", "zone_decision") %in%
                     g$domain_facts[["Inconsistency"]]$key))
   expect_true(all(c("confidence_interval", "crosses_null", "threshold_position",
@@ -151,8 +154,18 @@ test_that("the numeric column carries the raw statistics, not the display text",
   rob <- g$domain_facts[["Risk of bias"]]
   expect_equal(rob$numeric[rob$key == "high_rob_studies"], 3)
   expect_gt(rob$numeric[rob$key == "high_rob_weight_share"], 0.55)
-  # rule 3 of the direction-of-bias check drove this downgrade.
-  expect_equal(rob$numeric[rob$key == "fig2_branch"], 3)
+  # The default dominated route has no rule number to report.
+  expect_true(is.na(rob$numeric[rob$key == "fig2_branch"]))
+  # Under the legacy check, rule 3 of the direction-of-bias check drives the
+  # same downgrade and the comparison is recorded.
+  legacy <- quiet_grade(
+    mk_binary(),
+    rob = c("no", "no", "very_serious", "very_serious", "very_serious"),
+    small_values = "desirable", threshold = 1.10, threshold_scale = "ratio",
+    rob_direction_check = TRUE)
+  rob_l <- legacy$domain_facts[["Risk of bias"]]
+  expect_equal(rob_l$numeric[rob_l$key == "fig2_branch"], 3)
+  expect_true("estimate_shift" %in% rob_l$key)
 })
 
 # --- 3. the prose notes are untouched --------------------------------------

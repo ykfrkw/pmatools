@@ -159,28 +159,62 @@ test_that("the reachable path is what the breadcrumb may link to", {
   if (length(hit)) hit[[1L]] else NA_character_
 })
 
-test_that("nothing is lit until something is answered", {
-  expect_identical(step3_pubias_flow_ids(), character(0))
+# Core GRADE Guide Fig 9-1 opens with "Did the studies show an important
+# effect?", which is computed rather than asked, so it and its "yes" edge are
+# lit from the start, like the computed Q2 gate.
+Q0_YES <- c("pma-pubias-node-q0", "pma-pubias-edge-q0-yes")
+
+test_that("nothing the reviewer answers is lit until it is answered", {
+  expect_identical(step3_pubias_flow_ids(), Q0_YES)
   expect_identical(step3_pubias_flow_ids(small_industry = "", k = 14),
-                   character(0))
+                   Q0_YES)
+})
+
+test_that("a computed Q0 = no lights its leaf and ends the wizard", {
+  q0_no <- c("pma-pubias-node-q0", "pma-pubias-edge-q0-no",
+             "pma-pubias-leaf-nodown-q0")
+  expect_identical(step3_pubias_flow_ids(important_effect = "no"), q0_no)
+  # Answers left over from before do not light a route the rating ignores.
+  expect_identical(
+    step3_pubias_flow_ids(important_effect = "no", small_industry = "yes"),
+    q0_no)
+  expect_identical(step3_pubias_node(important_effect = "no"), "result")
+  expect_identical(step3_pubias_reachable(important_effect = "no"), "result")
+  # "yes" is the default and changes nothing downstream.
+  expect_identical(step3_pubias_node(important_effect = "yes"), "q1")
+})
+
+test_that("Q0 is read off the rating, and assumed yes before there is one", {
+  none <- step3_pubias_important_effect(NULL)
+  expect_identical(none$answer, "yes")
+  expect_match(none$line, "assumed yes", fixed = TRUE)
+
+  facts <- data.frame(
+    key = c("k", "important_effect"), label = c("k", "Q0"),
+    value = c("5", "no (auto; pooled estimate inside the threshold)"),
+    numeric = c(5, 0), stringsAsFactors = FALSE)
+  g <- list(domain_facts = list("Publication bias" = facts))
+  got <- step3_pubias_important_effect(g)
+  expect_identical(got$answer, "no")
+  expect_match(got$line, "Important effect: no (auto", fixed = TRUE)
 })
 
 test_that("each answer lights its node, its edge and any leaf it reaches", {
   expect_identical(
     step3_pubias_flow_ids(small_industry = "yes"),
-    c("pma-pubias-node-q1", "pma-pubias-edge-q1-yes",
+    c(Q0_YES, "pma-pubias-node-q1", "pma-pubias-edge-q1-yes",
       "pma-pubias-leaf-down1-q1"))
 
   # Answered Q1 = "no": the trail runs on to the node now being asked, so the
   # chart shows where the reviewer is as well as where they have been.
   expect_identical(
     step3_pubias_flow_ids(small_industry = "no"),
-    c("pma-pubias-node-q1", "pma-pubias-edge-q1-no",
+    c(Q0_YES, "pma-pubias-node-q1", "pma-pubias-edge-q1-no",
       "pma-pubias-node-registry"))
 
   expect_identical(
     step3_pubias_flow_ids(small_industry = "no", registry_complete = "yes"),
-    c("pma-pubias-node-q1", "pma-pubias-edge-q1-no",
+    c(Q0_YES, "pma-pubias-node-q1", "pma-pubias-edge-q1-no",
       "pma-pubias-node-registry", "pma-pubias-edge-registry-yes",
       "pma-pubias-leaf-nodown-registry"))
 })
@@ -191,13 +225,13 @@ test_that("the k gate lights the branch it computed, on either side", {
 
   expect_identical(
     do.call(step3_pubias_flow_ids, c(base, list(k = 14))),
-    c("pma-pubias-node-q1", "pma-pubias-edge-q1-no",
+    c(Q0_YES, "pma-pubias-node-q1", "pma-pubias-edge-q1-no",
       "pma-pubias-node-registry", "pma-pubias-edge-registry-no",
       "pma-pubias-node-q2", "pma-pubias-edge-q2-yes", "pma-pubias-node-q3"))
 
   expect_identical(
     do.call(step3_pubias_flow_ids, c(base, list(k = 4))),
-    c("pma-pubias-node-q1", "pma-pubias-edge-q1-no",
+    c(Q0_YES, "pma-pubias-node-q1", "pma-pubias-edge-q1-no",
       "pma-pubias-node-registry", "pma-pubias-edge-registry-no",
       "pma-pubias-node-q2", "pma-pubias-edge-q2-no", "pma-pubias-node-q4"))
 

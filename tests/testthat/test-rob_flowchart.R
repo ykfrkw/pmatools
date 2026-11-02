@@ -1,7 +1,7 @@
-# test-rob_flowchart.R — v0.5 (Phase B):
-# BMJ Core GRADE 4 Fig 2 risk-of-bias flowchart — binary low/high
-# classification, the reinstated weight-share dominance gate, and the
-# automatic refit on the "use low risk of bias studies only" leaf.
+# test-rob_flowchart.R -- risk of bias, Core GRADE Guide Fig 7-2
+# (formerly Core GRADE 4 Fig 2): binary low/high classification, the
+# weight-share dominance gate, the symmetric reading of the undominated
+# magnitude node, the legacy direction check, and the automatic refit.
 #
 # All fixtures use metagen() with tau.preset = 0 so the inverse-variance
 # weights are exactly 1/seTE^2 and the weight share is reproducible to the
@@ -26,7 +26,7 @@ row_of <- function(g, domain) {
 }
 
 # Not dominated (50% < 60%) and the low-RoB estimate is in a different zone,
-# so Fig 2 lands on "use low risk of bias studies only".
+# so Fig 7-2 lands on "use only low risk of bias studies".
 make_low_only <- function() {
   mk(te = c(1.2, 0.02, 0.02, 0.02),
      w  = c(400, 400 / 3, 400 / 3, 400 / 3),
@@ -34,6 +34,10 @@ make_low_only <- function() {
 }
 
 quiet_grade <- function(...) suppressWarnings(grade_meta(...))
+# The 0.5.x direction-of-bias check (Beyond Core GRADE, Guide Appendix 11).
+quiet_legacy <- function(...) {
+  suppressWarnings(grade_meta(..., rob_direction_check = TRUE))
+}
 
 # ---- B-1: binary classification is configurable ---------------------------
 
@@ -162,13 +166,30 @@ test_that("rob_dominant_threshold is validated", {
   )
 })
 
-test_that("dominated = yes uses the direction-of-bias check verdict", {
-  # 75% weight on the high-RoB study; same non-trivial zone but a large
-  # bias-favouring inflation -> rule 3 -> rate down 1.
+test_that("dominated = yes rates down one level with no direction check", {
+  # 75% weight on the high-RoB study; same non-trivial zone with a large
+  # bias-favouring inflation. Under Guide Fig 7-2 none of that is consulted:
+  # dominated evidence uses all studies and rates down.
   m <- mk(te = c(0.60, 0.40, 0.40), w = c(75, 12.5, 12.5))
   g <- quiet_grade(m, rob = c("very_serious", "no", "no"),
                    small_values = "undesirable",
                    threshold = 1.20, threshold_scale = "ratio")
+  row <- rob_row(g)
+  expect_match(row$notes, "dominated: yes", fixed = TRUE)
+  expect_match(row$notes, "use results from all studies and rate down",
+               fixed = TRUE)
+  expect_false(grepl("Rule 3", row$notes, fixed = TRUE))
+  expect_equal(row$judgment, "serious")
+  expect_equal(row$downgrade, -1)
+  expect_equal(g$rob_analysis_set, "all")
+  expect_false(g$rob_refit)
+})
+
+test_that("legacy: dominated = yes uses the direction-of-bias check verdict", {
+  m <- mk(te = c(0.60, 0.40, 0.40), w = c(75, 12.5, 12.5))
+  g <- quiet_legacy(m, rob = c("very_serious", "no", "no"),
+                    small_values = "undesirable",
+                    threshold = 1.20, threshold_scale = "ratio")
   row <- rob_row(g)
   expect_match(row$notes, "dominated: yes", fixed = TRUE)
   expect_match(row$notes, "Rule 3")
@@ -178,23 +199,24 @@ test_that("dominated = yes uses the direction-of-bias check verdict", {
   expect_false(g$rob_refit)
 })
 
-# ---- B-2b: the undominated branch reads the five-rule verdict --------------
+# ---- B-2b: the undominated branch, read symmetrically ----------------------
 #
-# "Similar or substantially different magnitudes of effect?" is answered by the
-# same check that decides the dominated branch: a rule that rates down means
-# substantially different, a rule that does not means similar. The fixtures
-# below walk that mapping rule by rule and assert the route through the figure
-# as well as the leaf, because the analysis set is what the leaf changes and a
-# picture that disagreed with it would be the harder bug to see.
+# "Are there substantial differences in estimate of effect between high and
+# low risk of bias studies?" is answered by .assess_rob_magnitude(): a change
+# of zone, or a relative change in magnitude beyond the inflation threshold in
+# EITHER direction within a non-trivial zone. The fixtures assert the route
+# through the figure as well as the leaf, because the analysis set is what the
+# leaf changes and a picture that disagreed with it would be the harder bug to
+# see.
 
 .rob_path <- function(g) {
   f <- domain_facts(g, "Risk of bias")
   strsplit(f$value[f$key == "flow_path"], " ", fixed = TRUE)[[1L]]
 }
 
-test_that("not dominated + substantial difference: no downgrade, low_only", {
+test_that("not dominated + substantial differences: no downgrade, low_only", {
   # make_low_only(): TE_all = 0.61 (above), TE_low = 0.02 (trivial) -- a zone
-  # change on the same side of the null, so rule 4.
+  # change.
   g <- quiet_grade(make_low_only(), rob = c("very_serious", "no", "no", "no"),
                    small_values = "undesirable",
                    threshold = 1.05, threshold_scale = "ratio")
@@ -206,19 +228,19 @@ test_that("not dominated + substantial difference: no downgrade, low_only", {
   expect_lt(g$meta$k, g$meta_full$k)
   expect_equal(g$meta$k, 3L)
   expect_equal(g$meta_full$k, 4L)
-  expect_match(row$notes, "use low risk of bias studies only", fixed = TRUE)
-  expect_match(row$notes, "reaches rule 4", fixed = TRUE)
-  expect_true(all(c("pma-rob-node-magnitude",
-                    "pma-rob-edge-magnitude-different",
-                    "pma-rob-leaf-lowonly") %in% .rob_path(g)))
-  expect_false("pma-rob-edge-magnitude-similar" %in% .rob_path(g))
+  expect_match(row$notes, "use only low risk of bias studies", fixed = TRUE)
+  expect_match(row$notes, "different zones: above vs trivial", fixed = TRUE)
+  expect_identical(.rob_path(g), c(
+    "pma-rob-node-dominance", "pma-rob-edge-dominance-no",
+    "pma-rob-node-appreciable", "pma-rob-edge-appreciable-magnitude",
+    "pma-rob-node-magnitude", "pma-rob-edge-magnitude-different",
+    "pma-rob-leaf-lowonly"))
 })
 
-test_that("not dominated + no substantial difference: no downgrade, all", {
-  # Same weights, but the high-RoB study agrees with the low-RoB studies, so
-  # both estimates stay in the trivial zone (rule 1). Rule 1's exemption is the
-  # reason this is "similar" despite a 25% relative change between two
-  # near-null numbers.
+test_that("not dominated + no substantial differences: no downgrade, all", {
+  # Both estimates stay in the trivial zone, which is "similar" despite a 25%
+  # relative change between two near-null numbers: they lead to the same
+  # decision, the Guide's first criterion.
   m <- mk(te = c(0.03, 0.02, 0.02, 0.02),
           w  = c(400, 400 / 3, 400 / 3, 400 / 3))
   g <- quiet_grade(m, rob = c("very_serious", "no", "no", "no"),
@@ -230,17 +252,15 @@ test_that("not dominated + no substantial difference: no downgrade, all", {
   expect_equal(g$rob_analysis_set, "all")
   expect_false(g$rob_refit)
   expect_equal(g$meta$k, g$meta_full$k)
-  expect_match(row$notes, "Similar magnitudes of effect", fixed = TRUE)
-  expect_match(row$notes, "reaches rule 1", fixed = TRUE)
+  expect_match(row$notes, "No substantial differences", fixed = TRUE)
+  expect_match(row$notes, "both estimates in the trivial zone", fixed = TRUE)
   expect_true(all(c("pma-rob-node-magnitude",
                     "pma-rob-edge-magnitude-similar",
                     "pma-rob-leaf-all") %in% .rob_path(g)))
 })
 
-test_that("not dominated: a bias-favouring shift past the threshold restricts", {
-  # Same non-trivial zone (both above +log(1.05)), TE_all = 0.65 against
-  # TE_low = 0.50, a 30% relative change in the bias-favouring direction under
-  # small_values = "undesirable". Rule 3 -> substantially different.
+test_that("not dominated: an inflation past the threshold restricts", {
+  # Same non-trivial zone, TE_all = 0.65 against TE_low = 0.50, +30%.
   m <- mk(te = c(0.80, 0.50, 0.50, 0.50),
           w  = c(400, 400 / 3, 400 / 3, 400 / 3))
   g <- quiet_grade(m, rob = c("very_serious", "no", "no", "no"),
@@ -251,123 +271,80 @@ test_that("not dominated: a bias-favouring shift past the threshold restricts", 
   expect_equal(g$rob_analysis_set, "low_only")
   expect_true(g$rob_refit)
   expect_equal(g$meta$k, 3L)
-  expect_match(row$notes, "Substantially different magnitudes of effect",
+  expect_match(row$notes, "Substantial differences in the estimate of effect",
                fixed = TRUE)
-  expect_match(row$notes, "reaches rule 3", fixed = TRUE)
-  expect_match(row$notes, "direction gate (bias-favouring shift): yes",
-               fixed = TRUE)
+  expect_match(row$notes, "the magnitude changes by 30%", fixed = TRUE)
+  expect_false(grepl("direction gate", row$notes, fixed = TRUE))
   expect_true("pma-rob-edge-magnitude-different" %in% .rob_path(g))
 })
 
-test_that("not dominated: the mirror-image shift is similar, and says why", {
-  # Mirror image of the fixture above: the LOW-RoB studies show the larger
-  # effect (TE_low = 0.50 against TE_all = 0.35, a 30% relative change), so the
-  # shift is not bias-favouring under small_values = "undesirable" and the
-  # five-rule check reaches rule 2.
-  #
-  # Up to and including 0.5.0 this branch judged magnitude alone and called the
-  # same pair of estimates substantially different, restricting the analysis to
-  # the three low-RoB studies. That is deliberately gone: the assertions below
-  # pin the new answer AND the absence of the old one, because a silently
-  # dropped expectation here would change which studies an analysis is run on.
+test_that("not dominated: a deflation past the threshold is now substantially different", {
+  # Mirror image: the LOW-RoB studies show the larger effect (TE_low = 0.50
+  # against TE_all = 0.35, a 30% relative change). The legacy directional
+  # reading calls this similar (rule 2, not bias-favouring); the Guide's node
+  # names no direction, and the default reading now restricts the analysis.
   m <- mk(te = c(0.20, 0.50, 0.50, 0.50),
           w  = c(400, 400 / 3, 400 / 3, 400 / 3))
-  g <- quiet_grade(m, rob = c("very_serious", "no", "no", "no"),
-                   small_values = "undesirable",
-                   threshold = 1.05, threshold_scale = "ratio")
-  row <- rob_row(g)
-  expect_equal(row$judgment, "not_serious")
-  expect_equal(g$rob_analysis_set, "all")
-  expect_false(g$rob_refit)
-  expect_equal(g$meta$k, g$meta_full$k)
-  expect_equal(g$meta$k, 4L)
+  for (sv in c("undesirable", "desirable")) {
+    g <- quiet_grade(m, rob = c("very_serious", "no", "no", "no"),
+                     small_values = sv,
+                     threshold = 1.05, threshold_scale = "ratio")
+    row <- rob_row(g)
+    expect_equal(row$judgment, "not_serious")
+    expect_equal(g$rob_analysis_set, "low_only")
+    expect_true(g$rob_refit)
+    expect_match(row$notes, "Substantial differences", fixed = TRUE)
+    expect_match(row$notes, "relative change = -30.0%", fixed = TRUE)
+    expect_true("pma-rob-leaf-lowonly" %in% .rob_path(g))
+  }
 
-  expect_match(row$notes, "Similar magnitudes of effect", fixed = TRUE)
-  expect_match(row$notes, "reaches rule 2", fixed = TRUE)
-  expect_false(grepl("Substantially different magnitudes of effect",
-                     row$notes, fixed = TRUE))
-  expect_false(grepl("use low risk of bias studies only", row$notes,
-                     fixed = TRUE))
-
-  # The direction gate is what changed the answer, so the note has to explain
-  # it rather than leave a reader with "similar" over a 30% shift.
-  expect_match(row$notes, "direction gate (bias-favouring shift): no",
-               fixed = TRUE)
-  expect_match(row$notes, "exceeding the 20% threshold", fixed = TRUE)
-  expect_match(row$notes, "the unfavourable direction given small_values",
-               fixed = TRUE)
-  expect_match(row$notes, "not in the bias-favouring direction", fixed = TRUE)
-
-  expect_true(all(c("pma-rob-edge-magnitude-similar", "pma-rob-leaf-all")
-                  %in% .rob_path(g)))
-  expect_false("pma-rob-leaf-lowonly" %in% .rob_path(g))
+  legacy <- quiet_legacy(m, rob = c("very_serious", "no", "no", "no"),
+                         small_values = "undesirable",
+                         threshold = 1.05, threshold_scale = "ratio")
+  expect_equal(legacy$rob_analysis_set, "all")
 })
 
 test_that("not dominated: a sign flip is substantially different, at no depth", {
-  # TE_all = 0.35 (above), TE_low = -0.50 (below): the zones flip across the
-  # null, which is rule 5. The undominated branch has no levels to rate down,
-  # so rule 5's depth must not surface anywhere on it -- the leaf, the
-  # downgrade and the notes all have to read the same as any other
-  # "substantially different" answer.
   m <- mk(te = c(2.90, -0.50, -0.50, -0.50),
           w  = c(400, 400 / 3, 400 / 3, 400 / 3))
   g <- quiet_grade(m, rob = c("very_serious", "no", "no", "no"),
                    small_values = "undesirable",
                    threshold = 1.05, threshold_scale = "ratio")
   row <- rob_row(g)
-  expect_match(row$notes, "reaches rule 5", fixed = TRUE)
+  expect_match(row$notes, "different zones: above vs below", fixed = TRUE)
   expect_equal(g$rob_analysis_set, "low_only")
   expect_equal(row$judgment, "not_serious")
   expect_equal(row$downgrade, 0)
   expect_false(grepl("rate down 2", row$notes, fixed = TRUE))
-  expect_false(grepl("two levels", row$notes, fixed = TRUE))
-  # The rule verdict's own prose belongs to the dominated branch and stays
-  # there, cap note and all; only the leaf crosses over.
-  expect_false(grepl("Rule 5:", row$notes, fixed = TRUE))
-  expect_false(grepl("two-level downgrade", row$notes, fixed = TRUE))
+  expect_false(grepl("Rule 5", row$notes, fixed = TRUE))
   expect_true("pma-rob-edge-magnitude-different" %in% .rob_path(g))
 })
 
-test_that("not dominated: an unassessable comparison takes its own edge", {
+test_that("not dominated: an unassessable comparison takes the No edge", {
   # Low-RoB studies that exist and carry weight but have no usable standard
-  # error. metagen() would drop them, so the assessor is driven directly.
+  # error. metagen() would drop them, so the assessor is driven directly --
+  # without small_values, which the default reading does not need.
   fake <- list(
     TE = c(-1.00, -0.9, -1.1, -1.0), seTE = c(0.1, NA, NA, NA),
     w.random = c(1, 1, 1, 1), random = TRUE,
     TE.random = -1.0, seTE.random = 0.2, sm = "RR")
   row <- pmatools:::.flowchart_rob(
-    c("very_serious", "no", "no", "no"), fake,
-    small_values = "desirable", threshold_internal = 0.5)
+    c("very_serious", "no", "no", "no"), fake, threshold_internal = 0.5)
   ids <- strsplit(attr(row, "facts")$value[
     attr(row, "facts")$key == "flow_path"], " ", fixed = TRUE)[[1L]]
 
   expect_equal(row$judgment, "not_serious")
   expect_equal(attr(row, "analysis_set"), "all")
-  expect_match(row$notes, "the magnitude question is never asked", fixed = TRUE)
-  # The route shares the "similar" edge, which the figure labels
-  # "Similar/Not assessable". Both answers reach the same leaf and rate down
-  # neither way, so one arrow carries the pair; which of the two happened is
-  # recorded in the notes and in fig2_branch, not in the shape.
-  #
-  # It used to have an edge of its own, and before that it was drawn on the
-  # appreciable node's "no" edge -- deleted as unreachable, since not
-  # dominating leaves the low-RoB studies at least the 35-45% of the weight
-  # Core GRADE 4 calls appreciable.
-  expect_true(all(c("pma-rob-edge-appreciable-yes",
+  expect_match(row$notes, "comparison is not assessable", fixed = TRUE)
+  expect_true(all(c("pma-rob-edge-appreciable-magnitude",
                     "pma-rob-edge-magnitude-similar",
                     "pma-rob-leaf-all") %in% ids))
-  expect_false("pma-rob-edge-magnitude-notassessable" %in% ids)
-  expect_false("pma-rob-edge-appreciable-no" %in% ids)
   expect_false("pma-rob-leaf-lowonly" %in% ids)
-  # And the note no longer claims the low-RoB evidence was not appreciable.
-  expect_false(grepl("do not provide appreciable evidence", row$notes,
-                     fixed = TRUE))
+  f <- attr(row, "facts")
+  expect_match(f$value[f$key == "fig2_branch"], "not assessable", fixed = TRUE)
 })
 
-test_that("both leaves of the magnitude node disclose the directional reading", {
-  # Core GRADE 4 words the node symmetrically; pmatools answers it with a
-  # directional check. That departure is stated wherever the node is answered,
-  # in the same register as the inconsistency two-level note.
+test_that("both leaves of the magnitude node disclose pmatools' numbers", {
   g_diff <- quiet_grade(make_low_only(), rob = c("very_serious", "no", "no", "no"),
                         small_values = "undesirable",
                         threshold = 1.05, threshold_scale = "ratio")
@@ -377,9 +354,12 @@ test_that("both leaves of the magnitude node disclose the directional reading", 
                        small_values = "undesirable",
                        threshold = 1.05, threshold_scale = "ratio")
   for (row in list(rob_row(g_diff), rob_row(g_sim))) {
-    expect_match(row$notes, "Departure from the source", fixed = TRUE)
-    expect_match(row$notes, "words this node symmetrically", fixed = TRUE)
-    expect_match(row$notes, "same directional five-rule check", fixed = TRUE)
+    expect_match(row$notes, "numeric operationalisation", fixed = TRUE)
+    expect_match(row$notes, "is pmatools'", fixed = TRUE)
+    expect_match(row$notes, "formal tests of subgroup differences",
+                 fixed = TRUE)
+    # The directional departure note is legacy-only.
+    expect_false(grepl("Departure from the source", row$notes, fixed = TRUE))
   }
 
   # A dominated assessment answers a different node and must not carry it.
@@ -387,36 +367,61 @@ test_that("both leaves of the magnitude node disclose the directional reading", 
                        rob = c("very_serious", "no", "no"),
                        small_values = "undesirable",
                        threshold = 1.20, threshold_scale = "ratio")
-  expect_false(grepl("words this node symmetrically", rob_row(g_dom)$notes,
+  expect_false(grepl("numeric operationalisation", rob_row(g_dom)$notes,
                      fixed = TRUE))
 })
 
-test_that("both branches now read the same estimates the same way", {
-  # The mirror-image fixture above with the weight moved: the high-RoB study
-  # carries 60% instead of 50%, so Fig 2 takes the "check direction of bias"
-  # branch. Same two estimates, same shift, same direction gate -- and the
-  # point of reading the rule verdict on both branches is that the two sides of
-  # the figure can no longer disagree about them.
+# ---- Legacy undominated reading (rob_direction_check = TRUE) ----------------
+# The 0.5.1 expectations, unchanged, through the legacy flag.
+
+test_that("legacy: the undominated node reads the five-rule verdict", {
+  g4 <- quiet_legacy(make_low_only(), rob = c("very_serious", "no", "no", "no"),
+                     small_values = "undesirable",
+                     threshold = 1.05, threshold_scale = "ratio")
+  expect_equal(g4$rob_analysis_set, "low_only")
+  expect_match(rob_row(g4)$notes, "reaches rule 4", fixed = TRUE)
+  expect_true("pma-rob-leaf-lowonly" %in% .rob_path(g4))
+
+  m <- mk(te = c(0.20, 0.50, 0.50, 0.50),
+          w  = c(400, 400 / 3, 400 / 3, 400 / 3))
+  g2 <- quiet_legacy(m, rob = c("very_serious", "no", "no", "no"),
+                     small_values = "undesirable",
+                     threshold = 1.05, threshold_scale = "ratio")
+  row <- rob_row(g2)
+  expect_equal(g2$rob_analysis_set, "all")
+  expect_match(row$notes, "reaches rule 2", fixed = TRUE)
+  expect_match(row$notes, "direction gate (bias-favouring shift): no",
+               fixed = TRUE)
+  expect_match(row$notes, "not in the bias-favouring direction", fixed = TRUE)
+  expect_match(row$notes, "Departure from the source", fixed = TRUE)
+  expect_match(row$notes, "Beyond Core GRADE", fixed = TRUE)
+  f <- domain_facts(g2, "Risk of bias")
+  expect_identical(f$numeric[f$key == "fig2_branch"], 2)
+
+  m5 <- mk(te = c(2.90, -0.50, -0.50, -0.50),
+           w  = c(400, 400 / 3, 400 / 3, 400 / 3))
+  g5 <- quiet_legacy(m5, rob = c("very_serious", "no", "no", "no"),
+                     small_values = "undesirable",
+                     threshold = 1.05, threshold_scale = "ratio")
+  expect_match(rob_row(g5)$notes, "reaches rule 5", fixed = TRUE)
+  expect_equal(g5$rob_analysis_set, "low_only")
+  expect_equal(rob_row(g5)$downgrade, 0)
+  expect_false(grepl("Rule 5:", rob_row(g5)$notes, fixed = TRUE))
+})
+
+test_that("legacy: both branches read the same estimates the same way", {
   m <- mk(te = c(0.20, 0.50, 0.50, 0.50),
           w  = c(600, 400 / 3, 400 / 3, 400 / 3))
-  g <- quiet_grade(m, rob = c("very_serious", "no", "no", "no"),
-                   small_values = "undesirable",
-                   threshold = 1.05, threshold_scale = "ratio")
+  g <- quiet_legacy(m, rob = c("very_serious", "no", "no", "no"),
+                    small_values = "undesirable",
+                    threshold = 1.05, threshold_scale = "ratio")
   row <- rob_row(g)
   expect_match(row$notes, "dominated: yes", fixed = TRUE)
   expect_equal(row$judgment, "not_serious")
   expect_match(row$notes, "Rule 2", fixed = TRUE)
   expect_equal(g$rob_analysis_set, "all")
-
-  # The undominated twin: same estimates, 50% weight, and the same rule.
-  g_undom <- quiet_grade(mk(te = c(0.20, 0.50, 0.50, 0.50),
-                            w  = c(400, 400 / 3, 400 / 3, 400 / 3)),
-                         rob = c("very_serious", "no", "no", "no"),
-                         small_values = "undesirable",
-                         threshold = 1.05, threshold_scale = "ratio")
-  expect_match(rob_row(g_undom)$notes, "dominated: no", fixed = TRUE)
-  expect_match(rob_row(g_undom)$notes, "reaches rule 2", fixed = TRUE)
-  expect_equal(g_undom$rob_analysis_set, g$rob_analysis_set)
+  expect_identical(.rob_path(g), c("pma-rob-node-dominance",
+                                   "pma-rob-edge-dominance-yes"))
 })
 
 # ---- B-1: study-level overrides -------------------------------------------

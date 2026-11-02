@@ -14,109 +14,75 @@ the picture to the code without reading the code first.
 These are pmatools' \emph{operationalisation} of the decision each cited
 figure describes, not reproductions of the published artwork, and they
 deliberately differ from the source where pmatools had to make the decision
-executable. Every difference is stated below, and four of the five figures
-carry it in a caption as well. The risk-of-bias figure does not: its shape
-follows Core GRADE 4 Fig 2 closely enough that a footnote inside the drawing
-would read as part of the source, so \strong{this topic and that figure's
-\code{<desc>} are where its disclosure lives} - the five rules and the
-two-level fifth rule are pmatools' own, and nothing a reader sees in the
-drawing says so. Where a figure and the source disagree, the source is right
-about GRADE and the figure is right about pmatools.
+executable. Every difference is stated below, and every figure's caption
+says it is pmatools' operationalisation. Where a figure and the source
+disagree, the source is right about GRADE and the figure is right about
+pmatools.
+
+The risk-of-bias and publication-bias figures follow the living Core GRADE
+Guide (Fig 7-2 and Fig 9-1), which revised the corresponding figures of the
+BMJ Core GRADE 4 article (Fig 2 and Fig 5). The imprecision and
+inconsistency figures still cite the BMJ articles, whose figures the Guide
+left unchanged. The indirectness figure is the Guide's Fig 8-2, which has no
+counterpart in the BMJ Core GRADE 5 article.
 
 Each assessment also records the route it took through its figure, as a
 fact keyed \code{"flow_path"} in \code{\link{domain_facts}}: a
 space-separated list of the element ids the judgment traversed. The
 companion Shiny app reads it and highlights the path.
 }
-\section{Risk of bias - Core GRADE 4 Fig 2}{
+\section{Risk of bias - Core GRADE Guide Fig 7-2}{
 
 Implemented by \code{assess_rob()} in \code{R/domain_rob.R}, which delegates
 the flowchart itself to \code{.flowchart_rob()} in the same file; the
-five-rule direction-of-bias check is \code{.assess_bias_direction()}, also
-in \code{R/domain_rob.R}, and both branches of the figure read its verdict.
+substantial-differences node is answered by \code{.assess_rob_magnitude()},
+also in \code{R/domain_rob.R}. The figure is Guide Fig 7-2 (formerly Core
+GRADE 4 Fig 2), in its own wording and shape.
 
-Departs from the source three times.
+\strong{Dominated evidence is rated down, with no further check} (since
+0.6.0). Core GRADE 4 Fig 2 asked users to "check direction of bias" before
+rating down dominated evidence; the Guide removed that node and treats the
+direction of bias as a consideration beyond Core GRADE (Guide Appendix 11).
+pmatools follows: when the high risk of bias studies carry at least the
+dominance threshold of the weight (55\\% by default, the conservative of
+the footnote's two candidates), the judgment is "serious", rated down one
+level, and every study is analysed.
 
-First, the five rules are pmatools' own. Core GRADE 4 Fig 2 has a single
-node reading "check direction of bias" and does not enumerate how. The
-dominance threshold shown (55\% of the pooled weight) is the conservative one
-of the two the figure's footnote offers.
+Departs from the source once. The undominated branch asks "Are there
+substantial differences in estimate of effect between high and low risk of
+bias studies?", and the Guide's criteria are qualitative - differing
+clinical decisions, or point estimates on different sides of and far from
+the MID threshold, supported by formal tests of subgroup differences.
+pmatools answers it with numbers of its own, symmetrically: yes when the
+pooled estimate and the estimate restricted to the low risk of bias
+studies fall in different zones relative to the chosen threshold, or in
+the same non-trivial zone with a relative change in magnitude above
+\code{rob_inflation_threshold} (20\\%) in either direction. Yes restricts the
+analysis to the low risk of bias studies and neither answer rates down. A
+comparison that cannot be made takes the No edge, and the judgment notes
+say which of the two it was. The restricted estimate is a fixed-effect
+pool. Two smaller conveniences are also pmatools': the count share used
+when study weights are unavailable, and \code{rob_some_concerns}, which
+folds a three-level rating into the binary one the source asks for.
 
-Second, and more consequentially, the fifth rule rates down \strong{two}
-levels. Core GRADE 4 describes no two-level risk-of-bias downgrade at all:
-every leaf of its Fig 2 reads "rate down" or "do not rate down", and the
-only two-level move in the paper is rating \emph{up} observational evidence.
-pmatools rates down two there because the rule is reached only when the
-pooled estimate sits beyond the chosen threshold on one side of the null and
-the estimate restricted to the low risk of bias studies sits beyond it on
-the other: the direction of the effect is what the high risk of bias studies
-produced, and moderate certainty would overstate the evidence. The
-neighbouring fourth rule, which is what an ordinary shift in the estimate
-reaches, still rates down one level, as do the third rule and the case where
-every study is at high risk of bias and no restricted estimate exists to
-compare. Every judgment on the two-level branch carries the departure in its
-\code{notes}. The two levels also require a threshold to have been supplied;
-without one the rule rates down one level, because the zones are then
-separated by the null alone and a sign flip no longer implies either
-estimate is appreciably away from it.
+The appreciable-evidence box is a statement in the source, not a question,
+and has one outgoing edge: not dominating leaves the low risk of bias
+studies more than 45\\% of the weight at the default gate and more than
+35\\% at 0.65, the footnote's "corresponding thresholds". A body of evidence
+with no high risk of bias study takes the undominated route like any other.
 
-Third, the undominated branch's node - "whether low and high risk of bias
-studies suggest similar or substantially different magnitudes of effect" -
-is worded symmetrically in the source and names no direction, whereas
-pmatools answers it with those same directional rules: a rule that rates
-down means substantially different, a rule that does not means similar. A
-shift past the inflation threshold that does not run in the bias-favouring
-direction implied by \code{small_values} is therefore read as "similar", and
-the analysis is not restricted to the low risk of bias studies. The
-symmetric reading was in force up to and including 0.5.0 and was worse
-rather than merely different: under it one and the same pair of estimates is
-"substantially different" on this branch and "not substantially different"
-one node away on the dominated branch. Rule 5's depth does not cross with
-its verdict - this branch rates down nothing, so every rating rule reaches
-the same leaf. Every judgment that answers the node carries the departure in
-its \code{notes}.
+\strong{The legacy direction-of-bias check is not drawn.}
+\code{grade_meta(rob_direction_check = TRUE)} restores the pmatools 0.5.x
+behaviour on both branches, for reproducibility of 0.5.x analyses: five
+zone rules decide the dominated branch (rule 5, a sign flip across the null
+beyond the threshold, rates down two levels, which no Core GRADE source
+describes), and the same directional verdict, gated on
+\code{small_values}, answers the undominated node. It is Beyond Core GRADE,
+every judgment made with it says so in its \code{notes}, and its route
+lights only the dominance node and its Yes edge; the rule number rides on
+the \code{fig2_branch} fact. The Shiny app does not offer it.
 
-\strong{The five rules are not in the drawing.} Below "check the direction
-of bias" Core GRADE 4 Fig 2 has exactly two boxes and two leaves: risk of
-bias may be responsible for the apparent effect, or for the apparent lack of
-one, so rate down; there is an apparent effect and bias would have decreased
-it, or there is no apparent effect and bias would have increased it, so do
-not rate down. The figure draws that structure and nothing else. The rules
-are the mechanism that decides which box is reached - rules 1 and 2 the
-do-not-rate-down box, rules 3, 4, 5 and the unassessable case the rate-down
-box - and they are named in this topic, in the figure's \code{<desc>} and in
-the domain notes, not on the page.
-
-A recorded \code{flow_path} therefore names the conclusion, not the rule.
-The rule number rides on the \code{fig2_branch} fact beside it, which is
-what the domain notes, the Summary of Findings footnote and the Evidence
-Profile read - the places a reader acts on it. Rule 5's second level is
-stated in those notes and in the caption the Shiny app prints beside the
-figure; the rate-down leaf reads "Rate down" alone, as the source's does.
-Up to 0.5.1 the figure enumerated the rules as six numbered boxes and
-annotated the two levels on that leaf.
-
-The chart opens at the dominance question. A body of evidence with no
-high-risk study is not drawn a node of its own, because it does not reach a
-different decision: the dominance share is then 0, below the gate, and
-"analyse all studies" is the answer when there is nothing to exclude. That
-case therefore lights the undominated route like any other, taking the
-appreciable node's "yes" edge - evidence with no high-risk study is entirely
-low risk of bias, which is the strongest possible yes.
-
-That node has no "no" edge, because the answer cannot be no. Reaching the
-undominated branch at all means the high-risk studies carry less than the
-dominance threshold, so the low-risk studies carry more than 45\% of the
-weight at the default gate and more than 35\% at the strictest gate Core
-GRADE 4 discusses - at or above the "35 to 45\%" the same paragraph calls
-appreciable. A comparison that cannot be made at all is carried on the same
-edge as "similar", labelled "Similar/Not assessable", because both answers
-reach the same leaf and rate down neither way. The two are still different
-findings, and the difference is recorded where it can be read - in the
-judgment notes and in the \code{fig2_branch} fact - rather than drawn as a
-second arrow into the same box.
-
-\if{html}{\figure{rob.svg}{options: width="100\%" alt="pmatools risk-of-bias decision flowchart: whether the high risk of bias studies dominate the evidence, then either the direction-of-bias check feeding Core GRADE 4's two conclusions and their rate-down / do-not-rate-down leaves, or the appreciable-evidence and magnitude questions."}}
+\if{html}{\figure{rob.svg}{options: width="100\%" alt="pmatools risk-of-bias decision flowchart after Core GRADE Guide Figure 7-2: whether evidence is dominated by high risk of bias studies, which leads to using all studies and rating down, or else whether there are substantial differences in estimate of effect between high and low risk of bias studies, which decides between using only the low risk of bias studies and using all studies, neither rating down."}}
 \if{latex}{Figure omitted from the PDF manual (SVG); see the HTML help.}
 }
 
@@ -170,34 +136,41 @@ a definition for binary outcomes only.
 \if{latex}{Figure omitted from the PDF manual (SVG); see the HTML help.}
 }
 
-\section{Publication bias - Core GRADE 4 Fig 5}{
+\section{Publication bias - Core GRADE Guide Fig 9-1}{
 
-Implemented by \code{assess_pubias()} in \code{R/domain_pubias.R}; the two
-branches out of Q2 are \code{.pubias_statistical()} (k at least 10) and
-\code{.pubias_registry()} (k below 10) in the same file.
+Implemented by \code{assess_pubias()} in \code{R/domain_pubias.R}; the
+first node is \code{.pubias_important_effect()}, and the two branches out of
+the study-count node are \code{.pubias_statistical()} (k at least 10) and
+\code{.pubias_registry()} (k below 10), all in the same file. The figure is
+Guide Fig 9-1 (formerly Core GRADE 4 Fig 5).
+
+\strong{The first node is new in the Guide}: "Did the studies show an
+important effect?" - no means do not rate down, and nothing else is asked
+(since 0.6.0). pmatools computes the answer: yes when the pooled point
+estimate lies beyond the threshold the rating target uses (the MID, or the
+null for a non-null-effect target), on either side. With a null threshold
+every non-null estimate is yes, so the node then effectively always answers
+yes; an unavailable estimate is assumed yes. \code{pubias_important_effect}
+overrides the derivation, and a manual "no" needs a written rationale.
 
 Departs from the source by one whole node: the registry-coverage box is a
-pmatools input and appears nowhere in Fig 5, whose only registry node is Q4.
-The box says so on its own third line, having been drawn with a dashed
-outline up to 0.5.0 -- a dash reads as "provisional" or "not reached yet" on
-a chart whose job is to show which boxes an analysis went through. It is
-evaluated after Q1, so a body of small industry-sponsored trials still rates
-down even when the reviewer asserts complete coverage.
-The p < 0.05 cut-off on Q3 is also pmatools': Fig 5 asks qualitatively
-whether asymmetry "strongly suggests publication bias" and names no
-threshold.
+pmatools input and appears nowhere in Fig 9-1, whose only registry node is
+the unpublished-studies question. The box says so on its own third line. It
+is evaluated after the small-and-industry-sponsored node, so a body of such
+trials still rates down even when the reviewer asserts complete coverage.
+The p < 0.05 cut-off for Egger's test is also pmatools': the Guide asks
+whether asymmetry is "statistically significant" and names no alpha.
 
-The study-count node is computed rather than asked, and says that on its own
-third line too. \code{flow_path} lights the node AND the edge out of it, so
-a reader can see which branch the count chose.
+The important-effect and study-count nodes are computed rather than asked,
+and each says so on its own last line. \code{flow_path} lights the node AND
+the edge out of it, so a reader can see which branch was chosen.
 
-The chart prints no question numbers, although Fig 5 numbers its four nodes
-Q1 to Q4: the registry box sits between Q1 and Q2, so numbering on the
-drawing would describe neither the source nor the route. The \code{"Q1:"}
-to \code{"Q4:"} prefixes in the domain \code{notes} are unchanged -- they
-are the exported record, and no figure travels with them.
+The chart prints no question numbers. The domain \code{notes} refer to the
+nodes as \code{"Q0:"} to \code{"Q4:"}: Q1 to Q4 keep the numbering Core
+GRADE 4 Fig 5 gave them, which exports from earlier releases carry, and the
+Guide's new first node is Q0 rather than a renumbering of the other four.
 
-\if{html}{\figure{pubias.svg}{options: width="100\%" alt="pmatools publication-bias decision flowchart: whether most studies are small and industry sponsored, a pmatools registry-coverage input, whether statistical analysis is feasible, and then either funnel-plot asymmetry or documentation of unpublished studies."}}
+\if{html}{\figure{pubias.svg}{options: width="100\%" alt="pmatools publication-bias decision flowchart after Core GRADE Guide Figure 9-1: whether the studies showed an important effect, whether most studies are small and industry sponsored, a pmatools registry-coverage input, whether there are enough studies to examine funnel plot asymmetry, and then either funnel-plot asymmetry or documented unpublished studies."}}
 \if{latex}{Figure omitted from the PDF manual (SVG); see the HTML help.}
 }
 
@@ -259,6 +232,10 @@ rating certainty of evidence - assessing inconsistency. BMJ.
 Guyatt G, Brignardello-Petersen R, Hultcrantz M, et al. Core GRADE 4:
 rating certainty of evidence - risk of bias and publication bias. BMJ.
 2025;389:e083864. \doi{10.1136/bmj-2024-083864}
+
+Guyatt G, et al. Core GRADE Guide. MAGIC Evidence Ecosystem; 2025-.
+\url{https://core-grade.gitbook.io/org}. Accessed 2026-11-02. Risk of
+bias: Fig 7-2 and Appendix 11; publication bias: Fig 9-1.
 
 Guyatt G, Brignardello-Petersen R, Hultcrantz M, et al. Core GRADE 5:
 rating certainty of evidence - indirectness. BMJ. 2025;389:e083865.

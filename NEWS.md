@@ -1,4 +1,4 @@
-# pmatools (development version)
+# pmatools 0.7.0
 
 ## New features
 
@@ -42,13 +42,109 @@
   row. With every subdomain at "do not rate down", the closing row's
   description now says so. Before, it named no subdomain.
 
-## Shiny app
+## Shiny app (3.6.0)
 
 * The Indirectness tab asks the four questions in Fig 8-2's words and offers
   its answers (4 on Population, Intervention and Comparator; 5 on Outcome),
   and it draws the figure under the subdomain table with every route the
   answers took lit up. The input ids are unchanged. An answer remembered on
   the old scale is restored to the Fig 8-2 choice that rates the same.
+
+# pmatools 0.6.0
+
+Risk of bias and publication bias now follow the **Core GRADE Guide**
+(Guyatt G, et al. MAGIC Evidence Ecosystem;
+<https://core-grade.gitbook.io/org>, accessed 2026-11-02): Fig 7-2 and
+Fig 9-1, which supersede Core GRADE 4 Fig 2 and Fig 5 (BMJ 2025) as pmatools'
+sources for these two domains. Both changes alter certainty ratings on
+unchanged input.
+
+## Breaking changes
+
+* **feat!: dominated evidence is always rated down one level for risk of
+  bias.** Core GRADE Guide Fig 7-2 has no "check direction of bias" node: when
+  the high risk of bias studies dominate the evidence (weight share at or above
+  `rob_dominant_threshold`, still 0.55), it uses the results from all studies
+  and rates down. `assess_rob()` now does exactly that — `"serious"` (−1),
+  `analysis_set = "all"`, no estimate comparison, no refit, `small_values` not
+  consulted — including when every study is at high risk of bias. Two kinds of
+  rating move:
+  - evidence the 0.5.x direction check left unrated (rules 1 and 2: both
+    estimates trivial, or a small or non-bias-favouring shift) is now rated
+    down one level;
+  - evidence it rated down **two** levels (rule 5, a sign flip across the
+    threshold) is now rated down one.
+
+  The domain notes, the `fig2_branch` fact (`numeric` now `NA` on this route)
+  and the lit flowchart (`node-dominance → edge-dominance-yes → leaf-ratedown`)
+  say so; no `estimate_shift` fact is recorded.
+
+* **feat!: the undominated "substantial differences" node is read
+  symmetrically.** "Are there substantial differences in estimate of effect
+  between high and low risk of bias studies?" is answered yes when the two
+  estimates fall in different threshold zones, or in the same non-trivial zone
+  with a relative change above `rob_inflation_threshold` (0.20) **in either
+  direction**. Up to 0.5.x a deflation — the low risk of bias studies showing
+  the larger effect — read as "similar"; it now restricts the analysis to the
+  low risk of bias studies (and, with `rob_refit = TRUE`, refits on them). The
+  branch still never rates down. The notes on both leaves say the numeric
+  reading is pmatools' (the Guide words the question qualitatively).
+
+* **feat!: publication bias opens with "Did the studies show an important
+  effect?".** Core GRADE Guide Fig 9-1's new first node is computed: yes when
+  the pooled estimate lies beyond the rating target's threshold on either side
+  of the null; with a null threshold any non-null estimate is yes (the note
+  says the node then effectively always answers yes); an unavailable estimate
+  is assumed yes. **No stops the chart at "do not rate down"**, so an outcome
+  whose estimate sits inside the threshold is no longer rated down for
+  publication bias, whatever Egger's test or documented unpublished studies
+  say. The new `pubias_important_effect = NULL | "yes" | "no"` of
+  `grade_meta()` / `assess_pubias()` overrides it; `"no"` requires
+  `pubias_rationale`. The notes prefix the node `Q0:` (`Q1:`–`Q4:` unchanged),
+  an `important_effect` fact records the answer, and every publication-bias
+  `flow_path` now starts at `pma-pubias-node-q0`. Q1–Q4 logic is unchanged; Q3
+  is reworded to the Guide's "visual asymmetry and/or statistical
+  significance".
+
+* **feat!: both flowcharts are redrawn, and recorded `flow_path`s from 0.5.x no
+  longer match.** `rob.svg` is Guide Fig 7-2 (eleven ids; the direction-node
+  ids are removed and `pma-rob-edge-appreciable-yes` is renamed
+  `pma-rob-edge-appreciable-magnitude`), carrying the Guide's two footnotes.
+  `pubias.svg` gains the Q0 node, its "No" leaf and edges. Read routes through
+  `domain_facts()`, not by matching ids.
+
+## New features
+
+* **`rob_direction_check = FALSE`** in `assess_rob()` and `grade_meta()`.
+  `TRUE` reproduces 0.5.x on both branches exactly: the five zone rules decide
+  the dominated judgment (including rule 5's two-level downgrade) and the
+  undominated leaf, directionally, via `small_values`. It is **Beyond Core
+  GRADE (Guide Appendix 11)**, retained for the reproducibility of 0.5.x
+  analyses, and every judgment it produces says so in its notes and in
+  `fig2_branch`. The figure lights only the dominance node and its "yes" edge
+  in this mode. Stored as `$rob_direction_check`; `export_bundle()` writes it
+  (and `pubias_important_effect`) into the bundled `analysis.R`. The Shiny app
+  does not offer it.
+* `assess_rob()` requires `small_values` only when `rob_direction_check =
+  TRUE`. `grade_meta()` still requires it, for Imprecision.
+
+## Shiny app (3.5.0)
+
+* The Risk of bias and Publication bias charts are the Guide's Fig 7-2 and
+  Fig 9-1, and their captions cite them ("formerly Core GRADE 4 Fig 2 / Fig 5").
+  The risk of bias caption names pmatools' numeric reading of the
+  substantial-differences node and no longer describes the five direction
+  rules.
+* The publication-bias wizard lights the computed Q0 node from the start,
+  prints its answer under the chart ("Important effect: …", read off the last
+  rating; assumed yes before one exists), and ends at the result without
+  asking anything when it is no.
+
+## Documentation and provenance
+
+* `?grade_flowcharts` rewrites the risk of bias and publication bias sections
+  and cites the Core GRADE Guide. SPEC.md §5.1, §5.1a and the new §5.5d are the
+  contract; shiny/SPEC.md §3.4.12 the app's side.
 
 # pmatools 0.5.2
 

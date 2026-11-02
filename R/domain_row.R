@@ -186,13 +186,12 @@ make_domain_row <- function(domain, judgment, auto, notes = NA_character_,
 # --------------------------------------------------------------------------
 # Outcome-direction entry gate (v0.5.1, breaking)
 # --------------------------------------------------------------------------
-# `small_values` says which way benefit runs for this outcome, and two domains
-# cannot be assessed without it: the Core GRADE 4 Fig 2 direction-of-bias check
-# needs to know which shift would flatter the intervention, and the Core GRADE 2
-# optimal information size needs to know whether a benefit is a modest relative
-# reduction or a modest relative increase in the event rate. Both used to guess
-# when the argument was absent, and the risk-of-bias guess was loud enough to
-# warn that it had decided the downgrade.
+# `small_values` says which way benefit runs for this outcome. The Core GRADE 2
+# optimal information size cannot be computed without it, and neither can the
+# legacy risk-of-bias direction check (rob_direction_check = TRUE), which needs
+# to know which shift would flatter the intervention. The OIS needs to know
+# whether a benefit is a modest relative reduction or a modest relative
+# increase in the event rate. Both used to guess when the argument was absent.
 #
 # NO ESCAPE HATCH, and that is the difference from require_threshold. Rating
 # without a MID is a legitimate choice (Core GRADE 7 asks users to pin one down
@@ -217,11 +216,12 @@ SMALL_VALUES_LEVELS <- c("desirable", "undesirable")
     "%s is required and must be 'desirable' or 'undesirable' (%s). ",
     "'desirable' means a small value of this outcome is good (mortality, ",
     "symptom severity); 'undesirable' means a small value is bad (response ",
-    "rate, remission). Risk of bias needs it to know which way bias would ",
-    "flatter the intervention, and the optimal information size needs it to ",
-    "know whether a benefit is a modest relative reduction or a modest ",
-    "relative increase in the event rate. pmatools will not guess: it used ",
-    "to, and the guess decided ratings. There is no way to proceed without ",
-    "the answer, because every outcome has a direction."),
+    "rate, remission). The optimal information size needs it to know ",
+    "whether a benefit is a modest relative reduction or a modest relative ",
+    "increase in the event rate, and the legacy risk-of-bias direction check ",
+    "needs it to know which way bias would flatter the intervention. ",
+    "pmatools will not guess: it used to, and the guess decided ratings. ",
+    "There is no way to proceed without the answer, because every outcome ",
+    "has a direction."),
     arg, got), class = "pmatools_direction_gate")
 }

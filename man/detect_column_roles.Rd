@@ -13,7 +13,7 @@ detect_column_roles(data)
 A data.frame with one row per role, in role order, and columns:
 \describe{
 \item{role}{the canonical name (\code{studlab}, \code{treat}, \code{n}, \code{event},
-\code{mean}, \code{sd}, \code{outcome}, \code{rob}, \code{indirectness}, \code{subgroup}).}
+\code{mean}, \code{sd}, \code{outcome}, \code{rob}, \code{indirectness}, \code{subgroup}, \code{score_type}).}
 \item{column}{the source column that fills it, or \code{NA} when none does.}
 \item{matched_by}{\code{"canonical"} when the column already carried the
 role's own name, \code{"alias"} when it was renamed, \code{NA} when unfilled.}
