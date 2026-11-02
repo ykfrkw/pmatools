@@ -229,9 +229,9 @@ EDU_COPY <- list(
     # value. `threshold_labels` below carries one ("e.g., 1.25") because a
     # threshold of clinical importance has a placeholder to illustrate; a
     # margin has none by design, and an example printed in its label is a
-    # number a reviewer can read as a suggestion. "above 1" is the constraint
-    # the internal conversion imposes: a ratio below 1 makes the threshold
-    # negative on the TE scale and trips a gate.
+    # number a reviewer can read as a suggestion. "above 1" is the canonical
+    # form: since 0.7.1 threshold_to_te_scale() takes a ratio below 1 as its
+    # reciprocal and notes it, but the label asks for the form it records.
     question_threshold_units = c(
       OR  = "as an odds ratio above 1",
       RR  = "as a risk ratio above 1",

@@ -213,8 +213,8 @@ suggest_threshold <- function(meta_obj) {
 #'       only when an \code{"ard"} Threshold was converted to the ratio scale.}
 #'     \item{threshold_note}{Human-readable conversion note (eg,
 #'       \code{"Absolute threshold 50 per 1000 at baseline risk 180 per 1000
-#'       (equivalent RR 1.28)"}). Non-\code{NULL} only on ARD-to-ratio
-#'       conversion.}
+#'       (equivalent RR 1.28)"}). Non-\code{NULL} on ARD-to-ratio conversion,
+#'       and when a ratio threshold below 1 was replaced by its reciprocal.}
 #'     \item{threshold_baseline}{The baseline risk actually used for the
 #'       conversion. Non-\code{NULL} only on ARD-to-ratio conversion.}
 #'   }
@@ -232,7 +232,10 @@ suggest_threshold <- function(meta_obj) {
 #'     approximation for HR is accurate only for low event rates / short
 #'     follow-up; interpret with care.
 #' }
-#' \code{threshold_internal} is then \eqn{\log T}. For non-ratio effect
+#' \code{threshold_internal} is then \eqn{\log T}. A ratio threshold below 1
+#' (eg, 0.8) is replaced by its reciprocal (1.25), which is the same distance
+#' from the null on the log scale, and \code{threshold_note} says so; a
+#' non-positive ratio threshold is an error. For non-ratio effect
 #' measures, \code{threshold_scale = "ard"} keeps the previous pass-through
 #' behaviour (\code{threshold_internal = threshold}).
 #'
@@ -281,6 +284,25 @@ threshold_to_te_scale <- function(threshold, threshold_scale = "auto", sm = NULL
     return(.ard_threshold_to_ratio(threshold, sm, threshold_baseline, meta_obj))
   }
 
+  # A ratio threshold is symmetric about 1 on the log scale, so 0.8 and 1.25
+  # name the same distance from the null. Below 1 the log is negative, and
+  # every consumer reads a non-positive threshold as "no threshold" -- so
+  # without this a reviewer who writes a 20% reduction as 0.8 silently got a
+  # different rating from one who wrote 1.25.
+  threshold_note <- NULL
+  if (scale == "ratio") {
+    if (!is.finite(threshold) || threshold <= 0) {
+      rlang::abort("A ratio threshold must be a positive number (eg, 1.25).")
+    }
+    if (threshold < 1) {
+      threshold_note <- sprintf(paste0(
+        "Ratio threshold %s is below 1; its reciprocal %s was used (the same ",
+        "distance from the null on the log scale)."),
+        format(signif(threshold, 4)), format(signif(1 / threshold, 4)))
+      threshold <- 1 / threshold
+    }
+  }
+
   threshold_internal <- switch(scale,
     "te_scale" = threshold,
     "ratio"    = log(threshold),
@@ -288,7 +310,8 @@ threshold_to_te_scale <- function(threshold, threshold_scale = "auto", sm = NULL
   )
 
   list(threshold_internal = threshold_internal, threshold_kind = scale,
-       threshold_ard = NULL, threshold_note = NULL, threshold_baseline = NULL)
+       threshold_ard = NULL, threshold_note = threshold_note,
+       threshold_baseline = NULL)
 }
 
 #' Convert an absolute risk difference Threshold to the log-ratio scale

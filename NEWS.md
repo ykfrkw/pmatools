@@ -1,3 +1,18 @@
+# pmatools 0.7.1
+
+## Bug fixes
+
+* **A ratio threshold below 1 is no longer ignored.** For OR, RR, HR and RoM
+  the threshold is compared on the log scale, where 0.8 and 1.25 are the same
+  distance from the null. Up to 0.7.0 a threshold below 1 became a negative
+  log value, which every domain reads as "no threshold": `threshold = 0.8`
+  silently rated as if no threshold had been given, changing the rating
+  target, Imprecision and the publication-bias "important effect" node.
+  `threshold_to_te_scale()` now takes the reciprocal (0.8 -> 1.25) and says so
+  in `threshold_note`, which grade_meta() appends to the Risk of bias,
+  Inconsistency and Imprecision notes. A non-positive ratio threshold is now an
+  error.
+
 # pmatools 0.7.0
 
 ## New features

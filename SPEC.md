@@ -2,7 +2,7 @@
 
 > Authoritative specification for the pmatools R package. Implementation MUST conform to this document. UI-side concerns (Shiny wizard, educational copy, accordion layout) are specified separately in [`shiny/SPEC.md`](shiny/SPEC.md), which governs the app in this repository's `shiny/` directory.
 
-**Version target:** 0.7.0
+**Version target:** 0.7.1
 **Document history:** this file was written for v0.2.0 and has been updated in place for v0.5.0, v0.5.1, v0.5.2 and v0.6.0; section numbering is preserved so the diff stays readable. Sections that still describe v0.2 behaviour verbatim are marked **[v0.2 — superseded]** with a pointer to the section that governs.
 
 **Backward compatibility:** v0.2 introduced no breaking changes. v0.4.0 and v0.5.0 did — see `NEWS.md`, which is authoritative for the change list. The three that most affect callers:
@@ -534,7 +534,7 @@ rating is set up and `export_bundle()` can print it in `results.txt`.
 |---|---|
 | `"auto"` | infer from `meta_obj$sm` (recommended) |
 | `"te_scale"` | already on the `meta_obj$TE` scale (log for OR/RR/HR/RoM, raw for MD/SMD) |
-| `"ratio"` | user gave an OR/RR ratio (e.g. 1.25); internally `log(threshold)` |
+| `"ratio"` | user gave an OR/RR ratio (e.g. 1.25); internally `log(threshold)`. A ratio below 1 (e.g. 0.8) is taken as its reciprocal (1.25) and `threshold_note` says so; a non-positive ratio aborts (0.7.1) |
 | `"ard"` | absolute risk difference; converted to the ratio scale at `threshold_baseline` (or the pooled baseline risk) for OR/RR/HR/RoM |
 
 **Mandatory rationales (v0.4.0, breaking).** Supplying a scalar `rob`, an `indirectness` other than `"not_serious"`, an `inconsistency`, an `imprecision`, a `pubias_funnel_asymmetry`, a manual `rating_target`, or any `rob_overrides` **without** the matching `*_rationale` argument is an error. Rationales are stored in the domain notes and surfaced by `sof_table()`, `grade_report()` and `export_bundle()`.
@@ -702,7 +702,7 @@ When `threshold_scale = "auto"`:
 
 | `meta_obj$sm` | User input convention | Internal storage |
 |---|---|---|
-| `"OR"`, `"RR"`, `"HR"`, `"RoM"` | ratio scale (e.g., 1.25, 1.10) | `log(threshold)` (matches `meta_obj$TE`) |
+| `"OR"`, `"RR"`, `"HR"`, `"RoM"` | ratio scale (e.g., 1.25, 1.10; below 1 is taken as its reciprocal) | `log(threshold)` (matches `meta_obj$TE`) |
 | `"MD"` | raw outcome units (e.g., 3 PHQ-9 points) | `threshold` as-is |
 | `"SMD"` | standardized units (e.g., 0.20) | `threshold` as-is |
 | `"ARD"` | proportion (e.g., 0.05 = 5%) | `threshold` as-is |

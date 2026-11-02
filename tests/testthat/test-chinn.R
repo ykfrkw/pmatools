@@ -71,6 +71,33 @@ test_that("threshold_to_te_scale handles ratio scale", {
   expect_equal(out$threshold_kind, "ratio")
 })
 
+test_that("a ratio threshold below 1 is taken as its reciprocal, with a note", {
+  out <- threshold_to_te_scale(0.8, "auto", "RR")
+  expect_equal(out$threshold_internal, log(1.25))
+  expect_match(out$threshold_note, "below 1; its reciprocal 1.25 was used")
+  expect_null(threshold_to_te_scale(1.25, "auto", "RR")$threshold_note)
+  expect_error(threshold_to_te_scale(0, "ratio", "RR"), "positive")
+  expect_error(threshold_to_te_scale(-1.25, "ratio", "RR"), "positive")
+})
+
+test_that("grade_meta() rates RR 0.8 exactly as RR 1.25", {
+  dat <- data.frame(
+    studlab = paste0("S", 1:3),
+    event.e = c(10, 15, 12), n.e = c(100, 120, 110),
+    event.c = c(20, 22, 25), n.c = c(100, 118, 112))
+  m <- meta::metabin(event.e, n.e, event.c, n.c, studlab = studlab,
+                     data = dat, sm = "RR")
+  rate <- function(thr) grade_meta(m, rob = rep("not_serious", 3),
+                                   small_values = "desirable", threshold = thr,
+                                   pubias_unpublished = "no")
+  g_low  <- rate(0.8)
+  g_high <- rate(1.25)
+  expect_equal(g_low$threshold_internal, g_high$threshold_internal)
+  expect_identical(g_low$rating_target, g_high$rating_target)
+  expect_identical(g_low$domains$judgment, g_high$domains$judgment)
+  expect_match(g_low$threshold_note, "reciprocal")
+})
+
 test_that("threshold_to_te_scale auto for OR -> ratio", {
   out <- threshold_to_te_scale(1.25, "auto", "OR")
   expect_equal(out$threshold_internal, log(1.25))
