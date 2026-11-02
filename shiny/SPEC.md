@@ -4,7 +4,7 @@
 
 **Public URL:** https://yuki-furukawa.shinyapps.io/pmatools/
 **Deployment:** shinyapps.io (account: `yuki-furukawa`, appId: `17697029`)
-**App version:** 3.6.0 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.5.0 → 3.6.0 is the Indirectness flowchart (Core GRADE Guide Fig 8-2, §3.4.12a); 3.4.0 → 3.5.0 is the Core GRADE Guide flowcharts (risk of bias Fig 7-2, publication bias Fig 9-1 and its computed first node, §3.4.12); 3.3.0 → 3.4.0 is the optional Score type mapping (§3.3.3); 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
+**App version:** 3.6.1 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.6.0 → 3.6.1 corrects the Configuration tab's outcome-direction sentence, which still said it set the bias direction Risk of Bias checks; 3.5.0 → 3.6.0 is the Indirectness flowchart (Core GRADE Guide Fig 8-2, §3.4.12a); 3.4.0 → 3.5.0 is the Core GRADE Guide flowcharts (risk of bias Fig 7-2, publication bias Fig 9-1 and its computed first node, §3.4.12); 3.3.0 → 3.4.0 is the optional Score type mapping (§3.3.3); 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
 
 ---
 

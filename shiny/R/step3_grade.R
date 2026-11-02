@@ -4216,7 +4216,8 @@ step3_server <- function(input, output, session, state) {
       "Outcome direction",
       htmltools::p(class = "pma-card-subtitle", style = "margin: 0;",
         htmltools::tags$strong(label),
-        " - set in Step 2. It sets the bias direction Risk of Bias checks.")
+        " - set in Step 2. It tells Imprecision and the Summary of Findings ",
+        "which side of the threshold is the worse one.")
     )
   })
   shiny::outputOptions(output, "direction_echo", suspendWhenHidden = FALSE)
