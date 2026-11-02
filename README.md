@@ -1028,12 +1028,14 @@ so. If your reading of "all or almost all" is stricter, raise it.
 The `indirectness_subdomains` table below keeps its worst-case fold —
 subdomains are facets of one judgment, not units of evidence.
 
-#### PICO subdomains (v0.5): `indirectness_subdomains`
+#### PICO subdomains: `indirectness_subdomains`, answered on Core GRADE Guide Fig 8-2
 
 Core GRADE 5 asks the indirectness question **separately for each element of the
-PICO**. pmatools implements that as a subdomain table with a 4-point answer
-scale. Pass a data frame with the columns `subdomain`, `target`, `evidence` and
-`judgment`, one row per PICO element:
+PICO**, and the living [Core GRADE Guide](https://core-grade.gitbook.io/org/08-8-rating-certainty-of-evidence-indirectness)
+(chapter 8) turns that into a decision algorithm, its **Fig 8-2**. pmatools
+implements it as a subdomain table: pass a data frame with the columns
+`subdomain`, `target`, `evidence` and `judgment`, one row per PICO element, and
+give each row the one answer code that encodes its route through the figure:
 
 ```r
 ind_sub <- data.frame(
@@ -1046,7 +1048,7 @@ ind_sub <- data.frame(
                 "Therapist-delivered and digital CBT-I; both used in practice.",
                 "Comparators ranged from waitlist to active attention control.",
                 "Response derived from continuous scales at 8-12 weeks only."),
-  judgment  = c("yes", "probably_yes", "probably_no", "probably_yes"),
+  judgment  = c("no_difference", "similar", "dissimilar", "similar_definition"),
   stringsAsFactors = FALSE
 )
 
@@ -1062,31 +1064,41 @@ g_ind <- grade_meta(m_response,
                     outcome_name            = "Depression response")
 ```
 
-**Judgment mapping** ("Is the evidence sufficiently direct?"):
+**The answer codes** (one per row; the label picks the branch, case-insensitive,
+and `"Comparator"` is accepted for `"Comparison"`):
 
-| Subdomain judgment | Levels down |
-|---|---|
-| `"yes"` | 0 |
-| `"probably_yes"` | 0 |
-| `"probably_no"` | −1 (serious indirectness) |
-| `"no"` | −2 (very serious indirectness) |
+| Branch | `judgment` | Fig 8-2 route | Levels down |
+|---|---|---|---|
+| Population / Intervention / Comparison | `"no_difference"` | no differences versus the target | 0 |
+| | `"similar"` | differences, but biological or social factors sufficiently similar | 0 |
+| | `"dissimilar"` | factors dissimilar | −1 |
+| | `"very_dissimilar"` | factors very dissimilar | −2 |
+| Outcome | `"similar_definition"` | not a surrogate; definition and time frames similar | 0 |
+| | `"different_definition"` | not a surrogate; they differ | −1 |
+| | `"surrogate_very_close"` | surrogate very close to the patient-important outcome | 0 |
+| | `"surrogate_close"` | surrogate, close | −1 |
+| | `"surrogate_far"` | surrogate, far | −2 |
 
-Aliases such as `"Probably No"` are normalized. The **domain judgment defaults to
-the worst case across the four subdomains** — in the example above
-`probably_no` for Comparison drives the whole domain to `serious` (−1),
-even though the other three subdomains raise no concern.
+An Outcome code on another row, or a Population / Intervention / Comparison code
+on the Outcome row, aborts. The **domain judgment defaults to the worst case
+across the four subdomains** — in the example above `dissimilar` for Comparison
+drives the whole domain to `serious` (−1). The route every row took is recorded
+as the `flow_path` fact (`domain_facts(g_ind, "Indirectness")`) and drawn in
+`?grade_flowcharts`.
 
-> **Attribution — the 4-point scale is ours, not Core GRADE's.** Asking the
-> question per PICO element comes from Core GRADE 5. The answer scale
-> (`yes` / `probably_yes` / `probably_no` / `no`) and the wording *"Is the
-> evidence sufficiently direct?"* are **pmatools conventions** and appear
-> nowhere in the article body. Core GRADE 5 does not pose a yes/no directness
-> question at all: it asks how likely it is that the effect differs
-> substantially between the target PICO and the available evidence, and its
-> Table 2 grades that answer as *Low / Intermediate / Substantial / High
-> likelihood* of rating down.
+**The legacy scale still works.** Before Fig 8-2, pmatools asked "Is the evidence
+sufficiently direct?" on its own 4-point scale — `yes` / `probably_yes` (0),
+`probably_no` (−1), `no` (−2). Those answers are still accepted on any row with
+the same levels, so existing scripts rate exactly as before. The scale is a
+pmatools convention that appears nowhere in Core GRADE; on the Outcome row it
+cannot say whether the outcome is a surrogate, so its Fig 8-2 route is left
+undetermined and the domain notes say so.
+
+> **Attribution.** The questions and answers are the Core GRADE Guide's Fig 8-2.
+> The table, the legacy scale and the **worst-case fold** are pmatools': Fig 8-2
+> draws four parallel branches and does not say how they combine.
 >
-> **Core GRADE 5 also weighs the four elements unequally, and this table does
+> **Core GRADE 5 also weighs the four elements unequally, and the fold does
 > not.** Table 2, "Likelihood of rating down":
 >
 > | PICO element | Likelihood of rating down (Core GRADE 5 Table 2) |
@@ -1096,12 +1108,12 @@ even though the other three subdomains raise no concern.
 > | Comparison | "Substantial likelihood in trials of new agents when an effective treatment already exists, particularly more than one effective treatment" |
 > | Outcome | "High likelihood because of frequent disappointing results in randomised controlled trials examining patient important outcomes" |
 >
-> The worst-case fold is symmetric, so a `probably_no` recorded against
-> Population weighs exactly as much as one against Outcome. In the example
-> above, a `probably_no` on **Comparison** carries the domain — which is a
-> plausible reading of Table 2 — but the same input on Population would be
-> harder to defend. Read the table before accepting the default, and override
-> with `indirectness` + `indirectness_rationale` where the gradient matters.
+> The worst-case fold is symmetric, so a dissimilar population weighs exactly as
+> much as a close surrogate. In the example above, a dissimilar **Comparison**
+> carries the domain — which is a plausible reading of Table 2 — but the same
+> answer on Population would be harder to defend. Read the table before
+> accepting the default, and override with `indirectness` +
+> `indirectness_rationale` where the gradient matters.
 
 The normalized table comes back on the object as `$indirectness_subdomains`;
 `$domain_assessments` keeps its one-row-per-domain schema, so nothing downstream
@@ -1131,8 +1143,9 @@ indirectness_table(g_ind)                       # flextable, renders in the RStu
 flextable::save_as_docx(indirectness_table(g_ind), path = "indirectness.docx")
 ```
 
-Renders `$indirectness_subdomains`: the target question, the evidence found, a
-colour-graded 4-option judgment row with the recorded answer ticked, and a
+Renders `$indirectness_subdomains`: the target question, the evidence found, the
+Fig 8-2 answer in words, three colour-graded leaf columns (do not rate down /
+rate down once / rate down twice) with the leaf each answer reached ticked, and a
 merged "Judgment across subdomains" row carrying the overall judgment. It aborts
 (with a message telling you how to record subdomains) when the object has none.
 `export_bundle()` writes it as `indirectness_table.docx` for every outcome that
@@ -1142,8 +1155,9 @@ recorded subdomains.
 body carries exactly two tables — Table 1 (an adaptation of a summary of
 findings table) and Table 2 ("Summary of indirectness issues": PICO element /
 Reason for rating down / Examples / Likelihood of rating down) — and neither has
-this shape. The layout implements Core GRADE 5's per-PICO reasoning; the table
-itself, the 4-point scale and the header wording are ours. (The online
+this shape. The layout implements Core GRADE 5's per-PICO reasoning with the
+Core GRADE Guide's Fig 8-2 answers; the table itself, the worst-case fold and
+the legacy 4-point scale are ours. (The online
 supplementary appendices have not been checked.) That attribution is stated here
 and in `?indirectness_table`, and no longer in the rendered footer — it describes
 the tool rather than the evidence, and rode along on every exported copy of the
@@ -2281,7 +2295,7 @@ grade_meta(
   indirectness  = NULL,            # scalar | vector | column name; NULL = no concern
   indirectness_dominant_threshold = 0.55,  # weight share for vector/column aggregation
   indirectness_rationale  = NULL,  # required for a scalar override
-  indirectness_subdomains = NULL,  # PICO data.frame (Core GRADE 5, v0.5)
+  indirectness_subdomains = NULL,  # PICO data.frame (Core GRADE Guide Fig 8-2 answers)
 
   ## Inconsistency
   inconsistency = NULL,            # scalar override (skips flowchart)

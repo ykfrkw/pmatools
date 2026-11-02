@@ -2,9 +2,8 @@
 
 # The five Core GRADE domains, in the order grade_meta() assembles them. Used
 # to reject a mistyped domain name with a message that lists the valid ones
-# (four of which record facts today; Indirectness is a valid name that simply
-# has none, because its judgment is a gradient rather than a flowchart -- see
-# grade_flowcharts).
+# (all five can record facts; Indirectness records its Fig 8-2 route only when
+# it was assessed from a subdomain table -- see grade_flowcharts).
 .GRADE_DOMAIN_NAMES <- c("Risk of bias", "Indirectness", "Inconsistency",
                          "Imprecision", "Publication bias")
 
@@ -27,15 +26,16 @@
 #' branch on them; read \code{notes} when you need the reasoning.
 #'
 #' Risk of bias, Inconsistency, Imprecision and Publication bias record facts.
-#' Indirectness does not, so it returns \code{NULL} - a valid domain name with
-#' nothing recorded, not an error. That is not an oversight: Core GRADE 5
-#' Table 2 grades indirectness on a gradient across the four PICO elements
-#' rather than routing it through a flowchart, so there is no branch to
-#' record. Its structured record is the subdomain table at
-#' \code{x$indirectness_subdomains} instead.
+#' Indirectness records one, its \code{flow_path} through the Core GRADE
+#' Guide's Fig 8-2, and only when it was assessed from an
+#' \code{indirectness_subdomains} table; assessed from a scalar level, a
+#' per-study vector or a column name it never walks the figure and returns
+#' \code{NULL} - a valid domain name with nothing recorded, not an error. Its
+#' fuller structured record is the subdomain table at
+#' \code{x$indirectness_subdomains}.
 #'
 #' @section The flow_path fact:
-#' Each of the four flowcharted domains also records a fact keyed
+#' Each flowcharted domain also records a fact keyed
 #' \code{"flow_path"}, whose \code{value} is a space-separated list of the
 #' decision nodes that judgment traversed and whose \code{numeric} is
 #' \code{NA}. The names are the element ids of the corresponding figure in

@@ -96,10 +96,20 @@ EDU_COPY <- list(
       # and whether it belongs in the same analysis. The second half read
       # "Never pool the two" until 0.5.1; Core GRADE 5 states no such
       # prohibition, so the flat imperative claimed more than the source does.
+      # Beside the Outcome question. Fig 8-2 (living Core GRADE Guide) turns
+      # "depending on how closely it tracks" into three answers; the closing
+      # half is unchanged from 0.5.1 and is still pmatools' advice, not the
+      # Guide's.
       surrogate = paste0(
-        "A surrogate outcome is grounds to consider rating down, depending ",
-        "on how closely it tracks the patient-important one. Pooling the two ",
-        "is not recommended."
+        "Rate a surrogate by its distance from the patient-important outcome: ",
+        "very close, not down; close, once; far, twice. Avoid pooling the two."
+      ),
+      # Beside the three Population / Intervention / Comparator questions,
+      # which share Fig 8-2's second question. A difference on its own is not
+      # a reason to rate down; this is the test that decides whether it is.
+      similarity = paste0(
+        "A difference rates down only if biological or social factors are too ",
+        "dissimilar to expect a similar impact on the target outcome."
       )
     ),
 
@@ -391,6 +401,7 @@ EDU_COPY_SUBTITLE_FIELDS <- c(
   "domains$indirectness$gradient",
   "domains$indirectness$population",
   "domains$indirectness$surrogate",
+  "domains$indirectness$similarity",
   "config_tab$continuous_departure",
   "config_tab$chinn_caveat",
   "config_tab$responder_default",

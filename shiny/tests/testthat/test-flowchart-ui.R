@@ -20,12 +20,12 @@
 .html <- function(x) paste(as.character(x), collapse = "")
 
 test_that("every flowcharted domain names a figure and an implementation", {
+  # All five, since the living Core GRADE Guide gave Indirectness a decision
+  # algorithm (Fig 8-2).
   expect_setequal(names(PMA_FLOWCHART_FIGS),
                   c("Risk of bias", "Inconsistency", "Imprecision",
-                    "Publication bias"))
-  # Indirectness is deliberately absent: Core GRADE 5 Table 2 is a gradient,
-  # not a flowchart, and the subdomain table on that tab stands in for one.
-  expect_null(PMA_FLOWCHART_FIGS[["Indirectness"]])
+                    "Publication bias", "Indirectness"))
+  expect_identical(PMA_FLOWCHART_FIGS[["Indirectness"]]$fig, "indirect")
 
   for (domain in names(PMA_FLOWCHART_FIGS)) {
     src <- pma_algorithm_source(domain)
@@ -35,7 +35,9 @@ test_that("every flowcharted domain names a figure and an implementation", {
     expect_match(src, "\\(\\)", info = domain)
     expect_match(src, "^Core GRADE .*R/.*\\.R", info = domain)
   }
-  expect_null(pma_algorithm_source("Indirectness"))
+  # The worst-case fold across Fig 8-2's four branches is pmatools', and the
+  # caption says so beside the picture.
+  expect_match(pma_algorithm_source("Indirectness"), "worst case")
   expect_null(pma_algorithm_source("Nonsense"))
 })
 
@@ -111,7 +113,7 @@ test_that("an unhighlighted chart is a valid state, not a missing one", {
 
 test_that("the SVGs carry no inline colour, so the app's tokens apply", {
   skip_if(is.na(.fig_dir), "no figures directory in this checkout")
-  for (key in c("rob", "incon", "impre", "pubias")) {
+  for (key in c("rob", "incon", "impre", "pubias", "indirect")) {
     txt <- paste(readLines(file.path(.fig_dir, paste0(key, ".svg")),
                            warn = FALSE), collapse = "\n")
     # A style= / fill= / stroke= on a shape would beat the CSS tokens and
@@ -145,8 +147,24 @@ test_that("pma_flowchart_details() renders open, with the chart inside", {
                'data-pma-path="pma-pubias-node-q1 pma-pubias-edge-q1-yes"',
                fixed = TRUE)
 
-  # Indirectness has no chart, so the whole block is absent rather than empty.
-  expect_null(pma_flowchart_details("Indirectness", facts, dir = .fig_dir))
+  # Indirectness has its chart too, lit from its own flow_path.
+  indir <- data.frame(
+    key = "flow_path", label = "Flowchart path",
+    value = "pma-indirect-node-root pma-indirect-edge-root-outcome",
+    numeric = NA_real_, stringsAsFactors = FALSE)
+  html <- .html(pma_flowchart_details("Indirectness", indir, dir = .fig_dir))
+  expect_match(html, "<svg", fixed = TRUE)
+  expect_match(html, "assess_indirectness\\(\\)")
+  expect_match(html,
+               'data-pma-path="pma-indirect-node-root pma-indirect-edge-root-outcome"',
+               fixed = TRUE)
+})
+
+test_that("the Indirectness tab draws Fig 8-2 under the subdomain table", {
+  src <- paste(readLines(file.path(PMA_APP_ROOT, "R", "step3_grade.R"),
+                         warn = FALSE), collapse = "\n")
+  expect_match(src, 'shiny::uiOutput("indir_flowchart")', fixed = TRUE)
+  expect_match(src, 'pma_flowchart_details("Indirectness"', fixed = TRUE)
 })
 
 test_that("www/flowchart.js is loaded by Step 3 and is idempotent by design", {
@@ -216,5 +234,5 @@ test_that("the Risk of bias caption says what in the chart is not the source's",
   expect_false(grepl("not the source's", plain, fixed = TRUE))
 
   # An unknown domain still has no caption at all.
-  expect_null(pma_algorithm_source("Indirectness"))
+  expect_null(pma_algorithm_source("Nonsense"))
 })

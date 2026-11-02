@@ -4,9 +4,9 @@
 #
 # The five `how` bodies and their accessor `edu_domain_how()` are gone as of
 # 0.5.1, together with `pma_how_collapse()` and `EDU_COPY$config_tab$intro`.
-# Four of the five domains draw their algorithm as a flowchart with the branch
-# taken lit up, and Indirectness has no flowchart because its PICO question
-# labels and subdomain table cover the same ground. The assertions below are
+# All five domains draw their algorithm as a flowchart with the branch taken
+# lit up (Indirectness since the living Core GRADE Guide's Fig 8-2), and the
+# figure covers the ground the accordion used to. The assertions below are
 # what stops the accordion coming back: it is one line to re-add, and each
 # body was 100+ words that sat behind a click nobody made.
 

@@ -28,6 +28,12 @@
 # and rates the opposite-sided branch down TWO levels, which Core GRADE 3
 # declines to describe at all. Every <desc> says so.
 #
+# The fifth chart, indirectness (living Core GRADE Guide Fig 8-2), departs in
+# combination only: the source draws four parallel branches and does not say
+# how they combine, and pmatools folds them worst-case. It also states how the
+# pre-Fig-8-2 legacy answers are drawn. Its caption and <desc> say both, and
+# it carries the source's "very close" footnote in brief.
+#
 # Three of the four say it in a caption as well. The risk-of-bias chart does
 # not, and that is the one deliberate exception: its shape now follows Fig 2
 # closely enough that a footnote inside the drawing reads as part of the
@@ -680,6 +686,206 @@ build_pubias <- function() {
 }
 
 # ============================================================================
+# Indirectness - living Core GRADE Guide, chapter 8, Fig 8-2
+# ============================================================================
+
+build_indirect <- function() {
+  # Fig 8-2 is four parallel branches under one root, and the figure keeps
+  # that shape: Population, Intervention and Comparison on the left sharing
+  # the similarity question, as in the source, and Outcome down the right.
+  # The question wording is shortened to fit a box; the node ids, not the
+  # wording, are what R/domain_indirectness.R (.INDIRECT_FIG82_NODE_IDS)
+  # emits. The Outcome column differs from the source in placement only: the
+  # source puts the definition question beside the pathway question, and a
+  # 310-unit column cannot hold both side by side, so it sits below the
+  # pathway leaves and the "No" edge runs down the right-hand margin to it.
+  root <- fc_box("pma-indirect-node-root", "node", 20, 44, 920,
+                 c("Compare the question of interest with the PICO of the available studies"))
+
+  col_x <- c(population = 20, intervention = 220, comparison = 420)
+  col_w <- 190
+  q_lines <- list(
+    population   = c("Population",
+                     "Differences in age,",
+                     "condition or disease, or",
+                     "in the population over",
+                     "time, versus the target?"),
+    intervention = c("Intervention",
+                     "Differences in dose,",
+                     "duration, route or operator",
+                     "skill, or non-adherence,",
+                     "switching or changing",
+                     "technology, versus target?"),
+    comparison   = c("Comparator",
+                     "Differences in dose,",
+                     "duration and route, or",
+                     "quality of administration,",
+                     "versus the target?")
+  )
+  sim <- fc_box("pma-indirect-node-similarity", "node", 20, 375, 590,
+                c(paste0("Are the biological or social factors sufficiently ",
+                         "similar that one would"),
+                  paste0("anticipate a similar impact on the target outcome ",
+                         "across study patient /"),
+                  "intervention / comparator versus the target?"))
+
+  boxes <- list(root)
+  edges <- list()
+  for (el in names(col_x)) {
+    x  <- col_x[[el]]
+    q  <- fc_box(paste0("pma-indirect-node-", el), "node", x, 120, col_w,
+                 q_lines[[el]])
+    lf <- fc_box(paste0("pma-indirect-leaf-", el, "-nodown"), "leaf",
+                 x + 100, 280, 90, c("Do not", "rate down"))
+    yes_x <- x + 45
+    no_x  <- lf$cx
+    mid_y <- (q$bottom + 280) / 2
+    edges[[length(edges) + 1L]] <- fc_edge(
+      paste0("pma-indirect-edge-root-", el),
+      list(c(q$cx, root$bottom), c(q$cx, 120)))
+    edges[[length(edges) + 1L]] <- fc_edge(
+      paste0("pma-indirect-edge-", el, "-no"),
+      list(c(no_x, q$bottom), c(no_x, 280)),
+      "No", no_x + 8, mid_y + 4, "start")
+    edges[[length(edges) + 1L]] <- fc_edge(
+      paste0("pma-indirect-edge-", el, "-yes"),
+      list(c(yes_x, q$bottom), c(yes_x, sim$y)),
+      "Yes", yes_x + 8, mid_y + 4, "start")
+    boxes <- c(boxes, list(q, lf))
+  }
+
+  s_yes  <- fc_box("pma-indirect-leaf-similarity-nodown", "leaf",
+                   20, 500, 170, c("Do not rate down"))
+  s_dis  <- fc_box("pma-indirect-leaf-similarity-down1", "leaf",
+                   200, 500, 170, c("Rate down once"))
+  s_vdis <- fc_box("pma-indirect-leaf-similarity-down2", "leaf",
+                   380, 500, 180, c("Rate down twice"))
+  sim_label_y <- (sim$bottom + 500) / 2 + 4
+  edges <- c(edges, list(
+    fc_edge("pma-indirect-edge-similarity-yes",
+            list(c(s_yes$cx, sim$bottom), c(s_yes$cx, 500)),
+            "Yes", s_yes$cx + 8, sim_label_y, "start"),
+    fc_edge("pma-indirect-edge-similarity-dissimilar",
+            list(c(s_dis$cx, sim$bottom), c(s_dis$cx, 500)),
+            "No: dissimilar", s_dis$cx + 8, sim_label_y, "start"),
+    fc_edge("pma-indirect-edge-similarity-verydissimilar",
+            list(c(s_vdis$cx, sim$bottom), c(s_vdis$cx, 500)),
+            "No: very dissimilar", s_vdis$cx + 8, sim_label_y, "start")
+  ))
+  boxes <- c(boxes, list(sim, s_yes, s_dis, s_vdis))
+
+  # --- Outcome --------------------------------------------------------------
+  sur  <- fc_box("pma-indirect-node-surrogate", "node", 630, 120, 250,
+                 c("Outcome",
+                   "Is the outcome a surrogate",
+                   "of the outcome of interest?"))
+  path <- fc_box("pma-indirect-node-pathway", "node", 630, 235, 275,
+                 c("How far is the surrogate placed in the",
+                   "putative causal pathway from the",
+                   "patient-important endpoints?"))
+  p_nd <- fc_box("pma-indirect-leaf-pathway-nodown", "leaf",
+                 630, 360, 85, c("Do not", "rate down"))
+  p_d1 <- fc_box("pma-indirect-leaf-pathway-down1", "leaf",
+                 725, 360, 85, c("Rate down", "once"))
+  p_d2 <- fc_box("pma-indirect-leaf-pathway-down2", "leaf",
+                 820, 360, 85, c("Rate down", "twice"))
+  defn <- fc_box("pma-indirect-node-definition", "node", 630, 455, 310,
+                 c("Are the criteria used to define outcomes,",
+                   "and the time frames for measurement,",
+                   "similar to the target?"))
+  d_nd <- fc_box("pma-indirect-leaf-definition-nodown", "leaf",
+                 630, 575, 150, c("Do not rate down"))
+  d_d1 <- fc_box("pma-indirect-leaf-definition-down1", "leaf",
+                 790, 575, 150, c("Rate down once"))
+
+  path_label_y <- (path$bottom + 360) / 2 + 4
+  defn_label_y <- (defn$bottom + 575) / 2 + 4
+  edges <- c(edges, list(
+    fc_edge("pma-indirect-edge-root-outcome",
+            list(c(sur$cx, root$bottom), c(sur$cx, 120))),
+    fc_edge("pma-indirect-edge-surrogate-yes",
+            list(c(680, sur$bottom), c(680, 235)),
+            "Yes", 688, (sur$bottom + 235) / 2 + 4, "start"),
+    # Down the right-hand margin, past the pathway node and its leaves.
+    fc_edge("pma-indirect-edge-surrogate-no",
+            list(c(sur$right, sur$cy), c(925, sur$cy), c(925, 455)),
+            "No", sur$right + 8, sur$cy - 7, "start"),
+    fc_edge("pma-indirect-edge-pathway-veryclose",
+            list(c(p_nd$cx, path$bottom), c(p_nd$cx, 360)),
+            "Very close*", p_nd$cx + 6, path_label_y, "start"),
+    fc_edge("pma-indirect-edge-pathway-close",
+            list(c(p_d1$cx, path$bottom), c(p_d1$cx, 360)),
+            "Close", p_d1$cx + 6, path_label_y, "start"),
+    fc_edge("pma-indirect-edge-pathway-far",
+            list(c(p_d2$cx, path$bottom), c(p_d2$cx, 360)),
+            "Far", p_d2$cx + 6, path_label_y, "start"),
+    fc_edge("pma-indirect-edge-definition-yes",
+            list(c(d_nd$cx, defn$bottom), c(d_nd$cx, 575)),
+            "Yes", d_nd$cx + 8, defn_label_y, "start"),
+    fc_edge("pma-indirect-edge-definition-no",
+            list(c(d_d1$cx, defn$bottom), c(d_d1$cx, 575)),
+            "No", d_d1$cx + 8, defn_label_y, "start")
+  ))
+  boxes <- c(boxes, list(sur, path, p_nd, p_d1, p_d2, defn, d_nd, d_d1))
+
+  body <- c(
+    unlist(lapply(edges, `[[`, "markup"), use.names = FALSE),
+    unlist(lapply(boxes, `[[`, "markup"), use.names = FALSE),
+    # The source's own footnote to "Very close", in brief.
+    fc_caption(650, c(
+      paste0("* Very close: some surrogates are so directly linked to the ",
+             "disease process that they always represent a"),
+      paste0("patient-important outcome (for example, a hip fracture ",
+             "diagnosed on radiograph)."))),
+    fc_caption(694, c(
+      paste0("After the living Core GRADE Guide (2025-2026), chapter 8, ",
+             "Fig 8-2. pmatools&#8217; operationalisation, not a reproduction:"),
+      paste0("pmatools combines the four branches worst-case, which the ",
+             "figure does not specify, and draws answers on its"),
+      paste0("pre-Fig-8-2 legacy scale on the Population / Intervention / ",
+             "Comparison routes; on Outcome they stop at the first question.")))
+  )
+
+  fc_svg(
+    "indirect", 746,
+    "Indirectness: the Core GRADE Guide Figure 8-2 decision as pmatools implements it",
+    paste0("Flowchart. The question of interest is compared with the PICO of ",
+           "the available studies along four parallel branches. Population, ",
+           "Intervention and Comparator each ask whether there are ",
+           "differences versus the target - in age, condition or disease, or ",
+           "the population over time; in dose, duration, route, operator ",
+           "skill, non-adherence, switching or changing technology; in the ",
+           "comparator&#8217;s dose, duration, route or quality of ",
+           "administration. No means do not rate down. Yes leads to a shared ",
+           "question: are the biological or social factors sufficiently ",
+           "similar that one would anticipate a similar impact on the target ",
+           "outcome? Yes means do not rate down; no, dissimilar, means rate ",
+           "down once; no, very dissimilar, means rate down twice. The ",
+           "Outcome branch asks whether the outcome is a surrogate of the ",
+           "outcome of interest. If it is, how far is the surrogate placed in ",
+           "the putative causal pathway from the patient-important endpoints? ",
+           "Very close means do not rate down (some surrogates are so ",
+           "directly linked to the disease process that they always ",
+           "represent a patient-important outcome), close means rate down ",
+           "once, and far means rate down twice. If it is not a surrogate, ",
+           "are the criteria used to define outcomes and the time frames for ",
+           "measurement similar to the target? Yes means do not rate down; ",
+           "no means rate down once. This is pmatools&#8217; ",
+           "operationalisation of the living Core GRADE Guide Figure 8-2, ",
+           "not a reproduction of the published figure: the figure does not ",
+           "say how its four branches combine, and pmatools takes the worst ",
+           "case across them; and answers on pmatools&#8217; legacy ",
+           "four-point scale (yes, probably yes, probably no, no) are drawn ",
+           "on the Population, Intervention and Comparison routes as no ",
+           "difference, similar, dissimilar and very dissimilar, while on ",
+           "the Outcome branch they determine no route beyond the surrogate ",
+           "question."),
+    "Indirectness &#8212; Core GRADE Guide Fig 8-2, as pmatools implements it",
+    body
+  )
+}
+
+# ============================================================================
 
 main <- function() {
   dir.create(FIG_DIR, showWarnings = FALSE, recursive = TRUE)
@@ -688,7 +894,8 @@ main <- function() {
   figs <- list(rob    = build_rob(),
                incon  = build_incon(),
                impre  = build_impre(),
-               pubias = build_pubias())
+               pubias = build_pubias(),
+               indirect = build_indirect())
 
   for (key in names(figs)) {
     src <- write_fig(key, figs[[key]])

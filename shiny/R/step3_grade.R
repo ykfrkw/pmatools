@@ -7,16 +7,18 @@
 # in R/step3_pubias.R and is called from step3_server() below.
 
 # --------------------------------------------------------------------------
-# Indirectness subdomains (Core GRADE 5 / pmatools indirectness_subdomains)
+# Indirectness subdomains (Core GRADE Guide Fig 8-2 / indirectness_subdomains)
 # --------------------------------------------------------------------------
 # The four PICO questions are inputs to grade_meta(indirectness_subdomains =),
 # so the UI and the server have to agree on the input ids, the subdomain
-# labels pmatools expects, and the 4-point answer scale. File scope, because
-# both step3_ui() and step3_server() read them.
+# labels pmatools expects, and the answer codes. File scope, because both
+# step3_ui() and step3_server() read them.
 #
-# Asking the indirectness question per PICO element is Core GRADE 5's; the
-# 4-point scale below and the worst-case fold pmatools applies to it are
-# pmatools conventions (see EDU_COPY$domains$indirectness$gradient).
+# The answers are the living Core GRADE Guide's Fig 8-2 routes, one code per
+# radio (R/domain_indirectness.R documents the codes). Population,
+# Intervention and Comparison share one set, because they share the figure's
+# similarity question; Outcome has its own five. The worst-case fold across
+# the four is pmatools' (see EDU_COPY$domains$indirectness$gradient).
 STEP3_INDIR_SUBDOMAINS <- c(
   Population   = "indir_population",
   Intervention = "indir_intervention",
@@ -24,22 +26,48 @@ STEP3_INDIR_SUBDOMAINS <- c(
   Outcome      = "indir_outcome"
 )
 
-STEP3_INDIR_ANSWERS <- c(
-  "Yes"          = "yes",
-  "Probably yes" = "probably_yes",
-  "Probably no"  = "probably_no",
-  "No"           = "no"
+STEP3_INDIR_PIC_ANSWERS <- c(
+  "No differences versus the target"              = "no_difference",
+  "Differences, but factors sufficiently similar" = "similar",
+  "Differences; factors dissimilar"               = "dissimilar",
+  "Differences; factors very dissimilar"          = "very_dissimilar"
 )
 
-# pmatools maps the 4-point answer onto a GRADE level; mirrored here so the
-# app can tell whether an overall rating restates the worst case (no rationale
+STEP3_INDIR_OUTCOME_ANSWERS <- c(
+  "Not a surrogate; definition and time frames similar" = "similar_definition",
+  "Not a surrogate; definition or time frames differ"   = "different_definition",
+  "Surrogate, very close to the patient-important outcome*" =
+    "surrogate_very_close",
+  "Surrogate, close to the patient-important outcome"   = "surrogate_close",
+  "Surrogate, far from the patient-important outcome"   = "surrogate_far"
+)
+
+# Every code a subdomain radio can send.
+STEP3_INDIR_ANSWERS <- c(STEP3_INDIR_PIC_ANSWERS, STEP3_INDIR_OUTCOME_ANSWERS)
+
+# What each radio ships selected: the "do not rate down" leaf reached without
+# a second question.
+STEP3_INDIR_DEFAULT_ANSWERS <- c(
+  indir_population   = "no_difference",
+  indir_intervention = "no_difference",
+  indir_comparator   = "no_difference",
+  indir_outcome      = "similar_definition"
+)
+
+# pmatools maps each Fig 8-2 code onto a GRADE level; mirrored here so the app
+# can tell whether an overall rating restates the worst case (no rationale
 # needed) or overrides it (rationale required) without a second grade_meta()
-# call.
+# call. test-indirectness-fold.R pins it against the package's own table.
 STEP3_INDIR_ANSWER_TO_LEVEL <- c(
-  yes          = "not_serious",
-  probably_yes = "not_serious",
-  probably_no  = "serious",
-  no           = "very_serious"
+  no_difference        = "not_serious",
+  similar              = "not_serious",
+  dissimilar           = "serious",
+  very_dissimilar      = "very_serious",
+  similar_definition   = "not_serious",
+  different_definition = "serious",
+  surrogate_very_close = "not_serious",
+  surrogate_close      = "serious",
+  surrogate_far        = "very_serious"
 )
 
 # --------------------------------------------------------------------------
@@ -512,8 +540,10 @@ step3_ui <- function(state = NULL) {
           .domain_header("Indirectness", "indir_badge", "indir_chip"),
           pma_domain_reference(EDU_COPY$domains$indirectness),
 
-          # ----- The four Core GRADE 5 PICO questions ----------------------
-          # Every one PRESELECTED to "yes" - the default is now on screen
+          # ----- The four Fig 8-2 branches ---------------------------------
+          # Every one PRESELECTED to its "do not rate down" answer that needs
+          # no second question (STEP3_INDIR_DEFAULT_ANSWERS) - the default is
+          # on screen
           # rather than in the code. Leaving them blank used to send
           # indirectness = "not_serious" to grade_meta() (see grade_obj()), so the
           # domain scored no downgrade while the screen showed four unanswered
@@ -525,28 +555,36 @@ step3_ui <- function(state = NULL) {
           # "substantive input": a preselected radio would satisfy it the
           # moment it mounts. The checkbox below is the whole gate.
           .inputs_details(open = TRUE,
-            title = "Inputs for this domain (Core GRADE 5 subdomains)",
+            title = "Inputs for this domain (Core GRADE Guide Fig 8-2)",
             htmltools::p(class = "pma-card-subtitle",
-              paste0("Is the evidence sufficiently direct? Answer each PICO ",
-                     "element; the worst answer decides the domain.")),
+              paste0("Compare the question of interest with the PICO of the ",
+                     "studies, branch by branch; the worst answer decides.")),
             shiny::radioButtons("indir_population",
-              "Population - trial population sufficiently similar to target patients?",
-              choices = STEP3_INDIR_ANSWERS, inline = TRUE,
-              selected = "yes"),
+              paste0("Population - differences in age, condition or disease, ",
+                     "or in the population over time, versus the target?"),
+              choices = STEP3_INDIR_PIC_ANSWERS,
+              selected = STEP3_INDIR_DEFAULT_ANSWERS[["indir_population"]]),
             htmltools::p(class = "pma-card-subtitle",
                          EDU_COPY$domains$indirectness$population),
             shiny::radioButtons("indir_intervention",
-              "Intervention - deliverable as studied?",
-              choices = STEP3_INDIR_ANSWERS, inline = TRUE,
-              selected = "yes"),
+              paste0("Intervention - differences in dose, duration, route or ",
+                     "operator skill, or non-adherence, switching or changing ",
+                     "technology, versus the target?"),
+              choices = STEP3_INDIR_PIC_ANSWERS,
+              selected = STEP3_INDIR_DEFAULT_ANSWERS[["indir_intervention"]]),
             shiny::radioButtons("indir_comparator",
-              "Comparison - representative of usual care?",
-              choices = STEP3_INDIR_ANSWERS, inline = TRUE,
-              selected = "yes"),
+              paste0("Comparator - differences in dose, duration, route or ",
+                     "quality of administration, versus the target?"),
+              choices = STEP3_INDIR_PIC_ANSWERS,
+              selected = STEP3_INDIR_DEFAULT_ANSWERS[["indir_comparator"]]),
+            htmltools::p(class = "pma-card-subtitle",
+                         EDU_COPY$domains$indirectness$similarity),
             shiny::radioButtons("indir_outcome",
-              "Outcome - patient-important, rather than a surrogate?",
-              choices = STEP3_INDIR_ANSWERS, inline = TRUE,
-              selected = "yes"),
+              paste0("Outcome - is it a surrogate of the outcome of interest? ",
+                     "If not, are its definition and time frames similar to ",
+                     "the target?"),
+              choices = STEP3_INDIR_OUTCOME_ANSWERS,
+              selected = STEP3_INDIR_DEFAULT_ANSWERS[["indir_outcome"]]),
             htmltools::p(class = "pma-card-subtitle",
                          EDU_COPY$domains$indirectness$surrogate),
             htmltools::p(class = "pma-card-subtitle",
@@ -559,6 +597,11 @@ step3_ui <- function(state = NULL) {
           # and its footer repeats the Core GRADE 5 Table 2 gradient caveat
           # next to the judgment rather than only in the collapsed copy.
           shiny::uiOutput("indir_subdomain_table"),
+
+          # Fig 8-2 itself, with every route the four answers took lit up -
+          # the same pma_flowchart_details() block the other domains draw
+          # under their verdict (R/judgment_display.R).
+          shiny::uiOutput("indir_flowchart"),
 
           # Preselected, like the four radios above it. Blank used to be the
           # way a reviewer said "accept the fold", which meant the one answer
@@ -1258,6 +1301,9 @@ step3_server <- function(input, output, session, state) {
       if (!exists(id, envir = .answer_val, inherits = FALSE)) next
       v <- get(id, envir = .answer_val, inherits = FALSE)
       if (!pma_restorable_value(v, shiny::isolate(.answer_gen[[id]]), gen)) next
+      # An Indirectness answer remembered on the pre-Fig-8-2 scale is put back
+      # as the Fig 8-2 choice that rates the same; anything else unchanged.
+      v <- step3_indir_upgrade_answer(id, v)
       session$sendInputMessage(id, list(value = v))
     }
   }, ignoreInit = TRUE)
@@ -2540,17 +2586,20 @@ step3_server <- function(input, output, session, state) {
     list(value = sel, rationale = rat)
   }
 
-  # ----- Indirectness subdomains (Core GRADE 5 / pmatools 0.5) ------------
+  # ----- Indirectness subdomains (Core GRADE Guide Fig 8-2) ---------------
   # The four PICO answers, shaped as the data frame grade_meta() documents
   # for indirectness_subdomains: one row per subdomain, `subdomain` and
   # `judgment` required, `target` / `evidence` optional and display-only.
   # NULL while nothing has been answered, so an unanswered domain falls back
-  # to the scalar path rather than asserting four "yes" answers.
+  # to the scalar path rather than asserting four "do not rate down" answers.
+  # A pre-Fig-8-2 value is upgraded on the way in, so the table can never be
+  # sent a legacy answer the radio no longer offers.
   indir_subdomains <- shiny::reactive({
     ans <- vapply(STEP3_INDIR_SUBDOMAINS, function(id) {
-      v <- input[[id]]
-      if (is.null(v) || length(v) != 1L || !nzchar(v)) NA_character_
-      else as.character(v)
+      v <- step3_indir_upgrade_answer(id, input[[id]])
+      if (is.null(v) || length(v) != 1L || is.na(v) || !nzchar(v)) {
+        NA_character_
+      } else as.character(v)
     }, character(1))
     keep <- !is.na(ans) & ans %in% STEP3_INDIR_ANSWERS
     if (!any(keep)) return(NULL)
@@ -3698,6 +3747,18 @@ step3_server <- function(input, output, session, state) {
   })
   shiny::outputOptions(output, "incon_subgroup_relevant",
                        suspendWhenHidden = FALSE)
+
+  # ----- Indirectness: Fig 8-2 with the routes taken lit up --------------
+  # Rendered whether or not the analysis has been rated: unrated, it is the
+  # plain figure, which is still the question being asked.
+  output$indir_flowchart <- shiny::renderUI({
+    tryCatch(
+      pma_flowchart_details("Indirectness",
+                            domain_fact_table("Indirectness"),
+                            summary_text = "Which routes did the answers take?"),
+      error = function(e) NULL)
+  })
+  shiny::outputOptions(output, "indir_flowchart", suspendWhenHidden = FALSE)
 
   # ----- Indirectness subdomain table (pmatools indirectness_table) -------
   # Surfaced deliberately: it is the only rendering of exactly what the app

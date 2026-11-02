@@ -16,15 +16,17 @@
 #' @name grade_flowcharts
 #'
 #' @description
-#' Four of the five Core GRADE domains reach their judgment by walking a
-#' decision flowchart. This topic draws each of those four and names the
-#' function that implements it, so a judgment can be traced from the picture
-#' to the code without reading the code first.
+#' All five Core GRADE domains reach their judgment by walking a decision
+#' flowchart: four from the BMJ Core GRADE series, and Indirectness from the
+#' living Core GRADE Guide, whose chapter 8 added a decision algorithm (Fig
+#' 8-2) that the BMJ paper did not have. This topic draws each of the five and
+#' names the function that implements it, so a judgment can be traced from
+#' the picture to the code without reading the code first.
 #'
 #' These are pmatools' \emph{operationalisation} of the decision each cited
 #' figure describes, not reproductions of the published artwork, and they
 #' deliberately differ from the source where pmatools had to make the decision
-#' executable. Every difference is stated below, and three of the four figures
+#' executable. Every difference is stated below, and four of the five figures
 #' carry it in a caption as well. The risk-of-bias figure does not: its shape
 #' follows Core GRADE 4 Fig 2 closely enough that a footnote inside the drawing
 #' would read as part of the source, so \strong{this topic and that figure's
@@ -166,7 +168,7 @@
 #' \code{.classify_imprecision()} in that file, and the optimal information
 #' size it consults is computed by \code{.compute_ois_pct()}.
 #'
-#' Follows the source most closely of the four. The one pmatools number on the
+#' Follows the source most closely of the four BMJ figures. The one pmatools number on the
 #' figure is the continuous definition of an implausibly large effect (a
 #' standardised effect of 0.8 or more, Cohen's convention): Core GRADE 2 gives
 #' a definition for binary outcomes only.
@@ -203,16 +205,49 @@
 #' \if{html}{\figure{pubias.svg}{options: width="100\%" alt="pmatools publication-bias decision flowchart: whether most studies are small and industry sponsored, a pmatools registry-coverage input, whether statistical analysis is feasible, and then either funnel-plot asymmetry or documentation of unpublished studies."}}
 #' \if{latex}{Figure omitted from the PDF manual (SVG); see the HTML help.}
 #'
-#' @section Indirectness - deliberately not a flowchart:
-#' Assessed by \code{assess_indirectness()} in
-#' \code{R/domain_indirectness.R}, and there is no figure here because Core
-#' GRADE 5 offers no flowchart to draw. Its Table 2 grades how likely each
-#' PICO element is to justify rating down - Population low, Intervention
-#' intermediate, Comparison substantial, Outcome high - which is a gradient,
-#' not a branch. pmatools folds the four subdomain answers worst-case, which
-#' does not reproduce that gradient; \code{\link{indirectness_table}} renders
-#' the subdomain table that stands in for a figure here, and the disclosure
-#' travels with it.
+#' @section Indirectness - Core GRADE Guide Fig 8-2:
+#' Implemented by \code{assess_indirectness()} in
+#' \code{R/domain_indirectness.R}, which hands the subdomain table to
+#' \code{.assess_indirectness_subdomains()} in the same file; the route each
+#' answer takes is \code{.indirectness_row_route()}.
+#'
+#' The living Core GRADE Guide (chapter 8, online 2025-2026) gives
+#' indirectness a decision algorithm, its Fig 8-2, which the BMJ Core GRADE 5
+#' paper did not have. Its four branches compare the question of interest
+#' with the PICO of the available studies. Population, Intervention and
+#' Comparator each ask whether there are differences versus the target; "no"
+#' does not rate down, and "yes" leads to one shared question - are the
+#' biological or social factors sufficiently similar that one would
+#' anticipate a similar impact on the target outcome? - whose answers are do
+#' not rate down, rate down once (dissimilar) or rate down twice (very
+#' dissimilar). Outcome asks whether the outcome is a surrogate: a surrogate
+#' very close to the patient-important endpoint does not rate down, a close
+#' one rates down once and a far one twice; an outcome that is not a
+#' surrogate rates down once when its definition or time frame differs from
+#' the target. One answer code per row of \code{indirectness_subdomains}
+#' encodes the whole route (see \code{\link{grade_meta}}).
+#'
+#' Departs from the source twice. First, the four branches are parallel in
+#' the figure, which does not say how they combine; pmatools takes the worst
+#' case across them, symmetrically, which also does not reproduce the
+#' gradient Core GRADE 5 Table 2 sets (Population low, Intervention
+#' intermediate, Comparison substantial, Outcome high likelihood of rating
+#' down). Second, answers on pmatools' pre-Fig-8-2 legacy scale are still
+#' accepted with their levels unchanged: on the Population, Intervention and
+#' Comparison branches they are drawn as no difference, similar, dissimilar
+#' and very dissimilar, and on the Outcome branch, where the legacy scale
+#' never said whether the outcome was a surrogate, they light only the
+#' surrogate question and the notes say the route was not determined. The
+#' Outcome column also places the definition question below the pathway
+#' leaves rather than beside them, for room. \code{\link{indirectness_table}}
+#' renders the subdomain table beside the figure.
+#'
+#' Only the subdomain-table input walks the figure and records a
+#' \code{flow_path}: the union of the routes of every row. A scalar level, a
+#' per-study vector and a column name record none.
+#'
+#' \if{html}{\figure{indirect.svg}{options: width="100\%" alt="pmatools indirectness decision flowchart after Core GRADE Guide Fig 8-2: four branches from comparing the question of interest with the PICO of the studies; Population, Intervention and Comparator lead through a shared similarity question to do not rate down, rate down once or twice; Outcome asks whether it is a surrogate and how far it is from the patient-important endpoint, or whether its definition and time frame match the target."}}
+#' \if{latex}{Figure omitted from the PDF manual (SVG); see the HTML help.}
 #'
 #' @references
 #' Guyatt G, Brignardello-Petersen R, Hultcrantz M, et al. Core GRADE 2:
@@ -230,6 +265,11 @@
 #' Guyatt G, Brignardello-Petersen R, Hultcrantz M, et al. Core GRADE 5:
 #' rating certainty of evidence - indirectness. BMJ. 2025;389:e083865.
 #' \doi{10.1136/bmj-2024-083865}
+#'
+#' Core GRADE Guide. Chapter 8: Rating certainty of evidence - indirectness
+#' (Fig 8-2, decision-algorithm for assessing indirectness in core GRADE).
+#' Living online guide, 2025-2026.
+#' \url{https://core-grade.gitbook.io/org/08-8-rating-certainty-of-evidence-indirectness}
 #'
 #' @seealso \code{\link{grade_meta}}, \code{\link{domain_facts}},
 #'   \code{\link{indirectness_table}}.

@@ -233,8 +233,10 @@ PMA_OUTCOME_INPUT_IDS <- list(
   inconsistency = c("subgroup_explained",
                     "incon_override", "incon_override_rationale",
                     "incon_confirm_na"),
-  # Step 3 - Indirectness (the four Core GRADE 5 PICO questions, plus the
-  # optional override of their worst-case fold)
+  # Step 3 - Indirectness (the four Fig 8-2 PICO branches, plus the
+  # optional override of their worst-case fold). A remembered answer on the
+  # pre-Fig-8-2 scale is put back through step3_indir_upgrade_answer()
+  # (R/step3_threshold.R), so it lands on a choice the radio still offers.
   indirectness = c("indir_population", "indir_intervention", "indir_comparator",
                    "indir_outcome", "indirectness", "indir_rationale",
                    "indir_confirm_na"),

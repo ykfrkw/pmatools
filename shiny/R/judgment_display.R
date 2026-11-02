@@ -4,7 +4,7 @@
 # already reached and turns it into something on screen: the certainty badge,
 # the downgrade chip, the per-domain verdict line, the facts list under it, the
 # per-study Risk of Bias / Indirectness pickers and the client-side script that
-# makes the bulk buttons work, and the four Core GRADE decision flowcharts with
+# makes the bulk buttons work, and the five Core GRADE decision flowcharts with
 # the branch actually taken lit up.
 #
 # THE RULE FOR A NEW HELPER: nothing here may DECIDE anything. Every rating
@@ -271,9 +271,9 @@ pma_facts_list <- function(facts, keys = NULL, max_rows = 6L) {
 
 # ----- Core GRADE decision flowcharts -------------------------------------
 # The picture of the decision, with the branch this analysis took highlighted.
-# Four of the five domains have one; Indirectness does not, because Core GRADE
-# 5 Table 2 is a gradient rather than a flowchart (the subdomain table on that
-# tab is its equivalent).
+# All five domains have one. Indirectness's is the living Core GRADE Guide's
+# Fig 8-2, drawn on its own tab beside the subdomain table rather than under a
+# verdict, and lit with the union of the routes the four PICO answers took.
 #
 # WHY THE FILE IS READ HERE AND NOT IN THE PACKAGE. shiny/stage_bundle.R
 # rewrites system.file(..., package = "pmatools") lookups in the VENDORED
@@ -321,7 +321,18 @@ PMA_FLOWCHART_FIGS <- list(
   "Publication bias" = list(fig = "pubias",
                             fn  = "assess_pubias()",
                             file = "R/domain_pubias.R",
-                            src = "Core GRADE 4 Fig 5")
+                            src = "Core GRADE 4 Fig 5"),
+  # The figure draws four parallel branches and never says how they combine;
+  # the fold is pmatools', so it is disclosed beside the picture.
+  "Indirectness"     = list(fig = "indirect",
+                            fn  = "assess_indirectness()",
+                            file = "R/domain_indirectness.R",
+                            src = "Core GRADE Guide Fig 8-2",
+                            departure = paste(
+                              "The figure does not say how its four branches",
+                              "combine; pmatools takes the worst case across",
+                              "them. * Very close: some surrogates always",
+                              "represent a patient-important outcome."))
 )
 
 # The candidate locations, in the order they are tried. `dir` short-circuits

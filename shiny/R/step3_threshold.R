@@ -291,6 +291,44 @@ step3_indir_worst_case <- function(levels) {
   unname(levels[which.max(STEP3_INDIR_LEVEL_SEVERITY[levels])])
 }
 
+# The pre-Fig-8-2 answers (pmatools' own "Is the evidence sufficiently
+# direct?" scale) mapped onto the Fig 8-2 choice that rates the same level.
+# Population / Intervention / Comparison follow the package's own route map
+# (INDIRECTNESS_LEGACY_TO_PIC); Outcome has no such map in the package,
+# because the legacy scale never said whether the outcome was a surrogate, so
+# the app picks the surrogate choice of the same level, and "yes" the
+# not-a-surrogate one. Level-preserving is the requirement; the route is a
+# best guess the reviewer can see and change.
+STEP3_INDIR_LEGACY_PIC <- c(
+  yes          = "no_difference",
+  probably_yes = "similar",
+  probably_no  = "dissimilar",
+  no           = "very_dissimilar"
+)
+STEP3_INDIR_LEGACY_OUTCOME <- c(
+  yes          = "similar_definition",
+  probably_yes = "surrogate_very_close",
+  probably_no  = "surrogate_close",
+  no           = "surrogate_far"
+)
+
+# One remembered answer, upgraded if it is a legacy value on one of the four
+# subdomain radios. Every other id, and every non-legacy value, passes
+# through untouched.
+step3_indir_upgrade_answer <- function(id, value) {
+  if (is.null(value) || length(value) != 1L || is.na(value)) return(value)
+  key <- as.character(value)
+  if (identical(id, "indir_outcome")) {
+    hit <- STEP3_INDIR_LEGACY_OUTCOME[key]
+  } else if (id %in% c("indir_population", "indir_intervention",
+                       "indir_comparator")) {
+    hit <- STEP3_INDIR_LEGACY_PIC[key]
+  } else {
+    return(value)
+  }
+  if (is.na(hit)) value else unname(hit)
+}
+
 # TRUE when the overall rating on screen departs from the fold and therefore
 # owes a written reason. An unanswered overall owes nothing, and neither does
 # one that restates the fold - which is exactly the case the preselected

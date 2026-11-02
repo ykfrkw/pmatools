@@ -243,37 +243,57 @@ body of evidence down.}
 Default \code{NULL}.}
 
 \item{indirectness_subdomains}{(v0.5) Optional per-PICO subdomain judgment
-table.
-\strong{Attribution}: asking the indirectness question separately for each
-PICO element is Core GRADE 5's; the table, the 4-point answer scale
-(\code{"yes"} / \code{"probably_yes"} / \code{"probably_no"} /
-\code{"no"}) and the wording "Is the evidence sufficiently direct?" are
-\strong{pmatools conventions} and do not appear in the Core GRADE 5
-article body. Core GRADE 5 instead asks how likely it is that the effect
-differs substantially from the target PICO, and grades that likelihood per
-element in its Table 2 ("Likelihood of rating down"): Population = "Low
+table, answered on the living Core GRADE Guide's Fig 8-2 decision
+algorithm (chapter 8; see \code{\link{grade_flowcharts}}).
+\strong{Attribution}: asking the indirectness question per PICO element
+is Core GRADE 5's, and the questions and answers encoded below are Fig
+8-2's. The table itself, the worst-case fold across rows (Fig 8-2 draws
+four parallel branches and does not say how they combine) and the legacy
+scale are \strong{pmatools conventions}. Core GRADE 5 Table 2 also grades
+how likely each element is to warrant rating down (Population = "Low
 likelihood", Intervention = "Intermediate", Comparison = "Substantial",
-Outcome = "High likelihood". The worst-case fold below is symmetric and
-does not reproduce that gradient.
+Outcome = "High likelihood"); the symmetric fold does not reproduce that
+gradient.
 A data.frame / tibble (or an equivalent list) with:
 \describe{
-\item{subdomain}{Required. Subdomain label, typically
-\code{"Population"}, \code{"Intervention"}, \code{"Comparison"},
-\code{"Outcome"}. Any order, subset, or extra subdomain is accepted;
-duplicate labels abort.}
+\item{subdomain}{Required. Subdomain label. \code{"Population"},
+\code{"Intervention"}, \code{"Comparison"} (or \code{"Comparator"})
+and \code{"Outcome"} name the Fig 8-2 branches (case-insensitive).
+Any order, subset, or extra label is accepted; an extra label takes
+the Population / Intervention / Comparison codes and is not drawn on
+the figure. Duplicate labels abort.}
 \item{target}{Optional. The target question for that subdomain (display
 only).}
 \item{evidence}{Optional. The evidence found (display only).}
-\item{judgment}{Required. One of \code{"yes"}, \code{"probably_yes"},
-\code{"probably_no"}, \code{"no"} — the answer to "Is the evidence
-sufficiently direct?". Case and separator variants
-(\code{"Probably No"}, \code{"probably-no"}) are accepted.}
+\item{judgment}{Required. One code per row encodes the whole Fig 8-2
+route. Population / Intervention / Comparison (and any other
+non-outcome label): \code{"no_difference"} (no differences versus the
+target; \code{"not_serious"}), \code{"similar"} (differences, but the
+biological or social factors are sufficiently similar;
+\code{"not_serious"}), \code{"dissimilar"} (\code{"serious"}),
+\code{"very_dissimilar"} (\code{"very_serious"}). Outcome:
+\code{"similar_definition"} (not a surrogate; definition and time
+frames similar; \code{"not_serious"}), \code{"different_definition"}
+(not a surrogate; they differ; \code{"serious"}),
+\code{"surrogate_very_close"} (\code{"not_serious"}),
+\code{"surrogate_close"} (\code{"serious"}),
+\code{"surrogate_far"} (\code{"very_serious"}). An Outcome code on
+another row, or a Population / Intervention / Comparison code on the
+Outcome row, aborts. Case and separator variants
+(\code{"Very dissimilar"}, \code{"surrogate-far"}) are accepted.
+\strong{Legacy scale}: pmatools' pre-Fig-8-2 answers to "Is the
+evidence sufficiently direct?" - \code{"yes"}, \code{"probably_yes"}
+(both \code{"not_serious"}), \code{"probably_no"}
+(\code{"serious"}) and \code{"no"} (\code{"very_serious"}) - are
+still accepted on any row with unchanged levels. On the Population /
+Intervention / Comparison rows they are drawn on the Fig 8-2 routes
+no difference / similar / dissimilar / very dissimilar; on the
+Outcome row they determine no route, and the notes say so.}
 }
-\code{yes} / \code{probably_yes} contribute \code{"not_serious"},
-\code{probably_no} contributes \code{"serious"} and \code{no}
-contributes \code{"very_serious"}; the domain judgment defaults to the worst
-case across subdomains. Supplying \code{indirectness} as a non-\code{NULL}
-scalar alongside overrides that default and then requires
+The domain judgment defaults to the worst case across subdomains, and the
+union of the rows' routes is recorded as the \code{flow_path} fact (see
+\code{\link{domain_facts}}). Supplying \code{indirectness} as a
+non-\code{NULL} scalar alongside overrides that default and then requires
 \code{indirectness_rationale} (a restatement of the default value needs
 none); leave \code{indirectness} at its \code{NULL} default to accept the
 worst case. Cannot be combined with per-study vector or column-name
@@ -636,7 +656,8 @@ An S3 object of class \code{pmatools} containing:
 \code{value}, \code{numeric}), one per domain that recorded the
 numbers behind its judgment: currently \code{"Risk of bias"},
 \code{"Inconsistency"}, \code{"Imprecision"} and
-\code{"Publication bias"}. Each of those four also records a
+\code{"Publication bias"}, plus \code{"Indirectness"} when it was
+assessed from \code{indirectness_subdomains}. Each of them records a
 \code{flow_path} fact naming the decision nodes its judgment
 traversed in the corresponding figure of
 \code{\link{grade_flowcharts}}. A domain with nothing recorded is
@@ -667,7 +688,7 @@ then dropped rather than guessed.}
 \code{"equivalence"} or \code{"non_inferiority"} — which
 plain-language family the Summary of Findings sentence is drawn from.
 Presentation only.}
-\item{indirectness_subdomains}{The normalised Core GRADE 5 subdomain
+\item{indirectness_subdomains}{The normalised Core GRADE subdomain
 tibble (\code{subdomain}, \code{target}, \code{evidence},
 \code{judgment}, \code{grade_level}), or \code{NULL} when none was
 supplied. Render it with \code{\link{indirectness_table}}.}
