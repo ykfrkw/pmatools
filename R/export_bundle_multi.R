@@ -254,7 +254,7 @@ export_bundle.pmatools_set <- function(x,
     }
 
     # The full-analysis forest is only meaningful when the rated analysis is a
-    # subset of it, i.e. after a Core GRADE 4 Fig 2 low-RoB refit.
+    # subset of it, i.e. after a Core GRADE Guide Fig 7-2 low-RoB refit.
     if ("forest_full" %in% include && isTRUE(g$rob_refit)) {
       k_full <- g$meta_full$k %||% 0L
       add(.bundle_plot(function() plot_forest(g$meta_full,
@@ -656,7 +656,7 @@ export_bundle.pmatools_set <- function(x,
       "Note: the analysis set is not the same for every outcome. Where it reads",
       "'low RoB only', every pooled number reported for that outcome - and the",
       "domains rated from it - comes from the low risk-of-bias subset that",
-      "Core GRADE 4 Fig 2 called for, not from all studies. forest_plot.pdf in",
+      "Core GRADE Guide Fig 7-2 called for, not from all studies. forest_plot.pdf in",
       "that outcome's directory shows the rated analysis and",
       "forest_plot_full.pdf the full one.",
       "")

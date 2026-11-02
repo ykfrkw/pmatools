@@ -229,10 +229,10 @@ step3_ui <- function(state = NULL) {
   # and a freshly built widget pushes its declared default back to the server.
   # Everything else on this step is outcome-scoped and is meant to be cleared
   # that way; rob_some_concerns is not. It is a review-wide convention that
-  # persists across outcomes, so a hard-coded selected = "high" would silently
-  # undo a reviewer's "low" on every 3 -> 2 -> 3 round trip. Seeding from the
+  # persists across outcomes, so a hard-coded selected = "low" would silently
+  # undo a reviewer's "high" on every 3 -> 2 -> 3 round trip. Seeding from the
   # mirrored state is the same trick step2_ui() uses for the outcome fields.
-  rob_some_concerns_default <- "high"
+  rob_some_concerns_default <- "low"
   if (!is.null(state)) {
     v <- shiny::isolate(state$rob_some_concerns)
     if (!is.null(v) && length(v) == 1L && v %in% c("low", "high")) {
@@ -396,13 +396,13 @@ step3_ui <- function(state = NULL) {
             shiny::radioButtons("rob_some_concerns",
               "Where do studies rated 'some concerns' belong?",
               choices = c(
-                "Some concerns count as high risk of bias (default)" = "high",
-                "Some concerns count as low risk of bias"            = "low"),
+                "Some concerns count as low risk of bias (default)"  = "low",
+                "Some concerns count as high risk of bias"           = "high"),
               selected = rob_some_concerns_default),
             htmltools::p(class = "pma-card-subtitle",
-              paste0("Core GRADE 4 rates risk of bias from a two-way split: ",
+              paste0("Core GRADE rates risk of bias from a two-way split: ",
                      "the studies are sorted into low and high risk of bias, ",
-                     "and Fig 2 asks whether the high risk of bias group ",
+                     "and Guide Fig 7-2 asks whether the high risk of bias group ",
                      "dominates the evidence. RoB 2 returns three judgments, ",
                      "so \"some concerns\" has to be assigned to one of the ",
                      "two sides before that question can be asked. A study ",
@@ -2480,7 +2480,7 @@ step3_server <- function(input, output, session, state) {
     if (is.null(v) || length(v) != 1L || !v %in% c("low", "high")) {
       v <- state$rob_some_concerns
     }
-    if (is.null(v) || length(v) != 1L || !v %in% c("low", "high")) "high" else v
+    if (is.null(v) || length(v) != 1L || !v %in% c("low", "high")) "low" else v
   }
 
   shiny::observeEvent(input$rob_some_concerns, {
@@ -3516,7 +3516,7 @@ step3_server <- function(input, output, session, state) {
   output$pubias_chip <- shiny::renderUI(
     pma_downgrade_chip(domain_judgment("Publication bias") %||% "not_serious"))
 
-  # ----- Risk-of-bias analysis set (Core GRADE 4 Fig 2) -------------------
+  # ----- Risk-of-bias analysis set (Core GRADE Guide Fig 7-2) -------------------
   # Display only: these three outputs read the rated object and change no
   # judgment, no number and no rating. They exist because grade_meta() can
   # refit the analysis on the low risk-of-bias subset and only says so via

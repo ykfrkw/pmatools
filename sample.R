@@ -140,19 +140,22 @@ print(table(df$rob_d))
 ##   returns the conventional OR 1.25 for binary outcomes; a review-specific,
 ##   published or expert-derived MID is always preferable.
 ##
-## [Risk of Bias — BMJ Core GRADE 4, Fig 2]
+## [Risk of Bias — Core GRADE Guide Fig 7-2 (formerly Core GRADE 4 Fig 2)]
 ##
 ##   small_values = "undesirable": small values (low response rates) are bad,
-##   so a large OR = more response = desirable. This defines which direction
-##   of shift counts as bias-favouring.
-##   Domination check (threshold 60%):
+##   so a large OR = more response = desirable. (Required by grade_meta() for
+##   Imprecision; risk of bias reads it only under the legacy
+##   rob_direction_check = TRUE.)
+##   Domination check (threshold 60% here; the default is 55%):
 ##     6/17 studies are Serious-RoB, but Henry2020 (n=3,352, "Some concerns")
 ##     dominates the weight. High-RoB weight ≈ 38% < 60% → NOT dominated.
-##   → Do not rate down.
+##   → Do not rate down; the package asks whether the high and low risk of
+##     bias estimates differ substantially, and restricts the analysis to the
+##     low-RoB studies if they do.
 ##
-##   If dominated, the package automatically compares:
-##     TE(all studies) vs TE(excl. high-RoB)
-##     small_values = "undesirable": TE_all > TE_low → inflates → rate down
+##   If dominated, Fig 7-2 uses every study and rates down one level. The
+##   0.5.x comparison of TE(all studies) vs TE(excl. high-RoB) runs only with
+##   rob_direction_check = TRUE (beyond Core GRADE).
 ##   Which side "Some concerns" studies land on is itself a review decision:
 ##   see rob_some_concerns in section 6b.
 ##
@@ -184,7 +187,9 @@ print(table(df$rob_d))
 ##   OIS: using baseline response rate ~25% and expected experimental ~40%,
 ##        power 80%, α = 0.05 → auto-calculated target events; met.
 ##
-## [Publication Bias — BMJ Core GRADE 4, Fig 5]
+## [Publication Bias — Core GRADE Guide Fig 9-1 (formerly Core GRADE 4 Fig 5)]
+##   Q0 is computed: OR 2.30 lies beyond the MID, so the effect is important
+##   and the remaining nodes run.
 ##   Studies are not predominantly small and industry-sponsored (k=17, many
 ##   academic trials). k ≥ 10 → Egger's test auto-computed.
 
@@ -215,7 +220,7 @@ g_response <- grade_meta(
   ois_alpha              = 0.05,
   ois_beta               = 0.20,
 
-  ## Publication Bias (BMJ Core GRADE 4 Fig 5)
+  ## Publication Bias (Core GRADE Guide Fig 9-1)
   pubias_small_industry  = "no",             # academic multi-centre trials
   ## pubias_funnel_asymmetry = NULL → Egger's test run automatically (k ≥ 10)
 
@@ -444,9 +449,9 @@ print(g_sens)
 
 ## ── 6b. rob_some_concerns — where "Some concerns" studies land ───────────────
 ##
-## [Risk of Bias — BMJ Core GRADE 4, Fig 2]
+## [Risk of Bias — Core GRADE Guide Fig 7-2 (formerly Core GRADE 4 Fig 2)]
 ##
-## The Core GRADE 4 flowchart is binary: every study is either low or high risk
+## The Core GRADE flowchart is binary: every study is either low or high risk
 ## of bias. RoB 2.0 has three levels, so the review must decide which side
 ## "Some concerns" falls on. `rob_some_concerns` makes that decision explicit:
 ##
@@ -454,11 +459,9 @@ print(g_sens)
 ##   "high"           — conservative; "Some concerns" studies count as high too
 ##
 ## In this dataset the choice moves the high-RoB weight share from 38% to 84%,
-## which flips the first flowchart node from "not dominated" to "dominated" and
-## makes the package compare the all-studies estimate with the low-RoB-only
-## estimate. Reporting both is good practice when the classification is
-## debatable. (Here the shift is 9.9%, just inside the 10% inflation
-## threshold, so the domain is still not rated down.)
+## which flips the first flowchart node from "not dominated" to "dominated",
+## and dominated evidence is rated down one level (Core GRADE Guide Fig 7-2).
+## Reporting both is good practice when the classification is debatable.
 
 g_conservative <- grade_meta(
   meta_obj          = m_response,

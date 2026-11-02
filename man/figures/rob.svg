@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 650" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="rob-title rob-desc">
-  <title id="rob-title">Risk of bias: the Core GRADE 4 Figure 2 decision as pmatools implements it</title>
-  <desc id="rob-desc">Flowchart. Do the high risk of bias studies dominate the evidence (55% or more of the pooled weight by default)? If they do, pmatools checks the direction of bias by comparing the pooled estimate with and without those studies, and that check decides which of the two conclusions Core GRADE 4 draws is reached. One is: risk of bias may be responsible for the apparent effect, or for the apparent lack of one, so rate down. The other is: there is an apparent effect and bias would have decreased it, or there is no apparent effect and bias would have increased it, so do not rate down. The check itself is five mutually exclusive rules -- both estimates trivial; the same zone with a change within 20%; the same zone with a bias-favouring change over 20%; zones differing on the same side of the null; and zones differing across the null -- plus a direction that cannot be assessed at all. The rules are not drawn: the one that fired is reported in the judgment notes and in the structured fact recorded beside them. If the high risk of bias studies do not dominate, pmatools asks whether there is appreciable evidence from the low risk of bias studies. Below the dominance gate that answer is always yes, so the node has one outgoing edge, and the chart then asks whether the two magnitudes of effect are similar or substantially different. That question is decided by the same rules: one that would rate down means substantially different, one that would not means similar, and a comparison that cannot be made shares the similar edge, since both reach the same leaf. Neither answer rates down, but a substantial difference restricts the analysis to the low risk of bias studies. A body of evidence with no high risk of bias study at all takes that same undominated route and does not rate down. This is pmatools&#8217; operationalisation of the Core GRADE 4 Figure 2 decision, not a reproduction of the published figure: the five rules are pmatools&#8217; and are not enumerated in the source; Core GRADE 4 words the magnitude question symmetrically where the rules are directional; and it describes no two-level risk-of-bias downgrade at all, so the two-level fifth rule is a departure from it, which also requires a threshold to have been supplied &#8212; without one that rule rates down one level.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 440" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="rob-title rob-desc">
+  <title id="rob-title">Risk of bias: the Core GRADE Guide Figure 7-2 decision as pmatools implements it</title>
+  <desc id="rob-desc">Flowchart. Is evidence dominated by high risk of bias studies? Possible thresholds for dominating are more than 65% of the weight, or 55% or more as possibly dominating; pmatools uses 55% by default. Yes: use results from all studies and rate down. No: appreciable evidence exists from low risk of bias studies, with corresponding thresholds of 35% or 45% of the weight, and the chart asks whether there are substantial differences in estimate of effect between high and low risk of bias studies. Yes: use only low risk of bias studies and do not rate down. No: use results from all studies and do not rate down. A comparison that cannot be made takes the No edge, and a body of evidence with no high risk of bias study takes that route too. This is pmatools&#8217; operationalisation of the Core GRADE Guide Figure 7-2 decision (formerly Core GRADE 4 Figure 2), not a reproduction of the published figure: the Guide words the substantial-differences question qualitatively, and pmatools answers it with a change of zone relative to the chosen threshold or a relative change in magnitude of more than 20% in either direction. The legacy pmatools 0.5.x direction-of-bias check, which is beyond Core GRADE and available only on request, is not drawn.</desc>
   <style>
     .pma-fc-node rect, .pma-fc-leaf rect {
       fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2;
@@ -24,120 +24,79 @@
     .pma-fc-on.pma-fc-edge path { stroke: #0f172a; stroke-width: 3; }
     .pma-fc-on text { fill: #0f172a; font-weight: 600; }
   </style>
-  <text class="pma-fc-heading" x="20" y="26">Risk of bias &#8212; Core GRADE 4 Fig 2, as pmatools implements it</text>
+  <text class="pma-fc-heading" x="20" y="26">Risk of bias &#8212; Core GRADE Guide Fig 7-2, as pmatools implements it</text>
   <g id="pma-rob-edge-dominance-yes" class="pma-fc-edge">
-    <path d="M 235 121 L 235 173"/>
-    <path d="M 230.5 166 L 235 173 L 239.5 166"/>
-    <text class="pma-fc-edge-label" x="243" y="150" text-anchor="start">Yes</text>
+    <path d="M 235 104 L 235 165"/>
+    <path d="M 230.5 158 L 235 165 L 239.5 158"/>
+    <text class="pma-fc-edge-label" x="243" y="140" text-anchor="start">Yes</text>
   </g>
   <g id="pma-rob-edge-dominance-no" class="pma-fc-edge">
-    <path d="M 450 84 L 722 84 L 722 173"/>
-    <path d="M 717.5 166 L 722 173 L 726.5 166"/>
-    <text class="pma-fc-edge-label" x="460" y="76" text-anchor="start">No</text>
+    <path d="M 450 76 L 505 76"/>
+    <path d="M 498 80.5 L 505 76 L 498 71.5"/>
+    <text class="pma-fc-edge-label" x="477" y="69" text-anchor="middle">No</text>
   </g>
-  <g id="pma-rob-edge-rules-responsible" class="pma-fc-edge">
-    <path d="M 150 246 L 150 470"/>
-    <path d="M 145.5 463 L 150 470 L 154.5 463"/>
-  </g>
-  <g id="pma-rob-edge-rules-conservative" class="pma-fc-edge">
-    <path d="M 360 246 L 360 452 L 715 452 L 715 470"/>
-    <path d="M 710.5 463 L 715 470 L 719.5 463"/>
-  </g>
-  <g id="pma-rob-edge-responsible-ratedown" class="pma-fc-edge">
-    <path d="M 245 543 L 245 580"/>
-    <path d="M 240.5 573 L 245 580 L 249.5 573"/>
-  </g>
-  <g id="pma-rob-edge-conservative-noratedown" class="pma-fc-edge">
-    <path d="M 715 543 L 715 580"/>
-    <path d="M 710.5 573 L 715 580 L 719.5 573"/>
-  </g>
-  <g id="pma-rob-edge-appreciable-yes" class="pma-fc-edge">
-    <path d="M 800 246 L 800 275"/>
-    <path d="M 795.5 268 L 800 275 L 804.5 268"/>
-    <text class="pma-fc-edge-label" x="808" y="266" text-anchor="start">Yes</text>
-  </g>
-  <g id="pma-rob-edge-magnitude-similar" class="pma-fc-edge">
-    <path d="M 660 331 L 660 383"/>
-    <path d="M 655.5 376 L 660 383 L 664.5 376"/>
-    <text class="pma-fc-edge-label" x="668" y="361" text-anchor="start">Similar/Not assessable</text>
+  <g id="pma-rob-edge-appreciable-magnitude" class="pma-fc-edge">
+    <path d="M 722 104 L 722 150"/>
+    <path d="M 717.5 143 L 722 150 L 726.5 143"/>
   </g>
   <g id="pma-rob-edge-magnitude-different" class="pma-fc-edge">
-    <path d="M 860 331 L 860 383"/>
-    <path d="M 855.5 376 L 860 383 L 864.5 376"/>
-    <text class="pma-fc-edge-label" x="868" y="361" text-anchor="start">Different</text>
+    <path d="M 610 206 L 610 275"/>
+    <path d="M 605.5 268 L 610 275 L 614.5 268"/>
+    <text class="pma-fc-edge-label" x="618" y="254" text-anchor="start">Yes</text>
+  </g>
+  <g id="pma-rob-edge-magnitude-similar" class="pma-fc-edge">
+    <path d="M 835 206 L 835 275"/>
+    <path d="M 830.5 268 L 835 275 L 839.5 268"/>
+    <text class="pma-fc-edge-label" x="843" y="254" text-anchor="start">No</text>
   </g>
   <g id="pma-rob-node-dominance" class="pma-fc-node">
-    <rect x="20" y="48" width="430" height="73" rx="6" ry="6"/>
+    <rect x="20" y="48" width="430" height="56" rx="6" ry="6"/>
     <text x="235" y="71" text-anchor="middle">
-      <tspan x="235" dy="0">Do the high risk of bias studies</tspan>
-      <tspan x="235" dy="17">dominate the evidence?</tspan>
-      <tspan x="235" dy="17">weight share 55% or more, by default</tspan>
-    </text>
-  </g>
-  <g id="pma-rob-node-direction" class="pma-fc-node">
-    <rect x="20" y="173" width="430" height="73" rx="6" ry="6"/>
-    <text x="235" y="196" text-anchor="middle">
-      <tspan x="235" dy="0">Check the direction of bias</tspan>
-      <tspan x="235" dy="17">Compare the pooled estimate with and without</tspan>
-      <tspan x="235" dy="17">the high risk of bias studies</tspan>
-    </text>
-  </g>
-  <g id="pma-rob-node-bias-responsible" class="pma-fc-node">
-    <rect x="20" y="470" width="450" height="73" rx="6" ry="6"/>
-    <text x="245" y="493" text-anchor="middle">
-      <tspan x="245" dy="0">Risk of bias may be responsible for the</tspan>
-      <tspan x="245" dy="17">apparent effect, or for the apparent lack of one</tspan>
-      <tspan x="245" dy="17">Also reached when the direction cannot be assessed</tspan>
-    </text>
-  </g>
-  <g id="pma-rob-node-bias-conservative" class="pma-fc-node">
-    <rect x="490" y="470" width="450" height="73" rx="6" ry="6"/>
-    <text x="715" y="493" text-anchor="middle">
-      <tspan x="715" dy="0">There is an apparent effect and bias would have</tspan>
-      <tspan x="715" dy="17">decreased it, or there is no apparent effect and</tspan>
-      <tspan x="715" dy="17">bias would have increased it</tspan>
+      <tspan x="235" dy="0">Is evidence dominated by high</tspan>
+      <tspan x="235" dy="17">risk of bias studies?*</tspan>
     </text>
   </g>
   <g id="pma-rob-leaf-ratedown" class="pma-fc-leaf">
-    <rect x="20" y="580" width="450" height="39" rx="6" ry="6"/>
-    <text x="245" y="603" text-anchor="middle">
-      <tspan x="245" dy="0">Rate down</tspan>
-    </text>
-  </g>
-  <g id="pma-rob-leaf-noratedown" class="pma-fc-leaf">
-    <rect x="490" y="580" width="450" height="39" rx="6" ry="6"/>
-    <text x="715" y="603" text-anchor="middle">
-      <tspan x="715" dy="0">Do not rate down</tspan>
+    <rect x="20" y="165" width="430" height="39" rx="6" ry="6"/>
+    <text x="235" y="188" text-anchor="middle">
+      <tspan x="235" dy="0">Use results from all studies and rate down</tspan>
     </text>
   </g>
   <g id="pma-rob-node-appreciable" class="pma-fc-node">
-    <rect x="505" y="173" width="435" height="73" rx="6" ry="6"/>
-    <text x="722.5" y="196" text-anchor="middle">
-      <tspan x="722.5" dy="0">Is there appreciable evidence from</tspan>
-      <tspan x="722.5" dy="17">the low risk of bias studies?</tspan>
-      <tspan x="722.5" dy="17">Always yes here: not dominating leaves 35% or more</tspan>
+    <rect x="505" y="48" width="435" height="56" rx="6" ry="6"/>
+    <text x="722.5" y="71" text-anchor="middle">
+      <tspan x="722.5" dy="0">Appreciable evidence exists from</tspan>
+      <tspan x="722.5" dy="17">low risk of bias studies&#8224;</tspan>
     </text>
   </g>
   <g id="pma-rob-node-magnitude" class="pma-fc-node">
-    <rect x="620" y="275" width="320" height="56" rx="6" ry="6"/>
-    <text x="780" y="298" text-anchor="middle">
-      <tspan x="780" dy="0">Similar or substantially different</tspan>
-      <tspan x="780" dy="17">magnitudes of effect?</tspan>
-    </text>
-  </g>
-  <g id="pma-rob-leaf-all" class="pma-fc-leaf">
-    <rect x="505" y="383" width="200" height="56" rx="6" ry="6"/>
-    <text x="605" y="406" text-anchor="middle">
-      <tspan x="605" dy="0">Do not rate down</tspan>
-      <tspan x="605" dy="17">Analyse all studies</tspan>
+    <rect x="505" y="150" width="435" height="56" rx="6" ry="6"/>
+    <text x="722.5" y="173" text-anchor="middle">
+      <tspan x="722.5" dy="0">Are there substantial differences in estimate of</tspan>
+      <tspan x="722.5" dy="17">effect between high and low risk of bias studies?</tspan>
     </text>
   </g>
   <g id="pma-rob-leaf-lowonly" class="pma-fc-leaf">
-    <rect x="725" y="383" width="215" height="56" rx="6" ry="6"/>
-    <text x="832.5" y="406" text-anchor="middle">
-      <tspan x="832.5" dy="0">Do not rate down</tspan>
-      <tspan x="832.5" dy="17">Analyse low risk studies</tspan>
+    <rect x="505" y="275" width="210" height="73" rx="6" ry="6"/>
+    <text x="610" y="298" text-anchor="middle">
+      <tspan x="610" dy="0">Use only low risk of bias</tspan>
+      <tspan x="610" dy="17">studies and do not</tspan>
+      <tspan x="610" dy="17">rate down</tspan>
     </text>
   </g>
+  <g id="pma-rob-leaf-all" class="pma-fc-leaf">
+    <rect x="730" y="275" width="210" height="73" rx="6" ry="6"/>
+    <text x="835" y="298" text-anchor="middle">
+      <tspan x="835" dy="0">Use results from all</tspan>
+      <tspan x="835" dy="17">studies and do not</tspan>
+      <tspan x="835" dy="17">rate down</tspan>
+    </text>
+  </g>
+  <text class="pma-fc-caption" x="20" y="370">
+    <tspan x="20" dy="0">* Possible thresholds for high risk of bias &#8216;dominating&#8217;: &gt;65% weight or &#8805;55% weight=possibly dominating (pmatools default: 55%).</tspan>
+    <tspan x="20" dy="16">&#8224; Possible thresholds for appreciable low risk of bias evidence, corresponding to thresholds for high risk of bias dominating, &#8805;35% or &#8805;45% weight.</tspan>
+    <tspan x="20" dy="16">After the Core GRADE Guide (Guyatt et al.) Figure 7-2, formerly Core GRADE 4 Figure 2. pmatools&#8217; operationalisation, not a reproduction:</tspan>
+    <tspan x="20" dy="16">the numbers that answer the substantial-differences question are pmatools&#8217;; see ?grade_flowcharts.</tspan>
+  </text>
 </svg>
 

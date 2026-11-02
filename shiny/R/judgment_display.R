@@ -296,20 +296,22 @@ PMA_FLOWCHART_FIGS <- list(
   "Risk of bias"     = list(fig = "rob",
                             fn  = "assess_rob()",
                             file = "R/domain_rob.R",
-                            src = "Core GRADE 4 Fig 2",
-                            # Reworded with the 0.5.1 redraw: the rules are no
-                            # longer drawn, so a sentence placing them "between"
-                            # two boxes described a picture that is not there.
-                            # This is now the ONLY place in the UI that states
-                            # the two-level rule 5, since the red leaf gave up
-                            # its annotation -- test-flowchart-ui.R pins both
-                            # halves of it.
+                            src = paste("Core GRADE Guide Fig 7-2",
+                                        "(formerly Core GRADE 4 Fig 2)"),
+                            # Rewritten for 0.6.0. The Guide answers the
+                            # substantial-differences node qualitatively, so
+                            # the numbers that answer it here are pmatools'
+                            # and the caption says so. The legacy
+                            # direction-of-bias check is a package option the
+                            # app does not offer, and the caption does not
+                            # mention it -- test-flowchart-ui.R pins both.
                             departure = paste(
-                              "The direction-of-bias question is decided by",
-                              "five rules of pmatools' own, not the source's,",
-                              "and they are reported in the notes rather than",
-                              "drawn; rule 5 rates down two levels, which Core",
-                              "GRADE 4 never does.")),
+                              "Whether the high and low risk of bias",
+                              "estimates differ substantially is decided by",
+                              "pmatools' own numeric reading, not the",
+                              "source's: a change of zone relative to the",
+                              "threshold, or a relative change in magnitude",
+                              "of more than 20% in either direction.")),
   "Inconsistency"    = list(fig = "incon",
                             fn  = "assess_inconsistency()",
                             file = "R/domain_inconsistency.R",
@@ -321,7 +323,12 @@ PMA_FLOWCHART_FIGS <- list(
   "Publication bias" = list(fig = "pubias",
                             fn  = "assess_pubias()",
                             file = "R/domain_pubias.R",
-                            src = "Core GRADE 4 Fig 5")
+                            src = paste("Core GRADE Guide Fig 9-1",
+                                        "(formerly Core GRADE 4 Fig 5)"),
+                            departure = paste(
+                              "The first node is not asked: pmatools answers",
+                              "it from the pooled estimate and the threshold,",
+                              "not the source's wording."))
 )
 
 # The candidate locations, in the order they are tried. `dir` short-circuits

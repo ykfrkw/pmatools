@@ -183,7 +183,7 @@ server <- function(input, output, session) {
     # the whole review, so begin_new_outcome() deliberately leaves it alone.
     # Mirrored here because the Step 3 widget is destroyed whenever another
     # step's body renders, and a rebuilt widget pushes its default back.
-    rob_some_concerns = "high",
+    rob_some_concerns = "low",
     # Outcome provenance. `outcome_sig` is pma_analysis_signature() of the
     # analysis the Step 3 answers were given for, and `outcome_gen` counts how
     # many outcomes this session has begun. Every Step 3 answer is stamped

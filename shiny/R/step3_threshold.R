@@ -312,14 +312,18 @@ step3_indir_rationale_required <- function(overall, worst = NULL) {
 }
 
 # --------------------------------------------------------------------------
-# Publication bias: which Fig 5 node is being asked
+# Publication bias: which Fig 9-1 node is being asked
 # --------------------------------------------------------------------------
 # DERIVED from the answers, never stored as a free-running cursor. Changing an
 # earlier answer therefore re-derives everything downstream instead of leaving
 # the wizard parked on a node the algorithm no longer reaches.
 #
 # The chain below is assess_pubias()'s own evaluation order
-# (R/domain_pubias.R): Q1 first and terminal on "yes"; then the pmatools
+# (R/domain_pubias.R). Core GRADE Guide Fig 9-1 (formerly Core GRADE 4 Fig 5)
+# opens with "Did the studies show an important effect?", which pmatools
+# computes from the pooled estimate and the threshold and never asks here:
+# `important_effect` carries that computed answer in, and "no" ends the chart
+# before the first question. Then Q1, terminal on "yes"; then the pmatools
 # registry-coverage input, terminal only on "yes" (which short-circuits the
 # package); then Fig 5's Q2 feasibility gate, which is computed and never asked
 # (the study count, or a rare-event analysis - see
@@ -367,7 +371,10 @@ step3_pubias_node <- function(small_industry = NULL,
                               unpublished = NULL,
                               k = 0L,
                               reopen = NULL,
-                              rare_flow = FALSE) {
+                              rare_flow = FALSE,
+                              important_effect = "yes") {
+  # Q0 answered no: nothing is asked, the chart has already concluded.
+  if (identical(.pubias_chr(important_effect), "no")) return("result")
   path <- step3_pubias_reachable(small_industry, registry_complete, k,
                                  rare_flow = rare_flow)
   if (!is.null(reopen) && length(reopen) == 1L && !is.na(reopen) &&
@@ -392,6 +399,29 @@ step3_pubias_node <- function(small_industry = NULL,
     if (!.pubias_answered(unpublished)) return("q4")
   }
   "result"
+}
+
+# Q0, computed. The answer assess_pubias() recorded as the `important_effect`
+# fact of the last rating, and the line printed under the chart. Before any
+# rating exists - or when the rating predates the node - the answer is "yes",
+# which is what assess_pubias() itself assumes when it cannot tell, so the
+# wizard never hides a question the rating will go on to use.
+#
+# Reads the rated object's `domain_facts` list directly rather than calling
+# domain_facts(): this file is pure and takes no dependency on that accessor.
+step3_pubias_important_effect <- function(grade = NULL) {
+  facts <- tryCatch(grade$domain_facts[["Publication bias"]],
+                    error = function(e) NULL)
+  value <- if (is.data.frame(facts)) {
+    facts$value[facts$key == "important_effect"]
+  } else character(0)
+  if (length(value) != 1L || is.na(value) || !nzchar(value)) {
+    return(list(answer = "yes", line = paste0(
+      "Important effect: assumed yes until the outcome is rated (computed ",
+      "from the pooled estimate and the threshold)")))
+  }
+  answer <- if (startsWith(value, "no")) "no" else "yes"
+  list(answer = answer, line = paste0("Important effect: ", value))
 }
 
 # Q2, computed. k >= 10 routes to the statistical branch, below it to the
@@ -428,7 +458,7 @@ step3_pubias_k_line <- function(k, rare_flow = FALSE) {
   } else if (isTRUE(rare_flow)) {
     sprintf(paste0("Statistical analysis not feasible - rare-event analysis ",
                    "(k = %g); Egger's test loses validity on sparse binary ",
-                   "data, so Figure 5's registry route is taken"), k)
+                   "data, so Figure 9-1's registry route is taken"), k)
   } else {
     sprintf("Statistical analysis not feasible - k = %g < 10, registry route",
             k)
@@ -460,7 +490,9 @@ step3_pubias_question_line <- function(node, path) {
 step3_pubias_reachable <- function(small_industry = NULL,
                                    registry_complete = NULL,
                                    k = 0L,
-                                   rare_flow = FALSE) {
+                                   rare_flow = FALSE,
+                                   important_effect = "yes") {
+  if (identical(.pubias_chr(important_effect), "no")) return("result")
   out <- "q1"
   if (!.pubias_answered(small_industry)) return(out)
   if (identical(.pubias_chr(small_industry), "yes")) return(c(out, "result"))
@@ -486,9 +518,11 @@ step3_pubias_reachable <- function(small_industry = NULL,
 # is the pmatools registry node, and the k gate is the figure's q2, which the
 # wizard never asks. Hence a pure function with tests rather than inline logic.
 #
-# Nothing is lit until something is answered: an unlit chart says "you have not
-# started", and lighting the entry node before the reviewer has touched it
-# would say the opposite.
+# Nothing the reviewer answers is lit until it is answered: an unlit question
+# says "you have not started". The entry node, Q0 ("Did the studies show an
+# important effect?"), is the exception because nobody answers it - it is
+# computed, like Q2 - so it and its edge are lit from the start, and on "no"
+# the chart is lit to its leaf before any question is asked.
 #
 # STEP3_PUBIAS_USE_EGGER is an answer, not a blank: it says "I looked, and I
 # accept the automated test". It used to stop the trail at pma-pubias-node-q3
@@ -505,10 +539,16 @@ step3_pubias_flow_ids <- function(small_industry = NULL,
                                   unpublished = NULL,
                                   k = 0L,
                                   egger_asymmetric = NULL,
-                                  rare_flow = FALSE) {
-  if (!.pubias_answered(small_industry)) return(character(0))
+                                  rare_flow = FALSE,
+                                  important_effect = "yes") {
+  if (identical(.pubias_chr(important_effect), "no")) {
+    return(c("pma-pubias-node-q0", "pma-pubias-edge-q0-no",
+             "pma-pubias-leaf-nodown-q0"))
+  }
+  ids <- c("pma-pubias-node-q0", "pma-pubias-edge-q0-yes")
+  if (!.pubias_answered(small_industry)) return(ids)
 
-  ids <- "pma-pubias-node-q1"
+  ids <- c(ids, "pma-pubias-node-q1")
   if (identical(.pubias_chr(small_industry), "yes")) {
     return(c(ids, "pma-pubias-edge-q1-yes", "pma-pubias-leaf-down1-q1"))
   }

@@ -30,8 +30,11 @@
 #'   \itemize{
 #'     \item A scalar GRADE level (see \code{grade_meta}'s "Domain judgment
 #'       levels" section) — used as-is (flowchart not applied).
-#'     \item A character vector of length k (one per study) — BMJ 2025 Core GRADE 4
-#'       Fig 2 flowchart applied: domination check then direction-of-bias check.
+#'     \item A character vector of length k (one per study) — Core GRADE
+#'       Guide Fig 7-2 flowchart applied (formerly Core GRADE 4 Fig 2):
+#'       dominated evidence is rated down one level; otherwise the high and
+#'       low risk of bias estimates are compared to choose the analysis set.
+#'       See \code{rob_direction_check} for the 0.5.x behaviour.
 #'     \item A column name in \code{meta_obj$data} containing per-study RoB judgments
 #'       — same flowchart logic applied.
 #'     \item \code{NULL} (default): treated as \code{"not_serious"}.
@@ -48,8 +51,8 @@
 #'   assessment). Default \code{NULL}.
 #' @param rob_some_concerns (v0.5) How studies rated \code{"some concerns"}
 #'   are folded into the binary low/high classification that Core GRADE 4
-#'   Fig 2 operates on. \code{"high"} (default as of 0.5.1) or \code{"low"}
-#'   (the default up to 0.5.1). Changing it changes which studies count toward
+#'   Fig 2 (now Core GRADE Guide Fig 7-2) operates on. \code{"low"} (default as
+#'   of 0.6.0) or \code{"high"} (the default in 0.5.1 and 0.5.2). Changing it changes which studies count toward
 #'   the high-RoB weight share and therefore the dominance gate. Only used when
 #'   \code{rob} is a vector or column name.
 #'
@@ -70,15 +73,15 @@
 #'   operational choice, and it is worth recording it alongside the item-count
 #'   rule your review actually used.
 #'
-#'   \strong{The default moved to \code{"high"} in 0.5.1.} Since the source
-#'   settles nothing, the default is pmatools' choice and it is now the
-#'   conservative one: \code{"some concerns"} is the judgment RoB 2 returns for
-#'   a study it declines to call low risk of bias, so folding it low asserts
-#'   the one thing the assessment would not. It also matches the first of the
-#'   three worked boundaries above, and the Shiny app, which has offered
-#'   \code{"high"} as its default since the control existed. A rating made
-#'   before 0.5.1 without this argument reproduces only if you now pass
-#'   \code{rob_some_concerns = "low"} explicitly.
+#'   \strong{The default is \code{"low"} as of 0.6.0}, by owner decision.
+#'   Since the source settles nothing, the default is pmatools' choice: a
+#'   \code{"some concerns"} study counts on the low risk of bias side unless
+#'   you say otherwise. Pass \code{"high"} if your review reads
+#'   \code{"some concerns"} as the stricter of the worked boundaries above
+#'   (\emph{at least one item} at high risk of bias). A rating made with
+#'   0.5.1 or 0.5.2 without this argument reproduces only if you now pass
+#'   \code{rob_some_concerns = "high"} explicitly. The Shiny app defaults to
+#'   \code{"low"} as well.
 #' @param rob_overrides (v0.5) Optional named character vector of study-level
 #'   Risk-of-Bias overrides keyed on \code{meta_obj$studlab}, e.g.
 #'   \code{c("Smith 2020" = "high")}. Values accept the same vocabulary as
@@ -90,21 +93,20 @@
 #'   aborts (Core GRADE transparency principle). Default \code{NULL}.
 #' @param rob_dominant_threshold (v0.5, reinstated) Weight share at or above
 #'   which the body of evidence counts as \emph{dominated} by high-RoB studies
-#'   in BMJ Core GRADE 4 Fig 2 (first decision node). The footnote to that
-#'   figure offers two candidate values — "\code{>65\%} weight or
-#'   \code{>=55\%} weight = possibly dominating" — and pmatools defaults to
-#'   the conservative one, \code{0.55}, with a \code{>=} comparison so that
-#'   exactly 55 percent counts as dominated. Pass \code{0.65} for the stricter
-#'   reading.
+#'   in Core GRADE Guide Fig 7-2 (first decision node; formerly Core GRADE 4
+#'   Fig 2). The figure's footnote offers two candidate values —
+#'   "\code{>65\%} weight or \code{>=55\%} weight = possibly dominating" — and
+#'   pmatools defaults to the conservative one, \code{0.55}, with a \code{>=}
+#'   comparison so that exactly 55 percent counts as dominated. Pass
+#'   \code{0.65} for the stricter reading. Dominated evidence is rated down one
+#'   level (\code{"serious"}) and analysed in full.
 #'   The share is computed from the inverse-variance study weights; when those
 #'   are unavailable the count share is used instead and the domain note says
 #'   so. When neither is computable, dominance is assumed (conservative).
-#'   \strong{This argument was deprecated and ignored in v0.3.1-v0.4.0}; the
-#'   retirement is retracted because the gate is the entry node of Fig 2.
 #'   Only used when \code{rob} is a vector or column name.
 #' @param rob_refit (v0.5) Logical, default \code{TRUE}. When the flowchart
-#'   reaches the "use low risk of bias studies only" leaf (not dominated, but
-#'   a substantial difference between the high- and low-RoB estimates), refit
+#'   reaches the "use only low risk of bias studies" leaf (not dominated, but
+#'   substantial differences between the high- and low-RoB estimates), refit
 #'   the meta-analysis on the low-RoB subset so that every downstream domain,
 #'   the rating target, the baseline risk and the SoF table use the restricted
 #'   estimate. Set to \code{FALSE} to keep the full analysis and receive the
@@ -116,27 +118,40 @@
 #'   absolute analysis scale: \eqn{(|TE_{all}| - |TE_{low}|) / |TE_{low}|},
 #'   where \eqn{TE_{low}} is the inverse-variance weighted mean of the
 #'   low/some-concerns RoB studies. Default
-#'   \code{PMA_ROB_INFLATION_THRESHOLD} (\code{0.20}, 20 percent).
+#'   \code{PMA_ROB_INFLATION_THRESHOLD} (\code{0.20}, 20 percent), compared
+#'   strictly (\code{>}).
+#'
+#'   \strong{Default use (v0.6)}: it operationalises the undominated
+#'   branch's "Are there substantial differences in estimate of effect between
+#'   high and low risk of bias studies?" node, symmetrically. The answer is
+#'   yes when the two estimates fall in different zones relative to
+#'   \eqn{\pm}threshold, or in the same non-trivial zone with a relative
+#'   change beyond this value \emph{in either direction}. Yes restricts the
+#'   analysis to the low risk of bias studies; neither answer rates down. The
+#'   Guide's criteria are qualitative, so these numbers are pmatools'.
+#'
+#'   \strong{Legacy use} (\code{rob_direction_check = TRUE}): only a
+#'   bias-favouring change (per \code{small_values}) counts, on both branches,
+#'   and on the dominated branch it is rule 3 of the five-rule check.
+#'
 #'   \strong{\eqn{TE_{low}} is always a fixed-effect estimate}
 #'   (\eqn{\sum w \cdot TE / \sum w} with \eqn{w = 1/se^2}), even when the
 #'   parent meta-analysis is a random-effects model. Part of any observed shift
 #'   can therefore come from the estimator difference rather than from risk of
-#'   bias, and the gap widens with heterogeneity. Core GRADE 4 does not specify
-#'   how to recompute the restricted estimate; \code{rob_refit = TRUE} refits
-#'   the model on the low-RoB subset and keeps both estimates on the same
-#'   footing.
-#'   A downgrade under this criterion requires BOTH (a) the relative change to
-#'   be *strictly* greater than the threshold (\code{>}; a change exactly at
-#'   the threshold does not rate down) AND (b) the shift to be in the
-#'   bias-favouring direction per \code{small_values}: only shifts that would
-#'   make the apparent effect look more favourable (over-estimation) count.
-#'   Shifts toward a smaller or less favourable effect never rate down under
-#'   this criterion, even when their magnitude exceeds the threshold; in that
-#'   case the domain note states explicitly why no downgrade was applied.
-#'   When every study is high-RoB, no low/some-RoB comparator pool exists and
-#'   the domain is rated \code{"very_serious"} (rate down 2 levels) unconditionally.
-#'   Set to \code{0} to restore v0.1.0 behavior (any bias-favouring change
-#'   rates down). Only used when \code{rob} is a vector or column name.
+#'   bias; \code{rob_refit = TRUE} refits the model on the low-RoB subset and
+#'   keeps the rated estimate on the parent model's footing.
+#'   Only used when \code{rob} is a vector or column name.
+#' @param rob_direction_check (v0.6) Logical, default \code{FALSE}.
+#'   \code{TRUE} restores the pmatools 0.5.x direction-of-bias check: on the
+#'   dominated branch the five zone rules decide the judgment (rules 1-2 do
+#'   not rate down, rules 3-4 rate down one level, rule 5 — a sign flip across
+#'   the null beyond the threshold — two), and on the undominated branch the
+#'   same directional verdict decides the analysis set. \strong{Beyond Core
+#'   GRADE} (Core GRADE Guide Appendix 11), \strong{legacy}, retained for
+#'   reproducibility of 0.5.x analyses: Core GRADE Guide Fig 7-2 dropped the
+#'   "check direction of bias" node that Core GRADE 4 Fig 2 had, and every
+#'   judgment made with this flag says so in its notes. Requires
+#'   \code{small_values}, which \code{grade_meta()} requires anyway.
 #' @param small_values \strong{Required} (v0.5.1, breaking). Are small outcome
 #'   values desirable? \code{"desirable"} if small values are good (eg,
 #'   mortality, symptom severity) or \code{"undesirable"} if small values are
@@ -145,20 +160,18 @@
 #'   assessed, with condition class \code{"pmatools_direction_gate"}.
 #'   (Consistent with \code{netmetaviz} \code{small_values} parameter.)
 #'
-#'   Two domains consume it. Risk of bias uses it to decide which shift of the
-#'   pooled estimate would flatter the intervention (Core GRADE 4 Fig 2, "check
-#'   direction of bias"); Imprecision uses it to decide which side of the
-#'   control-group risk the Optimal Information Size is powered against (Core
-#'   GRADE 2's "modest relative risk reduction" is written for an undesirable
-#'   event and does not generalise on its own).
+#'   Imprecision uses it to decide which side of the control-group risk the
+#'   Optimal Information Size is powered against (Core GRADE 2's "modest
+#'   relative risk reduction" is written for an undesirable event and does not
+#'   generalise on its own). Risk of bias uses it only under
+#'   \code{rob_direction_check = TRUE}, to decide which shift of the pooled
+#'   estimate would flatter the intervention; the default (Guide Fig 7-2)
+#'   reading of risk of bias has no direction.
 #'
 #'   \strong{There is no escape hatch}, unlike \code{require_threshold}. Rating
 #'   without a MID is a legitimate methodological choice; rating without a
 #'   direction is not, because every outcome has one. Up to v0.5.0 the argument
-#'   was optional and both domains guessed — risk of bias fell back to
-#'   \eqn{|TE_{all}| > |TE_{low}|} and then warned that the assumption had
-#'   determined the downgrade, and the OIS used the paper's \emph{reduction} as
-#'   written even for outcomes whose events are the desirable thing.
+#'   was optional and both domains guessed.
 #' @param indirectness Indirectness judgment. Same format as \code{rob} (scalar/vector/column).
 #'   Default \code{NULL}, which is treated as \code{"not_serious"} (no
 #'   downgrade). Pass \code{NULL} — rather than \code{"not_serious"} —
@@ -502,32 +515,49 @@
 #'   Only meaningful for binary outcomes with a relative effect measure
 #'   (RR, OR, HR, IRR). Set to \code{NULL} explicitly to suppress ARD display.
 #'
-#' @param pubias_small_industry \code{"yes"} / \code{"no"}: Are most or all studies
-#'   small AND industry-sponsored? (BMJ Core GRADE Fig 5 Step 1). Default \code{NULL}
+#' @param pubias_important_effect (v0.6) \code{NULL} (default), \code{"yes"}
+#'   or \code{"no"}: the answer to the first node of Core GRADE Guide Fig 9-1,
+#'   "Did the studies show an important effect?". \code{NULL} derives it: yes
+#'   when the pooled point estimate lies beyond the rating-target threshold
+#'   (\eqn{\pm}MID, or the null for a non-null-effect target), measured from
+#'   the null on either side. With a null threshold any non-null estimate
+#'   answers yes, so the node then effectively always answers yes; an
+#'   unavailable estimate is assumed yes (conservative). No means do not rate
+#'   down, and the remaining publication-bias nodes are not evaluated. A
+#'   manual \code{"no"} overrides the derivation and requires
+#'   \code{pubias_rationale}; a manual \code{"yes"} does not.
+#' @param pubias_small_industry \code{"yes"} / \code{"no"}: Are most or all of
+#'   the studies small and industry sponsored? (Core GRADE Guide Fig 9-1,
+#'   second node; formerly Core GRADE 4 Fig 5 Q1). Default \code{NULL}
 #'   (treated as \code{"no"}).
-#' @param pubias_funnel_asymmetry \code{"yes"} / \code{"no"}: Does visual funnel plot
-#'   asymmetry and/or statistical test strongly suggest publication bias?
-#'   Only used when k \eqn{\geq} 10. If \code{NULL} (default), Egger's test is
-#'   run automatically.
+#' @param pubias_funnel_asymmetry \code{"yes"} / \code{"no"}: Does visual
+#'   inspection of the funnel plot demonstrate substantial asymmetry, and/or
+#'   is the asymmetry statistically significant? Only used when k
+#'   \eqn{\geq} 10. If \code{NULL} (default), Egger's test is run
+#'   automatically (p < 0.05, a pmatools convention).
 #'   \strong{Breaking change (v0.4.0)}: supplying this argument replaces the
 #'   automated Egger's test with a manual visual judgment and therefore
 #'   requires \code{pubias_rationale}.
 #' @param pubias_rationale Free-text justification, required whenever
 #'   \code{pubias_funnel_asymmetry} is supplied (manual override of the
-#'   automated Egger's test). The informational inputs
+#'   automated Egger's test) or \code{pubias_important_effect = "no"} (manual
+#'   override of the important-effect derivation). The informational inputs
 #'   \code{pubias_small_industry}, \code{pubias_unpublished} and
 #'   \code{pubias_registry_complete} do not require a rationale. See
 #'   \code{rob_rationale} for how it is recorded. Default \code{NULL}.
-#' @param pubias_unpublished \code{"yes"} / \code{"no"}: Is there documentation of
-#'   unpublished studies (eg, in trial registry or FDA)? Only used when k < 10.
+#' @param pubias_unpublished \code{"yes"} / \code{"no"}: Did the review team
+#'   discover and document unpublished studies of sufficient size to
+#'   appreciably influence effect estimates (eg, in a trial registry or FDA
+#'   records)? Only used when k < 10.
 #'   If \code{NULL} (default), assumed \code{"no"} with a warning.
 #' @param rare_flow Logical. \code{TRUE} when the estimate comes from the
 #'   rare-event workflow (\code{\link{rare_event_diagnostics}}'s
 #'   \code{rare_flow}). It changes three computations and no decision rule: the
 #'   optimal information size switches to an event basis, the Inconsistency
-#'   I-squared surrogate is withdrawn as not assessable, and Core GRADE 4 Fig 5
-#'   takes its \code{k < 10} branch at any \code{k} because Egger's test loses
-#'   validity on sparse binary data. No domain rates down because of it.
+#'   I-squared surrogate is withdrawn as not assessable, and the
+#'   publication-bias flowchart takes its \code{k < 10} branch at any \code{k}
+#'   because Egger's test loses validity on sparse binary data. No domain
+#'   rates down because of it.
 #' @param rare_one_arm_total_zero Logical. \code{TRUE} when one arm has no
 #'   events at all across every study (\code{rare_event_diagnostics()}'s
 #'   \code{one_arm_total_zero}). Imprecision is then reported as not
@@ -678,9 +708,13 @@
 #'       low-RoB analysis when one was performed, otherwise the original.}
 #'     \item{meta_full}{The original (all-studies) meta object.}
 #'     \item{rob_analysis_set}{\code{"all"} or \code{"low_only"} — the analysis
-#'       set BMJ Core GRADE 4 Fig 2 recommends.}
+#'       set Core GRADE Guide Fig 7-2 recommends.}
 #'     \item{rob_refit}{\code{TRUE} when the low-RoB refit was actually
 #'       performed.}
+#'     \item{rob_direction_check}{(v0.6) \code{TRUE} when the legacy 0.5.x
+#'       direction-of-bias check decided risk of bias.}
+#'     \item{rob_some_concerns}{(v0.6) \code{"low"} or \code{"high"}: the
+#'       side "some concerns" studies were folded into.}
 #'     \item{control_risk}{How the one control-arm risk was shared across
 #'       \code{threshold_baseline}, \code{ois_p0} and \code{baseline_risk}
 #'       (see \strong{One control-arm risk}): \code{value} and \code{donor}
@@ -719,13 +753,16 @@ grade_meta <- function(meta_obj,
                        study_design                     = c("RCT", "obs"),
                        rob                              = NULL,
                        rob_rationale                    = NULL,
-                       rob_some_concerns                = c("high", "low"),
+                       rob_some_concerns                = c("low", "high"),
                        rob_overrides                    = NULL,
                        rob_override_rationale           = NULL,
                        rob_dominant_threshold           = 0.55,
                        rob_refit                        = TRUE,
                        rob_inflation_threshold          =
                          PMA_ROB_INFLATION_THRESHOLD,
+                       # Legacy 0.5.x direction-of-bias check; Beyond Core
+                       # GRADE. Off by default (Guide Fig 7-2).
+                       rob_direction_check              = FALSE,
                        # Required. The NULL default is kept only so that the
                        # omission is answered by .check_small_values()'s message
                        # rather than by R's "argument is missing" -- the same
@@ -770,6 +807,7 @@ grade_meta <- function(meta_obj,
                        ois_delta                        = NULL,
                        ois_sd                           = NULL,
                        baseline_risk                    = NULL,
+                       pubias_important_effect          = NULL,
                        pubias_small_industry            = NULL,
                        pubias_funnel_asymmetry          = NULL,
                        pubias_unpublished               = NULL,
@@ -812,6 +850,7 @@ grade_meta <- function(meta_obj,
   rob_some_concerns <- .check_rob_some_concerns(
     if (length(rob_some_concerns) > 1L) rob_some_concerns[1] else rob_some_concerns
   )
+  rob_direction_check <- .check_rob_direction_check(rob_direction_check)
 
   # --- Core GRADE 5 Indirectness subdomains (PICO) ---
   # With a subdomain table the domain judgment defaults to the worst case, and
@@ -842,9 +881,10 @@ grade_meta <- function(meta_obj,
   }
 
   # --- the outcome direction must be explicit (v0.5.1) ---
-  # Risk of bias and Imprecision both consume it, and both used to guess in its
-  # absence. Checked here, before any domain runs, so the call stops rather than
-  # returning a rating that a guess helped produce.
+  # Imprecision consumes it (and risk of bias under the legacy
+  # rob_direction_check), and both used to guess in its absence. Checked here,
+  # before any domain runs, so the call stops rather than returning a rating
+  # that a guess helped produce.
   .check_small_values(small_values)
 
   # --- starting certainty ---
@@ -864,7 +904,7 @@ grade_meta <- function(meta_obj,
 
   # --- resolve Threshold to TE scale (used by RoB, Inconsistency, Imprecision) ---
   # `meta_full` is the all-studies analysis; `meta_obj` is rebound below to
-  # the refitted low-RoB analysis when Core GRADE 4 Fig 2 calls for one.
+  # the refitted low-RoB analysis when Core GRADE Guide Fig 7-2 calls for one.
   meta_full          <- meta_obj
   threshold_resolved <- threshold_to_te_scale(
     threshold, threshold_scale, meta_obj$sm,
@@ -877,7 +917,7 @@ grade_meta <- function(meta_obj,
   threshold_note     <- threshold_resolved$threshold_note
   threshold_p0       <- threshold_resolved$threshold_baseline
 
-  # --- Risk of bias first (Core GRADE 4 Fig 2) ---
+  # --- Risk of bias first (Core GRADE Guide Fig 7-2) ---
   # RoB is assessed on the full analysis and may hand back the recommendation
   # to restrict the evidence to low-RoB studies. Everything downstream (rating
   # target, the other domains, baseline risk, SoF) then works from the
@@ -890,7 +930,8 @@ grade_meta <- function(meta_obj,
                         rob_inflation_threshold = rob_inflation_threshold,
                         small_values            = small_values,
                         threshold_internal      = threshold_internal,
-                        rationale               = rob_rationale)
+                        rationale               = rob_rationale,
+                        rob_direction_check     = rob_direction_check)
   rob_analysis_set <- attr(d_rob, "analysis_set") %||% "all"
   rob_high_idx     <- attr(d_rob, "high_idx")
   # Read immediately, for the same reason as the two attributes above: neither
@@ -1089,7 +1130,11 @@ grade_meta <- function(meta_obj,
     pubias_unpublished       = pubias_unpublished,
     pubias_registry_complete = pubias_registry_complete,
     rationale                = pubias_rationale,
-    rare_flow                = rare_flow
+    rare_flow                = rare_flow,
+    # Q0 of Guide Fig 9-1 is judged against the rating target's threshold,
+    # the same one Inconsistency and Imprecision are handed.
+    pubias_important_effect  = pubias_important_effect,
+    threshold_chosen         = target_info$threshold_for_imprecision
   )
   # bind_rows() below drops attributes, so every domain's facts have to be
   # lifted off its row BEFORE the bind. Publication bias was the one assessor
@@ -1204,6 +1249,13 @@ grade_meta <- function(meta_obj,
       meta_full          = meta_full,
       rob_analysis_set   = rob_analysis_set,
       rob_refit          = refit_done,
+      # Which risk-of-bias reading produced the judgment. Kept on the object so
+      # export_bundle() can replay a legacy rating as one even without
+      # grade_args: the two readings rate the same data differently.
+      rob_direction_check = rob_direction_check,
+      # The fold the rating used, so export_bundle() replays it even when the
+      # caller relied on the default (which moved in 0.5.1 and again in 0.6.0).
+      rob_some_concerns   = rob_some_concerns,
       rare               = rare_record
     ),
     class = "pmatools"
@@ -1247,7 +1299,7 @@ print.pmatools <- function(x, ...) {
                 x$meta$k, x$meta_full$k))
   } else if (identical(x$rob_analysis_set, "low_only")) {
     cat(paste0(" Analysis set : all studies ",
-               "(Core GRADE 4 Fig 2 recommends low risk of bias studies only)\n"))
+               "(Core GRADE Guide Fig 7-2 recommends low risk of bias studies only)\n"))
   }
   cat("\n Domain assessments:\n")
 

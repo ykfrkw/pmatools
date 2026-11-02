@@ -46,7 +46,8 @@ make_small_meta <- function() {
 }
 
 # --- Registry rule-out, evaluated after Q1 ----------------------------------
-# Updated (v0.5): Core GRADE 4 Fig 5 has no structural rule-out node, so
+# Updated (v0.5): Core GRADE 4 Fig 5 (now Core GRADE Guide Fig 9-1) has no
+# structural rule-out node, so
 # pubias_registry_complete is now consumed AFTER Q1 and can no longer suppress
 # the small-and-industry-sponsored downgrade.
 test_that("pubias_registry_complete = 'yes' short-circuits the Fig 5 nodes after Q1", {
@@ -57,7 +58,8 @@ test_that("pubias_registry_complete = 'yes' short-circuits the Fig 5 nodes after
   pb <- g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
   expect_equal(pb$judgment, "not_serious")
   expect_match(pb$notes, "pubias_registry_complete = 'yes'", fixed = TRUE)
-  expect_match(pb$notes, "not a decision node of Core GRADE 4 Fig 5", fixed = TRUE)
+  expect_match(pb$notes, "not a decision node of Core GRADE Guide Fig 9-1",
+               fixed = TRUE)
 })
 
 test_that("Q1 rate-down survives pubias_registry_complete = 'yes' (k >= 10)", {
@@ -254,4 +256,110 @@ test_that("a path through the study-count node lights the edge out of it too", {
                             threshold_type = "null",
                             small_values = "desirable"))
   expect_true(all(c("pma-pubias-node-q2", "pma-pubias-edge-q2-no") %in% small))
+})
+
+# --- Q0: "Did the studies show an important effect?" (Guide Fig 9-1) --------
+# The node the Core GRADE Guide added in front of Q1. pmatools answers it from
+# the pooled estimate and the rating-target threshold unless the reviewer
+# overrides it; "no" stops the chart at "do not rate down".
+
+pb_row <- function(g) {
+  g$domain_assessments[g$domain_assessments$domain == "Publication bias", ]
+}
+pb_path <- function(g) {
+  f <- domain_facts(g, "Publication bias")
+  strsplit(f$value[f$key == "flow_path"], " ", fixed = TRUE)[[1L]]
+}
+Q0_NO_PATH <- c("pma-pubias-node-q0", "pma-pubias-edge-q0-no",
+                "pma-pubias-leaf-nodown-q0")
+
+test_that("Q0 auto: an estimate inside the threshold stops at do not rate down", {
+  m <- make_strong_asymmetry()       # Egger would otherwise rate down
+  g <- suppressWarnings(grade_meta(m, small_values = "desirable",
+                                   pubias_small_industry = "no",
+                                   threshold = 3, threshold_scale = "ratio"))
+  pb <- pb_row(g)
+  expect_equal(pb$judgment, "not_serious")
+  expect_match(pb$notes, "Q0 (auto)", fixed = TRUE)
+  expect_match(pb$notes, "important effect: no", fixed = TRUE)
+  expect_match(pb$notes, "remaining nodes are not evaluated", fixed = TRUE)
+  # The answer supplied to Q1 is listed as not evaluated rather than dropped.
+  expect_match(pb$notes, "pubias_small_industry", fixed = TRUE)
+  expect_false(grepl("Egger", pb$notes, fixed = TRUE))
+  expect_identical(pb_path(g), Q0_NO_PATH)
+  f <- domain_facts(g, "Publication bias")
+  expect_identical(f$numeric[f$key == "important_effect"], 0)
+})
+
+test_that("Q0 auto: an estimate beyond the threshold continues to Q1-Q4", {
+  m <- make_strong_asymmetry()
+  g <- suppressWarnings(grade_meta(m, small_values = "desirable",
+                                   pubias_small_industry = "no",
+                                   threshold = 1.01, threshold_scale = "ratio"))
+  pb <- pb_row(g)
+  expect_equal(pb$judgment, "serious")
+  expect_match(pb$notes, "important effect: yes", fixed = TRUE)
+  ids <- pb_path(g)
+  expect_identical(ids[1:2], c("pma-pubias-node-q0", "pma-pubias-edge-q0-yes"))
+  expect_true("pma-pubias-node-q1" %in% ids)
+  f <- domain_facts(g, "Publication bias")
+  expect_identical(f$numeric[f$key == "important_effect"], 1)
+})
+
+test_that("Q0 auto: with a null threshold any non-null estimate answers yes", {
+  g <- grade_meta(make_small_meta(), small_values = "desirable",
+                  threshold_type = "null")
+  pb <- pb_row(g)
+  expect_match(pb$notes, "effectively always answers yes", fixed = TRUE)
+  expect_match(pb$notes, "important effect: yes", fixed = TRUE)
+  expect_false(identical(pb_path(g), Q0_NO_PATH))
+})
+
+test_that("Q0 auto: an unavailable estimate is assumed important", {
+  q0 <- pmatools:::.pubias_important_effect(
+    list(TE.random = NA_real_, TE.common = NA_real_, random = TRUE, sm = "OR"),
+    threshold_chosen = log(1.2))
+  expect_identical(q0$answer, "yes")
+  expect_true(q0$auto)
+  expect_match(q0$note, "not available", fixed = TRUE)
+  expect_match(q0$note, "assumed", fixed = TRUE)
+})
+
+test_that("Q0 manual 'yes' overrides an auto 'no' and needs no rationale", {
+  m <- make_strong_asymmetry()
+  g <- suppressWarnings(grade_meta(m, small_values = "desirable",
+                                   pubias_small_industry = "no",
+                                   pubias_important_effect = "yes",
+                                   threshold = 3, threshold_scale = "ratio"))
+  pb <- pb_row(g)
+  expect_equal(pb$judgment, "serious")
+  expect_match(pb$notes, "Q0 (manual)", fixed = TRUE)
+  expect_identical(pb_path(g)[1:2],
+                   c("pma-pubias-node-q0", "pma-pubias-edge-q0-yes"))
+})
+
+test_that("Q0 manual 'no' requires a rationale and then stops the chart", {
+  m <- make_strong_asymmetry()
+  expect_error(
+    suppressWarnings(grade_meta(m, small_values = "desirable",
+                                pubias_important_effect = "no",
+                                threshold_type = "null")),
+    "rationale")
+  g <- suppressWarnings(grade_meta(
+    m, small_values = "desirable", pubias_important_effect = "no",
+    pubias_rationale = "The effect is too small to matter for the decision.",
+    threshold_type = "null"))
+  pb <- pb_row(g)
+  expect_equal(pb$judgment, "not_serious")
+  expect_match(pb$notes, "Q0 (manual)", fixed = TRUE)
+  expect_match(pb$notes, "too small to matter", fixed = TRUE)
+  expect_identical(pb_path(g), Q0_NO_PATH)
+})
+
+test_that("pubias_important_effect rejects anything but NULL / 'yes' / 'no'", {
+  expect_error(
+    suppressWarnings(grade_meta(make_small_meta(), small_values = "desirable",
+                                pubias_important_effect = "maybe",
+                                threshold_type = "null")),
+    "pubias_important_effect")
 })

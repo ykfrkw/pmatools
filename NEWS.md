@@ -1,3 +1,117 @@
+# pmatools 0.6.0
+
+Risk of bias and publication bias now follow the **Core GRADE Guide**
+(Guyatt G, et al. MAGIC Evidence Ecosystem;
+<https://core-grade.gitbook.io/org>, accessed 2026-11-02): Fig 7-2 and
+Fig 9-1, which supersede Core GRADE 4 Fig 2 and Fig 5 (BMJ 2025) as pmatools'
+sources for these two domains. Both changes alter certainty ratings on
+unchanged input.
+
+## Breaking changes
+
+* **feat!: dominated evidence is always rated down one level for risk of
+  bias.** Core GRADE Guide Fig 7-2 has no "check direction of bias" node: when
+  the high risk of bias studies dominate the evidence (weight share at or above
+  `rob_dominant_threshold`, still 0.55), it uses the results from all studies
+  and rates down. `assess_rob()` now does exactly that — `"serious"` (−1),
+  `analysis_set = "all"`, no estimate comparison, no refit, `small_values` not
+  consulted — including when every study is at high risk of bias. Two kinds of
+  rating move:
+  - evidence the 0.5.x direction check left unrated (rules 1 and 2: both
+    estimates trivial, or a small or non-bias-favouring shift) is now rated
+    down one level;
+  - evidence it rated down **two** levels (rule 5, a sign flip across the
+    threshold) is now rated down one.
+
+  The domain notes, the `fig2_branch` fact (`numeric` now `NA` on this route)
+  and the lit flowchart (`node-dominance → edge-dominance-yes → leaf-ratedown`)
+  say so; no `estimate_shift` fact is recorded.
+
+* **feat!: the undominated "substantial differences" node is read
+  symmetrically.** "Are there substantial differences in estimate of effect
+  between high and low risk of bias studies?" is answered yes when the two
+  estimates fall in different threshold zones, or in the same non-trivial zone
+  with a relative change above `rob_inflation_threshold` (0.20) **in either
+  direction**. Up to 0.5.x a deflation — the low risk of bias studies showing
+  the larger effect — read as "similar"; it now restricts the analysis to the
+  low risk of bias studies (and, with `rob_refit = TRUE`, refits on them). The
+  branch still never rates down. The notes on both leaves say the numeric
+  reading is pmatools' (the Guide words the question qualitatively).
+
+* **feat!: publication bias opens with "Did the studies show an important
+  effect?".** Core GRADE Guide Fig 9-1's new first node is computed: yes when
+  the pooled estimate lies beyond the rating target's threshold on either side
+  of the null; with a null threshold any non-null estimate is yes (the note
+  says the node then effectively always answers yes); an unavailable estimate
+  is assumed yes. **No stops the chart at "do not rate down"**, so an outcome
+  whose estimate sits inside the threshold is no longer rated down for
+  publication bias, whatever Egger's test or documented unpublished studies
+  say. The new `pubias_important_effect = NULL | "yes" | "no"` of
+  `grade_meta()` / `assess_pubias()` overrides it; `"no"` requires
+  `pubias_rationale`. The notes prefix the node `Q0:` (`Q1:`–`Q4:` unchanged),
+  an `important_effect` fact records the answer, and every publication-bias
+  `flow_path` now starts at `pma-pubias-node-q0`. Q1–Q4 logic is unchanged; Q3
+  is reworded to the Guide's "visual asymmetry and/or statistical
+  significance".
+
+* **feat!: both flowcharts are redrawn, and recorded `flow_path`s from 0.5.x no
+  longer match.** `rob.svg` is Guide Fig 7-2 (eleven ids; the direction-node
+  ids are removed and `pma-rob-edge-appreciable-yes` is renamed
+  `pma-rob-edge-appreciable-magnitude`), carrying the Guide's two footnotes.
+  `pubias.svg` gains the Q0 node, its "No" leaf and edges. Read routes through
+  `domain_facts()`, not by matching ids.
+
+* **feat!: `rob_some_concerns` defaults to `"low"` again.** By owner
+  decision, studies rated `"some concerns"` now count on the **low** risk of
+  bias side unless you pass `rob_some_concerns = "high"` (the default in 0.5.1
+  and 0.5.2). This changes the high-RoB weight share and therefore the
+  Fig 7-2 dominance gate — evidence that 0.5.x called dominated can now be
+  undominated, and is then not rated down — and it changes which studies form
+  the low risk of bias pool, so the "substantial differences" answer and the
+  `low_only` analysis set (and its refit) can move too. Core GRADE gives no
+  fold for "some concerns"; `"high"` remains for reviewers who read it as the
+  stricter worked boundary ("at least one item" at high risk of bias). The
+  rated object now records `$rob_some_concerns`, which `export_bundle()`
+  writes into the bundled `analysis.R` when the call did not pass the
+  argument. The Shiny app's radio defaults to `"low"` as well. A 0.5.1/0.5.2
+  rating that relied on the default reproduces only with
+  `rob_some_concerns = "high"`.
+
+## New features
+
+* **`rob_direction_check = FALSE`** in `assess_rob()` and `grade_meta()`.
+  `TRUE` reproduces 0.5.x on both branches exactly: the five zone rules decide
+  the dominated judgment (including rule 5's two-level downgrade) and the
+  undominated leaf, directionally, via `small_values`. It is **Beyond Core
+  GRADE (Guide Appendix 11)**, retained for the reproducibility of 0.5.x
+  analyses, and every judgment it produces says so in its notes and in
+  `fig2_branch`. The figure lights only the dominance node and its "yes" edge
+  in this mode. Stored as `$rob_direction_check`; `export_bundle()` writes it
+  (and `pubias_important_effect`) into the bundled `analysis.R`. The Shiny app
+  does not offer it.
+* `assess_rob()` requires `small_values` only when `rob_direction_check =
+  TRUE`. `grade_meta()` still requires it, for Imprecision.
+
+## Shiny app (3.5.0)
+
+* The Risk of bias and Publication bias charts are the Guide's Fig 7-2 and
+  Fig 9-1, and their captions cite them ("formerly Core GRADE 4 Fig 2 / Fig 5").
+  The risk of bias caption names pmatools' numeric reading of the
+  substantial-differences node and no longer describes the five direction
+  rules.
+* The publication-bias wizard lights the computed Q0 node from the start,
+  prints its answer under the chart ("Important effect: …", read off the last
+  rating; assumed yes before one exists), and ends at the result without
+  asking anything when it is no.
+* The "Where do studies rated 'some concerns' belong?" radio defaults to
+  "Some concerns count as low risk of bias", matching the package.
+
+## Documentation and provenance
+
+* `?grade_flowcharts` rewrites the risk of bias and publication bias sections
+  and cites the Core GRADE Guide. SPEC.md §5.1, §5.1a and the new §5.5d are the
+  contract; shiny/SPEC.md §3.4.12 the app's side.
+
 # pmatools 0.5.2
 
 ## Changes to exported tables

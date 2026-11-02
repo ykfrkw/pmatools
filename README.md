@@ -478,7 +478,7 @@ no Box 1 counterpart and **must not be cited as GRADE wording** (`SPEC.md`
 §5.5c). The rated object gains `$threshold_sides`, `$plain_language_frame` and
 `$threshold_zone`.
 
-### 1. Risk of Bias (5-rule MECE zone-based decision; aligned with BMJ Core GRADE 4)
+### 1. Risk of Bias (Core GRADE Guide Fig 7-2, formerly Core GRADE 4 Fig 2)
 
 **Scalar input — flowchart bypassed** (v0.4.0+: requires `rob_rationale`):
 
@@ -487,33 +487,36 @@ grade_meta(m, rob = "very_serious",
            rob_rationale = "RoB2 consensus: high risk of bias in most domains")
 ```
 
-**Per-study vector — Core GRADE 4 Fig 2 flowchart applied:**
+**Per-study vector — Core GRADE Guide Fig 7-2 applied (v0.6.0):**
 
 Studies are first folded into a binary low / high classification
 (`rob_some_concerns` decides which side "some concerns" lands on), then the
-figure's first node asks whether the high-RoB studies **dominate** the
-evidence — whether they carry at least `rob_dominant_threshold` (default
-`0.55`, compared with `>=`) of the inverse-variance weight. The Fig 2 footnote
-names two candidate thresholds — ">65% weight or ≥55% weight = possibly
+figure's first node asks whether the evidence is **dominated** by high risk of
+bias studies — whether they carry at least `rob_dominant_threshold` (default
+`0.55`, compared with `>=`) of the inverse-variance weight. The Guide's
+footnote names two candidate thresholds — ">65% weight or ≥55% weight=possibly
 dominating" — and pmatools defaults to the conservative one; pass `0.65` for
 the stricter reading.
 
 ```
-w_high >= rob_dominant_threshold ?
-├── yes → check direction of bias (the 5-rule zone decision below)
-│           bias could account for the effect / its absence → rate down
-│           bias would under-estimate the effect             → do not rate down
-└── no  → appreciable evidence from low-RoB studies?
-          similar or substantially different magnitudes of effect?
-          (the same 5-rule decision, read as a leaf instead of a downgrade)
-            ├── rule 3/4/5 → substantially different
-            │                do not rate down; use low risk of bias studies only
-            └── rule 1/2   → similar
-                             do not rate down; use all studies
+Is evidence dominated by high risk of bias studies?*   (w_high >= 0.55)
+├── yes → use results from all studies and rate down          (serious, −1)
+└── no  → appreciable evidence exists from low risk of bias studies†
+          Are there substantial differences in estimate of effect
+          between high and low risk of bias studies?
+            ├── yes → use only low risk of bias studies and do not rate down
+            └── no  → use results from all studies and do not rate down
 ```
 
+**Dominated evidence is always rated down one level** — whatever the two
+estimates do, and without consulting `small_values`. The Core GRADE Guide
+removed the "check direction of bias" node that Core GRADE 4 Fig 2 had; it now
+sits in the Guide's Appendix 11, "Beyond Core GRADE". pmatools 0.5.x
+implemented that node with five zone rules, which are still available on
+request (`rob_direction_check = TRUE`, below).
+
 The non-dominated branch **never rates the domain down**. When it lands on
-"use low risk of bias studies only", `grade_meta()` refits the meta-analysis on
+"use only low risk of bias studies", `grade_meta()` refits the meta-analysis on
 the low-RoB subset (`rob_refit = TRUE`, the default), so every other domain,
 the rating target and the SoF table use the restricted estimate. The original
 analysis stays available as `$meta_full`; `$rob_analysis_set` and `$rob_refit`
@@ -527,36 +530,25 @@ all-studies object. In that second case the rated analysis is printed below as
 a separate block, so the file always contains the analysis the certainty rating
 was actually made on. Without a refit the heading is unchanged.
 
-**Direction-of-bias check (dominated branch) — 5-rule zone decision:**
-
-`pmatools` classifies the pooled effect from all studies (`TE_all`) and the
-IV-weighted pooled effect of low / some-RoB studies (`TE_low`) into one of three
-zones defined by the clinical decision Threshold on the analysis scale:
+**"Substantial differences" — pmatools' numeric reading.** The Guide answers
+the question qualitatively (differing clinical decisions on the low vs high
+risk of bias studies, or point estimates on different sides of and far from
+the decision threshold). pmatools compares the pooled effect from all studies
+(`TE_all`) with the inverse-variance pooled effect of the low-RoB studies
+(`TE_low`), each placed in one of three zones defined by the Threshold on the
+analysis scale:
 
 - `above`   : TE > +Threshold
 - `trivial` : −Threshold ≤ TE ≤ +Threshold
 - `below`   : TE < −Threshold
 
-Then a single MECE 3×3 table determines the downgrade:
-
-| zone(TE_all) → / zone(TE_low) ↓ | **above** | **trivial** | **below** |
-|---|---|---|---|
-| **above**    | rule 2 / 3 | rule 4    | **rule 5** |
-| **trivial**  | rule 4    | rule 1    | rule 4    |
-| **below**    | **rule 5** | rule 4    | rule 2 / 3 |
-
-```
-Rule 1: same trivial zone                                         → no
-Rule 2: same non-trivial zone, inflation ≤ 20%                    → no
-Rule 3: same non-trivial zone, bias-favouring inflation > 20%     → serious (−1)
-Rule 4: zone differs without sign flip                            → serious (−1)
-Rule 5: zone differs with sign flip (above ↔ below)               → very_serious (−2)
-        …with no Threshold supplied                               → serious (−1)
-```
-
-`inflation_ratio = (|TE_all| − |TE_low|) / |TE_low|` is evaluated only when the
-sign of the inflation matches the bias-favouring direction (per `small_values`);
-deflation in the bias-favouring direction never triggers a downgrade.
+and calls them **substantially different** when the zones differ, or when both
+sit in the same non-trivial zone and the relative change
+`(|TE_all| − |TE_low|) / |TE_low|` exceeds `rob_inflation_threshold` (default
+20%) **in either direction**. Two trivial-zone estimates are never
+substantially different: they lead to the same decision. A comparison that
+cannot be made (no usable low-RoB pool) takes the "no" edge. The domain notes
+say the numbers are pmatools', on both leaves.
 
 ```r
 grade_meta(m,
@@ -564,7 +556,7 @@ grade_meta(m,
   threshold               = 1.20,           # Threshold on natural scale
   threshold_scale         = "ratio",        # OR/RR/HR/RoM: ratio; MD/SMD: te_scale
   small_values            = "undesirable",  # large OR = good (eg, response)
-  rob_inflation_threshold = 0.20)           # rule 3 trigger; default 20%
+  rob_inflation_threshold = 0.20)           # "substantially different" past 20%
 ```
 
 **Threshold placeholder: `suggest_threshold()`.** Returns a value to pre-fill an
@@ -632,64 +624,51 @@ against the wrong tail for an outcome whose events are the desirable thing.
 choice; rating without a direction is not one, because every outcome has a
 direction.
 
-**Fallback when Threshold is not supplied** (`threshold = NULL`): the trivial
-zone collapses to `{0}`, so only sign flips can change zones. The algorithm
-reduces to a sign-flip check (rule 5 vs rule 2/3); rule 1 and rule 4 cannot
-fire. Rule 5 then rates down **one** level rather than two, and says why —
-without a Threshold to clear, "opposite sides of the null" means only that the
-two estimates carry opposite signs, which two near-null estimates can satisfy
-by an arbitrarily small movement.
 
 **Dominance gate: deprecation retracted.** `rob_dominant_threshold` was
 deprecated in v0.3.1 ("accepted but ignored"), on the reasoning that the
-zone-and-magnitude comparison subsumed it. That decision is **retracted** in
-the current development version: the gate is the first decision node of Core
-GRADE 4 Fig 2, and the two branches beneath it are not interchangeable — one
-can rate down, the other only chooses the analysis set. The argument is live
-again, with a default of `0.55` — one of the two thresholds the Fig 2 footnote
-names (the earlier `0.60` matched neither). (The CI-overlap and CI-significance
-branches removed in v0.3.1 stay removed; they really are subsumed by the
-zone comparison.)
+zone-and-magnitude comparison subsumed it. That decision was **retracted** in
+v0.5.0: the gate is the first decision node of the figure, and the two
+branches beneath it are not interchangeable — one rates down, the other only
+chooses the analysis set. The default `0.55` is one of the two thresholds the
+footnote names (the earlier `0.60` matched neither). (The CI-overlap and
+CI-significance branches removed in v0.3.1 stay removed.)
 
-**Both branches are decided by the same five rules.** On the non-dominated
-branch the figure asks "whether low and high risk of bias studies suggest
-similar or **substantially different magnitudes of effect**", and pmatools
-answers it with the rule verdict it already has: rules 3, 4 and 5 mean
-substantially different (restrict the analysis to the low-RoB studies), rules 1
-and 2 mean similar (keep every study). Nothing on that branch rates down, so
-rule 5's depth plays no part there.
+**Legacy: the 0.5.x direction-of-bias check (`rob_direction_check = TRUE`).**
+Beyond Core GRADE (Guide Appendix 11), retained so that a 0.5.x analysis can
+be reproduced exactly; every judgment it produces says so in its notes, and
+the Shiny app does not offer it. It replaces both readings above with a single
+MECE 3×3 zone table, read as the downgrade on the dominated branch and as the
+leaf on the other:
 
-That means the `small_values` direction gate applies to both branches: a shift
-past `rob_inflation_threshold` that does not run in the bias-favouring
-direction reaches rule 2 and is read as *similar*. **This departs from the
-source deliberately.** The node is worded symmetrically and names no direction,
-but under the symmetric reading one and the same pair of estimates is
-"substantially different" on this branch of Fig 2 and "not substantially
-different" one node away on the dominated branch, and nothing in the output
-says which answer the body of evidence has. The departure is stated in the
-domain `notes` on both leaves of the node. Up to and including v0.5.0 pmatools
-did read the node symmetrically; a reviewer who wants that reading can restrict
-the meta-analysis to the low-RoB studies by hand and rate the restricted
-analysis.
+| zone(TE_all) → / zone(TE_low) ↓ | **above** | **trivial** | **below** |
+|---|---|---|---|
+| **above**    | rule 2 / 3 | rule 4    | **rule 5** |
+| **trivial**  | rule 4    | rule 1    | rule 4    |
+| **below**    | **rule 5** | rule 4    | rule 2 / 3 |
 
-**One automatic two-level downgrade, and it is a departure.** Every leaf of
-Fig 2 reads "rate down" / "do not rate down", and Core GRADE 4 describes no
-two-level risk-of-bias downgrade — the only "two levels" in the paper is about
-rating *up* observational evidence. **Rule 5 rates down two anyway.** It fires
-only when the pooled estimate sits beyond the Threshold on one side of the null
-and the estimate restricted to the low-RoB studies sits beyond it on the
-*other*: the direction of the effect is then what the high-RoB studies
-produced, and moderate certainty would overstate the evidence. Every judgment
-on that branch says so in its notes.
+```
+Rule 1: same trivial zone                                         → no
+Rule 2: same non-trivial zone, inflation ≤ 20%                    → no
+Rule 3: same non-trivial zone, bias-favouring inflation > 20%     → serious (−1)
+Rule 4: zone differs without sign flip                            → serious (−1)
+Rule 5: zone differs with sign flip (above ↔ below)               → very_serious (−2)
+        …with no Threshold supplied                               → serious (−1)
+```
 
-Everything else still stops at `serious` (−1): rules 3 and 4, the
-all-studies-high-RoB case (no restricted estimate exists there to have landed
-anywhere), and the not-assessable paths. So does rule 5 itself when no
-Threshold was supplied — the trivial zone then collapses to `{0}`, and
-"opposite sides of the null" no longer requires either estimate to be
-appreciably away from it. Use the scalar `rob = "very_serious"` (with
-`rob_rationale`) to record −2 where the flowchart does not reach it, and
-`rob = "some_concerns"` to record −1 where it does.
+The inflation is evaluated only when it runs in the bias-favouring direction
+(per `small_values`), so a deflation never triggers a downgrade — and, on the
+non-dominated branch, reads as "similar", which the Guide's undirected node
+does not say. Rule 5's two-level downgrade has no counterpart in Core GRADE.
+On the dominated branch the figure lights only the dominance node and its
+"yes" edge, because the check has no box on the Guide's figure; the rule
+number is recorded on the `fig2_branch` fact.
+
+```r
+grade_meta(m, rob = rob_vec, small_values = "undesirable",
+           threshold = 1.20, threshold_scale = "ratio",
+           rob_direction_check = TRUE)   # reproduces pmatools 0.5.x
+```
 
 **Study-level overrides.** A single study's classification can be corrected
 without rebuilding the vector. Both arguments are named character vectors
@@ -1022,7 +1001,7 @@ evidence comes from ..." — and never turns that into a number, nor into a
 per-study aggregation rule of any kind: the judgment it describes is made about
 the body of evidence as a whole. `indirectness_dominant_threshold = 0.55` is a
 pmatools convention, chosen to line up with `rob_dominant_threshold` (whose
-value *is* sourced, from Core GRADE 4 Fig 2). Every aggregated domain note says
+value *is* sourced, from the Core GRADE Guide Fig 7-2 footnote). Every aggregated domain note says
 so. If your reading of "all or almost all" is stricter, raise it.
 
 The `indirectness_subdomains` table below keeps its worst-case fold —
@@ -1230,14 +1209,19 @@ grade_meta(m, ois_delta = 3, ois_sd = 7)
 
 ---
 
-### 5. Publication Bias (BMJ Core GRADE 4, Fig 5 flowchart)
+### 5. Publication Bias (Core GRADE Guide Fig 9-1, formerly Core GRADE 4 Fig 5)
 
 ```
+Q0: Did the studies show an important effect?            (new in v0.6.0)
+  computed: |pooled TE| beyond the rating-target threshold, either side
+  pubias_important_effect = "no"  → judgment = "not_serious" (stop; needs pubias_rationale)
+  pubias_important_effect = "yes" → continue (no rationale needed)
+
 Q1: Are most or all studies small AND industry-sponsored?
   pubias_small_industry = "yes"        → judgment = "serious" (-1; stop)
   pubias_small_industry = "no" / NULL  → continue
 
-[After Q1] pmatools convenience input (NOT a node of Fig 5):
+[After Q1] pmatools convenience input (NOT a node of Fig 9-1):
   pubias_registry_complete = "yes"
     → judgment = "not_serious" (stop; the user asserts complete pre-registration coverage)
 
@@ -1245,7 +1229,7 @@ Q2: Is statistical analysis feasible (k ≥ 10)?
   YES → Q3
   NO  → Q4
 
-Q3 (k ≥ 10): Visual asymmetry / Egger's test
+Q3 (k ≥ 10): Visual asymmetry and/or statistical significance (Egger's test)
   pubias_funnel_asymmetry = NULL  → run Egger's test automatically
     Egger p < 0.05           → judgment = "serious"  (-1)
     Egger p ≥ 0.05           → judgment = "not_serious"
@@ -1257,7 +1241,19 @@ Q4 (k < 10): Documentation of unpublished studies
   pubias_unpublished = "no" / NULL  → judgment = "not_serious" (NULL: assumed "no" with warning)
 ```
 
-**Registry rule-out is evaluated after Q1 (v0.5).** Core GRADE 4 Fig 5 has
+**Q0 — "Did the studies show an important effect?" (v0.6.0, breaking).** The
+Core GRADE Guide adds this node in front of Q1: an effect that is not important
+gives publication bias nothing to exaggerate. pmatools answers it from the
+pooled estimate — **yes** when it lies beyond the rating target's threshold on
+either side of the null, **no** otherwise — so an outcome whose estimate sits
+inside the threshold is no longer rated down here, whatever Egger's test says.
+With a null threshold (`threshold_type = "null"`) any non-null estimate is
+yes, and the note says the node then effectively always answers yes; an
+unavailable estimate is assumed yes. `pubias_important_effect = "yes"` /
+`"no"` overrides it, and `"no"` needs `pubias_rationale`. The notes prefix
+the node `Q0:` so the `Q1:`–`Q4:` lines stay comparable with 0.5.x.
+
+**Registry rule-out is evaluated after Q1 (v0.5).** Core GRADE 4 Fig 5 had
 exactly four decision nodes and no structural rule-out; its only registry node
 is Q4. Evaluating `pubias_registry_complete` first, as pmatools did up to
 v0.4.0, let a body of small industry-sponsored trials escape the Q1 downgrade.
@@ -1265,9 +1261,9 @@ The domain note now states that the rule-out is the user's assertion rather
 than a figure node.
 
 **No two-level publication-bias downgrade, and no p-value in the source
-(v0.5).** The `p < 0.01 → serious (-2)` tier is gone. Fig 5's asymmetry node
-asks qualitatively whether the evidence "strongly suggests publication bias"
-and names no threshold; the surviving `p < 0.05` cut-off is a pmatools
+(v0.5).** The `p < 0.01 → serious (-2)` tier is gone. The asymmetry node
+asks about visual asymmetry "and/or statistical significance" and names no
+threshold; the surviving `p < 0.05` cut-off is a pmatools
 operational convention and is labelled as such in the domain notes.
 
 ```r
@@ -2269,12 +2265,13 @@ grade_meta(
   ## Risk of Bias
   rob           = NULL,            # scalar | vector length k | column name | NULL
   rob_rationale          = NULL,   # required when `rob` is a scalar override
-  rob_some_concerns      = "low",  # fold "some concerns" into "low" | "high"
+  rob_some_concerns      = "low",  # fold "some concerns" into "low" (default, v0.6.0) | "high"
   rob_overrides          = NULL,   # named chr, keyed on studlab
   rob_override_rationale = NULL,   # named chr, same keys
   rob_dominant_threshold = 0.55,   # weight share at/above which evidence is "dominated"
-  rob_refit              = TRUE,   # refit on low-RoB studies when Fig 2 says so
-  rob_inflation_threshold = 0.20,  # relative inflation feeding the direction check
+  rob_refit              = TRUE,   # refit on low-RoB studies when Fig 7-2 says so
+  rob_inflation_threshold = 0.20,  # relative change that is "substantially different"
+  rob_direction_check    = FALSE,  # TRUE: legacy 0.5.x direction check (beyond Core GRADE)
   small_values  = NULL,            # REQUIRED: "undesirable" | "desirable"
 
   ## Indirectness
@@ -2309,6 +2306,7 @@ grade_meta(
                                    #   shared (v0.5.1)
 
   ## Publication Bias
+  pubias_important_effect = NULL,  # Q0 override "yes" | "no" (v0.6.0; "no" needs pubias_rationale)
   pubias_small_industry   = NULL,  # "yes" | "no"
   pubias_funnel_asymmetry = NULL,  # "yes" | "no" | NULL (auto Egger, k ≥ 10)
   pubias_unpublished      = NULL,  # "yes" | "no" | NULL (k < 10)
@@ -2427,11 +2425,11 @@ pmatools/
 │   ├── run_ma.R                # {meta} wrapper
 │   ├── multi_outcome.R         # run_ma_multi / grade_meta_multi / pmatools_set
 │   ├── rare_events.R           # rare-event method suite + diagnostics
-│   ├── domain_rob.R            # Risk of Bias Fig 2 flowchart + low-RoB refit
+│   ├── domain_rob.R            # Risk of Bias Guide Fig 7-2 + low-RoB refit
 │   ├── domain_indirectness.R   # domain judgment + PICO subdomains
 │   ├── domain_inconsistency.R  # auto-detect + manual flowchart
 │   ├── domain_imprecision.R    # Fig 4 flowchart + OIS
-│   ├── domain_pubias.R         # Egger's test + Fig 5 flowchart
+│   ├── domain_pubias.R         # Egger's test + Guide Fig 9-1 flowchart
 │   ├── domain_facts.R          # domain_facts() accessor over $domain_facts
 │   ├── rating_target.R         # Core GRADE 2 entry gate + rating target
 │   ├── grade_meta.R            # main function + print/summary

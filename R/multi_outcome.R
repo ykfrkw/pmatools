@@ -551,7 +551,7 @@ print.pmatools_set <- function(x, ...) {
   if (mixed) {
     cat(paste0("\n Note: the analysis set differs between outcomes; pooled ",
                "numbers for a\n       low-RoB outcome come from that subset ",
-               "only (Core GRADE 4 Fig 2).\n"))
+               "only (Core GRADE Guide Fig 7-2).\n"))
   }
   cat("----------------------------------------------------------\n\n")
   invisible(x)

@@ -423,7 +423,7 @@ test_that("the footnote markers still point at the right outcomes", {
   # Anxiety is the third BODY row, because the outcome above it takes two.
   expect_match(.body_col(ft, 1)[3], "^Anxiety \\[1\\]")
   expect_no_match(.body_col(ft, 1)[1], "[1]", fixed = TRUE)
-  expect_match(txt, "[1] Core GRADE 4 Fig 2 recommends restricting",
+  expect_match(txt, "[1] Core GRADE Guide Fig 7-2 recommends restricting",
                fixed = TRUE)
 
   # The per-row responder notes are keyed by name, not by row index, and both

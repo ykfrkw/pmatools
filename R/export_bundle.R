@@ -623,7 +623,7 @@ export_bundle.meta <- function(x,
     ""
   ), con)
 
-  # After a Core GRADE 4 Fig 2 low-RoB refit the rated analysis is a subset of
+  # After a Core GRADE Guide Fig 7-2 low-RoB refit the rated analysis is a subset of
   # the full one, so an unqualified "[ Meta-analysis summary ]" would let a
   # reader scanning the top of the file take a pooled estimate that the
   # certainty assessment below was not computed on. Name the analysis set in
@@ -756,7 +756,8 @@ export_bundle.meta <- function(x,
     study_design     = grade$study_design,
     rob_arg          = .arg_lit(grade_args[["rob", exact = TRUE]],           fallback = "NULL"),
     rob_rationale_arg = .arg_lit(grade_args[["rob_rationale", exact = TRUE]], fallback = "NULL"),
-    rob_some_concerns = grade_args[["rob_some_concerns", exact = TRUE]][["value"]] %||% "high",
+    rob_some_concerns = grade_args[["rob_some_concerns", exact = TRUE]][["value"]] %||%
+      grade$rob_some_concerns %||% "low",
     rob_overrides_arg = .named_chr_lit(grade_args[["rob_overrides", exact = TRUE]]),
     rob_override_rationale_arg =
       .named_chr_lit(grade_args[["rob_override_rationale", exact = TRUE]]),
@@ -770,6 +771,13 @@ export_bundle.meta <- function(x,
     ),
     rob_inf_threshold= grade_args[["rob_inflation_threshold", exact = TRUE]][["value"]] %||%
       PMA_ROB_INFLATION_THRESHOLD,
+    # The legacy direction-of-bias flag falls back to the RATED OBJECT, for the
+    # reason small_values does: the two risk-of-bias readings rate the same
+    # data differently, so a bundle exported without grade_args must still
+    # replay the one that produced it.
+    rob_direction_check_arg = .arg_lit(
+      grade_args[["rob_direction_check", exact = TRUE]],
+      fallback = if (isTRUE(grade$rob_direction_check)) "TRUE" else "FALSE"),
     # small_values: read the rated object when the caller did not route it
     # through grade_args. This used to fall back to "NULL", which was the bug
     # that made the argument required: a bundle exported without grade_args
@@ -911,6 +919,8 @@ export_bundle.meta <- function(x,
         "NULL"
       }
     ),
+    pubias_important_arg      =
+      .arg_lit(grade_args[["pubias_important_effect", exact = TRUE]],  fallback = "NULL"),
     pubias_small_industry_arg =
       .arg_lit(grade_args[["pubias_small_industry", exact = TRUE]],    fallback = "NULL"),
     pubias_funnel_arg         =
