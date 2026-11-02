@@ -218,8 +218,8 @@ test_that("the Risk of bias caption says what in the chart is not the source's",
   # The drawing carries the Guide's Fig 7-2 wording; the numbers that answer
   # its substantial-differences node are pmatools', and the caption beside the
   # chart is where a reviewer is told so. The legacy direction-of-bias check
-  # (five rules, a two-level rule 5) is not offered by the app and must not be
-  # described as if it were.
+  # (five rules, a two-level rule 5) is offered only through the 0.5.x rule
+  # set, and the default caption must not describe it as if it were in force.
   caption <- pma_algorithm_source("Risk of bias")
   expect_match(caption, "Core GRADE Guide Fig 7-2", fixed = TRUE)
   expect_match(caption, "formerly Core GRADE 4 Fig 2", fixed = TRUE)
@@ -241,4 +241,32 @@ test_that("the Risk of bias caption says what in the chart is not the source's",
 
   # An unknown domain still has no caption at all.
   expect_null(pma_algorithm_source("Nonsense"))
+})
+
+test_that("under the 0.5.x rule set the captions say which rules decided", {
+  legacy <- STEP3_RULE_SET_LEGACY
+  rob <- pma_algorithm_source("Risk of bias", rule_set = legacy)
+  expect_match(rob, "Core GRADE Guide Fig 7-2", fixed = TRUE)
+  expect_match(rob, "0.5.x direction-of-bias rules", fixed = TRUE)
+  expect_match(rob, "the chart is the Guide's figure", fixed = TRUE)
+  # The Guide-rule departure would describe rules that were not applied.
+  expect_false(grepl("either direction", rob, fixed = TRUE))
+
+  pub <- pma_algorithm_source("Publication bias", rule_set = legacy)
+  expect_match(pub, "first node was not asked", fixed = TRUE)
+  expect_false(grepl("pooled estimate and the threshold", pub, fixed = TRUE))
+
+  # The other domains rate the same under both sets and are captioned so.
+  for (domain in c("Inconsistency", "Imprecision", "Indirectness")) {
+    expect_identical(pma_algorithm_source(domain, rule_set = legacy),
+                     pma_algorithm_source(domain), info = domain)
+  }
+  # The default is the Guide, and a junk value falls back to it.
+  expect_identical(pma_algorithm_source("Risk of bias", rule_set = "junk"),
+                   pma_algorithm_source("Risk of bias"))
+
+  skip_if(is.na(.fig_dir), "flowchart figures not found")
+  html <- .html(pma_flowchart_details("Publication bias", NULL,
+                                      dir = .fig_dir, rule_set = legacy))
+  expect_match(html, "first node was not asked", fixed = TRUE)
 })

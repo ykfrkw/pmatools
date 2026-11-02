@@ -41,6 +41,11 @@
 #         already have them.
 #         A manual "no" overrides the derivation and needs pubias_rationale;
 #         a manual "yes" only removes a reason not to look and needs none.
+#         pubias_ask_q0 = FALSE (grade_meta(rule_set = "core_grade_bmj_2025"),
+#         the pmatools 0.5.x rule set) skips the node: Core GRADE 4 Fig 5 has
+#         no such node, so Q1-Q4 run exactly as in 0.5.x, the note and the
+#         `important_effect` fact say the node was not asked, and the
+#         flow_path starts at Q1 rather than lighting Q0.
 #
 #   Q1. pubias_small_industry == "yes" -> "serious" (-1)
 #         else -> registry check, then Q2 (default "no" assumption with note)
@@ -238,6 +243,37 @@
                     as.numeric(answer == "yes")))
 }
 
+# Q0 under the 0.5.x rule set: not asked. Recorded rather than omitted, so a
+# reader of the facts can tell "not asked" from a derivation that answered yes.
+# The fact's value deliberately does not start with "no": the app reads a
+# leading "no" as the answer to the node.
+.PUBIAS_Q0_NOT_ASKED_NOTE <- paste0(
+  "Q0 not asked (pmatools 0.5.x rule set, Core GRADE 4 Fig 5: the BMJ 2025 ",
+  "figure has no important-effect node, so the assessment starts at Q1). "
+)
+.pubias_q0_not_asked <- function() {
+  list(answer = "not_asked", auto = TRUE, note = .PUBIAS_Q0_NOT_ASKED_NOTE,
+       fact = .fact("important_effect",
+                    "Did the studies show an important effect?",
+                    paste0("not asked (pmatools 0.5.x rule set; Core GRADE 4 ",
+                           "Fig 5 has no such node)"),
+                    NA_real_))
+}
+
+# The Q0 node and its "yes" edge, removed from a row's flow_path when the node
+# was not asked. Every path past Q0 is built on .PUBIAS_FLOW_Q0_YES, so taking
+# those two ids out leaves the 0.5.x route, starting at Q1.
+.pubias_drop_q0_path <- function(row) {
+  facts <- attr(row, "facts")
+  if (is.null(facts)) return(row)
+  at <- which(facts$key == "flow_path")
+  if (length(at) != 1L) return(row)
+  ids <- strsplit(facts$value[at], " ", fixed = TRUE)[[1]]
+  facts$value[at] <- paste(setdiff(ids, .PUBIAS_FLOW_Q0_YES), collapse = " ")
+  attr(row, "facts") <- facts
+  row
+}
+
 assess_pubias <- function(meta_obj,
                           pubias_small_industry    = NULL,
                           pubias_funnel_asymmetry  = NULL,
@@ -250,9 +286,27 @@ assess_pubias <- function(meta_obj,
                           # Q0. The threshold is the rating target's (analysis
                           # scale); NULL means a null threshold.
                           pubias_important_effect  = NULL,
-                          threshold_chosen         = NULL) {
+                          threshold_chosen         = NULL,
+                          # FALSE skips Q0 (the pmatools 0.5.x rule set; see
+                          # grade_meta(rule_set =)). TRUE is Guide Fig 9-1.
+                          pubias_ask_q0            = TRUE) {
   k <- .pubias_effective_k(meta_obj)
   if (is.null(k) || is.na(k)) k <- 0L
+
+  if (!is.logical(pubias_ask_q0) || length(pubias_ask_q0) != 1L ||
+      is.na(pubias_ask_q0)) {
+    rlang::abort("pubias_ask_q0 must be TRUE or FALSE.")
+  }
+  # An answer to a node that is not asked would be silently discarded.
+  if (!pubias_ask_q0 && !is.null(pubias_important_effect)) {
+    rlang::abort(paste0(
+      "pubias_important_effect was supplied with pubias_ask_q0 = FALSE: the ",
+      "important-effect node is not asked, so the answer would be ignored. ",
+      "Drop one of the two."
+    ))
+  }
+  # Every return past Q0 goes through this, so a skipped node never lights.
+  finish <- function(row) if (pubias_ask_q0) row else .pubias_drop_q0_path(row)
 
   # Every input is validated before Q0 can stop the walk, so a malformed
   # answer aborts whether or not its node is reached.
@@ -277,8 +331,12 @@ assess_pubias <- function(meta_obj,
   }
 
   # --- Q0: important effect? (Guide Fig 9-1, first node) -------------------
-  q0 <- .pubias_important_effect(meta_obj, threshold_chosen,
-                                 pubias_important_effect)
+  q0 <- if (pubias_ask_q0) {
+    .pubias_important_effect(meta_obj, threshold_chosen,
+                             pubias_important_effect)
+  } else {
+    .pubias_q0_not_asked()
+  }
   if (identical(q0$answer, "no")) {
     supplied <- c(
       pubias_small_industry    = !is.null(pubias_small_industry),
@@ -308,7 +366,7 @@ assess_pubias <- function(meta_obj,
   # --- Q1: Small + industry-sponsored ----------------------------------------
   if (!is.null(pubias_small_industry)) {
     if (pubias_small_industry == "yes") {
-      return(make_domain_row(
+      return(finish(make_domain_row(
         domain   = "Publication bias",
         judgment = "serious",
         auto     = FALSE,
@@ -327,7 +385,7 @@ assess_pubias <- function(meta_obj,
           .PUBIAS_FLOW_Q0_YES,
           "pma-pubias-node-q1", "pma-pubias-edge-q1-yes",
           "pma-pubias-leaf-down1-q1")))
-      ))
+      )))
     }
     q1_note <- paste0(q0_note,
                       "Q1: Not dominated by small industry-sponsored studies. ")
@@ -342,7 +400,7 @@ assess_pubias <- function(meta_obj,
   # can be accounted for and short-circuits the remaining nodes; the note says
   # whose claim it is.
   if (identical(pubias_registry_complete, "yes")) {
-    return(make_domain_row(
+    return(finish(make_domain_row(
       domain   = "Publication bias",
       judgment = "not_serious",
       auto     = FALSE,
@@ -360,7 +418,7 @@ assess_pubias <- function(meta_obj,
         "pma-pubias-node-q1", "pma-pubias-edge-q1-no",
         "pma-pubias-node-registry", "pma-pubias-edge-registry-yes",
         "pma-pubias-leaf-nodown-registry")))
-    ))
+    )))
   }
 
   # --- Q2: enough studies (k >= 10) to examine funnel plot asymmetry? -------
@@ -386,7 +444,7 @@ assess_pubias <- function(meta_obj,
       rare_flow          = isTRUE(rare_flow) && k >= 10
     )
   }
-  .pubias_add_fact(row, q0$fact)
+  finish(.pubias_add_fact(row, q0$fact))
 }
 
 # Insert one fact after the k fact of a row the Q2 branches built, so Q0's

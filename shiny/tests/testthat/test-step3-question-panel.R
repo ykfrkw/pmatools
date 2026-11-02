@@ -390,3 +390,49 @@ test_that("the early panel still offers a suggestion on a prefilled question", {
     expect_equal(pma_q_box_value(early$html, "threshold_cont"), "0.2")
   })
 })
+
+# --------------------------------------------------------------------------
+# The Rule set dropdown reaches grade_meta() (pmatools 0.8)
+# --------------------------------------------------------------------------
+# Here rather than in test-rule-set.R because it needs step3_server() running:
+# the fold follows the dropdown through an observer, and rule_set reaches the
+# rating only through grade_obj().
+
+test_that("choosing the 0.5.x rule set rates under it and folds some concerns high", {
+  skip_if_not_installed("meta")
+  # grade_obj() calls grade_meta(), which helper-app.R does not put in the
+  # global environment; lend it the staged one for this test only.
+  pkg <- pma_vendored_pkg()
+  skip_if(is.null(pkg), "no staged bundle - run Rscript shiny/stage_bundle.R")
+  had_grade_meta <- exists("grade_meta", envir = globalenv(), inherits = FALSE)
+  if (!had_grade_meta) {
+    assign("grade_meta", pkg$grade_meta, envir = globalenv())
+    on.exit(rm("grade_meta", envir = globalenv()), add = TRUE)
+  }
+
+  built <- pma_q_app(PMA_Q_FIT_BINARY())
+  shiny::testServer(built$app, {
+    pma_q_open_binary(session)
+    session$setInputs(rob_some_concerns = "low")
+    state <- built$handle$state
+    expect_identical(shiny::isolate(state$grade$rule_set), "core_grade_guide")
+
+    session$setInputs(rule_set = "core_grade_bmj_2025")
+    expect_identical(shiny::isolate(state$rule_set), "core_grade_bmj_2025")
+    # The radio is moved to the 0.5.x fold; the mirror follows at once.
+    expect_identical(shiny::isolate(state$rob_some_concerns), "high")
+    g <- shiny::isolate(state$grade)
+    expect_identical(g$rule_set, "core_grade_bmj_2025")
+    expect_true(isTRUE(g$rob_direction_check))
+    expect_identical(
+      attr(g, PMA_GRADE_ARGS_ATTR)[["rule_set"]]$value, "core_grade_bmj_2025")
+    pb <- g$domain_assessments[g$domain_assessments$domain ==
+                                 "Publication bias", ]
+    expect_match(pb$notes, "Q0 not asked", fixed = TRUE)
+
+    # Back to the Guide puts the fold back to low.
+    session$setInputs(rule_set = "core_grade_guide")
+    expect_identical(shiny::isolate(state$rob_some_concerns), "low")
+    expect_identical(shiny::isolate(state$grade$rule_set), "core_grade_guide")
+  })
+})

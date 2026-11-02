@@ -1,3 +1,37 @@
+# pmatools 0.8.0
+
+## New features
+
+* **`grade_meta(rule_set =)` re-runs a 0.5.x rating under the rules it was
+  made with.** `"core_grade_guide"` (the default) follows the Core GRADE Guide
+  figures and rates exactly as 0.7.x did. `"core_grade_bmj_2025"` applies the
+  BMJ 2025 Core GRADE series rules of pmatools 0.5.x:
+  * `rob_direction_check` defaults to `TRUE` and `rob_some_concerns` to
+    `"high"` when not supplied; explicitly passed values still win.
+  * Publication bias does not ask Q0 ("Did the studies show an important
+    effect?"), which Core GRADE 4 Fig 5 does not have. Q1-Q4 run as in 0.5.x,
+    the note says Q0 was not asked, the `important_effect` fact records
+    "not asked", and the `flow_path` starts at Q1.
+  * Passing `pubias_important_effect` with this rule set aborts: the answer
+    would be ignored.
+
+  Indirectness, Inconsistency and Imprecision rate identically under both. The
+  flowcharts stay the Guide's figures. The result records `$rule_set`,
+  `print()` names the legacy set, and `export_bundle()` writes
+  `rule_set = "core_grade_bmj_2025"` into the bundled `analysis.R` (nothing
+  for the default). Rules before 0.5 are not reproduced.
+* `assess_pubias()` (internal) gains `pubias_ask_q0 = TRUE`; `FALSE` skips Q0.
+
+## Shiny app (3.7.0)
+
+* **Rule set** on the Configuration tab: *Core GRADE Guide (current)* (default)
+  or *BMJ 2025 Core GRADE series (pmatools 0.5.x)*. Review-wide, like the
+  "some concerns" setting. Choosing the legacy set moves the Risk of Bias
+  "some concerns" radio to high (back to low when switching back; the
+  reviewer can still change it). Under the legacy set the Risk of bias and
+  Publication bias flowchart captions say which rules decided, and the
+  publication-bias wizard says Q0 was not asked instead of "assumed yes".
+
 # pmatools 0.7.3
 
 ## Bug fixes

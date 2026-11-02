@@ -4,7 +4,7 @@
 
 **Public URL:** https://yuki-furukawa.shinyapps.io/pmatools/
 **Deployment:** shinyapps.io (account: `yuki-furukawa`, appId: `17697029`)
-**App version:** 3.6.1 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.6.0 → 3.6.1 corrects the Configuration tab's outcome-direction sentence, which still said it set the bias direction Risk of Bias checks; 3.5.0 → 3.6.0 is the Indirectness flowchart (Core GRADE Guide Fig 8-2, §3.4.12a); 3.4.0 → 3.5.0 is the Core GRADE Guide flowcharts (risk of bias Fig 7-2, publication bias Fig 9-1 and its computed first node, §3.4.12); 3.3.0 → 3.4.0 is the optional Score type mapping (§3.3.3); 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
+**App version:** 3.7.0 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.6.0 → 3.6.1 corrects the Configuration tab's outcome-direction sentence, which still said it set the bias direction Risk of Bias checks; 3.5.0 → 3.6.0 is the Indirectness flowchart (Core GRADE Guide Fig 8-2, §3.4.12a); 3.4.0 → 3.5.0 is the Core GRADE Guide flowcharts (risk of bias Fig 7-2, publication bias Fig 9-1 and its computed first node, §3.4.12); 3.3.0 → 3.4.0 is the optional Score type mapping (§3.3.3); 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
 
 ---
 
@@ -1451,6 +1451,7 @@ control.
 |---|---|---|
 | `per` | Configuration | it relabels the control-group risk, the absolute threshold and the OIS figures, none of which are on Final certainty (Final certainty keeps a read-only echo) |
 | `rob_some_concerns` | **Risk of Bias**, under `Inputs for this domain` | it decides which side of the binary split each study falls on, and the stratified forest on that tab draws exactly that split. Its default is `"low"` as of 0.6.0 (owner decision), matching the **package** default (`SPEC.md` §5.1); it was `"high"` from the control's introduction through 0.5.2, which the package matched only in 0.5.1 and 0.5.2. The app and the package must keep one default, or a rating reproduced by calling the package directly differs from the one on screen. Its **scope is unchanged** — still one review-wide setting that persists across outcomes, still absent from `PMA_OUTCOME_INPUT_IDS$rob`. Only the point of edit moved (0.5.1; it was on Configuration for one release, and on a closed `<details>` on Risk of Bias before that). Seeded from `state$rob_some_concerns` — see below |
+| `rule_set` | Configuration, its own **Rule set** section (3.7.0) | which rules grade_meta() rates under (`SPEC.md` §5.0a); review-wide like `rob_some_concerns`, mirrored in `state$rule_set` and seeded the same way. See §3.4.12b |
 | `rob_inf_threshold` | **deleted** (0.5.1) | a pmatools convention rather than a Core GRADE 4 rule, and a reviewer had no basis on which to move it. The package default `rob_inflation_threshold = PMA_ROB_INFLATION_THRESHOLD` (`R/domain_rob.R`, `0.20` since 0.5.1) now applies unconditionally; the app no longer passes the argument at all, and `export_bundle()` writes that same value into the bundled `analysis.R`. Deleting the slider also removed the only consumer of the RoB `how` closure's `inflation_threshold` argument — producer and consumer died together |
 
 **The some-concerns boundary survives a rebuild.** `state$rob_some_concerns`
@@ -2416,9 +2417,59 @@ Fig 2)" and "Core GRADE Guide Fig 9-1 (formerly Core GRADE 4 Fig 5)". The risk o
 bias `departure` sentence names pmatools' numeric reading of the
 substantial-differences node (a change of zone, or a relative change of more than 20%
 in either direction); the publication-bias one says the first node is computed. The
-app shows **only** the Guide's flowchart: it has no `rob_direction_check` control, and
-no caption mentions the five legacy direction rules or a two-level rule 5 —
-`tests/testthat/test-flowchart-ui.R` pins both.
+app shows **only** the Guide's flowchart: it has no `rob_direction_check` control of
+its own, and no **default** caption mentions the five legacy direction rules or a
+two-level rule 5 — `tests/testthat/test-flowchart-ui.R` pins both. The legacy check is
+reached only through the 0.5.x rule set (§3.4.12b), which recaptions the chart.
+
+### 3.4.12b Rule set — the Core GRADE Guide or the pmatools 0.5.x rules [3.7.0]
+
+A **Rule set** section on the Configuration tab, after *Presentation of event rates*:
+`selectInput("rule_set", "Rate certainty with", …)` with two choices,
+`STEP3_RULE_SET_CHOICES` in `R/step3_threshold.R`:
+
+| label | value | |
+|---|---|---|
+| *Core GRADE Guide (current)* | `"core_grade_guide"` | default |
+| *BMJ 2025 Core GRADE series (pmatools 0.5.x)* | `"core_grade_bmj_2025"` | re-runs a review rated with 0.5.x |
+
+The help line under it names the three things the legacy set changes (the
+direction-of-bias check, "some concerns" counted as high, no Q0) and says the
+flowcharts stay the Guide's. `step3_rule_set_block()` builds the section;
+`step3_ui()` renders it statically (not inside `output$threshold_panel`, which is
+rebuilt per outcome) and seeds `selected` from `state$rule_set`.
+
+- **Scope: the review, not the outcome.** `state$rule_set` (app.R, default
+  `"core_grade_guide"`) mirrors it, exactly like `rob_some_concerns`; it is not in
+  `PMA_OUTCOME_INPUT_IDS` and `begin_new_outcome()` leaves it alone.
+  `.rule_set_setting()` reads the input and falls back to the mirror.
+- **Reaching the rating.** `grade_obj()` passes `rule_set = .rule_set_setting()` to
+  `grade_meta()`. The app still never passes `rob_direction_check`, so the package's
+  rule-set default for it applies (`TRUE` under the legacy set).
+- **The "some concerns" radio follows a change.** An `observeEvent(input$rule_set)`
+  that acts only when the value differs from `state$rule_set` sets the mirror and
+  calls `updateRadioButtons("rob_some_concerns")` to `"high"` (legacy) or `"low"`
+  (Guide), via `step3_rule_set_some_concerns()`. The reviewer can move the radio
+  afterwards; a rebuilt body reporting the mirrored value back is not a change and
+  does not undo that.
+- **Captions.** `pma_algorithm_source(domain, rule_set)` and
+  `pma_flowchart_details(…, rule_set =)` take the rule set; under the legacy set the
+  Risk of bias and Publication bias captions use `PMA_FLOWCHART_LEGACY_NOTES` in
+  place of their `departure` sentence (the 0.5.x direction rules decided the risk of
+  bias judgment; the first publication-bias node was not asked; the chart is the
+  Guide's figure). The verdict charts read the rule set off the rating
+  (`g$rule_set`), so caption and judgment cannot disagree.
+- **The publication-bias wizard.** `step3_pubias_important_effect(grade, rule_set)`
+  answers `"not_asked"` under the legacy set (and for a rating whose
+  `important_effect` fact reads "not asked"), with the line *"Important effect: not
+  asked …"*; it never says "assumed yes" there. `step3_pubias_flow_ids()` lights no
+  Q0 id for `"not_asked"`, so the chart starts at the first question, as the
+  package's `flow_path` does. The wizard's nodes are unchanged: it already starts at
+  Q1, because Q0 was never asked on screen.
+- **Export.** `"rule_set"` is in `PMA_GRADE_ARGS_EXPORTED`, but
+  `pma_grade_arg_specs()` drops the default value, so a Guide rating exports the
+  script it always did. `pma_outcome_grade_args()` recovers a legacy `rule_set` from
+  the rated object for the multi-outcome `per_outcome` list.
 
 ### 3.4.12a Indirectness — Core GRADE Guide Fig 8-2 [0.7.0]
 

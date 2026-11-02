@@ -2,7 +2,7 @@
 
 > Authoritative specification for the pmatools R package. Implementation MUST conform to this document. UI-side concerns (Shiny wizard, educational copy, accordion layout) are specified separately in [`shiny/SPEC.md`](shiny/SPEC.md), which governs the app in this repository's `shiny/` directory.
 
-**Version target:** 0.7.3
+**Version target:** 0.8.0
 **Document history:** this file was written for v0.2.0 and has been updated in place for v0.5.0, v0.5.1, v0.5.2 and v0.6.0; section numbering is preserved so the diff stays readable. Sections that still describe v0.2 behaviour verbatim are marked **[v0.2 — superseded]** with a pointer to the section that governs.
 
 **Backward compatibility:** v0.2 introduced no breaking changes. v0.4.0 and v0.5.0 did — see `NEWS.md`, which is authoritative for the change list. The three that most affect callers:
@@ -501,7 +501,10 @@ grade_meta(
   # --- Rare events (shiny/SPEC.md §3.4.14) ---
   rare_flow                        = FALSE,
   rare_one_arm_total_zero          = FALSE,
-  rare_method                      = NULL    # recorded, never rated on
+  rare_method                      = NULL,   # recorded, never rated on
+
+  # --- Rule set (v0.8.0; §5.0a) ---
+  rule_set                         = c("core_grade_guide", "core_grade_bmj_2025")
 ) -> S3 "pmatools" object
 ```
 
@@ -549,6 +552,7 @@ rating is set up and `export_bundle()` can print it in `results.txt`.
 | `$rob_refit` | logical; whether a refit actually took place |
 | `$rob_some_concerns` (v0.6.0) | `"low"` or `"high"`, the fold the rating used (§5.1 Step 0). `export_bundle()` falls back to it |
 | `$rob_direction_check` (v0.6.0) | logical; whether the legacy direction check (§5.1 Step 2c) was requested. `export_bundle()` reads it |
+| `$rule_set` (v0.8.0) | `"core_grade_guide"` or `"core_grade_bmj_2025"`, the rule set the rating was made under (§5.0a). `export_bundle()` falls back to it |
 | `$threshold_type` | `"mid"` or `"null"` |
 | `$rating_target` | `"important_effect"` / `"little_to_no_difference"` / `"non_null_effect"` |
 | `$rating_target_note`, `$rating_target_auto` | derivation note and whether it was derived rather than supplied |
@@ -1676,6 +1680,45 @@ GRADE_DOWNGRADE <- c(not_serious = 0, serious = -1,
 
 `evidence_profile()` calls it; so do `sof_bmj()`'s certainty sentence, `indirectness_table()`'s notes, and the Shiny app's domain badges, verdict lines and override menus. Note the trap it closes: a second hand-written mapping — which `evidence_profile()`, `sof_bmj()`, `domain_indirectness.R` and the app badge each used to carry — could and did print "Serious" for −1 in one place and for −2 in another. A new renderer must call `.grade_level_wording()` rather than write another `switch()`. Likewise, the level → downgrade lookup is **`.grade_level_downgrade()`**, which reports 0 for an unrecognised level rather than aborting a render; the Shiny app's badge, chip and verdict helpers call it instead of the private copies they used to keep in step by hand.
 
+### 5.0a Rule sets — the Core GRADE Guide, or the pmatools 0.5.x rules [v0.8.0]
+
+`grade_meta(rule_set =)` picks the rules the evidence is rated under. It is the
+last argument, so no positional call shifts, and it is resolved before any
+other argument is validated.
+
+| `rule_set` | Source | What it does |
+|---|---|---|
+| `"core_grade_guide"` (default) | Core GRADE Guide (Fig 7-2, Fig 9-1) | what 0.6.0–0.7.x did. Passing it explicitly changes nothing, byte for byte |
+| `"core_grade_bmj_2025"` | BMJ 2025 Core GRADE series, as pmatools 0.5.x implemented it | re-runs a 0.5.x rating under the rules it was made with |
+
+Under `"core_grade_bmj_2025"`:
+
+- **Risk of bias (§5.1).** `rob_direction_check` defaults to `TRUE` (Step 2c,
+  which already reproduces 0.5.x exactly on both branches) and
+  `rob_some_concerns` to `"high"` (the 0.5.1/0.5.2 default). The defaults move
+  only when the caller **did not pass** the argument — `grade_meta()` reads
+  `missing()` before either is touched — so an explicit value always wins.
+- **Publication bias (§5.5d).** Q0 is not asked: `grade_meta()` calls
+  `assess_pubias(pubias_ask_q0 = FALSE)`. Q1–Q4 run exactly as in 0.5.x. The
+  note opens `"Q0 not asked (pmatools 0.5.x rule set, Core GRADE 4 Fig 5: …)"`,
+  the `important_effect` fact is recorded with `value` `"not asked (…)"` and
+  `numeric` `NA` (never `"yes"`), and `flow_path` drops `node-q0` and
+  `edge-q0-yes`, so every route starts at `pma-pubias-node-q1`. No other id
+  changes and no figure is redrawn.
+- **Passing `pubias_important_effect` aborts.** The node is not asked, so an
+  answer to it would be silently discarded. `assess_pubias()` refuses the same
+  pair (`pubias_important_effect` with `pubias_ask_q0 = FALSE`) on its own.
+- **Indirectness, Inconsistency, Imprecision** rate identically under both sets.
+
+The flowcharts stay the Guide's: the legacy set lights the nodes the 0.5.x
+rules walked on the Guide's drawings. `print()` adds a `Rule set` line for the
+legacy set only, so a default call prints as before. The result records
+`$rule_set`; `export_bundle()` writes `rule_set = "core_grade_bmj_2025"` into
+the bundled `analysis.R` when it is not the default (from `grade_args`, else
+from the object) and writes nothing otherwise, so a default bundle's script is
+unchanged. Rules older than 0.5 (e.g. 0.3.4's two-level publication-bias rule)
+are not reproduced.
+
 ### 5.1 Risk of bias — Core GRADE Guide Fig 7-2 (formerly Core GRADE 4 Fig 2) [v0.6.0 — breaking]
 
 `assess_rob()` follows **Fig 7-2 of the Core GRADE Guide** (Guyatt G, et al. MAGIC Evidence Ecosystem; https://core-grade.gitbook.io/org, accessed 2026-11-02), which supersedes Core GRADE 4 Fig 2 (BMJ 2025) as pmatools' source for this domain. `R/domain_rob.R`'s header comment is the maintained long form; this section is the contract.
@@ -1818,8 +1861,10 @@ fixed colour in any pmatools figure.
 In the app the claim also rides on `pma_algorithm_source()`, whose
 `PMA_FLOWCHART_FIGS` entry for this domain carries a `departure` sentence
 naming pmatools' numeric reading of the substantial-differences node. The app
-exposes only the default; it has no `rob_direction_check` control and its
-caption says nothing about the five rules.
+has no `rob_direction_check` control of its own; the check is reached only
+through the 0.5.x rule set (§5.0a, shiny/SPEC.md §3.4.12), whose caption
+replaces the departure sentence with one saying the 0.5.x direction rules
+decided the judgment. The default caption says nothing about the five rules.
 
 ### 5.2 Inconsistency — BMJ Core GRADE 3 flowchart (v0.2)
 
@@ -2260,6 +2305,8 @@ Q1–Q4 logic is **unchanged** from 0.5.1; only Q3's wording follows the Guide (
 A manual `pubias_important_effect = "yes"` needs no rationale (it only lets the remaining nodes run); **`"no"` requires `pubias_rationale`**, because it rules the domain out on the reviewer's word. Any other value aborts. On "no" the judgment is `"not_serious"`, the notes say the remaining nodes are not evaluated and list any of their inputs that were supplied anyway, and `flow_path` is `node-q0 → edge-q0-no → leaf-nodown-q0`. Every route records an `important_effect` fact (`numeric` 1 / 0; `value` names auto or manual). Every other route's `flow_path` now starts `node-q0 → edge-q0-yes`.
 
 The notes prefix the node with `"Q0:"`, keeping `"Q1:"`–`"Q4:"` for the nodes they already named, so a 0.5.x note stays comparable line for line.
+
+**Skipping Q0 (v0.8.0).** `assess_pubias(pubias_ask_q0 = FALSE)` — what `grade_meta(rule_set = "core_grade_bmj_2025")` passes (§5.0a) — does not evaluate the node: the walk starts at Q1 and runs as 0.5.x did, the note opens with `.PUBIAS_Q0_NOT_ASKED_NOTE`, the `important_effect` fact reads `"not asked (…)"` with `numeric` `NA`, and `.pubias_drop_q0_path()` removes `node-q0` / `edge-q0-yes` from every route's `flow_path`. The default is `TRUE`. Supplying `pubias_important_effect` with `FALSE` aborts.
 
 **Consequence (breaking).** An outcome whose pooled estimate sits inside the threshold is no longer rated down for publication bias, whatever Egger's test or the documented unpublished studies say. With a null threshold nothing changes in practice.
 

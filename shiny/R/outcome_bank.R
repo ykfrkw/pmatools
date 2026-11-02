@@ -375,6 +375,12 @@ pma_outcome_grade_args <- function(g) {
       recovered$rare_method <- rare$method
     }
   }
+  # The 0.5.x rule set rates the same data differently (pmatools 0.8), so it
+  # is recovered when the object records it. The default is left out, as
+  # grade_meta() would supply it anyway.
+  if (identical(field("rule_set"), "core_grade_bmj_2025")) {
+    recovered$rule_set <- field("rule_set")
+  }
   recovered <- recovered[!vapply(recovered, is.null, logical(1))]
   # The specs win: they are the arguments the app actually passed, recorded
   # beside the grade_meta() call that used them.

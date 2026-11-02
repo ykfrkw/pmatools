@@ -267,6 +267,10 @@ step3_ui <- function(state = NULL) {
       rob_some_concerns_default <- v
     }
   }
+  # The rule set is review-wide too (R/step3_threshold.R), and seeded from its
+  # mirror for the same reason.
+  rule_set_default <- step3_rule_set_value(
+    if (!is.null(state)) shiny::isolate(state$rule_set) else NULL)
 
   .domain_header <- function(name, badge_id, chip_id) {
     htmltools::div(
@@ -393,6 +397,12 @@ step3_ui <- function(state = NULL) {
           # moved to the Risk of Bias tab, next to the verdict it produces.
           # Its SCOPE is unchanged - still one review-wide setting that
           # persists across outcomes - only the point of edit moved.
+          #
+          # Which rules rate the evidence (pmatools 0.8): the Core GRADE Guide
+          # or the 0.5.x BMJ 2025 rules. Static rather than inside
+          # threshold_panel, which is rebuilt per outcome; this is set once
+          # for the review.
+          step3_rule_set_block(rule_set_default),
           shiny::uiOutput("config_status"),
           pma_confirm_checkbox("threshold_confirm",
             paste0("I have reviewed and confirm this configuration ",
@@ -2534,6 +2544,27 @@ step3_server <- function(input, output, session, state) {
     if (length(v) == 1L && v %in% c("low", "high")) state$rob_some_concerns <- v
   }, ignoreInit = FALSE)
 
+  # The rule set (R/step3_threshold.R). Same input-then-mirror fallback as the
+  # "some concerns" fold above, for the same rebuild window.
+  .rule_set_setting <- function() {
+    v <- input$rule_set
+    if (is.null(v) || !v %in% STEP3_RULE_SET_CHOICES) v <- state$rule_set
+    step3_rule_set_value(v)
+  }
+
+  # A CHANGE of rule set moves the "some concerns" radio to the fold that set
+  # implies (0.5.x: high; the Guide: low). Only a change: a rebuilt Step 3 body
+  # reports the mirrored value back, which must not undo a reviewer who chose
+  # the legacy set and then moved the radio back to "low" by hand.
+  shiny::observeEvent(input$rule_set, {
+    v <- step3_rule_set_value(input$rule_set)
+    if (identical(v, step3_rule_set_value(state$rule_set))) return()
+    state$rule_set <- v
+    fold <- step3_rule_set_some_concerns(v)
+    state$rob_some_concerns <- fold
+    shiny::updateRadioButtons(session, "rob_some_concerns", selected = fold)
+  }, ignoreInit = TRUE)
+
   .study_covariate <- function(labels, col, default = NA_character_) {
     labels <- as.character(labels)
     source <- NULL
@@ -2705,6 +2736,9 @@ step3_server <- function(input, output, session, state) {
       # the binary split but leaves the boundary open, so it is a reviewer
       # choice, exposed on the tab.
       rob_some_concerns        = .rob_some_concerns_setting()
+      # rob_direction_check is deliberately NOT passed either: grade_meta()
+      # defaults it from rule_set (TRUE under the 0.5.x set), and passing it
+      # would override that. rule_set itself is spliced in by grade_obj().
       # rob_inflation_threshold is deliberately NOT passed. The app used to
       # expose it as a slider; it is a pmatools convention rather than a Core
       # GRADE 4 rule, and a reviewer had no basis on which to move it. The
@@ -3193,7 +3227,10 @@ step3_server <- function(input, output, session, state) {
       .ois_grade_args(obj),
       pubias$args,
       .rare_grade_args(),
-      list(outcome_name = state$outcome_name %||% "Outcome")
+      list(outcome_name = state$outcome_name %||% "Outcome",
+           # Last, as in grade_meta()'s signature. Review-wide; see
+           # .rule_set_setting().
+           rule_set     = .rule_set_setting())
     )
 
     rated   <- .run_grade_with_refit(obj, args, th_args)
@@ -3640,7 +3677,14 @@ step3_server <- function(input, output, session, state) {
         # The picture of the decision, with the branch this analysis took lit
         # up, directly under the verdict it explains. NULL for Indirectness,
         # which has no flowchart to draw (Core GRADE 5 Table 2 is a gradient).
-        if (flowchart) pma_flowchart_details(domain, facts)
+        # Captioned for the rule set the rating was MADE under, read off the
+        # rating rather than the dropdown, so the two cannot disagree.
+        if (flowchart) {
+          pma_flowchart_details(
+            domain, facts,
+            rule_set = grade_obj()[["rule_set", exact = TRUE]] %||%
+              STEP3_RULE_SET_DEFAULT)
+        }
       )
     }, error = function(e) {
       htmltools::tagList(

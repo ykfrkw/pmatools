@@ -302,9 +302,11 @@ PMA_FLOWCHART_FIGS <- list(
                             # substantial-differences node qualitatively, so
                             # the numbers that answer it here are pmatools'
                             # and the caption says so. The legacy
-                            # direction-of-bias check is a package option the
-                            # app does not offer, and the caption does not
-                            # mention it -- test-flowchart-ui.R pins both.
+                            # direction-of-bias check is offered only through
+                            # the 0.5.x rule set, whose caption is
+                            # PMA_FLOWCHART_LEGACY_NOTES below; this default
+                            # one does not mention it -- test-flowchart-ui.R
+                            # pins both.
                             departure = paste(
                               "Whether the high and low risk of bias",
                               "estimates differ substantially is decided by",
@@ -340,6 +342,25 @@ PMA_FLOWCHART_FIGS <- list(
                               "combine; pmatools takes the worst case across",
                               "them. * Very close: some surrogates always",
                               "represent a patient-important outcome."))
+)
+
+# What a caption says instead of `departure` when the rating was made under the
+# BMJ 2025 Core GRADE series rule set (pmatools 0.5.x; grade_meta(rule_set =)).
+# Only the two domains whose rules that set changes have one; every other
+# chart is captioned the same under both sets. The figure is still the
+# Guide's, so the caption has to say which parts of the picture the rating did
+# not follow.
+PMA_FLOWCHART_LEGACY_NOTES <- list(
+  "Risk of bias" = paste(
+    "Rule set: BMJ 2025 Core GRADE series (pmatools 0.5.x). This judgment",
+    "used the 0.5.x direction-of-bias rules of Core GRADE 4 Fig 2, which",
+    "are beyond Core GRADE; the chart is the Guide's figure, which has no",
+    "box for that check."),
+  "Publication bias" = paste(
+    "Rule set: BMJ 2025 Core GRADE series (pmatools 0.5.x). The first node",
+    "was not asked - Core GRADE 4 Fig 5 does not have it - so the route",
+    "starts at the small-and-industry-sponsored question; the chart is the",
+    "Guide's figure.")
 )
 
 # The candidate locations, in the order they are tried. `dir` short-circuits
@@ -410,14 +431,22 @@ pma_flowchart <- function(figkey, on_ids = character(0), caption = NULL,
 
 # "Where is this implemented?", in one sentence, from the same table the
 # figure is chosen from. Rendered as the chart's caption.
-pma_algorithm_source <- function(domain) {
+#
+# `rule_set` is the rule set the rating was made under. Under the 0.5.x set a
+# domain with an entry in PMA_FLOWCHART_LEGACY_NOTES says so in place of its
+# usual departure, which describes the Guide's rules and would then be wrong.
+pma_algorithm_source <- function(domain, rule_set = "core_grade_guide") {
   spec <- PMA_FLOWCHART_FIGS[[domain]]
   if (is.null(spec)) return(NULL)
   provenance <- sprintf(
     "%s, as implemented by %s in %s of the pmatools package.",
     spec$src, spec$fn, spec$file)
-  if (is.null(spec$departure)) return(provenance)
-  paste(provenance, spec$departure)
+  legacy_note <- if (step3_rule_set_is_legacy(rule_set)) {
+    PMA_FLOWCHART_LEGACY_NOTES[[domain]]
+  }
+  departure <- legacy_note %||% spec$departure
+  if (is.null(departure)) return(provenance)
+  paste(provenance, departure)
 }
 
 # The flow_path fact, split into ids. `facts` is a domain_facts() tibble or
@@ -444,7 +473,8 @@ pma_flow_path_ids <- function(facts) {
 pma_flowchart_details <- function(domain, facts,
                                   summary_text =
                                     "Which path did this assessment take?",
-                                  dir = NULL) {
+                                  dir = NULL,
+                                  rule_set = "core_grade_guide") {
   spec <- PMA_FLOWCHART_FIGS[[domain]]
   if (is.null(spec)) return(NULL)
   htmltools::tags$details(
@@ -452,7 +482,7 @@ pma_flowchart_details <- function(domain, facts,
     htmltools::tags$summary(summary_text),
     pma_flowchart(spec$fig,
                   on_ids  = pma_flow_path_ids(facts),
-                  caption = pma_algorithm_source(domain),
+                  caption = pma_algorithm_source(domain, rule_set),
                   dir     = dir)
   )
 }

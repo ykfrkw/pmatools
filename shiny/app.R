@@ -184,6 +184,10 @@ server <- function(input, output, session) {
     # Mirrored here because the Step 3 widget is destroyed whenever another
     # step's body renders, and a rebuilt widget pushes its default back.
     rob_some_concerns = "low",
+    # Which rules rate the evidence (pmatools 0.8; R/step3_threshold.R): the
+    # Core GRADE Guide, or the 0.5.x BMJ 2025 rules. Review-wide and mirrored
+    # for the same two reasons as rob_some_concerns above.
+    rule_set       = "core_grade_guide",
     # Outcome provenance. `outcome_sig` is pma_analysis_signature() of the
     # analysis the Step 3 answers were given for, and `outcome_gen` counts how
     # many outcomes this session has begun. Every Step 3 answer is stamped

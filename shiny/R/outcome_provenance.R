@@ -422,7 +422,11 @@ PMA_GRADE_ARGS_EXPORTED <- c(
   # template recovers them from the rated object as a fallback; the
   # multi-outcome one renders per_outcome and nothing else, so they have to be
   # declared here as well.
-  "rare_flow", "rare_one_arm_total_zero", "rare_method"
+  "rare_flow", "rare_one_arm_total_zero", "rare_method",
+  # The rule set (pmatools 0.8). The 0.5.x set skips publication-bias Q0 and
+  # turns on the direction-of-bias check, so a per_outcome list without it
+  # re-rates a legacy outcome under the Guide.
+  "rule_set"
 )
 
 # Only the arguments the app actually set are emitted. Before pmatools 0.5.1
@@ -438,6 +442,11 @@ pma_grade_arg_specs <- function(args) {
   out <- list()
   for (nm in intersect(PMA_GRADE_ARGS_EXPORTED, names(args))) {
     out[[nm]] <- pma_arg_spec(args[[nm]])
+  }
+  # The default rule set is grade_meta()'s own default, so it is not emitted:
+  # a bundle rated under the Guide keeps the script it always had.
+  if (identical(args[["rule_set", exact = TRUE]], "core_grade_guide")) {
+    out[["rule_set"]] <- NULL
   }
   out
 }

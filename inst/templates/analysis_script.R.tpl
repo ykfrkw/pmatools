@@ -28,7 +28,7 @@ ma <- run_ma(
 # ----- 3. GRADE certainty assessment -----
 g <- grade_meta(
   ma,
-  study_design            = "{{study_design}}",
+{{rule_set_line}}  study_design            = "{{study_design}}",
   rob                     = {{rob_arg}},
   rob_rationale           = {{rob_rationale_arg}},
   rob_some_concerns       = "{{rob_some_concerns}}",

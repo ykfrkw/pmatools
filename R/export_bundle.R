@@ -754,7 +754,14 @@ export_bundle.meta <- function(x,
                                        ma_args[["control_label", exact = TRUE]]),
     subgroup_arg     = .subgroup_arg(ma_args[["subgroup", exact = TRUE]]),
     study_design     = grade$study_design,
-    rob_arg          = .arg_lit(grade_args[["rob", exact = TRUE]],           fallback = "NULL"),
+    # The rule set (v0.8) is written only when it is not the default, so a
+    # default bundle's analysis.R stays byte-identical to what 0.7.x wrote.
+    # Falls back to the RATED OBJECT, like rob_direction_check below: the 0.5.x
+    # set skips publication-bias Q0, which the explicit risk-of-bias arguments
+    # the template always writes cannot replay on their own.
+    rule_set_line    = .rule_set_line(
+      grade_args[["rule_set", exact = TRUE]][["value"]] %||% grade$rule_set),
+    rob_arg       = .arg_lit(grade_args[["rob", exact = TRUE]],           fallback = "NULL"),
     rob_rationale_arg = .arg_lit(grade_args[["rob_rationale", exact = TRUE]], fallback = "NULL"),
     rob_some_concerns = grade_args[["rob_some_concerns", exact = TRUE]][["value"]] %||%
       grade$rob_some_concerns %||% "low",
@@ -1176,6 +1183,16 @@ export_bundle.meta <- function(x,
     "dropped from the bundled analysis.R and the \"reproducible\" script ",
     "would reproduce a different rating."
   ))
+}
+
+# The `rule_set = ` line of the bundled grade_meta() call, or "" for the
+# default set (and for an object rated before 0.8, which carries none).
+.rule_set_line <- function(rule_set) {
+  if (is.null(rule_set) || !identical(as.character(rule_set)[1],
+                                      PMA_RULE_SET_LEGACY)) {
+    return("")
+  }
+  sprintf("  rule_set                = \"%s\",\n", PMA_RULE_SET_LEGACY)
 }
 
 # Origins understood by .arg_lit(). Anything else is a caller bug: silently

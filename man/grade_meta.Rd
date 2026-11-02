@@ -57,7 +57,8 @@ grade_meta(
   pubias_rationale = NULL,
   rare_flow = FALSE,
   rare_one_arm_total_zero = FALSE,
-  rare_method = NULL
+  rare_method = NULL,
+  rule_set = c("core_grade_guide", "core_grade_bmj_2025")
 )
 }
 \arguments{
@@ -123,8 +124,10 @@ you say otherwise. Pass \code{"high"} if your review reads
 \code{"some concerns"} as the stricter of the worked boundaries above
 (\emph{at least one item} at high risk of bias). A rating made with
 0.5.1 or 0.5.2 without this argument reproduces only if you now pass
-\code{rob_some_concerns = "high"} explicitly. The Shiny app defaults to
-\code{"low"} as well.}
+\code{rob_some_concerns = "high"} explicitly, or pass
+\code{rule_set = "core_grade_bmj_2025"}, under which an unsupplied
+\code{rob_some_concerns} defaults to \code{"high"}. The Shiny app defaults
+to \code{"low"} as well.}
 
 \item{rob_overrides}{(v0.5) Optional named character vector of study-level
 Risk-of-Bias overrides keyed on \code{meta_obj$studlab}, e.g.
@@ -199,7 +202,9 @@ same directional verdict decides the analysis set. \strong{Beyond Core
 GRADE} (Core GRADE Guide Appendix 11), \strong{legacy}, retained for
 reproducibility of 0.5.x analyses: Core GRADE Guide Fig 7-2 dropped the
 "check direction of bias" node that Core GRADE 4 Fig 2 had, and every
-judgment made with this flag says so in its notes. Requires
+judgment made with this flag says so in its notes. Defaults to
+\code{TRUE} instead when \code{rule_set = "core_grade_bmj_2025"} and the
+argument is not supplied. Requires
 \code{small_values}, which \code{grade_meta()} requires anyway.}
 
 \item{small_values}{\strong{Required} (v0.5.1, breaking). Are small outcome
@@ -681,6 +686,30 @@ threshold. No downgrade follows from it.}
 produced the estimate (e.g. \code{"BB_CR"}). Recorded on the returned
 object as \code{$rare} so the exported record names the method; it is read
 by nothing that rates anything.}
+
+\item{rule_set}{(v0.8) Which set of rules rates the evidence.
+\code{"core_grade_guide"} (default) follows the Core GRADE Guide figures
+(Fig 7-2 for risk of bias, Fig 9-1 for publication bias) and is what every
+release since 0.6.0 does; passing it changes nothing.
+\code{"core_grade_bmj_2025"} re-runs a review rated with pmatools 0.5.x
+under the rules of the BMJ 2025 Core GRADE series it was rated with:
+\itemize{
+\item \code{rob_direction_check} defaults to \code{TRUE} (the 0.5.x
+direction-of-bias check of Core GRADE 4 Fig 2) and
+\code{rob_some_concerns} to \code{"high"} (the 0.5.1/0.5.2 default).
+Either argument passed explicitly wins over the rule set.
+\item Publication bias does not ask Guide Fig 9-1's first node ("Did the
+studies show an important effect?"), which Core GRADE 4 Fig 5 does
+not have: Q1-Q4 run exactly as in 0.5.x, the domain note says Q0 was
+not asked, the \code{important_effect} fact records
+\code{"not asked"}, and the \code{flow_path} starts at Q1. Passing
+\code{pubias_important_effect} with this rule set aborts, because the
+answer would be ignored.
+}
+Indirectness, Inconsistency and Imprecision rate identically under both
+sets. The flowcharts in \code{\link{grade_flowcharts}} stay the Guide's;
+the legacy set lights the nodes the 0.5.x rules walked. Versions before
+0.5 are not reproduced.}
 }
 \value{
 An S3 object of class \code{pmatools} containing:
@@ -737,6 +766,8 @@ performed.}
 direction-of-bias check decided risk of bias.}
 \item{rob_some_concerns}{(v0.6) \code{"low"} or \code{"high"}: the
 side "some concerns" studies were folded into.}
+\item{rule_set}{(v0.8) \code{"core_grade_guide"} or
+\code{"core_grade_bmj_2025"}: the rule set the rating was made under.}
 \item{control_risk}{How the one control-arm risk was shared across
 \code{threshold_baseline}, \code{ois_p0} and \code{baseline_risk}
 (see \strong{One control-arm risk}): \code{value} and \code{donor}
