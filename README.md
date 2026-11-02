@@ -2279,7 +2279,7 @@ grade_meta(
   ## Risk of Bias
   rob           = NULL,            # scalar | vector length k | column name | NULL
   rob_rationale          = NULL,   # required when `rob` is a scalar override
-  rob_some_concerns      = "low",  # fold "some concerns" into "low" | "high"
+  rob_some_concerns      = "low",  # fold "some concerns" into "low" (default, v0.6.0) | "high"
   rob_overrides          = NULL,   # named chr, keyed on studlab
   rob_override_rationale = NULL,   # named chr, same keys
   rob_dominant_threshold = 0.55,   # weight share at/above which evidence is "dominated"

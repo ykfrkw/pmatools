@@ -1450,13 +1450,13 @@ control.
 | input | where it lives | why |
 |---|---|---|
 | `per` | Configuration | it relabels the control-group risk, the absolute threshold and the OIS figures, none of which are on Final certainty (Final certainty keeps a read-only echo) |
-| `rob_some_concerns` | **Risk of Bias**, under `Inputs for this domain` | it decides which side of the binary split each study falls on, and the stratified forest on that tab draws exactly that split. Its default is `"high"`, which the **package** default matched only from 0.5.1 (`SPEC.md` §5.1); before that the radio said `(default)` beside a value `grade_meta()` did not default to, and a rating reproduced by calling the package directly could differ from the one on screen. Its **scope is unchanged** — still one review-wide setting that persists across outcomes, still absent from `PMA_OUTCOME_INPUT_IDS$rob`. Only the point of edit moved (0.5.1; it was on Configuration for one release, and on a closed `<details>` on Risk of Bias before that). Seeded from `state$rob_some_concerns` — see below |
+| `rob_some_concerns` | **Risk of Bias**, under `Inputs for this domain` | it decides which side of the binary split each study falls on, and the stratified forest on that tab draws exactly that split. Its default is `"low"` as of 0.6.0 (owner decision), matching the **package** default (`SPEC.md` §5.1); it was `"high"` from the control's introduction through 0.5.2, which the package matched only in 0.5.1 and 0.5.2. The app and the package must keep one default, or a rating reproduced by calling the package directly differs from the one on screen. Its **scope is unchanged** — still one review-wide setting that persists across outcomes, still absent from `PMA_OUTCOME_INPUT_IDS$rob`. Only the point of edit moved (0.5.1; it was on Configuration for one release, and on a closed `<details>` on Risk of Bias before that). Seeded from `state$rob_some_concerns` — see below |
 | `rob_inf_threshold` | **deleted** (0.5.1) | a pmatools convention rather than a Core GRADE 4 rule, and a reviewer had no basis on which to move it. The package default `rob_inflation_threshold = PMA_ROB_INFLATION_THRESHOLD` (`R/domain_rob.R`, `0.20` since 0.5.1) now applies unconditionally; the app no longer passes the argument at all, and `export_bundle()` writes that same value into the bundled `analysis.R`. Deleting the slider also removed the only consumer of the RoB `how` closure's `inflation_threshold` argument — producer and consumer died together |
 
 **The some-concerns boundary survives a rebuild.** `state$rob_some_concerns`
 holds the setting; `step3_ui(state)` seeds the radio from it under `isolate()`,
 and an `observeEvent` mirrors the input back. Without the seed a hard-coded
-`selected = "high"` would undo a reviewer's `"low"` on every 3 → 2 → 3 round
+`selected = "low"` would undo a reviewer's `"high"` on every 3 → 2 → 3 round
 trip, because `output$step_body` rebuilds the whole step and a freshly built
 widget pushes its declared default to the server. That is the intended
 behaviour for everything else on Step 3 — the rest is outcome-scoped and is

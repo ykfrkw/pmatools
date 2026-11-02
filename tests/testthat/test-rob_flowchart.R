@@ -67,30 +67,37 @@ test_that("rob_some_concerns folds 'some concerns' into the chosen side", {
                "'some concerns' folded into the high risk group", fixed = TRUE)
 })
 
-test_that("the default folds 'some concerns' HIGH", {
-  # Changed in 0.5.1; it was "low". Core GRADE 4 settles nothing here (see the
-  # PROVENANCE block in R/domain_rob.R), so the default is pmatools' own
-  # choice, and it is now the conservative one: "some concerns" is what RoB 2
-  # returns for a study it declines to call low risk of bias, and folding it
-  # low asserts the one thing the assessment would not.
-  #
-  # This is a rating change for any caller who omitted the argument, which is
-  # why it is pinned here rather than left to the explicit-value test above.
+test_that("the default folds 'some concerns' LOW", {
+  # Owner decision for 0.6.0 (it was "high" in 0.5.1-0.5.2). Core GRADE
+  # settles nothing here (see the PROVENANCE block in R/domain_rob.R), so the
+  # default is pmatools' own choice. This is a rating change for any caller
+  # who omitted the argument, which is why it is pinned here rather than left
+  # to the explicit-value test above.
   m <- mk(te = c(0.8, 0.8, 0.02), w = c(30, 35, 35))
   rob <- c("very_serious", "some_concerns", "no")
 
   g <- quiet_grade(m, rob = rob, small_values = "undesirable",
                    threshold = 1.05, threshold_scale = "ratio")
+  expect_match(rob_row(g)$notes, "30% by weight", fixed = TRUE)
+  expect_match(rob_row(g)$notes, "dominated: no", fixed = TRUE)
 
-  expect_match(rob_row(g)$notes,
+  # The same data with "high" passed explicitly: the 0.5.1 default reading.
+  g_high <- quiet_grade(m, rob = rob, small_values = "undesirable",
+                        rob_some_concerns = "high",
+                        threshold = 1.05, threshold_scale = "ratio")
+  expect_match(rob_row(g_high)$notes,
                "'some concerns' folded into the high risk group", fixed = TRUE)
-  expect_match(rob_row(g)$notes, "65% by weight", fixed = TRUE)
-  expect_match(rob_row(g)$notes, "dominated: yes", fixed = TRUE)
+  expect_match(rob_row(g_high)$notes, "65% by weight", fixed = TRUE)
+  expect_match(rob_row(g_high)$notes, "dominated: yes", fixed = TRUE)
 
-  # And the one place that decides it agrees, so assess_rob() and grade_meta()
-  # cannot drift apart.
-  expect_identical(pmatools:::.check_rob_some_concerns(NULL), "high")
-  expect_true("serious" %in% pmatools:::.rob_high_levels())
+  # The one place that decides it agrees, so assess_rob() and grade_meta()
+  # cannot drift apart, and the rated object records the fold it used.
+  expect_identical(pmatools:::.check_rob_some_concerns(NULL), "low")
+  expect_false("serious" %in% pmatools:::.rob_high_levels())
+  expect_identical(g$rob_some_concerns, "low")
+  expect_identical(g_high$rob_some_concerns, "high")
+  d <- assess_rob(rob, m, threshold_internal = log(1.05))
+  expect_match(d$notes, "dominated: no", fixed = TRUE)
 })
 
 test_that("rob_some_concerns rejects anything but 'low' / 'high'", {
@@ -812,9 +819,23 @@ test_that("the reproducibility script defaults are valid R", {
   )
   script <- paste(readLines(out), collapse = "\n")
 
-  expect_match(script, 'rob_some_concerns       = "high"', fixed = TRUE)
+  expect_match(script, 'rob_some_concerns       = "low"', fixed = TRUE)
   expect_match(script, "rob_overrides           = NULL", fixed = TRUE)
   expect_match(script, "rob_override_rationale  = NULL", fixed = TRUE)
   expect_match(script, "rob_refit               = TRUE", fixed = TRUE)
   expect_silent(parse(text = script))
+
+  # Without grade_args the script replays the fold the object was rated with,
+  # not the current default.
+  g_high <- quiet_grade(m, rob = c("no", "no", "no"),
+                        small_values = "desirable", rob_some_concerns = "high",
+                        threshold = 1.05, threshold_scale = "ratio")
+  pmatools:::.render_analysis_script(
+    m, g_high, ma_args = NULL, grade_args = NULL,
+    per = 1000, prediction = FALSE,
+    convert_smd_to_or = FALSE, baseline_risk = NULL, threshold_label = NULL,
+    out_path = out
+  )
+  script_high <- paste(readLines(out), collapse = "\n")
+  expect_match(script_high, 'rob_some_concerns       = "high"', fixed = TRUE)
 })

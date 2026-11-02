@@ -9,7 +9,7 @@ grade_meta(
   study_design = c("RCT", "obs"),
   rob = NULL,
   rob_rationale = NULL,
-  rob_some_concerns = c("high", "low"),
+  rob_some_concerns = c("low", "high"),
   rob_overrides = NULL,
   rob_override_rationale = NULL,
   rob_dominant_threshold = 0.55,
@@ -94,8 +94,8 @@ assessment). Default \code{NULL}.}
 
 \item{rob_some_concerns}{(v0.5) How studies rated \code{"some concerns"}
 are folded into the binary low/high classification that Core GRADE 4
-Fig 2 operates on. \code{"high"} (default as of 0.5.1) or \code{"low"}
-(the default up to 0.5.1). Changing it changes which studies count toward
+Fig 2 (now Core GRADE Guide Fig 7-2) operates on. \code{"low"} (default as
+of 0.6.0) or \code{"high"} (the default in 0.5.1 and 0.5.2). Changing it changes which studies count toward
 the high-RoB weight share and therefore the dominance gate. Only used when
 \code{rob} is a vector or column name.
 
@@ -116,15 +116,15 @@ impossible to resolve". Whichever value you pass here is your own
 operational choice, and it is worth recording it alongside the item-count
 rule your review actually used.
 
-\strong{The default moved to \code{"high"} in 0.5.1.} Since the source
-settles nothing, the default is pmatools' choice and it is now the
-conservative one: \code{"some concerns"} is the judgment RoB 2 returns for
-a study it declines to call low risk of bias, so folding it low asserts
-the one thing the assessment would not. It also matches the first of the
-three worked boundaries above, and the Shiny app, which has offered
-\code{"high"} as its default since the control existed. A rating made
-before 0.5.1 without this argument reproduces only if you now pass
-\code{rob_some_concerns = "low"} explicitly.}
+\strong{The default is \code{"low"} as of 0.6.0}, by owner decision.
+Since the source settles nothing, the default is pmatools' choice: a
+\code{"some concerns"} study counts on the low risk of bias side unless
+you say otherwise. Pass \code{"high"} if your review reads
+\code{"some concerns"} as the stricter of the worked boundaries above
+(\emph{at least one item} at high risk of bias). A rating made with
+0.5.1 or 0.5.2 without this argument reproduces only if you now pass
+\code{rob_some_concerns = "high"} explicitly. The Shiny app defaults to
+\code{"low"} as well.}
 
 \item{rob_overrides}{(v0.5) Optional named character vector of study-level
 Risk-of-Bias overrides keyed on \code{meta_obj$studlab}, e.g.
@@ -735,6 +735,8 @@ set Core GRADE Guide Fig 7-2 recommends.}
 performed.}
 \item{rob_direction_check}{(v0.6) \code{TRUE} when the legacy 0.5.x
 direction-of-bias check decided risk of bias.}
+\item{rob_some_concerns}{(v0.6) \code{"low"} or \code{"high"}: the
+side "some concerns" studies were folded into.}
 \item{control_risk}{How the one control-arm risk was shared across
 \code{threshold_baseline}, \code{ois_p0} and \code{baseline_risk}
 (see \strong{One control-arm risk}): \code{value} and \code{donor}

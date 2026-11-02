@@ -257,10 +257,10 @@ step3_ui <- function(state = NULL) {
   # and a freshly built widget pushes its declared default back to the server.
   # Everything else on this step is outcome-scoped and is meant to be cleared
   # that way; rob_some_concerns is not. It is a review-wide convention that
-  # persists across outcomes, so a hard-coded selected = "high" would silently
-  # undo a reviewer's "low" on every 3 -> 2 -> 3 round trip. Seeding from the
+  # persists across outcomes, so a hard-coded selected = "low" would silently
+  # undo a reviewer's "high" on every 3 -> 2 -> 3 round trip. Seeding from the
   # mirrored state is the same trick step2_ui() uses for the outcome fields.
-  rob_some_concerns_default <- "high"
+  rob_some_concerns_default <- "low"
   if (!is.null(state)) {
     v <- shiny::isolate(state$rob_some_concerns)
     if (!is.null(v) && length(v) == 1L && v %in% c("low", "high")) {
@@ -424,8 +424,8 @@ step3_ui <- function(state = NULL) {
             shiny::radioButtons("rob_some_concerns",
               "Where do studies rated 'some concerns' belong?",
               choices = c(
-                "Some concerns count as high risk of bias (default)" = "high",
-                "Some concerns count as low risk of bias"            = "low"),
+                "Some concerns count as low risk of bias (default)"  = "low",
+                "Some concerns count as high risk of bias"           = "high"),
               selected = rob_some_concerns_default),
             htmltools::p(class = "pma-card-subtitle",
               paste0("Core GRADE rates risk of bias from a two-way split: ",
@@ -2526,7 +2526,7 @@ step3_server <- function(input, output, session, state) {
     if (is.null(v) || length(v) != 1L || !v %in% c("low", "high")) {
       v <- state$rob_some_concerns
     }
-    if (is.null(v) || length(v) != 1L || !v %in% c("low", "high")) "high" else v
+    if (is.null(v) || length(v) != 1L || !v %in% c("low", "high")) "low" else v
   }
 
   shiny::observeEvent(input$rob_some_concerns, {

@@ -179,6 +179,9 @@ The authority is the `# pmatools 0.6.0` section of [NEWS.md](NEWS.md).
   `pubias_important_effect`; "no" stops at do not rate down. `pubias.svg`
   redrawn; the app's wizard lights the computed node (SPEC §5.5d,
   shiny/SPEC.md §3.4.12)
+- [x] `rob_some_concerns` defaults to `"low"` in the package and the app
+  (**breaking**, owner decision; `"high"` was the 0.5.1-0.5.2 default). The
+  rated object records `$rob_some_concerns` for `export_bundle()` (SPEC §5.1)
 
 ---
 
