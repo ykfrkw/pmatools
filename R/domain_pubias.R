@@ -198,8 +198,7 @@
     sprintf("%s %s", scale$sm_label, .rob_fact_num(scale$disp(te)))
   } else "not available"
   thr_txt <- if (M > 0) {
-    sprintf("beyond the threshold (+/-%s on the analysis scale)",
-            format(signif(M, 3)))
+    sprintf("beyond the threshold %s", .threshold_words(M, scale))
   } else "away from the null (null threshold)"
 
   if (!is.null(manual)) {
@@ -221,8 +220,7 @@
                      "effect is assumed (conservative)")
   } else if (M > 0) {
     answer <- if (abs(te) > M) "yes" else "no"
-    why    <- sprintf("pooled estimate %s (|TE| = %s) %s %s", te_txt,
-                      format(signif(abs(te), 3)),
+    why    <- sprintf("pooled estimate %s %s %s", te_txt,
                       if (answer == "yes") "lies" else "does not lie", thr_txt)
   } else {
     answer <- if (abs(te) > 0) "yes" else "no"

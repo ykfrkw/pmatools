@@ -94,7 +94,9 @@ test_that("grade_meta() rates RR 0.8 exactly as RR 1.25", {
   g_high <- rate(1.25)
   expect_equal(g_low$threshold_internal, g_high$threshold_internal)
   expect_identical(g_low$rating_target, g_high$rating_target)
-  expect_identical(g_low$domains$judgment, g_high$domains$judgment)
+  expect_identical(g_low$domain_assessments$judgment,
+                   g_high$domain_assessments$judgment)
+  expect_length(g_low$domain_assessments$judgment, 5L)
   expect_match(g_low$threshold_note, "reciprocal")
 })
 
@@ -112,4 +114,21 @@ test_that("threshold_to_te_scale auto for SMD -> te_scale", {
 test_that("threshold_to_te_scale returns NULL for NULL threshold", {
   out <- threshold_to_te_scale(NULL, "auto", "OR")
   expect_null(out$threshold_internal)
+})
+
+test_that("threshold notes speak the ratio the reviewer entered, not its log", {
+  dat <- data.frame(
+    studlab = paste0("S", 1:3),
+    event.e = c(10, 15, 12), n.e = c(100, 120, 110),
+    event.c = c(20, 22, 25), n.c = c(100, 118, 112))
+  m <- meta::metabin(event.e, n.e, event.c, n.c, studlab = studlab,
+                     data = dat, sm = "OR")
+  g <- grade_meta(m, rob = c("not_serious", "very_serious", "not_serious"),
+                  small_values = "desirable", threshold = 1.25,
+                  pubias_unpublished = "no")
+  notes <- setNames(g$domain_assessments$notes, g$domain_assessments$domain)
+  expect_match(notes[["Publication bias"]],
+               "threshold OR 1.25 (or 0.8 on the other side)", fixed = TRUE)
+  expect_match(notes[["Risk of bias"]], "Threshold = OR 1.25", fixed = TRUE)
+  expect_no_match(notes[["Publication bias"]], "analysis scale")
 })
