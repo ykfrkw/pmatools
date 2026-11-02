@@ -288,23 +288,39 @@ test_that("Indirectness records no facts, and that is on purpose", {
   expect_null(domain_facts(.cases()$rob_dominated, "Indirectness"))
 })
 
-test_that("the rule the direction check applied is a fact, not a drawn id", {
-  # It used to be both: the figure carried six numbered rule boxes and
-  # flow_path named the one that fired. The boxes are gone -- the rules are the
-  # mechanism, not a shape Core GRADE 4 Fig 2 has -- so the only place the rule
-  # number is reported is fig2_branch, which is the place a reader can act on
-  # it (the domain notes, the Summary of Findings footnote, the Evidence
-  # Profile). Losing it from BOTH would be the regression this guards against.
-  g <- .cases()$rob_dominated
-  ids <- .flow_path(g, "Risk of bias")
-  f   <- domain_facts(g, "Risk of bias")
+
+test_that("the rule the legacy direction check applied is a fact, not a drawn id", {
+  # Core GRADE Guide Fig 7-2 has no direction-of-bias node, so the default
+  # dominated route records no rule at all. The legacy check
+  # (rob_direction_check = TRUE) still numbers its five rules, and since the
+  # figure has no box for them the only place the rule is reported is
+  # fig2_branch -- which is what the notes, the SoF footnote and the Evidence
+  # Profile read. Losing it there would be the regression this guards against.
+  g0  <- .cases()$rob_dominated
+  f0  <- domain_facts(g0, "Risk of bias")
+  expect_identical(.flow_path(g0, "Risk of bias"),
+                   c("pma-rob-node-dominance", "pma-rob-edge-dominance-yes",
+                     "pma-rob-leaf-ratedown"))
+  expect_true(is.na(f0$numeric[f0$key == "fig2_branch"]))
+
+  g <- quiet_grade(
+    mk_binary(),
+    rob = c("no", "no", "very_serious", "very_serious", "very_serious"),
+    small_values = "desirable", threshold = 1.10, threshold_scale = "ratio",
+    rob_direction_check = TRUE)
+  ids  <- .flow_path(g, "Risk of bias")
+  f    <- domain_facts(g, "Risk of bias")
   rule <- f$numeric[f$key == "fig2_branch"]
 
-  expect_false(any(grepl("^pma-rob-leaf-rule", ids)))
+  # The legacy route lights the dominance node and its Yes edge, no further.
+  expect_identical(ids, c("pma-rob-node-dominance",
+                          "pma-rob-edge-dominance-yes"))
   expect_false(is.na(rule))
   expect_true(rule %in% 1:5)
   expect_match(f$value[f$key == "fig2_branch"],
                sprintf("direction-of-bias rule %d", rule))
+  expect_match(f$value[f$key == "fig2_branch"], "beyond Core GRADE",
+               fixed = TRUE)
 })
 
 test_that("publication bias records k, and Egger's p when it ran", {
@@ -414,39 +430,48 @@ test_that("the risk-of-bias vocabulary is fully reachable", {
   expect_identical(setdiff(.vocab$rob, seen), character(0))
 })
 
-test_that("a dominated path reaches one of Fig 2's two conclusions", {
-  # Below "check the direction of bias" the figure draws the source's two
-  # boxes and two leaves, and the rules decide which one is reached without
-  # being drawn themselves. Each path lights exactly one of the two, never
-  # both, and never stops at the direction node with no conclusion.
-  down <- .rob_flow(c("no", "very_serious", "very_serious", "very_serious"),
-                    c(-0.60, -3.00, -3.10, -2.90), threshold = 0.5)   # rule 3
-  stay <- .rob_flow(c("no", "very_serious", "very_serious", "very_serious"),
-                    c(-1.00, -1.02, -1.01, -1.03), threshold = 0.5)   # rule 2
 
-  expect_true(all(c("pma-rob-node-direction",
-                    "pma-rob-edge-rules-responsible",
-                    "pma-rob-node-bias-responsible",
-                    "pma-rob-leaf-ratedown") %in% down))
-  expect_false("pma-rob-leaf-noratedown" %in% down)
+test_that("a dominated path reaches the rate-down leaf whatever the estimates do", {
+  # Guide Fig 7-2: dominated -> use results from all studies and rate down.
+  # The two fixtures were legacy rule 3 (rate down) and rule 2 (do not); by
+  # default they take the same route.
+  hi <- c("no", "very_serious", "very_serious", "very_serious")
+  down <- .rob_flow(hi, c(-0.60, -3.00, -3.10, -2.90), threshold = 0.5)
+  stay <- .rob_flow(hi, c(-1.00, -1.02, -1.01, -1.03), threshold = 0.5)
+  route <- c("pma-rob-node-dominance", "pma-rob-edge-dominance-yes",
+             "pma-rob-leaf-ratedown")
+  expect_identical(down, route)
+  expect_identical(stay, route)
 
-  expect_true(all(c("pma-rob-node-direction",
-                    "pma-rob-edge-rules-conservative",
-                    "pma-rob-node-bias-conservative",
-                    "pma-rob-leaf-noratedown") %in% stay))
-  expect_false("pma-rob-leaf-ratedown" %in% stay)
+  # The legacy check decides the judgment without a drawn box, so its route
+  # stops on the Yes edge.
+  legacy <- .rob_flow(hi, c(-1.00, -1.02, -1.01, -1.03), threshold = 0.5,
+                      direction_check = TRUE)
+  expect_identical(legacy, route[1:2])
 
-  # No rule box survives on either path.
-  expect_false(any(grepl("^pma-rob-leaf-rule", c(down, stay))))
+  # The 0.5.x direction-of-bias shapes are gone from the drawing and from the
+  # vocabulary.
+  skip_if(is.na(.fig_dir), "inst/figures not available in this layout")
+  drawn <- .svg_ids(file.path(.fig_dir, "rob.svg"))
+  gone <- c("pma-rob-node-direction", "pma-rob-edge-rules-responsible",
+            "pma-rob-edge-rules-conservative", "pma-rob-node-bias-responsible",
+            "pma-rob-node-bias-conservative", "pma-rob-leaf-noratedown",
+            "pma-rob-edge-responsible-ratedown",
+            "pma-rob-edge-conservative-noratedown",
+            "pma-rob-edge-appreciable-yes")
+  for (id in gone) {
+    expect_false(id %in% drawn,      info = id)
+    expect_false(id %in% .vocab$rob, info = id)
+  }
 })
 
 test_that("nothing is drawn or emitted on the deleted appreciable 'no' edge", {
   # Reaching the undominated branch means the low risk of bias studies carry
   # more than 45% of the weight at the default gate, and more than 35% at the
-  # strictest gate Core GRADE 4 discusses -- at or above the 35 to 45% the same
-  # paragraph calls appreciable. The "no" answer is unreachable, so the edge is
+  # strictest gate the Guide discusses -- at or above the 35 to 45% its
+  # footnote calls appreciable. The "no" answer is unreachable, so the edge is
   # gone from the vocabulary and from the figure, and the two paths that used
-  # it now reach the green leaf through the "yes" edge.
+  # it reach the magnitude node through the one edge drawn.
   skip_if(is.na(.fig_dir), "inst/figures not available in this layout")
   drawn <- .svg_ids(file.path(.fig_dir, "rob.svg"))
   expect_false("pma-rob-edge-appreciable-no" %in% drawn)
@@ -454,7 +479,7 @@ test_that("nothing is drawn or emitted on the deleted appreciable 'no' edge", {
 
   none_high <- .rob_flow(rep("no", 4), c(-1.0, -1.1, -0.9, -1.05),
                          threshold = 0.5)
-  expect_true(all(c("pma-rob-edge-appreciable-yes", "pma-rob-leaf-all")
+  expect_true(all(c("pma-rob-edge-appreciable-magnitude", "pma-rob-leaf-all")
                   %in% none_high))
 })
 
@@ -521,6 +546,10 @@ test_that("the publication-bias vocabulary is fully reachable", {
     meta_obj = list(TE = 1, seTE = 1), k = 10,
     pubias_funnel_asymmetry = NULL, q1_note = q1))))
 
+  # Q0 answered no (Guide Fig 9-1's first node): stop, do not rate down.
+  seen <- union(seen, path_of(assess_pubias(
+    mk_binary(), pubias_important_effect = "no",
+    rationale = "The pooled estimate is trivial.")))
   # The two entry nodes, from the front door.
   seen <- union(seen, .flow_path(.cases()$pubias_small_industry,
                                  "Publication bias"))
@@ -594,15 +623,11 @@ test_that("inst/figures and man/figures are byte-identical", {
 # What the 0.5.1 redraw removed, and where it went instead
 # --------------------------------------------------------------------------
 
+
 test_that("the rule leaves are gone from the drawing and from the vocabulary", {
-  # Core GRADE 4 Fig 2 has two boxes and two leaves below the direction
-  # question. The five rules are the mechanism that picks a box, not an
-  # alternative to it, and drawing them as a column of six numbered leaves put
-  # six verdicts on the page where the source has two sentences.
-  #
-  # The RULES are unchanged -- .assess_bias_direction() still numbers them and
-  # still decides the judgment. Only the drawing changed, and with it what
-  # flow_path is able to name.
+  # The 0.5.0 figure drew the five legacy rules as numbered leaves. Neither
+  # the 0.5.1 nor the Core GRADE Guide Fig 7-2 drawing has them, and the
+  # legacy rule number lives on the fig2_branch fact (asserted above).
   skip_if(is.na(.fig_dir), "inst/figures not available in this layout")
   drawn <- .svg_ids(file.path(.fig_dir, "rob.svg"))
   gone  <- c(paste0("pma-rob-leaf-rule", 1:5), "pma-rob-leaf-rulena",
@@ -611,46 +636,47 @@ test_that("the rule leaves are gone from the drawing and from the vocabulary", {
     expect_false(id %in% drawn,      info = id)
     expect_false(id %in% .vocab$rob, info = id)
   }
-
-  # And the rule number is still recorded -- on the fact, which is what the
-  # domain notes, the SoF footnote and the Evidence Profile read.
-  g <- .cases()$rob_dominated
-  f <- domain_facts(g, "Risk of bias")
-  expect_true(is.finite(f$numeric[f$key == "fig2_branch"]))
-  expect_match(f$value[f$key == "fig2_branch"], "direction-of-bias rule",
-               fixed = TRUE)
 })
 
+
 test_that("the magnitude node has one edge for similar and not assessable", {
-  # Both answers already reached pma-rob-leaf-all and rated down neither way.
-  # Two arrows into one box showed a reader two routes, not two meanings; the
-  # meanings are in the notes and in fig2_branch, where a reader acts on them.
+  # Both answers reach pma-rob-leaf-all and rate down neither way, so the
+  # figure draws the Guide's two edges, Yes and No, and the caption says a
+  # comparison that cannot be made takes the No edge.
   skip_if(is.na(.fig_dir), "inst/figures not available in this layout")
   drawn <- .svg_ids(file.path(.fig_dir, "rob.svg"))
   expect_false("pma-rob-edge-magnitude-notassessable" %in% drawn)
   expect_false("pma-rob-edge-magnitude-notassessable" %in% .vocab$rob)
 
   svg <- paste(readLines(file.path(.fig_dir, "rob.svg"), warn = FALSE),
-               collapse = "\n")
-  expect_match(svg, ">Similar/Not assessable<", fixed = TRUE)
+               collapse = "
+")
+  edge <- regmatches(
+    svg, regexpr('(?s)<g id="pma-rob-edge-magnitude-similar".*?</g>', svg,
+                 perl = TRUE))
+  expect_match(edge, ">No<", fixed = TRUE)
   expect_false(grepl(">Not assessable<", svg, fixed = TRUE))
+  expect_match(svg, "A comparison that cannot be made takes the No edge",
+               fixed = TRUE)
 })
 
-test_that("the rate-down leaf says only 'Rate down'", {
-  # The source's two leaves are two phrases and pmatools' now match them. Rule
-  # 5's second level is stated in .ROB_TWO_LEVEL_NOTE, in the notes of every
-  # judgment on that branch, in the <desc>, and in the app's figure caption --
-  # so it is disclosed wherever the judgment is, which the leaf text was not.
+
+test_that("the rate-down leaf says what the Guide's leaf says", {
+  # Guide Fig 7-2's dominated leaf is one sentence and the drawing carries it
+  # verbatim. The two-level downgrade belonged to legacy rule 5 and is no
+  # longer something the default can do, so the figure does not mention it.
   skip_if(is.na(.fig_dir), "inst/figures not available in this layout")
   svg <- paste(readLines(file.path(.fig_dir, "rob.svg"), warn = FALSE),
-               collapse = "\n")
+               collapse = "
+")
   leaf <- regmatches(
     svg, regexpr('(?s)<g id="pma-rob-leaf-ratedown".*?</g>', svg,
                  perl = TRUE))
   expect_length(gregexpr("<tspan", leaf)[[1L]], 1L)
-  expect_match(leaf, ">Rate down<", fixed = TRUE)
+  expect_match(leaf, ">Use results from all studies and rate down<",
+               fixed = TRUE)
   expect_false(grepl("or 2 on rule 5", svg, fixed = TRUE))
-
-  # Still disclosed to a reader who meets the file alone.
-  expect_match(svg, "two-level risk-of-bias downgrade", fixed = TRUE)
+  expect_false(grepl("two-level", svg, fixed = TRUE))
+  # The legacy check is disclosed as not drawn.
+  expect_match(svg, "is not drawn", fixed = TRUE)
 })

@@ -2,7 +2,8 @@
 #
 # Split out of step3_grade.R, whose step3_server() had grown past three and a
 # half thousand lines and buried the wizard's reactive graph in the middle of
-# it. Everything Figure 5 needs is here: the derived node, the breadcrumb, the
+# it. Everything Figure 9-1 (Core GRADE Guide; formerly Core GRADE 4 Figure 5)
+# needs is here: the computed first node, the derived node, the breadcrumb, the
 # four question cards, the funnel / trim-and-fill / missing-results reference
 # tabs, and the three status dots on their titles. Nothing here rates anything
 # - the answers still reach grade_meta() through grade_obj(), which stayed in
@@ -61,7 +62,7 @@ step3_pubias_server <- function(input, output, session, state,
   force(.display_args)
   force(.threshold_grade_args)
 
-  # ----- Publication bias: Figure 5 as a wizard --------------------------
+  # ----- Publication bias: Figure 9-1 as a wizard ------------------------
   # The node on screen is DERIVED from the answers by step3_pubias_node()
   # (R/step3_threshold.R, pure and unit-tested), never stored as a cursor of
   # its own. Changing Q1 therefore re-derives everything downstream instead of
@@ -107,8 +108,18 @@ step3_pubias_server <- function(input, output, session, state,
     list(feasible = TRUE, p = pval, asymmetric = pval < STEP3_EGGER_ALPHA)
   })
 
+  # Q0, "Did the studies show an important effect?", computed by
+  # assess_pubias() and read back off the last rating (state$grade). It is not
+  # an input of grade_obj(), so reading the rating here closes no reactive
+  # loop. Before the first rating it is "yes", which is also what the package
+  # assumes when it cannot tell.
+  pubias_q0 <- shiny::reactive({
+    step3_pubias_important_effect(state$grade)
+  })
+
   pubias_node <- shiny::reactive({
     step3_pubias_node(
+      important_effect  = pubias_q0()$answer,
       small_industry    = input$pubias_small_industry,
       registry_complete = input$pubias_registry_complete,
       funnel_asymmetry  = input$pubias_funnel_asymmetry,
@@ -171,6 +182,7 @@ step3_pubias_server <- function(input, output, session, state,
       pma_flowchart(
         PMA_FLOWCHART_FIGS[["Publication bias"]]$fig,
         on_ids = step3_pubias_flow_ids(
+          important_effect  = pubias_q0()$answer,
           small_industry    = input$pubias_small_industry,
           registry_complete = input$pubias_registry_complete,
           funnel_asymmetry  = input$pubias_funnel_asymmetry,
@@ -188,6 +200,9 @@ step3_pubias_server <- function(input, output, session, state,
       # asked, so the chart can light the branch but cannot print the number
       # it turned on. It used to be a breadcrumb line; it belongs under the
       # picture of the node it decides.
+      # Q0 is computed too, and the number it turned on is the pooled
+      # estimate against the threshold - so it gets the same kind of line.
+      htmltools::div(class = "pma-crumb pma-crumb-auto", pubias_q0()$line),
       htmltools::div(class = "pma-crumb pma-crumb-auto",
                      step3_pubias_k_line(pubias_k(), .rare_active()))
     )
@@ -204,7 +219,8 @@ step3_pubias_server <- function(input, output, session, state,
     node <- pubias_node()
     path <- step3_pubias_reachable(input$pubias_small_industry,
                                    input$pubias_registry_complete,
-                                   pubias_k(), .rare_active())
+                                   pubias_k(), .rare_active(),
+                                   important_effect = pubias_q0()$answer)
     .answered <- function(nd) {
       v <- switch(nd,
         q1    = input$pubias_small_industry,
@@ -235,7 +251,8 @@ step3_pubias_server <- function(input, output, session, state,
     k    <- pubias_k()
     rare <- .rare_active()
     path <- step3_pubias_reachable(input$pubias_small_industry,
-                                   input$pubias_registry_complete, k, rare)
+                                   input$pubias_registry_complete, k, rare,
+                                   important_effect = pubias_q0()$answer)
 
     # ONE container for every node. Each node used to return a bare tagList,
     # so the live question - the only thing on the tab that can be answered -
@@ -291,12 +308,13 @@ step3_pubias_server <- function(input, output, session, state,
                  "agree, or prospective registration is the field standard ",
                  "with no discrepancies.")),
         # Two answers, and only "Yes" decides anything. "No" used to force
-        # rate down 1 on its own, which is a rule Core GRADE 4 Fig 5 does not
-        # have; it now means what a third "leave it to the Figure 5 nodes"
+        # rate down 1 on its own, which is a rule Core GRADE 4 Fig 5 (now Guide
+        # Fig 9-1) does not have; it now means what a third "leave it to the
+        # Figure 5 nodes"
         # option used to mean, so that option is gone with the rule.
         shiny::radioButtons("pubias_registry_complete", NULL,
           choices = c(
-            "No - reporting bias is possible; go on to the Figure 5 nodes"
+            "No - reporting bias is possible; go on to the Figure 9-1 nodes"
               = "no",
             "Yes - reporting bias is unlikely; do not rate down"
               = "yes"
@@ -349,10 +367,10 @@ step3_pubias_server <- function(input, output, session, state,
             # studies and a registry question needs to see that the study
             # count was not what sent them here.
             sprintf(paste0("Egger's test loses validity on sparse binary ",
-                           "data, so Figure 5 routes here even at k = %d. ",
+                           "data, so Figure 9-1 routes here even at k = %d. ",
                            "Documented unpublished trials rate down 1."), k)
           } else {
-            sprintf(paste0("Egger's test is unreliable at k = %d, so Figure 5 ",
+            sprintf(paste0("Egger's test is unreliable at k = %d, so Figure 9-1 ",
                            "routes here. Documented unpublished trials rate ",
                            "down 1."), k)
           }),

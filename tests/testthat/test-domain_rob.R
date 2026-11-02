@@ -2,13 +2,15 @@ library(testthat)
 
 skip_if_not_installed("meta")
 
-# These fixtures exercise the direction-of-bias check (the 5 zone rules). Every
-# one carries 80% of the weight on the high-RoB study, so under the v0.5
-# Core GRADE 4 Fig 2 flowchart they all take the *dominated* branch, where the
-# 5-rule verdict is used verbatim — which is why none of the expectations below
-# changed when the dominance gate was reinstated. The non-dominated branch (no
-# downgrade; analysis-set recommendation instead) is covered in
-# test-rob_flowchart.R.
+# These fixtures exercise the LEGACY direction-of-bias check (the 5 zone
+# rules), reached only with rob_direction_check = TRUE since 0.6.0. Every one
+# carries 80% of the weight on the high-RoB study, so they all take the
+# *dominated* branch, where the 5-rule verdict is used verbatim. The
+# expectations are the 0.5.1 ones, unchanged: the legacy flag exists to
+# reproduce 0.5.x ratings, and these tests are what hold it to that. The
+# default (Core GRADE Guide Fig 7-2) behaviour on the same fixtures -- rate
+# down one level, no comparison -- is pinned at the end of this file, and the
+# non-dominated branch is covered in test-rob_flowchart.R.
 #
 # Mock dominated meta object: 1 large high-RoB study + 2 small low-RoB studies.
 # TE values supplied here are on the analysis scale (log scale for RR/OR).
@@ -43,11 +45,15 @@ make_mock_dominated <- function(te_all, te_low_only,
   m
 }
 
+# grade_meta() with the legacy 0.5.x check switched on. Every rule test below
+# goes through it, so a test cannot silently fall back to the default.
+grade_legacy <- function(...) grade_meta(..., rob_direction_check = TRUE)
+
 # --- Rule 1: same trivial zone -----------------------------------------------
 test_that("Rule 1: TE_all and TE_low both in trivial zone -> no", {
   # log(1.20) ~ 0.182; both 0.05 and 0.05 fall inside +/-0.182.
   m <- make_mock_dominated(te_all = 0.05, te_low_only = 0.05)
-  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
@@ -61,7 +67,7 @@ test_that("Rule 2: same non-trivial zone, inflation <= 10% -> no", {
   # Both te_all=0.50 and te_low=0.48 are above +log(1.20)=0.182 (zone 'above').
   # inflation = (0.50 - 0.48) / 0.48 = 4.2% < 10%.
   m <- make_mock_dominated(te_all = 0.50, te_low_only = 0.48)
-  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
@@ -74,7 +80,7 @@ test_that("Rule 2: same non-trivial zone, deflating direction -> no", {
   # te_all=0.40 < te_low=0.60: high-RoB pulls *toward* null; not bias-favouring.
   # Both still in 'above' zone (above +0.182). -> Rule 2.
   m <- make_mock_dominated(te_all = 0.40, te_low_only = 0.60)
-  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
@@ -87,7 +93,7 @@ test_that("Rule 2: same non-trivial zone, deflating direction -> no", {
 test_that("Rule 3: same non-trivial zone, inflation > 10% -> some_concerns", {
   # Both te_all=0.60 and te_low=0.40 in 'above' zone; inflation = 50% > 10%.
   m <- make_mock_dominated(te_all = 0.60, te_low_only = 0.40)
-  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
@@ -100,7 +106,7 @@ test_that("Rule 3: same non-trivial zone, inflation > 10% -> some_concerns", {
 test_that("Rule 4: 'above' -> 'trivial' zone change -> some_concerns", {
   # te_all=0.50 (above), te_low=0.10 (trivial). Zones differ; no sign flip.
   m <- make_mock_dominated(te_all = 0.50, te_low_only = 0.10)
-  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
@@ -112,7 +118,7 @@ test_that("Rule 4: 'above' -> 'trivial' zone change -> some_concerns", {
 test_that("Rule 4: 'trivial' -> 'above' zone change -> some_concerns", {
   # high-RoB pulls into trivial: te_all=0.10 (trivial), te_low=0.50 (above).
   m <- make_mock_dominated(te_all = 0.10, te_low_only = 0.50)
-  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
@@ -132,7 +138,7 @@ test_that("Rule 4: 'trivial' -> 'above' zone change -> some_concerns", {
 # assertion that pins it.
 test_that("Rule 5: 'above' <-> 'below' sign flip -> very_serious (-2)", {
   m <- make_mock_dominated(te_all = 0.50, te_low_only = -0.50)
-  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
@@ -155,7 +161,7 @@ test_that("Rule 5 records the sign flip as rule 5 and lights its own leaf", {
   expect_identical(dir$judgment, "very_serious")
   expect_true(dir$sign_flips)
 
-  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
@@ -177,7 +183,7 @@ test_that("Rule 5's own wording says two levels, and discloses the departure", {
   # same notes the reviewer reads. Pinned against something executable because
   # the same sentence lives in four documents.
   m <- make_mock_dominated(te_all = 0.50, te_low_only = -0.50)
-  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
@@ -199,7 +205,7 @@ test_that("Rule 5's own wording says two levels, and discloses the departure", {
 test_that("Rules 3 and 4 keep the one-level cap that rule 5 gave up", {
   # The retraction is for rule 5 only. Rules 3 and 4 are 'the estimate moved',
   # not 'the direction reversed', and nothing about them departs from Fig 2.
-  rule3 <- grade_meta(make_mock_dominated(te_all = 0.60, te_low_only = 0.40),
+  rule3 <- grade_legacy(make_mock_dominated(te_all = 0.60, te_low_only = 0.40),
                       rob = c("very_serious", "no", "no"),
                       small_values = "undesirable",
                       threshold = 1.20, threshold_scale = "ratio",
@@ -209,7 +215,7 @@ test_that("Rules 3 and 4 keep the one-level cap that rule 5 gave up", {
   expect_equal(r3$downgrade, -1L)
   expect_match(r3$notes, "Rule 3")
 
-  rule4 <- grade_meta(make_mock_dominated(te_all = 0.50, te_low_only = 0.10),
+  rule4 <- grade_legacy(make_mock_dominated(te_all = 0.50, te_low_only = 0.10),
                       rob = c("very_serious", "no", "no"),
                       small_values = "undesirable",
                       threshold = 1.20, threshold_scale = "ratio",
@@ -222,7 +228,7 @@ test_that("Rules 3 and 4 keep the one-level cap that rule 5 gave up", {
 
 test_that("Rule 5 can still reach -2 through the scalar rob override", {
   m <- make_mock_dominated(te_all = 0.50, te_low_only = -0.50)
-  g <- grade_meta(m, rob = "very_serious",
+  g <- grade_legacy(m, rob = "very_serious",
                   small_values = "desirable",
                   rob_rationale = "Sign flip when high-RoB studies are removed",
                   threshold = 1.20, threshold_scale = "ratio")
@@ -242,7 +248,7 @@ test_that("Fallback: Threshold not supplied + sign flip -> serious, not very_ser
   m <- make_mock_dominated(te_all = 1.0, te_low_only = -0.5)
   # The direction gate plays no part in rule 5 (the zones flip across the
   # null), so the declared direction is immaterial here.
-  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                   small_values = "desirable",
                   rob_inflation_threshold = 0.10, threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
@@ -260,7 +266,7 @@ test_that("Fallback: the same sign flip reaches -2 once a threshold is supplied"
   # Same estimates, one argument apart: this is the whole of the no-threshold
   # decision, stated as a pair so a future change to either half is visible.
   m <- make_mock_dominated(te_all = 1.0, te_low_only = -0.5)
-  with_threshold <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  with_threshold <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                                small_values = "desirable",
                                threshold = 1.20, threshold_scale = "ratio",
                                rob_inflation_threshold = 0.10)
@@ -274,7 +280,7 @@ test_that("Fallback: Threshold not supplied + same-sign small inflation -> no (r
   # Without Threshold, trivial zone collapses to {0}; both 0.05 and 0.04 are 'above'.
   # te_all < te_low under small_values='undesirable' -> direction_ok FALSE -> rule 2.
   m <- make_mock_dominated(te_all = 0.04, te_low_only = 0.05)
-  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   rob_inflation_threshold = 0.10, threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
@@ -290,7 +296,7 @@ test_that("Direction gate blocks downgrade despite ratio > threshold -> no + exp
   # bias-favouring; here te_all < te_low (shift toward smaller values), so the
   # direction gate blocks the downgrade (rule 2) and the note must say why.
   m <- make_mock_dominated(te_all = -0.60, te_low_only = -0.40)
-  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
@@ -306,7 +312,7 @@ test_that("Direction gate blocks downgrade despite ratio > threshold -> no + exp
 test_that("Direction gate result is always reported in notes", {
   # Bias-favouring case (rule 3): gate = yes.
   m <- make_mock_dominated(te_all = 0.60, te_low_only = 0.40)
-  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
@@ -328,7 +334,7 @@ test_that("the declared direction, not the magnitude, decides the rule-3 downgra
   # small_values answers it.
   m <- make_mock_dominated(te_all = 0.60, te_low_only = 0.40)
   rate <- function(sv) {
-    g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+    g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                     small_values = sv,
                     threshold = 1.20, threshold_scale = "ratio",
                     rob_inflation_threshold = 0.10)
@@ -350,7 +356,7 @@ test_that("the declared direction, not the magnitude, decides the rule-3 downgra
   # neither made one. (The fixture's k = 3 still draws the publication-bias
   # warning, which is why this looks for the subject rather than for silence.)
   w <- testthat::capture_warnings(
-    grade_meta(m, rob = c("very_serious", "no", "no"),
+    grade_legacy(m, rob = c("very_serious", "no", "no"),
                small_values = "undesirable",
                threshold = 1.20, threshold_scale = "ratio",
                rob_inflation_threshold = 0.10))
@@ -362,7 +368,7 @@ test_that("a shift back toward the null does NOT rate down", {
   # te_all = 0.2, te_low = 1.1: both 'above' (no Threshold), and dropping the
   # high-RoB studies makes the effect LARGER, so bias cannot account for it.
   m <- make_mock_dominated(te_all = 0.2, te_low_only = 1.1)
-  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                   small_values = "desirable",
                   rob_inflation_threshold = 0.10, threshold_type = "null")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
@@ -373,7 +379,7 @@ test_that("a shift back toward the null does NOT rate down", {
 test_that("Threshold = 0 inside same non-trivial zone rates down for any inflation", {
   # te_all=0.20 (above), te_low=0.19 (above); 5% inflation; threshold 0 -> rule 3.
   m <- make_mock_dominated(te_all = 0.20, te_low_only = 0.19)
-  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0)
@@ -385,7 +391,7 @@ test_that("Threshold = 0 inside same non-trivial zone rates down for any inflati
 # --- Reporting ---------------------------------------------------------------
 test_that("weight_note reports both count % and weight %", {
   m <- make_mock_dominated(te_all = 0.05, te_low_only = 0.05)
-  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio")
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
@@ -401,7 +407,7 @@ test_that("All studies high-RoB -> serious (1 level down, no comparator pool)", 
   # landed anywhere -- no zone comparison happened at all. -2 requires
   # rob = "very_serious" + rob_rationale.
   m <- make_mock_dominated(te_all = 0.30, te_low_only = 0.30)
-  g <- grade_meta(m, rob = c("very_serious", "very_serious", "very_serious"),
+  g <- grade_legacy(m, rob = c("very_serious", "very_serious", "very_serious"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
@@ -414,7 +420,7 @@ test_that("All studies high-RoB -> serious (1 level down, no comparator pool)", 
 
 test_that("diff_note reports zone labels and relative inflation", {
   m <- make_mock_dominated(te_all = 0.60, te_low_only = 0.40)
-  g <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                   small_values = "undesirable",
                   threshold = 1.20, threshold_scale = "ratio",
                   rob_inflation_threshold = 0.10)
@@ -574,7 +580,7 @@ test_that("a 15% inflation does not rate down under the default threshold", {
   # zones agree; inflation = (0.46 - 0.40) / 0.40 = 15%.
   m <- make_mock_dominated(te_all = 0.46, te_low_only = 0.40)
 
-  g_default <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g_default <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                           small_values = "undesirable",
                           threshold = 1.20, threshold_scale = "ratio")
   rob_default <- g_default$domain_assessments[
@@ -582,7 +588,7 @@ test_that("a 15% inflation does not rate down under the default threshold", {
   expect_equal(rob_default$judgment, "not_serious")
   expect_match(rob_default$notes, "Rule 2")
 
-  g_old <- grade_meta(m, rob = c("very_serious", "no", "no"),
+  g_old <- grade_legacy(m, rob = c("very_serious", "no", "no"),
                       small_values = "undesirable",
                       threshold = 1.20, threshold_scale = "ratio",
                       rob_inflation_threshold = 0.10)
@@ -590,4 +596,110 @@ test_that("a 15% inflation does not rate down under the default threshold", {
     g_old$domain_assessments$domain == "Risk of bias", ]
   expect_equal(rob_old$judgment, "serious")
   expect_match(rob_old$notes, "Rule 3")
+})
+
+# --- Default (Core GRADE Guide Fig 7-2): dominated -> rate down, no check ----
+# The same dominated fixtures, without the legacy flag. The Guide removed the
+# "check direction of bias" node, so whatever the two estimates do, dominated
+# evidence is rated down one level and every study is analysed.
+
+rob_default_row <- function(g) {
+  g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
+}
+
+test_that("dominated evidence rates down one level where legacy rules 1/2 did not", {
+  # Rule 1 fixture (both trivial) and rule 2 fixture (same zone, small change).
+  for (fx in list(c(0.05, 0.05), c(0.60, 0.58))) {
+    m <- make_mock_dominated(te_all = fx[1], te_low_only = fx[2])
+    legacy <- suppressWarnings(grade_legacy(
+      m, rob = c("very_serious", "no", "no"), small_values = "undesirable",
+      threshold = 1.20, threshold_scale = "ratio",
+      rob_inflation_threshold = 0.10))
+    g <- suppressWarnings(grade_meta(
+      m, rob = c("very_serious", "no", "no"), small_values = "undesirable",
+      threshold = 1.20, threshold_scale = "ratio",
+      rob_inflation_threshold = 0.10))
+    expect_equal(rob_default_row(legacy)$judgment, "not_serious")
+    expect_equal(rob_default_row(g)$judgment, "serious")
+    expect_identical(g$rob_analysis_set, "all")
+    expect_false(isTRUE(g$rob_direction_check))
+    expect_match(rob_default_row(g)$notes,
+                 "use results from all studies and rate down 1 level",
+                 fixed = TRUE)
+    expect_false(grepl("Rule [1-5]", rob_default_row(g)$notes))
+  }
+})
+
+test_that("dominated evidence rates down one level where legacy rule 5 rated two", {
+  m <- make_mock_dominated(te_all = 0.50, te_low_only = -0.50)
+  legacy <- suppressWarnings(grade_legacy(
+    m, rob = c("very_serious", "no", "no"), small_values = "undesirable",
+    threshold = 1.20, threshold_scale = "ratio"))
+  g <- suppressWarnings(grade_meta(
+    m, rob = c("very_serious", "no", "no"), small_values = "undesirable",
+    threshold = 1.20, threshold_scale = "ratio"))
+  expect_equal(rob_default_row(legacy)$judgment, "very_serious")
+  expect_equal(rob_default_row(g)$judgment, "serious")
+  expect_false(grepl("TWO levels", rob_default_row(g)$notes, fixed = TRUE))
+})
+
+test_that("the default dominated branch records no comparison and the Guide's route", {
+  m <- make_mock_dominated(te_all = 0.50, te_low_only = -0.50)
+  g <- suppressWarnings(grade_meta(
+    m, rob = c("very_serious", "no", "no"), small_values = "undesirable",
+    threshold = 1.20, threshold_scale = "ratio"))
+  f <- domain_facts(g, "Risk of bias")
+  expect_false("estimate_shift" %in% f$key)
+  expect_identical(f$label[f$key == "fig2_branch"], "Core GRADE Guide Fig 7-2")
+  expect_true(is.na(f$numeric[f$key == "fig2_branch"]))
+  expect_identical(f$value[f$key == "flow_path"], paste(
+    "pma-rob-node-dominance", "pma-rob-edge-dominance-yes",
+    "pma-rob-leaf-ratedown"))
+})
+
+test_that("all studies high-RoB rates down one level by default too", {
+  m <- make_mock_dominated(te_all = 0.30, te_low_only = 0.30)
+  g <- suppressWarnings(grade_meta(
+    m, rob = c("very_serious", "very_serious", "very_serious"),
+    small_values = "undesirable", threshold = 1.20, threshold_scale = "ratio"))
+  expect_equal(rob_default_row(g)$judgment, "serious")
+  expect_match(rob_default_row(g)$notes, "All studies high-RoB", fixed = TRUE)
+})
+
+test_that("every legacy judgment says it is beyond Core GRADE", {
+  m <- make_mock_dominated(te_all = 0.05, te_low_only = 0.05)
+  g <- suppressWarnings(grade_legacy(
+    m, rob = c("very_serious", "no", "no"), small_values = "undesirable",
+    threshold = 1.20, threshold_scale = "ratio"))
+  expect_match(rob_default_row(g)$notes, "Beyond Core GRADE", fixed = TRUE)
+  expect_match(rob_default_row(g)$notes, "Appendix 11", fixed = TRUE)
+  expect_true(isTRUE(g$rob_direction_check))
+  f <- domain_facts(g, "Risk of bias")
+  expect_match(f$value[f$key == "fig2_branch"], "legacy", fixed = TRUE)
+  # The figure has no box for the check: the route stops on the Yes edge.
+  expect_identical(f$value[f$key == "flow_path"],
+                   "pma-rob-node-dominance pma-rob-edge-dominance-yes")
+})
+
+test_that("small_values is required by assess_rob() only in legacy mode", {
+  m <- make_mock_dominated(te_all = 0.50, te_low_only = 0.40)
+  d <- assess_rob(c("very_serious", "no", "no"), m,
+                  threshold_internal = log(1.20))
+  expect_equal(d$judgment, "serious")
+  expect_error(
+    assess_rob(c("very_serious", "no", "no"), m,
+               threshold_internal = log(1.20), rob_direction_check = TRUE),
+    class = "pmatools_direction_gate")
+  # Malformed values are still rejected when supplied.
+  expect_error(
+    assess_rob(c("very_serious", "no", "no"), m, small_values = "up"),
+    class = "pmatools_direction_gate")
+  expect_error(
+    assess_rob(c("very_serious", "no", "no"), m, rob_direction_check = NA),
+    "rob_direction_check must be TRUE or FALSE")
+  # grade_meta() still requires it, for Imprecision.
+  expect_error(
+    grade_meta(m, rob = c("very_serious", "no", "no"),
+               threshold = 1.20, threshold_scale = "ratio"),
+    class = "pmatools_direction_gate")
 })

@@ -29,10 +29,11 @@
 - Core GRADE 3 (BMJ 2025): Inconsistency - PMID 40328467
 - Core GRADE 4 (BMJ 2025): Risk of Bias, Publication Bias - PMID 40360206
 - Core GRADE 5 (BMJ 2025): Indirectness - PMID 40393729
+- Core GRADE Guide (MAGIC Evidence Ecosystem, 2025-): https://core-grade.gitbook.io/org (accessed 2026-11-02). Source for risk of bias (Fig 7-2, Appendix 11) and publication bias (Fig 9-1) since v0.6.0
 
 ---
 
-## 実装ステータス（v0.5.1）
+## 実装ステータス（v0.6.0）
 
 ### v0.1.0 既存
 - [x] パッケージ骨格（DESCRIPTION, NAMESPACE）
@@ -161,6 +162,23 @@
 
 - [x] `CLAUDE.md` 新設（ベンダリングのライフライン + docs は変更と同じ PR で更新するルール）
 - [x] SPEC.md の `Version target:` を 0.5.1 に同期（CLAUDE.md ルール 2）
+
+### v0.6.0 追加
+
+The authority is the `# pmatools 0.6.0` section of [NEWS.md](NEWS.md).
+
+- [x] Risk of bias follows Core GRADE Guide Fig 7-2 (**breaking**): dominated
+  evidence uses every study and rates down one level, with no direction check;
+  the undominated substantial-differences node is read symmetrically (a zone
+  change, or a relative change above `rob_inflation_threshold` in either
+  direction). `rob_direction_check = TRUE` reproduces 0.5.x (beyond Core GRADE,
+  Guide Appendix 11). `rob.svg` redrawn (SPEC §5.1, §5.1a)
+- [x] Publication bias follows Core GRADE Guide Fig 9-1 (**breaking**): new
+  first node "Did the studies show an important effect?", computed from the
+  pooled estimate and the threshold, overridable with
+  `pubias_important_effect`; "no" stops at do not rate down. `pubias.svg`
+  redrawn; the app's wizard lights the computed node (SPEC §5.5d,
+  shiny/SPEC.md §3.4.12)
 
 ---
 

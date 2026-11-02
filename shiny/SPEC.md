@@ -4,7 +4,7 @@
 
 **Public URL:** https://yuki-furukawa.shinyapps.io/pmatools/
 **Deployment:** shinyapps.io (account: `yuki-furukawa`, appId: `17697029`)
-**App version:** 3.4.0 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.3.0 → 3.4.0 is the optional Score type mapping (§3.3.3); 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
+**App version:** 3.5.0 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.4.0 → 3.5.0 is the Core GRADE Guide flowcharts (risk of bias Fig 7-2, publication bias Fig 9-1 and its computed first node, §3.4.12); 3.3.0 → 3.4.0 is the optional Score type mapping (§3.3.3); 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
 
 ---
 
@@ -1041,8 +1041,9 @@ The gate earns its place on cases like this one: the missing results are
 suspected null-ward, but `δ*` is further from the null than the observed effect.
 Nothing the missing studies could plausibly report moves the conclusion **in the
 direction they are suspected of lying**, so the dot is 🟢 whatever its magnitude
-would have said. This is the direction-of-bias step of the Risk of bias
-flowchart, asked of missing evidence instead of high-RoB evidence.
+would have said. This is the direction-of-bias step of the 0.5.x Risk of bias
+flowchart (since 0.6.0 a legacy package option the app does not use), asked of
+missing evidence instead of high-RoB evidence.
 
 **`Not measured` is capped at 🟡 and nothing else is.** An outcome that was never
 assessed cannot have been suppressed for what it showed, so its absence is
@@ -1519,23 +1520,38 @@ event rate is a count of patients; "15.6 per 100" is not one.
 > `conditionalPanel` compares against the quantised auto value, so a fresh
 > analysis is not reported as overridden.
 
-**Publication bias is a wizard over Figure 5.** `output$pubias_wizard` renders
+**Publication bias is a wizard over Figure 9-1** (Core GRADE Guide; formerly Core GRADE 4 Figure 5). `output$pubias_wizard` renders
 exactly one node. The node is **derived**, never stored as a cursor, by
 `step3_pubias_node()` (`R/step3_threshold.R`, pure and unit-tested), mirroring
 `assess_pubias()`'s own short-circuit order:
 
 ```
+important_effect == "no"                           -> "result"   (terminal; computed, never asked)
 !answered(pubias_small_industry)                    -> "q1"
 pubias_small_industry == "yes"                      -> "result"   (terminal)
 !answered(pubias_registry_complete)                 -> "extra"
 pubias_registry_complete == "yes"                   -> "result"   (terminal)
-# "no" falls through to the Figure 5 nodes
+# "no" falls through to the Figure 9-1 nodes
 k >= 10 : !answered(pubias_funnel_asymmetry) ? "q3" : "result"
 k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
 ```
 
 - **Q2 is not a question.** k decides it (`.pubias_effective_k()`), so it is
   reported as a one-line automatic step under the chart, never a screen.
+- **Neither is Q0 (0.6.0).** Figure 9-1 opens with "Did the studies show an
+  important effect?", which `assess_pubias()` computes from the pooled
+  estimate and the threshold (package SPEC.md §5.5d). The wizard reads the
+  answer off the last rating's `important_effect` fact through
+  `step3_pubias_important_effect(state$grade)` (`R/step3_threshold.R`, pure),
+  and before any rating exists it is `"yes"` — the package's own assumption
+  when it cannot tell — so no question the rating will use is hidden. The
+  answer is passed as `important_effect` to `step3_pubias_node()`,
+  `step3_pubias_reachable()` and `step3_pubias_flow_ids()`, and printed as a
+  second automatic line under the chart ("Important effect: …"). The rating
+  is not an input of `grade_obj()`, so reading it here closes no reactive loop.
+  **There is no override control in the app:** `pubias_important_effect` is
+  never sent, so the package always computes Q0. A reviewer who disagrees uses
+  the domain's existing manual override.
 - **Every node is one card, and the four nodes agree with each other.** Each
   node's body is wrapped in a single `div(class = "pma-wizard-question")` built
   by one local helper inside `output$pubias_wizard`. Before that each returned
@@ -1623,8 +1639,10 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
   titles survive as the link text, because two undifferentiated "change" links
   would be a trap of their own.
 - **The chart is a progress indicator, drawn before the first answer (0.5.1).**
-  `output$pubias_flowchart` renders Figure 5 **above** the wizard, from the
-  first node onwards, unlit, and lights up node by node as answers arrive. One
+  `output$pubias_flowchart` renders Figure 9-1 **above** the wizard, from the
+  first node onwards, and lights up node by node as answers arrive. The
+  computed Q0 node and its edge are lit from the start (on "no", through to
+  its leaf); every node the reviewer answers stays unlit until answered. One
   question at a time answers "what am I being asked" but never answered "how
   much is left", and a reviewer three questions in could not tell whether two
   more were coming. The two surfaces therefore have different jobs: the wizard
@@ -1762,8 +1780,8 @@ branch, via a `conditionalPanel` on `output.incon_subgroup_relevant`
 
 **Risk of Bias.** `output$rob_rule_note` (a ~180-word standing statement of the
 binary rule) and the "See also RoB 2" paragraph are deleted, not collapsed: the
-`rob_some_concerns` radio states the rule beside itself — that Core GRADE 4
-rates risk of bias from a **two-way split**, that Fig 2 asks whether the high
+`rob_some_concerns` radio states the rule beside itself — that Core GRADE
+rates risk of bias from a **two-way split**, that Guide Fig 7-2 asks whether the high
 risk of bias group dominates, and that RoB 2's three judgments therefore have
 to fold into two before the question can be asked at all — the two-group forest
 *shows* it, and `pma_reference()` already carries the source. That copy says
@@ -2389,6 +2407,16 @@ printed.
 
 `pma_algorithm_source(domain)` supplies the caption naming the implementing function, so
 the app and the roxygen topic `?grade_flowcharts` quote the same file and function.
+
+**Risk of bias and publication bias cite the Core GRADE Guide (0.6.0).** The
+`PMA_FLOWCHART_FIGS` sources read "Core GRADE Guide Fig 7-2 (formerly Core GRADE 4
+Fig 2)" and "Core GRADE Guide Fig 9-1 (formerly Core GRADE 4 Fig 5)". The risk of
+bias `departure` sentence names pmatools' numeric reading of the
+substantial-differences node (a change of zone, or a relative change of more than 20%
+in either direction); the publication-bias one says the first node is computed. The
+app shows **only** the Guide's flowchart: it has no `rob_direction_check` control, and
+no caption mentions the five legacy direction rules or a two-level rule 5 —
+`tests/testthat/test-flowchart-ui.R` pins both.
 
 ### 3.4.13 Confirmation, progress and the forward path (v0.5.1)
 

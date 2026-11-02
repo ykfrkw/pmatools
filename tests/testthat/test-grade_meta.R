@@ -313,13 +313,20 @@ test_that("rob vector: inflating small_values=undesirable rates down (some_conce
   expect_equal(rob_row$judgment, "serious")
 })
 
-test_that("rob vector: NOT inflating small_values=undesirable does not rate down", {
-  # TE_all < TE_low → high-RoB pulls toward null → conservative (doesn't inflate)
+test_that("rob vector: NOT inflating small_values=undesirable does not rate down (legacy only)", {
+  # TE_all < TE_low → high-RoB pulls toward null → conservative (doesn't inflate).
+  # Only the legacy direction check (rob_direction_check = TRUE) reads the
+  # direction; Core GRADE Guide Fig 7-2 rates dominated evidence down.
   m <- make_mock_dominated(te_all = 0.2, te_low_only = 1.1)
   g <- grade_meta(m, rob = c("very_serious", "no", "no"),
-                  small_values           = "undesirable", threshold_type = "null")
+                  small_values           = "undesirable", threshold_type = "null",
+                  rob_direction_check = TRUE)
   rob_row <- g$domain_assessments[g$domain_assessments$domain == "Risk of bias", ]
   expect_equal(rob_row$judgment, "not_serious")
+  g0 <- grade_meta(m, rob = c("very_serious", "no", "no"),
+                   small_values = "undesirable", threshold_type = "null")
+  rob_row0 <- g0$domain_assessments[g0$domain_assessments$domain == "Risk of bias", ]
+  expect_equal(rob_row0$judgment, "serious")
 })
 
 test_that("rob vector: inflating small_values=desirable rates down (some_concerns)", {

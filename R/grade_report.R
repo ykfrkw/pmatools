@@ -208,7 +208,7 @@ grade_report <- function(outcomes,
       ""
     )
 
-    # Core GRADE 4 Fig 2 analysis set: a low-RoB refit changes every number
+    # Core GRADE Guide Fig 7-2 analysis set: a low-RoB refit changes every number
     # reported for this outcome, so the note travels with the outcome.
     rob_set_note <- .rob_analysis_set_note(g)
     if (!is.null(rob_set_note)) {
