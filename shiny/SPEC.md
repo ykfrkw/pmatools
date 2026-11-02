@@ -1592,7 +1592,7 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
   decides anything (0.5.1, breaking).** `pubias_registry_complete = "yes"`
   ("reporting bias is unlikely; do not rate down") is the pmatools
   short-circuit and is forwarded to `grade_meta()`. `"no"` ("reporting bias is
-  possible; go on to the Figure 5 nodes") is sent as `NULL` and decides
+  possible; go on to the Figure 9-1 nodes") is sent as `NULL` and decides
   nothing on its own. Two things went with that:
   - the app-level post-override that rewrote a `"no"` into a forced rate-down 1
     **regardless of the remaining nodes** is deleted. Core GRADE 4 Fig 5 has no

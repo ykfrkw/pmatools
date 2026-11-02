@@ -60,8 +60,8 @@ outcome the evidence base turns out to be silent on
 ([`not_reported_outcome()`](#outcomes-no-included-study-reported-v051),
 without writing R).
 
-The app has **its own version** (`shiny/DESCRIPTION`, currently 3.3.0), which
-tracks separately from the package version (0.5.2) in the root `DESCRIPTION`.
+The app has **its own version** (`shiny/DESCRIPTION`, currently 3.6.0), which
+tracks separately from the package version (0.7.0) in the root `DESCRIPTION`.
 They count different things: the package version counts changes to the
 analysis and rating API, the app version counts changes to the wizard's UI, and
 a release of one usually is not a release of the other. `shiny/DESCRIPTION` is
