@@ -283,6 +283,11 @@ step3_ui <- function(state = NULL) {
     )
   }
 
+  # House rule for all five domain tabs: the flowchart comes first and the
+  # questions the reviewer answers follow it. The chart frames which node a
+  # question answers, and a question that appears conditionally
+  # (Inconsistency Step 3, the Publication bias wizard) then opens below what
+  # the reviewer is reading instead of pushing it down the page.
   .inputs_details <- function(..., title = "Inputs for this domain", open = TRUE) {
     htmltools::tags$details(
       open = if (isTRUE(open)) NA else NULL,
@@ -426,6 +431,8 @@ step3_ui <- function(state = NULL) {
           # lights up the branch taken. output$rob_how_body went with it, and
           # so did output$rob_rule_note before that.
           pma_domain_reference(EDU_COPY$domains$rob),
+          shiny::uiOutput("threshold_block_rob"),
+          shiny::uiOutput("rob_evaluation"),
           # Review-wide, and edited here because this is the tab where it
           # decides something: it sets which side of the binary split each
           # study falls on, and the stratified forest below draws exactly that
@@ -446,8 +453,6 @@ step3_ui <- function(state = NULL) {
                      "two sides before that question can be asked. A study ",
                      "with no rating follows the same side."))
           ),
-          shiny::uiOutput("threshold_block_rob"),
-          shiny::uiOutput("rob_evaluation"),
           htmltools::tags$details(
             class = "pma-edit-details",
             htmltools::tags$summary(
@@ -504,20 +509,14 @@ step3_ui <- function(state = NULL) {
           pma_domain_reference(EDU_COPY$domains$inconsistency),
           shiny::uiOutput("threshold_block_inco"),
           shiny::uiOutput("incon_evaluation"),
-          htmltools::h5("Forest plot"),
-          htmltools::div(class = "pma-forest-image",
-            shinycssloaders::withSpinner(
-              shiny::imageOutput("incon_forest", height = "auto"),
-              type = 4, color = "#0f172a", size = 0.6,
-              proxy.height = "320px")),
-          pma_forest_display_panel("incon"),
           # Core GRADE 3 has three steps and the app used to ask for all
           # three. Two of them are DERIVED: Step 1 from the I-squared
           # surrogate and Step 2 from the zone tally over the study estimates,
           # both computed by .auto_inconsistency() and both now reported as
-          # facts above. Asking a reviewer to answer a question the algorithm
-          # has already answered - and then, on the manual path, aborting
-          # unless they answered a second one too - was the worst of both.
+          # facts in the evaluation directly above. Asking a reviewer to
+          # answer a question the algorithm has already answered - and then,
+          # on the manual path, aborting unless they answered a second one
+          # too - was the worst of both.
           #
           # Step 3 is genuinely not auto-detectable (subgroup credibility;
           # Core GRADE 3 points at ICEMAN), so it stays open - but only when
@@ -536,6 +535,13 @@ step3_ui <- function(state = NULL) {
                 selected = character(0))
             )
           ),
+          htmltools::h5("Forest plot"),
+          htmltools::div(class = "pma-forest-image",
+            shinycssloaders::withSpinner(
+              shiny::imageOutput("incon_forest", height = "auto"),
+              type = 4, color = "#0f172a", size = 0.6,
+              proxy.height = "320px")),
+          pma_forest_display_panel("incon"),
           .override_details(
             shiny::selectInput("incon_override", NULL,
               choices = pma_judgment_choices()),
@@ -549,6 +555,12 @@ step3_ui <- function(state = NULL) {
         shiny::tabPanel(.tab_title("indirectness"), value = "Indirectness",
           .domain_header("Indirectness", "indir_badge", "indir_chip"),
           pma_domain_reference(EDU_COPY$domains$indirectness),
+
+          # Fig 8-2 itself, with every route the four answers below took lit
+          # up - the same pma_flowchart_details() block the other domains
+          # draw inside their evaluation (R/judgment_display.R). It comes
+          # before the questions, as on every domain tab.
+          shiny::uiOutput("indir_flowchart"),
 
           # ----- The four Fig 8-2 branches ---------------------------------
           # Every one PRESELECTED to its "do not rate down" answer that needs
@@ -607,11 +619,6 @@ step3_ui <- function(state = NULL) {
           # and its footer repeats the Core GRADE 5 Table 2 gradient caveat
           # next to the judgment rather than only in the collapsed copy.
           shiny::uiOutput("indir_subdomain_table"),
-
-          # Fig 8-2 itself, with every route the four answers took lit up -
-          # the same pma_flowchart_details() block the other domains draw
-          # under their verdict (R/judgment_display.R).
-          shiny::uiOutput("indir_flowchart"),
 
           # Preselected, like the four radios above it. Blank used to be the
           # way a reviewer said "accept the fold", which meant the one answer
