@@ -421,7 +421,11 @@ test_that("choosing the 0.5.x rule set rates under it and folds some concerns hi
     expect_identical(shiny::isolate(state$rule_set), "core_grade_bmj_2025")
     # The radio is moved to the 0.5.x fold; the mirror follows at once.
     expect_identical(shiny::isolate(state$rob_some_concerns), "high")
+    # testServer does not round-trip updateRadioButtons(), so echo the radio
+    # the browser would send back; the rating must then carry the fold.
+    session$setInputs(rob_some_concerns = "high")
     g <- shiny::isolate(state$grade)
+    expect_identical(g$rob_some_concerns, "high")
     expect_identical(g$rule_set, "core_grade_bmj_2025")
     expect_true(isTRUE(g$rob_direction_check))
     expect_identical(

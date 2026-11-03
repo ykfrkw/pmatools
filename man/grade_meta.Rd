@@ -700,7 +700,7 @@ direction-of-bias check of Core GRADE 4 Fig 2) and
 Either argument passed explicitly wins over the rule set.
 \item Publication bias does not ask Guide Fig 9-1's first node ("Did the
 studies show an important effect?"), which Core GRADE 4 Fig 5 does
-not have: Q1-Q4 run exactly as in 0.5.x, the domain note says Q0 was
+not have: Q1-Q4 rate exactly as in 0.5.x, the domain note says Q0 was
 not asked, the \code{important_effect} fact records
 \code{"not asked"}, and the \code{flow_path} starts at Q1. Passing
 \code{pubias_important_effect} with this rule set aborts, because the

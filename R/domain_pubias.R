@@ -43,7 +43,7 @@
 #         a manual "yes" only removes a reason not to look and needs none.
 #         pubias_ask_q0 = FALSE (grade_meta(rule_set = "core_grade_bmj_2025"),
 #         the pmatools 0.5.x rule set) skips the node: Core GRADE 4 Fig 5 has
-#         no such node, so Q1-Q4 run exactly as in 0.5.x, the note and the
+#         no such node, so Q1-Q4 rate exactly as in 0.5.x, the note and the
 #         `important_effect` fact say the node was not asked, and the
 #         flow_path starts at Q1 rather than lighting Q0.
 #

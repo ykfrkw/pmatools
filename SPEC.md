@@ -1699,7 +1699,7 @@ Under `"core_grade_bmj_2025"`:
   only when the caller **did not pass** the argument — `grade_meta()` reads
   `missing()` before either is touched — so an explicit value always wins.
 - **Publication bias (§5.5d).** Q0 is not asked: `grade_meta()` calls
-  `assess_pubias(pubias_ask_q0 = FALSE)`. Q1–Q4 run exactly as in 0.5.x. The
+  `assess_pubias(pubias_ask_q0 = FALSE)`. Q1–Q4 rate exactly as in 0.5.x. The
   note opens `"Q0 not asked (pmatools 0.5.x rule set, Core GRADE 4 Fig 5: …)"`,
   the `important_effect` fact is recorded with `value` `"not asked (…)"` and
   `numeric` `NA` (never `"yes"`), and `flow_path` drops `node-q0` and
