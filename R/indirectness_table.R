@@ -3,7 +3,8 @@
 #
 # Renders x$indirectness_subdomains (normalised by R/domain_indirectness.R) as
 # a flextable: one row per subdomain with its target, the evidence found, the
-# Fig 8-2 answer in words, and a mark under the leaf that answer reached (do
+# Fig 8-2 answer in words (with the row's written reason beneath it, when one
+# was given), and a mark under the leaf that answer reached (do
 # not rate down / rate down once / rate down twice), plus a closing row with
 # the overall domain judgment. The answer vocabulary, its levels and the
 # worst-case fold all live in R/domain_indirectness.R; this file only paints
@@ -144,6 +145,14 @@ indirectness_table <- function(x, summary_text = NULL, ...) {
   if (is.na(overall_label)) overall_label <- overall
 
   answer_col <- unname(INDIRECTNESS_ANSWER_LABELS[sub_tbl$judgment])
+  # The reason sits under the answer it justifies (required for a "very
+  # close" surrogate since 0.9). Tables normalised earlier have no column.
+  row_rationale <- sub_tbl$rationale
+  if (!is.null(row_rationale)) {
+    has_reason <- !is.na(row_rationale) & nzchar(trimws(row_rationale))
+    answer_col[has_reason] <- paste0(answer_col[has_reason], "\nReason: ",
+                                     trimws(row_rationale[has_reason]))
+  }
 
   headers <- c(
     "Subdomain (target question)",

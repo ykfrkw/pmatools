@@ -341,7 +341,9 @@ PMA_FLOWCHART_FIGS <- list(
                               "The figure does not say how its four branches",
                               "combine; pmatools takes the worst case across",
                               "them. * Very close: some surrogates always",
-                              "represent a patient-important outcome."))
+                              "represent a patient-important outcome;",
+                              "pmatools takes that answer only with a",
+                              "written reason."))
 )
 
 # What a caption says instead of `departure` when the rating was made under the

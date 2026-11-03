@@ -90,6 +90,20 @@
 # The footnote * is the Guide's: some surrogates are so directly linked to the
 # disease process that they always represent a patient-important outcome.
 #
+# A "VERY CLOSE" SURROGATE NEEDS A WRITTEN REASON (pmatools 0.9, stricter than
+# Fig 8-2). The footnote is all the Guide offers: neither it nor Core GRADE 5
+# gives a single worked example of a surrogate close enough not to rate down,
+# whereas every surrogate either source does name (bone density, coronary
+# calcification, mitral valve area, calcium and phosphate measures) is rated
+# down once or twice. With no example to measure an answer against,
+# "surrogate_very_close" is the one Fig 8-2 answer that removes a rating down
+# on the reviewer's word alone, so a row giving it must carry a non-empty
+# `rationale` or the call aborts; the alternative offered is
+# "surrogate_close". The code -> level mapping is the figure's and does not
+# change. The legacy scale is unaffected: its Outcome answers never said
+# whether the outcome was a surrogate. Any row MAY carry a rationale, and when
+# it does the notes quote it after that row's route.
+#
 # A P/I/C code on the Outcome row, or an Outcome code on any other row, is a
 # route the figure does not have and aborts. The element is read from the
 # subdomain label (.indirectness_element()); a label that names no PICO
@@ -160,7 +174,8 @@
 # pass every argument do not accidentally override the subdomain worst case.
 #
 # ADMISSION RULE. Anything that reads or writes the indirectness judgment
-# itself (answer vocabulary, fold, notes, flow_path) belongs here. Rendering
+# itself (answer vocabulary, fold, notes, flow_path, the very-close reason
+# gate) belongs here. Rendering
 # the subdomain table belongs in R/indirectness_table.R; drawing the figure in
 # data-raw/build_figures.R; the Shiny tab in shiny/R/step3_grade.R.
 
@@ -170,6 +185,9 @@ INDIRECTNESS_PIC_ANSWERS <- c("no_difference", "similar", "dissimilar",
 INDIRECTNESS_OUTCOME_ANSWERS <- c("similar_definition", "different_definition",
                                   "surrogate_very_close", "surrogate_close",
                                   "surrogate_far")
+# The Fig 8-2 answers a row may give only with a written `rationale` (see
+# "A VERY CLOSE SURROGATE NEEDS A WRITTEN REASON" above).
+INDIRECTNESS_RATIONALE_REQUIRED <- "surrogate_very_close"
 # pmatools' pre-Fig-8-2 scale; accepted on any row, levels unchanged.
 INDIRECTNESS_LEGACY_ANSWERS <- c("yes", "probably_yes", "probably_no", "no")
 
@@ -557,7 +575,8 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
     rlang::abort(paste0(
       "indirectness_subdomains is missing required column(s): ",
       paste(missing_cols, collapse = ", "),
-      ". Required: 'subdomain', 'judgment'; optional: 'target', 'evidence'."
+      ". Required: 'subdomain', 'judgment'; optional: 'target', 'evidence', ",
+      "'rationale'."
     ))
   }
 
@@ -584,13 +603,37 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
     v
   }
 
+  rationale <- opt_col("rationale")
+  .check_indirectness_rationale(sub, judgment, rationale)
+
   tibble::tibble(
     subdomain   = sub,
     target      = opt_col("target"),
     evidence    = opt_col("evidence"),
     judgment    = judgment,
+    rationale   = rationale,
     grade_level = unname(INDIRECTNESS_ANSWER_TO_GRADE[judgment])
   )
+}
+
+# Refuse "surrogate_very_close" without a written reason. Core GRADE gives no
+# worked example of such a surrogate (see the header), so not rating down
+# rests on the reviewer's reason alone, and the reason must be on record.
+.check_indirectness_rationale <- function(subdomain, judgment, rationale) {
+  is_missing <- judgment %in% INDIRECTNESS_RATIONALE_REQUIRED &
+    (is.na(rationale) | !nzchar(trimws(rationale)))
+  if (!any(is_missing)) return(invisible(TRUE))
+  rlang::abort(paste0(
+    "indirectness_subdomains: the '", subdomain[is_missing][1], "' row ",
+    "answers 'surrogate_very_close' (do not rate down) but gives no ",
+    "rationale. Core GRADE gives no worked example of a surrogate that is ",
+    "very close to the patient-important outcome - Fig 8-2 offers only its ",
+    "footnote, that some surrogates are so directly linked to the disease ",
+    "process that they always represent a patient-important outcome - so ",
+    "pmatools requires a written reason for not rating down. Add a non-empty ",
+    "'rationale' to that row saying why this surrogate effectively is the ",
+    "patient-important outcome, or answer 'surrogate_close' (rate down once)."
+  ))
 }
 
 # Accept both list-of-rows (list(list(subdomain = , judgment = ), ...)) and
@@ -609,11 +652,15 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
           "'judgment' elements."
         ))
       }
+      optional <- function(value) {
+        if (is.null(value)) NA_character_ else as.character(value)[1]
+      }
       tibble::tibble(
         subdomain = as.character(e$subdomain)[1],
-        target    = if (is.null(e$target))   NA_character_ else as.character(e$target)[1],
-        evidence  = if (is.null(e$evidence)) NA_character_ else as.character(e$evidence)[1],
-        judgment  = as.character(e$judgment)[1]
+        target    = optional(e$target),
+        evidence  = optional(e$evidence),
+        judgment  = as.character(e$judgment)[1],
+        rationale = optional(e$rationale)
       )
     })
     return(dplyr::bind_rows(rows))
@@ -766,14 +813,21 @@ assess_indirectness <- function(indirectness, meta_obj, rationale = NULL,
 }
 
 # Compact one-line summary of the subdomain judgments for the domain notes:
-# each row's Fig 8-2 route in plain words and the leaf it reached. Kept free
-# of " | " so .first_sentence() (evidence_profile footnotes) keeps the whole
-# summary.
+# each row's Fig 8-2 route in plain words and the leaf it reached, then the
+# row's reason when one was given. Kept free of " | " so .first_sentence()
+# (evidence_profile footnotes) keeps the whole summary.
 .indirectness_subdomain_notes <- function(sub_tbl, worst) {
+  # A table normalised before 0.9 has no rationale column.
+  row_rationale <- sub_tbl$rationale %||% rep(NA_character_, nrow(sub_tbl))
+  # A reviewer's " | " would split the note at .first_sentence().
+  reason <- ifelse(is.na(row_rationale), "",
+                   paste0(" - reason: ", gsub(" | ", " / ",
+                                              trimws(row_rationale),
+                                              fixed = TRUE)))
   parts <- paste0(
     sub_tbl$subdomain, ": ",
     .lc_first(unname(INDIRECTNESS_ANSWER_LABELS[sub_tbl$judgment])),
-    " (", .indirectness_leaf_words(sub_tbl$grade_level), ")")
+    " (", .indirectness_leaf_words(sub_tbl$grade_level), ")", reason)
   elements <- .indirectness_element(sub_tbl$subdomain)
   legacy_outcome <- elements %in% "outcome" &
     sub_tbl$judgment %in% INDIRECTNESS_LEGACY_ANSWERS

@@ -60,8 +60,8 @@ outcome the evidence base turns out to be silent on
 ([`not_reported_outcome()`](#outcomes-no-included-study-reported-v051),
 without writing R).
 
-The app has **its own version** (`shiny/DESCRIPTION`, currently 3.7.0), which
-tracks separately from the package version (0.8.0) in the root `DESCRIPTION`.
+The app has **its own version** (`shiny/DESCRIPTION`, currently 3.8.0), which
+tracks separately from the package version (0.9.0) in the root `DESCRIPTION`.
 They count different things: the package version counts changes to the
 analysis and rating API, the app version counts changes to the wizard's UI, and
 a release of one usually is not a release of the other. `shiny/DESCRIPTION` is
@@ -1069,12 +1069,21 @@ and `"Comparator"` is accepted for `"Comparison"`):
 | | `"very_dissimilar"` | factors very dissimilar | −2 |
 | Outcome | `"similar_definition"` | not a surrogate; definition and time frames similar | 0 |
 | | `"different_definition"` | not a surrogate; they differ | −1 |
-| | `"surrogate_very_close"` | surrogate very close to the patient-important outcome | 0 |
+| | `"surrogate_very_close"` | surrogate very close to the patient-important outcome — **needs a `rationale`** (below) | 0 |
 | | `"surrogate_close"` | surrogate, close | −1 |
 | | `"surrogate_far"` | surrogate, far | −2 |
 
 An Outcome code on another row, or a Population / Intervention / Comparison code
-on the Outcome row, aborts. The **domain judgment defaults to the worst case
+on the Outcome row, aborts.
+
+**A "very close" surrogate needs a written reason (v0.9.0).** Any row may carry
+an optional `rationale` column; a row answered `"surrogate_very_close"` must, or
+`grade_meta()` aborts. Core GRADE gives no worked example of a surrogate that
+close — Fig 8-2 offers only its footnote that some surrogates always represent a
+patient-important outcome — so not rating down rests on your reason, and pmatools
+records it: the reason is quoted in the domain notes and shown in
+`indirectness_table()`. Without one, answer `"surrogate_close"` (−1). This rule is
+pmatools', stricter than the figure; the level itself is unchanged. The **domain judgment defaults to the worst case
 across the four subdomains** — in the example above `dissimilar` for Comparison
 drives the whole domain to `serious` (−1). The route every row took is recorded
 as the `flow_path` fact (`domain_facts(g_ind, "Indirectness")`) and drawn in

@@ -203,7 +203,7 @@
 #' the target. One answer code per row of \code{indirectness_subdomains}
 #' encodes the whole route (see \code{\link{grade_meta}}).
 #'
-#' Departs from the source twice. First, the four branches are parallel in
+#' Departs from the source three times. First, the four branches are parallel in
 #' the figure, which does not say how they combine; pmatools takes the worst
 #' case across them, symmetrically, which also does not reproduce the
 #' gradient Core GRADE 5 Table 2 sets (Population low, Intervention
@@ -213,7 +213,10 @@
 #' Comparison branches they are drawn as no difference, similar, dissimilar
 #' and very dissimilar, and on the Outcome branch, where the legacy scale
 #' never said whether the outcome was a surrogate, they light only the
-#' surrogate question and the notes say the route was not determined. The
+#' surrogate question and the notes say the route was not determined. Third,
+#' a "very close" surrogate does not rate down only with a written
+#' \code{rationale} on its row: Core GRADE gives no worked example of one,
+#' only the figure's footnote, so pmatools asks for the reason. The
 #' Outcome column also places the definition question below the pathway
 #' leaves rather than beside them, for room. \code{\link{indirectness_table}}
 #' renders the subdomain table beside the figure.

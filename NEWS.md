@@ -1,3 +1,44 @@
+# pmatools 0.9.0
+
+## Breaking changes
+
+* **An Indirectness Outcome answered `"surrogate_very_close"` now needs a
+  written reason.** `indirectness_subdomains` gains an optional `rationale`
+  column (also accepted in both list forms; blank or whitespace counts as
+  missing). A row answered `"surrogate_very_close"` without one aborts, naming
+  the row; answer `"surrogate_close"` (rate down once) instead, or add the
+  reason. Core GRADE gives no worked example of a surrogate close enough not to
+  rate down - Fig 8-2 offers only its footnote that some surrogates always
+  represent a patient-important outcome - so pmatools asks for the reason
+  rather than accepting the answer on its own. This is a pmatools convention,
+  stricter than the figure. The Fig 8-2 code-to-level mapping is unchanged,
+  and legacy-scale answers are unaffected. Scripts that pass
+  `"surrogate_very_close"` without a `rationale` stop working.
+
+## New features
+
+* A given `rationale` is quoted in the Indirectness domain notes after its
+  row's route ("... (do not rate down) - reason: ..."), shown under the
+  answer in `indirectness_table()`, and carried into the `analysis.R` that
+  `export_bundle()` writes. The normalised `$indirectness_subdomains` tibble
+  has a `rationale` column between `judgment` and `grade_level`.
+
+## Shiny app (3.8.0)
+
+* **"Very close" surrogate takes a reason.** The Outcome option reads
+  "... (reason required)". Choosing it opens a box asking why the surrogate is
+  so close that it effectively is the patient-important outcome. Until a reason
+  is written the app sends "close" (rate down once), says so under the box and
+  shows a warning; the fold, the overall-rating gate, the subdomain table and
+  the flowchart all use the answer actually sent. A remembered pre-Fig-8-2
+  "probably yes" on Outcome is now restored as "not a surrogate; definition and
+  time frames similar" instead of "very close", so it keeps its level without a
+  reason.
+* **Core GRADE examples, per answer.** Each of the four Indirectness questions
+  has a collapsed "Core GRADE examples" block listing, for every answer, the
+  worked examples Core GRADE 5 and the Core GRADE Guide chapter 8 give
+  (paraphrased), and saying so where they give none.
+
 # pmatools 0.8.0
 
 ## New features

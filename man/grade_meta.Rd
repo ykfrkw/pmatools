@@ -286,6 +286,11 @@ the figure. Duplicate labels abort.}
 \item{target}{Optional. The target question for that subdomain (display
 only).}
 \item{evidence}{Optional. The evidence found (display only).}
+\item{rationale}{Optional on every row, \strong{required} on a row
+answered \code{"surrogate_very_close"} (v0.9.0): the reviewer's
+written reason for the answer. Blank or whitespace-only counts as
+missing. When given it is quoted in the domain notes after the row's
+route and shown in \code{\link{indirectness_table}}.}
 \item{judgment}{Required. One code per row encodes the whole Fig 8-2
 route. Population / Intervention / Comparison (and any other
 non-outcome label): \code{"no_difference"} (no differences versus the
@@ -296,7 +301,12 @@ biological or social factors are sufficiently similar;
 \code{"similar_definition"} (not a surrogate; definition and time
 frames similar; \code{"not_serious"}), \code{"different_definition"}
 (not a surrogate; they differ; \code{"serious"}),
-\code{"surrogate_very_close"} (\code{"not_serious"}),
+\code{"surrogate_very_close"} (\code{"not_serious"}; requires a
+\code{rationale}, or the call aborts - a \strong{pmatools
+convention} stricter than Fig 8-2, because Core GRADE gives no
+worked example of a "very close" surrogate, only the figure's
+footnote that some surrogates always represent a patient-important
+outcome),
 \code{"surrogate_close"} (\code{"serious"}),
 \code{"surrogate_far"} (\code{"very_serious"}). An Outcome code on
 another row, or a Population / Intervention / Comparison code on the

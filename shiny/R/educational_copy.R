@@ -4,6 +4,21 @@
 # require touching the UI / server code. Values may be plain strings or
 # templates (with `{{slot}}` placeholders) used by the result blocks.
 
+# Core GRADE's examples of differences that do NOT rate down. The book gives
+# them per element: population characteristics, and dose or follow-up, which
+# are differences in intervention and outcome. Comparison has none of its own,
+# so its block says so rather than borrowing another element's example.
+EDU_INDIR_POPULATION_NOT_RATED_DOWN <- paste0(
+  "Differences in age, ethnicity or comorbidity typically do not warrant ",
+  "rating down: relative effects seldom differ with baseline risk. Applying ",
+  "mostly-male evidence to women raises no concern when there is no reason ",
+  "to expect different effects."
+)
+EDU_INDIR_DOSE_NOT_RATED_DOWN <- paste0(
+  "Applying evidence from a lower dose to a higher one raises no concern ",
+  "when there is no reason to expect different effects."
+)
+
 EDU_COPY <- list(
 
   # Step headers carry the title and nothing else. Each step used to open with
@@ -99,10 +114,13 @@ EDU_COPY <- list(
       # Beside the Outcome question. Fig 8-2 (living Core GRADE Guide) turns
       # "depending on how closely it tracks" into three answers; the closing
       # half is unchanged from 0.5.1 and is still pmatools' advice, not the
-      # Guide's.
+      # Guide's. "(reason required)" since 3.8.0: the app, like pmatools 0.9,
+      # takes "very close" only with a written reason (see `examples` below
+      # for why).
       surrogate = paste0(
         "Rate a surrogate by its distance from the patient-important outcome: ",
-        "very close, not down; close, once; far, twice. Avoid pooling the two."
+        "very close (reason required), not down; close, once; far, twice. ",
+        "Avoid pooling the two."
       ),
       # Beside the three Population / Intervention / Comparator questions,
       # which share Fig 8-2's second question. A difference on its own is not
@@ -110,6 +128,158 @@ EDU_COPY <- list(
       similarity = paste0(
         "A difference rates down only if biological or social factors are too ",
         "dissimilar to expect a similar impact on the target outcome."
+      ),
+      # The very-close reason box under the Outcome question: its label, its
+      # placeholder, and the line shown while it is empty.
+      very_close_reason_label = paste0(
+        "Why is this surrogate so close that it effectively is the ",
+        "patient-important outcome? (required)"
+      ),
+      very_close_reason_placeholder = paste0(
+        "Core GRADE gives no example of a very close surrogate, so say why ",
+        "this one always represents the outcome patients care about."
+      ),
+      very_close_fallback = paste0(
+        "Rated as close (rate down once) until a reason is given."
+      ),
+      # ----- Core GRADE's own worked examples, per Fig 8-2 answer ----------
+      # Rendered by step3_indir_examples_details() (R/step3_threshold.R) as
+      # one collapsed block under each of the four questions. Paraphrased
+      # from Core GRADE 5 (Guyatt et al., BMJ 2025;389:e083865) and the
+      # living Core GRADE Guide, chapter 8 (Fig 8-2, Table 2 / 8-2); nothing
+      # here is pmatools' own example, and no example the sources do not give
+      # may be added - an empty `items` renders `none` instead, because the
+      # absence is the information. In particular there is no Core GRADE
+      # example about disease-specific versus all-cause mortality, so none is
+      # given here.
+      #
+      # Only `source` renders as a `.pma-card-subtitle` and is registered in
+      # EDU_COPY_SUBTITLE_FIELDS; the rest is details-body text (see the
+      # comment above that vector).
+      examples = list(
+        title  = "Core GRADE examples",
+        source = paste0(
+          "Paraphrased from Core GRADE 5 (Guyatt et al., BMJ 2025) and the ",
+          "Core GRADE Guide, chapter 8."
+        ),
+        none = "Core GRADE gives no worked example for this answer.",
+        population = list(
+          list(heading = paste0("No differences / differences, but factors ",
+                                "sufficiently similar (do not rate down)"),
+               items = EDU_INDIR_POPULATION_NOT_RATED_DOWN),
+          list(heading = "Differences; factors dissimilar (rate down once)",
+               items = c(
+                 paste0("Mechanical vs bioprosthetic valves in patients on ",
+                        "dialysis: bleeding was inferred from RCTs of ",
+                        "warfarin vs placebo in other populations, so ",
+                        "rated down once (moderate certainty)."),
+                 paste0("Antibiotics for pancreatitis in children, inferred ",
+                        "from evidence in adults (no formal rating stated).")
+               )),
+          list(heading = paste0("Differences; factors very dissimilar ",
+                                "(rate down twice)"),
+               items = c(
+                 paste0("SARS-CoV-2 monoclonal antibodies after omicron: the ",
+                        "original RCTs were judged only very indirect ",
+                        "evidence.")
+               ))
+        ),
+        intervention = list(
+          list(heading = paste0("No differences / differences, but factors ",
+                                "sufficiently similar (do not rate down)"),
+               items = c(
+                 EDU_INDIR_DOSE_NOT_RATED_DOWN,
+                 paste0("A sunitinib vs interferon-alfa trial with switching ",
+                        "was not rated down, because sunitinib was superior ",
+                        "anyway; when few patients switch, indirectness is ",
+                        "minimal.")
+               )),
+          list(heading = "Differences; factors dissimilar (rate down once)",
+               items = c(
+                 paste0("Nortriptyline for smoking cessation with about 60% ",
+                        "adherence; the review rated it low certainty for ",
+                        "indirectness and imprecision."),
+                 paste0("Being invited to colonoscopy screening, when the ",
+                        "question is about actually undergoing it (level not ",
+                        "stated)."),
+                 "Cardiac rehabilitation whose components were poorly described.",
+                 "Continuous glucose monitoring using older technology."
+               )),
+          list(heading = paste0("Differences; factors very dissimilar ",
+                                "(rate down twice)"),
+               items = character(0))
+        ),
+        comparison = list(
+          list(heading = paste0("No differences / differences, but factors ",
+                                "sufficiently similar (do not rate down)"),
+               items = character(0)),
+          list(heading = "Differences; factors dissimilar (rate down once)",
+               items = c(
+                 paste0("Burosumab vs placebo, used for the question ",
+                        "burosumab vs phosphate plus active vitamin D: rated ",
+                        "down once."),
+                 "Atenolol as the comparator for newer antihypertensives.",
+                 "Haloperidol at 20 mg/day as the comparator.",
+                 paste0("Intramuscular interferon beta-1a as the comparator ",
+                        "in multiple sclerosis."),
+                 "Inferior control regimens in myeloma trials."
+               )),
+          list(heading = paste0("Differences; factors very dissimilar ",
+                                "(rate down twice)"),
+               items = character(0))
+        ),
+        outcome = list(
+          list(heading = paste0("Not a surrogate; definition and time frames ",
+                                "similar (do not rate down)"),
+               items = character(0)),
+          list(heading = paste0("Not a surrogate; definition or time frames ",
+                                "differ (rate down once)"),
+               items = c(
+                 paste0("Symptomatic vs asymptomatic vertebral fracture or ",
+                        "deep vein thrombosis."),
+                 "Short- vs long-term follow-up."
+               ),
+               note = paste0(
+                 "A different time frame alone is not enough: applying ",
+                 "1-year follow-up to 3 years raises no concern when there is ",
+                 "no reason to expect different effects.")),
+          list(heading = paste0("Surrogate, very close (do not rate down; ",
+                                "reason required)"),
+               items = character(0),
+               note = paste0(
+                 "Fig 8-2 gives only a footnote: surrogates so directly ",
+                 "linked to the disease process that they always represent ",
+                 "a patient-important outcome. With no example to compare ",
+                 "against, the app asks for your reason."
+               )),
+          list(heading = "Surrogate, close (rate down once)",
+               items = c(
+                 "Bone density for fractures.",
+                 "Coronary calcification for myocardial infarction.",
+                 paste0("Mitral valve area for long-term heart-failure ",
+                        "symptoms (serious indirectness).")
+               )),
+          list(heading = "Surrogate, far (rate down twice)",
+               items = c(
+                 paste0("Calcium and phosphate measures for fractures and ",
+                        "myocardial infarction in end-stage kidney disease.")
+               ))
+        ),
+        outcome_table2_heading = paste0(
+          "Surrogates Core GRADE 5 names, without a level"
+        ),
+        outcome_table2 = c(
+          "Cardiac function, for mortality in heart failure.",
+          "Test performance, for function in dementia.",
+          paste0("Blood glucose, for microvascular and macrovascular ",
+                 "morbidity and mortality in diabetes."),
+          "Viral load, in HIV."
+        ),
+        outcome_surrogate_test = paste0(
+          "Core GRADE's test: if an intervention with harms or burden changed ",
+          "only this outcome, would patients take it? If not, it is a ",
+          "surrogate."
+        )
       )
     ),
 
@@ -391,6 +561,14 @@ EDU_COPY_SUBTITLE_WORD_CAP <- 25L
 #     the two threshold notes in `output$threshold_panel` - and it is
 #     uncapped for the same reason: none of it lives in this deck.
 #
+# `domains$indirectness$examples` is details-body text, not a subtitle: the
+# per-answer Core GRADE examples behind a collapsed "Core GRADE examples"
+# summary, read by a reviewer who opened it to read them, so the one-line cap
+# has nothing to protect there. Only its `source` line wears the subtitle
+# class, and that one is registered. Of the three `very_close_*` strings the
+# label and placeholder are widget chrome; `very_close_fallback` is the
+# warning line under the box, styled as a subtitle, and is registered.
+#
 # `multi_outcome$*` was a third exemption, granted because a later phase owned
 # the saved-outcome UI. That phase has happened (the Save button is gone), so
 # the strings are capped like everything else.
@@ -402,6 +580,8 @@ EDU_COPY_SUBTITLE_FIELDS <- c(
   "domains$indirectness$population",
   "domains$indirectness$surrogate",
   "domains$indirectness$similarity",
+  "domains$indirectness$very_close_fallback",
+  "domains$indirectness$examples$source",
   "config_tab$continuous_departure",
   "config_tab$chinn_caveat",
   "config_tab$responder_default",
