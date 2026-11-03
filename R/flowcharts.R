@@ -157,6 +157,9 @@
 #' every non-null estimate is yes, so the node then effectively always answers
 #' yes; an unavailable estimate is assumed yes. \code{pubias_important_effect}
 #' overrides the derivation, and a manual "no" needs a written rationale.
+#' Under \code{grade_meta(rule_set = "core_grade_bmj_2025")} (the pmatools
+#' 0.5.x rules, after Core GRADE 4 Fig 5) the node is not asked and is not
+#' lit: the route starts at the small-and-industry-sponsored node.
 #'
 #' Departs from the source by one whole node: the registry-coverage box is a
 #' pmatools input and appears nowhere in Fig 9-1, whose only registry node is

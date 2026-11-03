@@ -113,8 +113,12 @@ step3_pubias_server <- function(input, output, session, state,
   # an input of grade_obj(), so reading the rating here closes no reactive
   # loop. Before the first rating it is "yes", which is also what the package
   # assumes when it cannot tell.
+  #
+  # Under the 0.5.x rule set the node is not asked at all, so the answer is
+  # "not_asked" from the moment the reviewer picks that set rather than only
+  # once a rating carrying the fact has come back.
   pubias_q0 <- shiny::reactive({
-    step3_pubias_important_effect(state$grade)
+    step3_pubias_important_effect(state$grade, rule_set = state$rule_set)
   })
 
   pubias_node <- shiny::reactive({
@@ -195,7 +199,8 @@ step3_pubias_server <- function(input, output, session, state,
           # concern that must not change what is rated.
           egger_asymmetric  = pubias_egger()$asymmetric,
           rare_flow         = .rare_active()),
-        caption = pma_algorithm_source("Publication bias")),
+        caption = pma_algorithm_source("Publication bias",
+                                       rule_set = state$rule_set)),
       # The chart's second node is the k gate, which is computed rather than
       # asked, so the chart can light the branch but cannot print the number
       # it turned on. It used to be a breadcrumb line; it belongs under the

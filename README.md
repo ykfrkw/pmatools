@@ -60,8 +60,8 @@ outcome the evidence base turns out to be silent on
 ([`not_reported_outcome()`](#outcomes-no-included-study-reported-v051),
 without writing R).
 
-The app has **its own version** (`shiny/DESCRIPTION`, currently 3.6.1), which
-tracks separately from the package version (0.7.3) in the root `DESCRIPTION`.
+The app has **its own version** (`shiny/DESCRIPTION`, currently 3.7.0), which
+tracks separately from the package version (0.8.0) in the root `DESCRIPTION`.
 They count different things: the package version counts changes to the
 analysis and rating API, the app version counts changes to the wizard's UI, and
 a release of one usually is not a release of the other. `shiny/DESCRIPTION` is
@@ -637,7 +637,7 @@ CI-significance branches removed in v0.3.1 stay removed.)
 **Legacy: the 0.5.x direction-of-bias check (`rob_direction_check = TRUE`).**
 Beyond Core GRADE (Guide Appendix 11), retained so that a 0.5.x analysis can
 be reproduced exactly; every judgment it produces says so in its notes, and
-the Shiny app does not offer it. It replaces both readings above with a single
+the Shiny app offers it only through its 0.5.x rule set (below). It replaces both readings above with a single
 MECE 3×3 zone table, read as the downgrade on the dominated branch and as the
 leaf on the other:
 
@@ -668,6 +668,21 @@ number is recorded on the `fig2_branch` fact.
 grade_meta(m, rob = rob_vec, small_values = "undesirable",
            threshold = 1.20, threshold_scale = "ratio",
            rob_direction_check = TRUE)   # reproduces pmatools 0.5.x
+```
+
+**The whole 0.5.x rule set (`rule_set = "core_grade_bmj_2025"`, v0.8.0).**
+To re-run a review rated with 0.5.x, pass the rule set rather than the
+individual flags. It defaults `rob_direction_check` to `TRUE` and
+`rob_some_concerns` to `"high"` (explicit values still win) and skips
+publication bias Q0 ("Did the studies show an important effect?"), which
+Core GRADE 4 Fig 5 does not have, so Q1–Q4 run as in 0.5.x. The flowcharts
+stay the Guide's; `export_bundle()` writes the rule set into `analysis.R`. In
+the Shiny app it is the *Rule set* dropdown on the Configuration tab.
+
+```r
+grade_meta(m, rob = rob_vec, small_values = "undesirable",
+           threshold = 1.20, threshold_scale = "ratio",
+           rule_set = "core_grade_bmj_2025")
 ```
 
 **Study-level overrides.** A single study's classification can be corrected
@@ -2328,7 +2343,10 @@ grade_meta(
   pubias_rationale         = NULL, # required for a scalar override
 
   ## Labels
-  outcome_name  = NULL             # outcome label for SoF table
+  outcome_name  = NULL,            # outcome label for SoF table
+
+  ## Rule set (v0.8.0)
+  rule_set      = c("core_grade_guide", "core_grade_bmj_2025")  # 0.5.x rules
 )
 ```
 

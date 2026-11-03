@@ -22,6 +22,11 @@
 # maps between a question and grade_meta() arguments or the copy on screen
 # belongs there; one that reads a rated object to build a Summary of Findings
 # sentence belongs in R/sof_display.R instead.
+#
+# THE RULE SET (pmatools 0.8) has its own short block after the publication-
+# bias wizard helpers: the choice between the Core GRADE Guide and the 0.5.x
+# BMJ 2025 rules, the "some concerns" fold it implies and the tab section that
+# offers it. A helper that only reads which rule set is in force belongs there.
 
 # ----- Why is there no analysis? ------------------------------------------
 #
@@ -447,12 +452,27 @@ step3_pubias_node <- function(small_industry = NULL,
 #
 # Reads the rated object's `domain_facts` list directly rather than calling
 # domain_facts(): this file is pure and takes no dependency on that accessor.
-step3_pubias_important_effect <- function(grade = NULL) {
+#
+# Under the pmatools 0.5.x rule set the node is not asked at all (Core GRADE 4
+# Fig 5 does not have it), and the answer is "not_asked" whether or not a
+# rating exists yet: saying "assumed yes" there would claim a node the rating
+# will never evaluate. The fact's own "not asked" value is checked BEFORE the
+# leading-"no" test below, which it would otherwise satisfy.
+step3_pubias_important_effect <- function(grade = NULL,
+                                          rule_set = STEP3_RULE_SET_DEFAULT) {
   facts <- tryCatch(grade$domain_facts[["Publication bias"]],
                     error = function(e) NULL)
   value <- if (is.data.frame(facts)) {
     facts$value[facts$key == "important_effect"]
   } else character(0)
+  is_not_asked_fact <- length(value) == 1L && !is.na(value) &&
+    startsWith(value, "not asked")
+  if (step3_rule_set_is_legacy(rule_set) || is_not_asked_fact) {
+    return(list(answer = "not_asked", line = paste0(
+      "Important effect: not asked - the BMJ 2025 Core GRADE series rule set ",
+      "(pmatools 0.5.x) has no such node, so the chart starts at the next ",
+      "question")))
+  }
   if (length(value) != 1L || is.na(value) || !nzchar(value)) {
     return(list(answer = "yes", line = paste0(
       "Important effect: assumed yes until the outcome is rated (computed ",
@@ -583,7 +603,13 @@ step3_pubias_flow_ids <- function(small_industry = NULL,
     return(c("pma-pubias-node-q0", "pma-pubias-edge-q0-no",
              "pma-pubias-leaf-nodown-q0"))
   }
-  ids <- c("pma-pubias-node-q0", "pma-pubias-edge-q0-yes")
+  # Not asked (the 0.5.x rule set): nothing of Q0 is lit, and the route starts
+  # at the first question, exactly as assess_pubias() records it.
+  ids <- if (identical(.pubias_chr(important_effect), "not_asked")) {
+    character(0)
+  } else {
+    c("pma-pubias-node-q0", "pma-pubias-edge-q0-yes")
+  }
   if (!.pubias_answered(small_industry)) return(ids)
 
   ids <- c(ids, "pma-pubias-node-q1")
@@ -627,6 +653,67 @@ step3_pubias_flow_ids <- function(small_industry = NULL,
     return(c(ids, "pma-pubias-edge-q4-no", "pma-pubias-leaf-nodown-q4"))
   }
   ids
+}
+
+# ----- The rule set (pmatools 0.8) ----------------------------------------
+#
+# Which rules grade_meta() rates under: the Core GRADE Guide (default), or the
+# BMJ 2025 Core GRADE series rules pmatools 0.5.x applied, kept so a review
+# rated with 0.5.x can be re-run as it was. Review-wide, like the "some
+# concerns" fold - it is a property of the review, not of one outcome - so it
+# is mirrored in state$rule_set and not registered per outcome in
+# R/outcome_provenance.R.
+#
+# The ids are grade_meta()'s own rule_set values, spelled out here rather than
+# read off the staged package so this file stays loadable without it.
+STEP3_RULE_SET_DEFAULT <- "core_grade_guide"
+STEP3_RULE_SET_LEGACY  <- "core_grade_bmj_2025"
+STEP3_RULE_SET_CHOICES <- c(
+  "Core GRADE Guide (current)"                  = STEP3_RULE_SET_DEFAULT,
+  "BMJ 2025 Core GRADE series (pmatools 0.5.x)" = STEP3_RULE_SET_LEGACY
+)
+
+# A selectInput value, or the default for anything it cannot be.
+step3_rule_set_value <- function(value) {
+  if (is.null(value) || length(value) != 1L || is.na(value) ||
+      !value %in% STEP3_RULE_SET_CHOICES) {
+    return(STEP3_RULE_SET_DEFAULT)
+  }
+  as.character(value)
+}
+
+step3_rule_set_is_legacy <- function(rule_set) {
+  identical(step3_rule_set_value(rule_set), STEP3_RULE_SET_LEGACY)
+}
+
+# The "some concerns" fold a rule set implies, which the Risk of Bias radio is
+# moved to when the reviewer picks that rule set. The reviewer can still move
+# the radio afterwards; the rule set only chooses where it starts.
+step3_rule_set_some_concerns <- function(rule_set) {
+  if (step3_rule_set_is_legacy(rule_set)) "high" else "low"
+}
+
+# The Configuration tab's Rule set section. Static (built by step3_ui(), not
+# a renderUI), because the choice is review-wide and must survive the
+# per-outcome rebuild of output$threshold_panel; `selected` is seeded from
+# state$rule_set for the same reason the "some concerns" radio is.
+step3_rule_set_block <- function(selected = STEP3_RULE_SET_DEFAULT) {
+  .config_section(
+    "Rule set",
+    shiny::selectInput("rule_set", "Rate certainty with",
+                       choices  = STEP3_RULE_SET_CHOICES,
+                       selected = step3_rule_set_value(selected),
+                       width    = "100%"),
+    .config_note(
+      "Keep the Core GRADE Guide unless you are re-running a review that ",
+      "was rated with pmatools 0.5.x. The BMJ 2025 rules change three things: ",
+      "risk of bias adds the 0.5.x direction-of-bias check (beyond Core ",
+      "GRADE), studies rated 'some concerns' count as high risk of bias ",
+      "(changeable on the Risk of Bias tab), and publication bias does not ",
+      "ask whether the studies showed an important effect. Indirectness, ",
+      "inconsistency and imprecision rate the same under both. The ",
+      "flowcharts stay the Core GRADE Guide's figures.")
+  )
 }
 
 # Map a suggest_threshold() return onto the two threshold reactiveVals used by

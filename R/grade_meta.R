@@ -80,8 +80,10 @@
 #'   \code{"some concerns"} as the stricter of the worked boundaries above
 #'   (\emph{at least one item} at high risk of bias). A rating made with
 #'   0.5.1 or 0.5.2 without this argument reproduces only if you now pass
-#'   \code{rob_some_concerns = "high"} explicitly. The Shiny app defaults to
-#'   \code{"low"} as well.
+#'   \code{rob_some_concerns = "high"} explicitly, or pass
+#'   \code{rule_set = "core_grade_bmj_2025"}, under which an unsupplied
+#'   \code{rob_some_concerns} defaults to \code{"high"}. The Shiny app defaults
+#'   to \code{"low"} as well.
 #' @param rob_overrides (v0.5) Optional named character vector of study-level
 #'   Risk-of-Bias overrides keyed on \code{meta_obj$studlab}, e.g.
 #'   \code{c("Smith 2020" = "high")}. Values accept the same vocabulary as
@@ -150,7 +152,9 @@
 #'   GRADE} (Core GRADE Guide Appendix 11), \strong{legacy}, retained for
 #'   reproducibility of 0.5.x analyses: Core GRADE Guide Fig 7-2 dropped the
 #'   "check direction of bias" node that Core GRADE 4 Fig 2 had, and every
-#'   judgment made with this flag says so in its notes. Requires
+#'   judgment made with this flag says so in its notes. Defaults to
+#'   \code{TRUE} instead when \code{rule_set = "core_grade_bmj_2025"} and the
+#'   argument is not supplied. Requires
 #'   \code{small_values}, which \code{grade_meta()} requires anyway.
 #' @param small_values \strong{Required} (v0.5.1, breaking). Are small outcome
 #'   values desirable? \code{"desirable"} if small values are good (eg,
@@ -591,6 +595,29 @@
 #'   rule-out for fields where pre-registration is universal and all registered
 #'   trials can be accounted for. \code{"yes"} short-circuits the publication
 #'   bias domain to "no" regardless of Egger's test or k. Default \code{NULL}.
+#' @param rule_set (v0.8) Which set of rules rates the evidence.
+#'   \code{"core_grade_guide"} (default) follows the Core GRADE Guide figures
+#'   (Fig 7-2 for risk of bias, Fig 9-1 for publication bias) and is what every
+#'   release since 0.6.0 does; passing it changes nothing.
+#'   \code{"core_grade_bmj_2025"} re-runs a review rated with pmatools 0.5.x
+#'   under the rules of the BMJ 2025 Core GRADE series it was rated with:
+#'   \itemize{
+#'     \item \code{rob_direction_check} defaults to \code{TRUE} (the 0.5.x
+#'       direction-of-bias check of Core GRADE 4 Fig 2) and
+#'       \code{rob_some_concerns} to \code{"high"} (the 0.5.1/0.5.2 default).
+#'       Either argument passed explicitly wins over the rule set.
+#'     \item Publication bias does not ask Guide Fig 9-1's first node ("Did the
+#'       studies show an important effect?"), which Core GRADE 4 Fig 5 does
+#'       not have: Q1-Q4 rate exactly as in 0.5.x, the domain note says Q0 was
+#'       not asked, the \code{important_effect} fact records
+#'       \code{"not asked"}, and the \code{flow_path} starts at Q1. Passing
+#'       \code{pubias_important_effect} with this rule set aborts, because the
+#'       answer would be ignored.
+#'   }
+#'   Indirectness, Inconsistency and Imprecision rate identically under both
+#'   sets. The flowcharts in \code{\link{grade_flowcharts}} stay the Guide's;
+#'   the legacy set lights the nodes the 0.5.x rules walked. Versions before
+#'   0.5 are not reproduced.
 #'
 #' @section One control-arm risk:
 #' \code{threshold_baseline}, \code{ois_p0} and \code{baseline_risk} are three
@@ -736,6 +763,8 @@
 #'       direction-of-bias check decided risk of bias.}
 #'     \item{rob_some_concerns}{(v0.6) \code{"low"} or \code{"high"}: the
 #'       side "some concerns" studies were folded into.}
+#'     \item{rule_set}{(v0.8) \code{"core_grade_guide"} or
+#'       \code{"core_grade_bmj_2025"}: the rule set the rating was made under.}
 #'     \item{control_risk}{How the one control-arm risk was shared across
 #'       \code{threshold_baseline}, \code{ois_p0} and \code{baseline_risk}
 #'       (see \strong{One control-arm risk}): \code{value} and \code{donor}
@@ -848,11 +877,34 @@ grade_meta <- function(meta_obj,
                        # never met the rare-event workflow is unaffected.
                        rare_flow                        = FALSE,
                        rare_one_arm_total_zero          = FALSE,
-                       rare_method                      = NULL) {
+                       rare_method                      = NULL,
+                       # Which set of rules rates the evidence (v0.8). Last in
+                       # the signature so no positional call shifts. See
+                       # .check_rule_set() and the roxygen for what the
+                       # legacy set changes.
+                       rule_set                         = c("core_grade_guide",
+                                                            "core_grade_bmj_2025")) {
 
   # --- input check ---
   if (!inherits(meta_obj, "meta")) {
     rlang::abort("meta_obj must be an object of class 'meta' (from the {meta} package).")
+  }
+  # The rule set changes the DEFAULTS of two risk-of-bias arguments, so it is
+  # resolved before they are validated -- and missing() is read before either
+  # argument is touched, which is the only point at which it is reliable.
+  rule_set <- .check_rule_set(rule_set)
+  is_legacy_rules <- identical(rule_set, PMA_RULE_SET_LEGACY)
+  if (is_legacy_rules) {
+    if (missing(rob_direction_check)) rob_direction_check <- TRUE
+    if (missing(rob_some_concerns))   rob_some_concerns   <- "high"
+    if (!is.null(pubias_important_effect)) {
+      rlang::abort(paste0(
+        "pubias_important_effect cannot be combined with rule_set = ",
+        "'core_grade_bmj_2025': that rule set (pmatools 0.5.x, Core GRADE 4 ",
+        "Fig 5) does not ask whether the studies showed an important effect. ",
+        "Drop pubias_important_effect, or use rule_set = 'core_grade_guide'."
+      ))
+    }
   }
   study_design      <- match.arg(study_design)
   outcome_type      <- match.arg(outcome_type)
@@ -1155,7 +1207,9 @@ grade_meta <- function(meta_obj,
     # Q0 of Guide Fig 9-1 is judged against the rating target's threshold,
     # the same one Inconsistency and Imprecision are handed.
     pubias_important_effect  = pubias_important_effect,
-    threshold_chosen         = target_info$threshold_for_imprecision
+    threshold_chosen         = target_info$threshold_for_imprecision,
+    # The 0.5.x rule set has no Q0 (Core GRADE 4 Fig 5).
+    pubias_ask_q0            = !is_legacy_rules
   )
   # bind_rows() below drops attributes, so every domain's facts have to be
   # lifted off its row BEFORE the bind. Publication bias was the one assessor
@@ -1281,10 +1335,41 @@ grade_meta <- function(meta_obj,
       # The fold the rating used, so export_bundle() replays it even when the
       # caller relied on the default (which moved in 0.5.1 and again in 0.6.0).
       rob_some_concerns   = rob_some_concerns,
+      # Which rule set rated the evidence (v0.8), so export_bundle() can replay
+      # a legacy rating as one: the two sets rate the same data differently.
+      rule_set            = rule_set,
       rare               = rare_record
     ),
     class = "pmatools"
   )
+}
+
+# The two rule sets grade_meta() can rate under. The Guide is the default and
+# the only one maintained forward; the BMJ 2025 set is pmatools 0.5.x, kept so
+# a review rated with 0.5.x can be re-run under the rules it was rated with.
+PMA_RULE_SETS       <- c("core_grade_guide", "core_grade_bmj_2025")
+PMA_RULE_SET_LEGACY <- "core_grade_bmj_2025"
+PMA_RULE_SET_LABELS <- c(
+  core_grade_guide    = "Core GRADE Guide",
+  core_grade_bmj_2025 = "BMJ 2025 Core GRADE series (pmatools 0.5.x)"
+)
+
+# The rule_set argument: its unsupplied c(...) default resolves to the first
+# entry; anything outside the two names aborts with what each one means.
+.check_rule_set <- function(rule_set) {
+  if (is.null(rule_set)) return(PMA_RULE_SETS[[1]])
+  if (identical(as.character(rule_set), PMA_RULE_SETS)) {
+    return(PMA_RULE_SETS[[1]])
+  }
+  if (!is.character(rule_set) || length(rule_set) != 1L || is.na(rule_set) ||
+      !rule_set %in% PMA_RULE_SETS) {
+    rlang::abort(paste0(
+      "rule_set must be 'core_grade_guide' (default: the Core GRADE Guide ",
+      "figures) or 'core_grade_bmj_2025' (the pmatools 0.5.x rules of the BMJ ",
+      "2025 Core GRADE series)."
+    ))
+  }
+  rule_set
 }
 
 # Append a sentence to a domain row's notes, preserving the " | " separator
@@ -1318,6 +1403,11 @@ print.pmatools <- function(x, ...) {
                 } else {
                   ""
                 }))
+  }
+  # Printed only for the legacy set, so a default call prints as it always did.
+  if (identical(x$rule_set, PMA_RULE_SET_LEGACY)) {
+    cat(sprintf(" Rule set     : %s\n",
+                PMA_RULE_SET_LABELS[[PMA_RULE_SET_LEGACY]]))
   }
   if (isTRUE(x$rob_refit)) {
     cat(sprintf(" Analysis set : low risk of bias studies only (%d of %d studies)\n",
