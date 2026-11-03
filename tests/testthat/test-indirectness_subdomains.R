@@ -273,7 +273,8 @@ test_that("subdomains live on the object, not in domain_assessments", {
   sub <- g$indirectness_subdomains
   expect_s3_class(sub, "tbl_df")
   expect_equal(names(sub),
-               c("subdomain", "target", "evidence", "judgment", "grade_level"))
+               c("subdomain", "target", "evidence", "judgment", "rationale",
+                 "grade_level"))
   expect_equal(nrow(sub), 4L)
   expect_equal(sub$grade_level,
                c("not_serious", "not_serious", "not_serious", "serious"))
@@ -446,7 +447,10 @@ test_that("each Fig 8-2 code maps to the level of the leaf it reaches", {
            surrogate_close = "serious",
            surrogate_far = "very_serious")
   for (code in names(out)) {
-    g <- grade_with_subdomains(fig82_subdomains(outcome = code))
+    sub <- fig82_subdomains(outcome = code)
+    # "Very close" is accepted only with a reason (see the tests below).
+    sub$rationale <- c(NA, NA, NA, "The surrogate is the clinical event.")
+    g <- grade_with_subdomains(sub)
     expect_equal(indir_row(g)$judgment, unname(out[code]), info = code)
   }
 })
@@ -614,4 +618,124 @@ test_that("the machine-only flow_path does not count as a footnote reason", {
                               indirectness = "very_serious",
                               indirectness_rationale = "Surrogate is far")
   expect_true("Indirectness" %in% pmatools:::.rated_down_fact_domains(g2))
+})
+
+# ---- "very close" surrogate needs a written reason (0.9.0) ---------------
+
+very_close_reason <- "Reviewer's reason the surrogate is the outcome itself"
+
+test_that("a very close surrogate without a rationale aborts", {
+  expect_error(
+    grade_with_subdomains(fig82_subdomains(outcome = "surrogate_very_close")),
+    regexp = "'Outcome' row answers 'surrogate_very_close'")
+  err <- tryCatch(
+    grade_with_subdomains(fig82_subdomains(outcome = "surrogate_very_close")),
+    error = function(e) conditionMessage(e))
+  expect_match(err, "no worked example", fixed = TRUE)
+  expect_match(err, "surrogate_close", fixed = TRUE)
+  expect_s3_class(
+    tryCatch(pmatools:::.normalize_indirectness_subdomains(
+      fig82_subdomains(outcome = "surrogate_very_close")),
+      error = function(e) e),
+    "rlang_error")
+})
+
+test_that("a blank or whitespace rationale counts as missing", {
+  for (blank in c("", "   ", NA)) {
+    sub <- fig82_subdomains(outcome = "surrogate_very_close")
+    sub$rationale <- c("x", "x", "x", blank)
+    expect_error(grade_with_subdomains(sub),
+                 regexp = "surrogate_very_close", info = blank)
+  }
+  # Blank rationales on other rows normalise to NA.
+  sub <- fig82_subdomains()
+  sub$rationale <- c("", "  ", NA, "Same follow-up as the target")
+  g <- grade_with_subdomains(sub)
+  expect_identical(g$indirectness_subdomains$rationale,
+                   c(NA, NA, NA, "Same follow-up as the target"))
+})
+
+test_that("a very close surrogate with a rationale is accepted and quoted", {
+  sub <- fig82_subdomains(outcome = "surrogate_very_close")
+  sub$rationale <- c(NA, NA, NA, very_close_reason)
+  g <- grade_with_subdomains(sub)
+  expect_equal(indir_row(g)$judgment, "not_serious")
+  expect_identical(g$indirectness_subdomains$rationale[4], very_close_reason)
+  notes <- indir_row(g)$notes
+  expect_match(notes, paste0(
+    "Outcome: surrogate, very close to patient-important outcome (do not ",
+    "rate down) - reason: ", very_close_reason), fixed = TRUE)
+  # Rows without a reason read as before.
+  expect_match(notes, "Population: no difference from the target (do not rate down);",
+               fixed = TRUE)
+  # The normalised table round-trips through the gate.
+  expect_identical(
+    pmatools:::.normalize_indirectness_subdomains(g$indirectness_subdomains),
+    g$indirectness_subdomains)
+})
+
+test_that("a rationale cannot split the note at .first_sentence()", {
+  sub <- fig82_subdomains(outcome = "surrogate_very_close")
+  sub$rationale <- c(NA, NA, NA, "first | second")
+  notes <- indir_row(grade_with_subdomains(sub))$notes
+  expect_false(grepl(" | ", notes, fixed = TRUE))
+  expect_match(notes, "reason: first / second", fixed = TRUE)
+})
+
+test_that("the legacy scale needs no rationale on the Outcome row", {
+  g <- grade_with_subdomains(bmj_subdomains(outcome_judgment = "probably_yes"))
+  expect_equal(indir_row(g)$judgment, "not_serious")
+})
+
+test_that("both list forms carry the rationale", {
+  as_rows <- list(
+    list(subdomain = "Population", judgment = "no_difference"),
+    list(subdomain = "Outcome", judgment = "surrogate_very_close",
+         rationale = very_close_reason)
+  )
+  g_rows <- grade_with_subdomains(as_rows)
+  expect_equal(indir_row(g_rows)$judgment, "not_serious")
+  expect_identical(g_rows$indirectness_subdomains$rationale,
+                   c(NA, very_close_reason))
+
+  as_cols <- list(
+    subdomain = c("Population", "Outcome"),
+    judgment  = c("no_difference", "surrogate_very_close"),
+    rationale = c("", very_close_reason)
+  )
+  g_cols <- grade_with_subdomains(as_cols)
+  expect_identical(g_cols$indirectness_subdomains$rationale,
+                   c(NA, very_close_reason))
+
+  # Without it, both forms abort.
+  as_rows[[2]]$rationale <- NULL
+  expect_error(grade_with_subdomains(as_rows), regexp = "surrogate_very_close")
+  as_cols$rationale <- NULL
+  expect_error(grade_with_subdomains(as_cols), regexp = "surrogate_very_close")
+})
+
+test_that("indirectness_table shows the reason under the answer", {
+  skip_if_not_installed("flextable")
+  sub <- fig82_subdomains(outcome = "surrogate_very_close")
+  sub$rationale <- c(NA, NA, NA, very_close_reason)
+  answers <- as.character(
+    indirectness_table(grade_with_subdomains(sub))$body$dataset[[3]])
+  expect_true(paste0("Surrogate, very close to patient-important outcome",
+                     "\nReason: ", very_close_reason) %in% answers)
+  expect_true("No difference from the target" %in% answers)
+})
+
+test_that("the bundled script carries the rationale only when one exists", {
+  sub <- fig82_subdomains(outcome = "surrogate_very_close")
+  sub$rationale <- c(NA, NA, NA, very_close_reason)
+  lit <- pmatools:::.indirectness_subdomains_lit(
+    grade_with_subdomains(sub)$indirectness_subdomains)
+  expect_match(lit, "rationale", fixed = TRUE)
+  rebuilt <- eval(parse(text = lit))
+  expect_equal(indir_row(grade_with_subdomains(rebuilt))$judgment,
+               "not_serious")
+
+  plain <- pmatools:::.indirectness_subdomains_lit(
+    grade_with_subdomains(fig82_subdomains())$indirectness_subdomains)
+  expect_false(grepl("rationale", plain, fixed = TRUE))
 })

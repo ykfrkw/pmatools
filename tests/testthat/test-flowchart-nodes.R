@@ -691,6 +691,8 @@ test_that("the rate-down leaf says what the Guide's leaf says", {
 .indir_flow <- function(subdomain, judgment) {
   row <- pmatools:::.assess_indirectness_subdomains(
     data.frame(subdomain = subdomain, judgment = judgment,
+               # A "very close" surrogate is accepted only with a reason.
+               rationale = "Reason given by the reviewer",
                stringsAsFactors = FALSE))
   f <- attr(row, "facts")
   strsplit(f$value[f$key == "flow_path"], " ", fixed = TRUE)[[1L]]

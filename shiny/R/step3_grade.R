@@ -36,7 +36,9 @@ STEP3_INDIR_PIC_ANSWERS <- c(
 STEP3_INDIR_OUTCOME_ANSWERS <- c(
   "Not a surrogate; definition and time frames similar" = "similar_definition",
   "Not a surrogate; definition or time frames differ"   = "different_definition",
-  "Surrogate, very close to the patient-important outcome*" =
+  # "(reason required)": the app sends this answer only with a written reason
+  # (step3_indir_outcome_effective(), R/step3_threshold.R).
+  "Surrogate, very close to the patient-important outcome* (reason required)" =
     "surrogate_very_close",
   "Surrogate, close to the patient-important outcome"   = "surrogate_close",
   "Surrogate, far from the patient-important outcome"   = "surrogate_far"
@@ -588,12 +590,14 @@ step3_ui <- function(state = NULL) {
               selected = STEP3_INDIR_DEFAULT_ANSWERS[["indir_population"]]),
             htmltools::p(class = "pma-card-subtitle",
                          EDU_COPY$domains$indirectness$population),
+            step3_indir_examples_details("population"),
             shiny::radioButtons("indir_intervention",
               paste0("Intervention - differences in dose, duration, route or ",
                      "operator skill, or non-adherence, switching or changing ",
                      "technology, versus the target?"),
               choices = STEP3_INDIR_PIC_ANSWERS,
               selected = STEP3_INDIR_DEFAULT_ANSWERS[["indir_intervention"]]),
+            step3_indir_examples_details("intervention"),
             shiny::radioButtons("indir_comparator",
               paste0("Comparator - differences in dose, duration, route or ",
                      "quality of administration, versus the target?"),
@@ -601,14 +605,29 @@ step3_ui <- function(state = NULL) {
               selected = STEP3_INDIR_DEFAULT_ANSWERS[["indir_comparator"]]),
             htmltools::p(class = "pma-card-subtitle",
                          EDU_COPY$domains$indirectness$similarity),
+            step3_indir_examples_details("comparison"),
             shiny::radioButtons("indir_outcome",
               paste0("Outcome - is it a surrogate of the outcome of interest? ",
                      "If not, are its definition and time frames similar to ",
                      "the target?"),
               choices = STEP3_INDIR_OUTCOME_ANSWERS,
               selected = STEP3_INDIR_DEFAULT_ANSWERS[["indir_outcome"]]),
+            # "Very close" is taken only with a reason. Until one is written
+            # the server sends "surrogate_close" and the note below says so
+            # (step3_indir_outcome_effective(), R/step3_threshold.R).
+            shiny::conditionalPanel(
+              "input.indir_outcome == 'surrogate_very_close'",
+              shiny::textAreaInput(
+                "indir_outcome_rationale",
+                EDU_COPY$domains$indirectness$very_close_reason_label,
+                rows = 2, width = "100%",
+                placeholder =
+                  EDU_COPY$domains$indirectness$very_close_reason_placeholder),
+              shiny::uiOutput("indir_outcome_fallback_note")
+            ),
             htmltools::p(class = "pma-card-subtitle",
                          EDU_COPY$domains$indirectness$surrogate),
+            step3_indir_examples_details("outcome"),
             htmltools::p(class = "pma-card-subtitle",
                          EDU_COPY$domains$indirectness$gradient)
           ),
@@ -2627,11 +2646,23 @@ step3_server <- function(input, output, session, state) {
   # ----- Indirectness subdomains (Core GRADE Guide Fig 8-2) ---------------
   # The four PICO answers, shaped as the data frame grade_meta() documents
   # for indirectness_subdomains: one row per subdomain, `subdomain` and
-  # `judgment` required, `target` / `evidence` optional and display-only.
+  # `judgment` required, `target` / `evidence` optional and display-only,
+  # `rationale` the Outcome row's reason for a very close surrogate.
   # NULL while nothing has been answered, so an unanswered domain falls back
   # to the scalar path rather than asserting four "do not rate down" answers.
   # A pre-Fig-8-2 value is upgraded on the way in, so the table can never be
   # sent a legacy answer the radio no longer offers.
+  #
+  # The Outcome answer goes through step3_indir_outcome_effective() first, so
+  # a "very close" surrogate with no reason is sent as "surrogate_close".
+  # Everything downstream - the fold, the override gate, the subdomain table,
+  # the flowchart - reads this reactive, so they all see the answer actually
+  # sent rather than the one on the radio.
+  indir_outcome_resolved <- shiny::reactive({
+    step3_indir_outcome_effective(
+      step3_indir_upgrade_answer("indir_outcome", input$indir_outcome),
+      input$indir_outcome_rationale)
+  })
   indir_subdomains <- shiny::reactive({
     ans <- vapply(STEP3_INDIR_SUBDOMAINS, function(id) {
       v <- step3_indir_upgrade_answer(id, input[[id]])
@@ -2639,13 +2670,29 @@ step3_server <- function(input, output, session, state) {
         NA_character_
       } else as.character(v)
     }, character(1))
+    outcome   <- indir_outcome_resolved()
+    rationale <- rep(NA_character_, length(ans))
+    if (!is.na(ans[["Outcome"]])) {
+      ans[["Outcome"]]       <- outcome$judgment
+      rationale[names(ans) == "Outcome"] <- outcome$rationale
+    }
     keep <- !is.na(ans) & ans %in% STEP3_INDIR_ANSWERS
     if (!any(keep)) return(NULL)
     data.frame(
       subdomain = names(STEP3_INDIR_SUBDOMAINS)[keep],
       judgment  = unname(ans[keep]),
+      rationale = rationale[keep],
       stringsAsFactors = FALSE
     )
+  })
+
+  # Beside the reason box, visible only while "very close" is selected
+  # (the conditionalPanel in step3_ui()): says what is being sent instead.
+  output$indir_outcome_fallback_note <- shiny::renderUI({
+    if (!isTRUE(indir_outcome_resolved()$fell_back)) return(NULL)
+    htmltools::p(class = "pma-card-subtitle", style = "color: #8a6d1f;",
+                 htmltools::strong(
+                   EDU_COPY$domains$indirectness$very_close_fallback))
   })
 
   # Worst case across the answered subdomains. Mirrors the symmetric fold
@@ -2794,6 +2841,16 @@ step3_server <- function(input, output, session, state) {
   .indir_grade_args <- function() {
     indir_sub       <- indir_subdomains()
     indir_worst     <- indir_worst_case()
+    # Same wording and id pattern as the other rationale gates: the answer
+    # was not dropped, it was sent as the stricter one.
+    if (isTRUE(indir_outcome_resolved()$fell_back)) {
+      shiny::showNotification(
+        paste0("Indirectness: 'very close' surrogate rated as close (rate ",
+               "down once) - a written reason is required for not rating ",
+               "down."),
+        id = "indir_outcome_rationale_missing", type = "warning",
+        duration = 6)
+    }
     indir_arg       <- if (is.null(indir_sub)) {
       STEP3_INDIR_DEFAULT_LEVEL
     } else {

@@ -1103,8 +1103,17 @@ export_bundle.meta <- function(x,
   }
   if (is.null(subdomain_table) || nrow(subdomain_table) == 0) return("NULL")
 
-  cols <- intersect(c("subdomain", "target", "evidence", "judgment"),
+  cols <- intersect(c("subdomain", "target", "evidence", "judgment",
+                      "rationale"),
                     names(subdomain_table))
+  # The rationale has to travel: a "surrogate_very_close" row without it
+  # aborts the re-run. A table with no reason on any row leaves the column
+  # out, so scripts that never needed one read as they did before 0.9.
+  if ("rationale" %in% cols &&
+      all(is.na(subdomain_table$rationale) |
+            !nzchar(trimws(subdomain_table$rationale)))) {
+    cols <- setdiff(cols, "rationale")
+  }
   if (length(cols) == 0) return("NULL")
 
   vec_lit <- function(v) {

@@ -2,7 +2,7 @@
 
 > Authoritative specification for the pmatools R package. Implementation MUST conform to this document. UI-side concerns (Shiny wizard, educational copy, accordion layout) are specified separately in [`shiny/SPEC.md`](shiny/SPEC.md), which governs the app in this repository's `shiny/` directory.
 
-**Version target:** 0.8.0
+**Version target:** 0.9.0
 **Document history:** this file was written for v0.2.0 and has been updated in place for v0.5.0, v0.5.1, v0.5.2 and v0.6.0; section numbering is preserved so the diff stays readable. Sections that still describe v0.2 behaviour verbatim are marked **[v0.2 — superseded]** with a pointer to the section that governs.
 
 **Backward compatibility:** v0.2 introduced no breaking changes. v0.4.0 and v0.5.0 did — see `NEWS.md`, which is authoritative for the change list. The three that most affect callers:
@@ -652,7 +652,7 @@ Because the target is pinned, `print()` reports it as `manual`, and the pinned-t
 
 #### 4.5.3 Indirectness subdomains (per-PICO; Core GRADE Guide Fig 8-2) [0.7.0]
 
-`indirectness_subdomains` is a data.frame with columns `subdomain`, `target`, `evidence`, `judgment`, one row per PICO element. Asking the question per element is Core GRADE 5's; **the questions and answers are the living Core GRADE Guide's Fig 8-2** ("Decision-algorithm for assessing indirectness in core GRADE", chapter 8, online 2025-2026), and one `judgment` code per row encodes that row's whole route through the figure. The subdomain label picks the branch (case-insensitive): `Population`, `Intervention`, `Comparison` or `Comparator`, `Outcome`. Any other label is accepted with the Population / Intervention / Comparison codes and is not drawn on the figure.
+`indirectness_subdomains` is a data.frame with columns `subdomain`, `target`, `evidence`, `judgment` and (v0.9.0) `rationale`, one row per PICO element. Asking the question per element is Core GRADE 5's; **the questions and answers are the living Core GRADE Guide's Fig 8-2** ("Decision-algorithm for assessing indirectness in core GRADE", chapter 8, online 2025-2026), and one `judgment` code per row encodes that row's whole route through the figure. The subdomain label picks the branch (case-insensitive): `Population`, `Intervention`, `Comparison` or `Comparator`, `Outcome`. Any other label is accepted with the Population / Intervention / Comparison codes and is not drawn on the figure.
 
 | Branch | `judgment` | Fig 8-2 route | Levels down |
 |---|---|---|---|
@@ -662,11 +662,13 @@ Because the target is pinned, `print()` reports it as `manual`, and the pinned-t
 | | `"very_dissimilar"` | Yes; factors not similar - very dissimilar | 2 |
 | Outcome | `"similar_definition"` | not a surrogate; criteria and time frames similar to the target | 0 |
 | | `"different_definition"` | not a surrogate; they differ | 1 |
-| | `"surrogate_very_close"` | surrogate, very close in the causal pathway (the Guide's footnote: some surrogates always represent a patient-important outcome) | 0 |
+| | `"surrogate_very_close"` | surrogate, very close in the causal pathway (the Guide's footnote: some surrogates always represent a patient-important outcome). **Requires `rationale`** (v0.9.0, below) | 0 |
 | | `"surrogate_close"` | surrogate, close | 1 |
 | | `"surrogate_far"` | surrogate, far | 2 |
 
 An Outcome code on another row, or a Population / Intervention / Comparison code on the Outcome row, **aborts** (`.check_indirectness_answer_element()`): it names a route the figure does not have. Case and separator variants (`"Very dissimilar"`, `"surrogate-far"`) are normalised.
+
+**`rationale` and the "very close" rule [v0.9.0, breaking].** `rationale` is optional on every row, accepted in the data.frame and both list forms, and normalised like `target` / `evidence` (blank or whitespace-only → `NA`). A row answered `"surrogate_very_close"` **must** carry a non-empty `rationale`, or `.check_indirectness_rationale()` aborts with an `rlang` error naming the row. This is a **pmatools convention stricter than Fig 8-2**: neither the Guide nor Core GRADE 5 gives a worked example of a surrogate close enough not to rate down - the figure offers only its footnote definition - while every surrogate the sources do name (bone density, coronary calcification, mitral valve area, calcium and phosphate measures) is rated down once or twice. Not rating down therefore rests on the reviewer's word alone, and the word must be on record; the error names `"surrogate_close"` (rate down once) as the alternative. The code → level mapping is unchanged (`not_serious` with a reason), and legacy-scale answers need no rationale. A given rationale is quoted in the domain notes after its row's route (`"Outcome: surrogate, very close to patient-important outcome (do not rate down) - reason: <text>"`, with any `" | "` in the text turned into `" / "` so `.first_sentence()` keeps the note whole), printed under the answer in `indirectness_table()`, and written into the bundled `analysis.R` by `.indirectness_subdomains_lit()` (the column is left out when no row has one). The normalised tibble's columns are `subdomain`, `target`, `evidence`, `judgment`, `rationale`, `grade_level`.
 
 **Legacy scale (not breaking).** pmatools' pre-Fig-8-2 answers to "Is the evidence sufficiently direct?" - a **pmatools convention** that appears nowhere in Core GRADE - are still accepted on any row with unchanged levels: `"yes"` and `"probably_yes"` 0, `"probably_no"` 1, `"no"` 2 (aliases such as `"Probably No"` normalised). On a Population / Intervention / Comparison row they are drawn on the routes `no_difference` / `similar` / `dissimilar` / `very_dissimilar` (`INDIRECTNESS_LEGACY_TO_PIC`); on the Outcome row the legacy scale never said whether the outcome was a surrogate, so the answer determines no route and the domain notes say so.
 

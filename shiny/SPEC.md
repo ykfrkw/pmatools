@@ -4,7 +4,7 @@
 
 **Public URL:** https://yuki-furukawa.shinyapps.io/pmatools/
 **Deployment:** shinyapps.io (account: `yuki-furukawa`, appId: `17697029`)
-**App version:** 3.7.0 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.6.1 → 3.7.0 is the Rule set dropdown, which re-runs a review under the pmatools 0.5.x rules (§3.4.12b); 3.6.0 → 3.6.1 corrects the Configuration tab's outcome-direction sentence, which still said it set the bias direction Risk of Bias checks; 3.5.0 → 3.6.0 is the Indirectness flowchart (Core GRADE Guide Fig 8-2, §3.4.12a); 3.4.0 → 3.5.0 is the Core GRADE Guide flowcharts (risk of bias Fig 7-2, publication bias Fig 9-1 and its computed first node, §3.4.12); 3.3.0 → 3.4.0 is the optional Score type mapping (§3.3.3); 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
+**App version:** 3.8.0 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.7.0 → 3.8.0 is the Indirectness reason box for a "very close" surrogate and the per-answer Core GRADE examples (§3.4.12a); 3.6.1 → 3.7.0 is the Rule set dropdown, which re-runs a review under the pmatools 0.5.x rules (§3.4.12b); 3.6.0 → 3.6.1 corrects the Configuration tab's outcome-direction sentence, which still said it set the bias direction Risk of Bias checks; 3.5.0 → 3.6.0 is the Indirectness flowchart (Core GRADE Guide Fig 8-2, §3.4.12a); 3.4.0 → 3.5.0 is the Core GRADE Guide flowcharts (risk of bias Fig 7-2, publication bias Fig 9-1 and its computed first node, §3.4.12); 3.3.0 → 3.4.0 is the optional Score type mapping (§3.3.3); 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
 
 ---
 
@@ -2515,8 +2515,10 @@ Guide's Fig 8-2 asks them (package `SPEC.md` §4.5.3), and draws the figure.
   `sendInputMessage()`, and `indir_subdomains()` applies the same map, so a
   radio is never sent a value it no longer offers. P/I/C: `no_difference` /
   `similar` / `dissimilar` / `very_dissimilar`. Outcome: `similar_definition` /
-  `surrogate_very_close` / `surrogate_close` / `surrogate_far`. The Outcome
-  route is a best guess (the legacy scale never said whether the outcome was a
+  `similar_definition` / `surrogate_close` / `surrogate_far` (`probably_yes`
+  went to `surrogate_very_close` before 3.8.0; that answer now needs a written
+  reason, and without one it would be rated down once, which is not
+  level-preserving). The Outcome route is a best guess (the legacy scale never said whether the outcome was a
   surrogate); the level is what is guaranteed, and the reviewer sees the
   choice it landed on.
 - **The figure** is `output$indir_flowchart`, rendered above the four
@@ -2525,7 +2527,49 @@ Guide's Fig 8-2 asks them (package `SPEC.md` §4.5.3), and draws the figure.
   union of every row's route, so up to four routes are lit at once. Unrated, it is the plain
   figure. `PMA_FLOWCHART_FIGS[["Indirectness"]]` names `assess_indirectness()`
   and carries a `departure` sentence: the worst-case combination of the four
-  branches is pmatools', and the Guide's "very close" footnote in brief.
+  branches is pmatools', and the Guide's "very close" footnote in brief, with
+  the reason requirement below.
+- **A "very close" surrogate needs a written reason [3.8.0].** Package 0.9.0
+  aborts on an Outcome row answered `surrogate_very_close` without a
+  `rationale` (package `SPEC.md` §4.5.3): Core GRADE gives no worked example
+  of such a surrogate, only Fig 8-2's footnote. The option's label ends
+  "(reason required)". Selecting it reveals a `conditionalPanel`
+  (`input.indir_outcome == 'surrogate_very_close'`) with the textarea
+  `indir_outcome_rationale` ("Why is this surrogate so close that it
+  effectively is the patient-important outcome?"). The pure helper
+  `step3_indir_outcome_effective()` (`R/step3_threshold.R`) decides what is
+  sent: with a non-empty reason, `surrogate_very_close` plus the trimmed
+  reason as the row's `rationale`; with none, **`surrogate_close`** (the
+  strict alternative the package's error names, rate down once) and no
+  rationale. Any other answer passes through, and a reason left in the hidden
+  box is not sent with it. The server reads this through one reactive,
+  `indir_outcome_resolved()`, which `indir_subdomains()` uses, so the
+  worst-case fold, `indir_worst_case()`, the override gate, the subdomain
+  table and the flowchart all see the answer actually sent. While it falls
+  back, `output$indir_outcome_fallback_note` under the box says "Rated as
+  close (rate down once) until a reason is given.", and `.indir_grade_args()`
+  shows a warning notification (`id = "indir_outcome_rationale_missing"`),
+  like the other rationale gates. `indir_outcome_rationale` is registered in
+  `PMA_OUTCOME_INPUT_IDS$indirectness`, so it is cleared and restored per
+  outcome like the radio it belongs to.
+- **Core GRADE's own examples, per answer [3.8.0].** Under each of the four
+  questions a collapsed `<details>` ("Core GRADE examples"), built by
+  `step3_indir_examples_details()` from
+  `EDU_COPY$domains$indirectness$examples`, lists for every answer the worked
+  examples Core GRADE 5 and the Core GRADE Guide chapter 8 give, paraphrased,
+  with the source on its last line. An answer the sources give no example for
+  says so ("Core GRADE gives no worked example for this answer.") rather than
+  being left out: very dissimilar intervention and comparison, not-a-surrogate
+  with similar definitions, and "very close" — where the block quotes the
+  footnote and says that is why the reason is asked for. The Outcome block
+  also lists the surrogates Core GRADE 5 Table 2 names without a level and
+  Core GRADE's test (would patients take an intervention with harms or burden
+  that changed only this outcome?). Nothing is added that the sources do not
+  give; in particular there is no example about disease-specific versus
+  all-cause mortality. The block is details-body text and is **not** under
+  the subtitle word cap; only its `source` line, and the fallback line above,
+  are registered in `EDU_COPY_SUBTITLE_FIELDS`. The `surrogate` help line now
+  reads "very close (reason required), not down".
 
 ### 3.4.13 Confirmation, progress and the forward path (v0.5.1)
 

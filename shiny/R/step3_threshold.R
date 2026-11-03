@@ -23,6 +23,12 @@
 # belongs there; one that reads a rated object to build a Summary of Findings
 # sentence belongs in R/sof_display.R instead.
 #
+# THE INDIRECTNESS HELPERS (the worst-case fold, the legacy-answer upgrade,
+# the override gate, the "very close" reason fallback and the per-answer
+# Core GRADE examples block) sit together further down. A helper that decides
+# what one of the four Fig 8-2 radios sends, or renders copy beside them,
+# belongs there.
+#
 # THE RULE SET (pmatools 0.8) has its own short block after the publication-
 # bias wizard helpers: the choice between the Core GRADE Guide and the 0.5.x
 # BMJ 2025 rules, the "some concerns" fold it implies and the tab section that
@@ -310,9 +316,15 @@ STEP3_INDIR_LEGACY_PIC <- c(
   probably_no  = "dissimilar",
   no           = "very_dissimilar"
 )
+#
+# "probably_yes" on Outcome lands on "similar_definition", not on
+# "surrogate_very_close" as it did before 3.8.0: a very close surrogate now
+# needs a written reason (step3_indir_outcome_effective() below), so a
+# restored answer put there would be rated down once until the reviewer wrote
+# one - and the upgrade's one requirement is that it keeps the level.
 STEP3_INDIR_LEGACY_OUTCOME <- c(
   yes          = "similar_definition",
-  probably_yes = "surrogate_very_close",
+  probably_yes = "similar_definition",
   probably_no  = "surrogate_close",
   no           = "surrogate_far"
 )
@@ -352,6 +364,89 @@ step3_indir_rationale_required <- function(overall, worst = NULL) {
     as.character(worst)
   }
   !identical(overall, auto)
+}
+
+# ----- A "very close" surrogate needs a written reason --------------------
+# pmatools 0.9 aborts on an Outcome row answered "surrogate_very_close" with
+# no `rationale` (R/domain_indirectness.R: Core GRADE gives no worked example
+# of such a surrogate, only Fig 8-2's footnote). The app must never send that
+# row, so until a reason is written it sends the strict alternative the
+# package's error names - "surrogate_close", rate down once - and says so
+# beside the radio. Choosing the stricter answer, not dropping the row, is
+# deliberate: an unexplained "not rated down" is exactly what the gate exists
+# to refuse.
+STEP3_INDIR_VERY_CLOSE          <- "surrogate_very_close"
+STEP3_INDIR_VERY_CLOSE_FALLBACK <- "surrogate_close"
+
+# The Outcome answer actually sent, from the radio and its reason box.
+# Returns list(judgment, rationale, fell_back): `rationale` is the trimmed
+# reason for a very close surrogate and NA otherwise (a reason typed and then
+# hidden by changing the answer is not sent), and `fell_back` is TRUE when
+# "very close" was chosen without one. Every other answer passes through.
+step3_indir_outcome_effective <- function(answer, rationale = NULL) {
+  reason <- if (is.null(rationale) || length(rationale) != 1L ||
+                is.na(rationale)) {
+    ""
+  } else {
+    trimws(as.character(rationale))
+  }
+  is_very_close <- length(answer) == 1L && !is.na(answer) &&
+    identical(as.character(answer), STEP3_INDIR_VERY_CLOSE)
+  if (!is_very_close) {
+    return(list(judgment = answer, rationale = NA_character_,
+                fell_back = FALSE))
+  }
+  if (!nzchar(reason)) {
+    return(list(judgment = STEP3_INDIR_VERY_CLOSE_FALLBACK,
+                rationale = NA_character_, fell_back = TRUE))
+  }
+  list(judgment = STEP3_INDIR_VERY_CLOSE, rationale = reason,
+       fell_back = FALSE)
+}
+
+# ----- Core GRADE's own worked examples, per Fig 8-2 answer ---------------
+# One collapsed block under each of the four questions, built from
+# EDU_COPY$domains$indirectness$examples (R/educational_copy.R holds the
+# words and says where they come from). `element` is "population",
+# "intervention", "comparison" or "outcome". An answer Core GRADE gives no
+# example for says so rather than being left out, because the absence is
+# itself what the reviewer needs to know - for "very close" it is the reason
+# the reason box exists.
+step3_indir_examples_details <- function(element,
+                                         copy = EDU_COPY$domains$indirectness$examples) {
+  entries <- copy[[element]]
+  if (is.null(entries)) return(NULL)
+  entry_block <- function(entry) {
+    body <- if (length(entry$items)) {
+      htmltools::tags$ul(lapply(entry$items, htmltools::tags$li))
+    } else {
+      htmltools::p(htmltools::em(copy$none))
+    }
+    htmltools::tagList(
+      htmltools::p(htmltools::strong(entry$heading),
+                   style = "margin: 0.5rem 0 0.15rem;"),
+      body,
+      if (!is.null(entry$note)) htmltools::p(entry$note)
+    )
+  }
+  extra <- if (identical(element, "outcome")) {
+    htmltools::tagList(
+      htmltools::p(htmltools::strong(copy$outcome_table2_heading),
+                   style = "margin: 0.5rem 0 0.15rem;"),
+      htmltools::tags$ul(lapply(copy$outcome_table2, htmltools::tags$li)),
+      htmltools::p(copy$outcome_surrogate_test)
+    )
+  }
+  htmltools::tags$details(
+    class = "pma-edit-details",
+    htmltools::tags$summary(class = "pma-edit-summary", copy$title),
+    htmltools::div(
+      class = "pma-edit-body",
+      lapply(entries, entry_block),
+      extra,
+      htmltools::p(class = "pma-card-subtitle", copy$source)
+    )
+  )
 }
 
 # --------------------------------------------------------------------------
