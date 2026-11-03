@@ -2562,7 +2562,7 @@ Guide's Fig 8-2 asks them (package `SPEC.md` §4.5.3), and draws the figure.
   being left out: very dissimilar intervention and comparison, not-a-surrogate
   with similar definitions, and "very close" — where the block quotes the
   footnote and says that is why the reason is asked for. The Outcome block
-  also lists the surrogates Core GRADE 5 Table 2 names without a level and
+  also lists the surrogates Core GRADE 5 names without a level (Table 2 and the text) and
   Core GRADE's test (would patients take an intervention with harms or burden
   that changed only this outcome?). Nothing is added that the sources do not
   give; in particular there is no example about disease-specific versus

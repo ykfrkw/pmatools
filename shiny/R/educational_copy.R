@@ -174,7 +174,7 @@ EDU_COPY <- list(
                         "warfarin vs placebo in other populations, so ",
                         "rated down once (moderate certainty)."),
                  paste0("Antibiotics for pancreatitis in children, inferred ",
-                        "from evidence in adults.")
+                        "from evidence in adults (no formal rating stated).")
                )),
           list(heading = paste0("Differences; factors very dissimilar ",
                                 "(rate down twice)"),
@@ -196,10 +196,12 @@ EDU_COPY <- list(
                )),
           list(heading = "Differences; factors dissimilar (rate down once)",
                items = c(
-                 paste0("A nortriptyline trial with about 60% adherence (low ",
-                        "certainty, for indirectness and imprecision)."),
+                 paste0("Nortriptyline for smoking cessation with about 60% ",
+                        "adherence; the review rated it low certainty for ",
+                        "indirectness and imprecision."),
                  paste0("Being invited to colonoscopy screening, when the ",
-                        "question is about actually undergoing it."),
+                        "question is about actually undergoing it (level not ",
+                        "stated)."),
                  "Cardiac rehabilitation whose components were poorly described.",
                  "Continuous glucose monitoring using older technology."
                )),
@@ -264,11 +266,11 @@ EDU_COPY <- list(
                ))
         ),
         outcome_table2_heading = paste0(
-          "Surrogates Core GRADE 5 Table 2 names, without a level"
+          "Surrogates Core GRADE 5 names, without a level"
         ),
         outcome_table2 = c(
           "Cardiac function, for mortality in heart failure.",
-          "Cognitive test performance, for function in dementia.",
+          "Test performance, for function in dementia.",
           paste0("Blood glucose, for microvascular and macrovascular ",
                  "morbidity and mortality in diabetes."),
           "Viral load, in HIV."
