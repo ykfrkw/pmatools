@@ -9,21 +9,20 @@ the subgroup forest is a drawing, and every call site whose rating depends on
 `sm` already passed a canonical name in 0.9.1.
 
 * **The Missing results (RoB-ME) dot can turn green where it was red or
-  amber.** `Not measured` rows are now excluded from the tipping-point
-  computation - from `m`, from the imputed weights and from the direction
-  gate - because under RoB-ME (Page et al., BMJ 2023) a result that was never
-  measured cannot have been selectively unreported. Before, one such row was
-  unconstrained and held the direction gate shut for every other row: an
+  amber.** `Not measured` rows no longer take part in the direction gate,
+  because under RoB-ME (Page et al., BMJ 2023) a result that was never
+  measured cannot have been selectively unreported. They still count in the
+  tipping-point computation - in `m` and in the imputed weights. Before, one
+  such row was unconstrained and held the gate shut for every other row: an
   outcome with one `Not measured` trial and four "Measured, result not
   available (assumed P > 0.05)" trials, whose tipping value lay further from
   the null than the observed effect, came out red. It is now green at step 5.
-  A table of only `Not measured` rows is green at step 1 instead of being
-  capped at amber; the cap, and the `capped` field of
-  `.pubias_missing_tipping()`, are gone. The return list gains
-  `n_not_measured` and `n_undirected`.
-* **New sentences in the RoB-ME tooltip.** When rows were excluded, the reason
-  says how many. When undirected rows ("Reported but data not extractable",
-  free text) are all that keeps the direction gate from firing, the reason
+  The all-`Not measured` amber cap is unchanged. The return list of
+  `.pubias_missing_tipping()` gains `n_not_measured` and `n_undirected`.
+* **New sentences in the RoB-ME tooltip.** When the gate fires with
+  `Not measured` rows present, the reason says how many were counted but left
+  out of the direction check. When undirected rows ("Reported but data not
+  extractable", free text) are all that keeps the gate from firing, the reason
   says so and suggests recording why each result is missing. Undirected rows
   stay unconstrained.
 * **The trim-and-fill dot's tooltip and the trim-and-fill line gain a caution
