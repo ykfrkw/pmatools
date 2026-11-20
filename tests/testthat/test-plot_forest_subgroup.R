@@ -247,8 +247,10 @@ expect_same_pool <- function(plotted, meta_obj) {
     unname(c(plotted$TE.random.w[available], plotted$lower.random.w[available],
              plotted$upper.random.w[available], plotted$lower.predict.w[available],
              plotted$upper.predict.w[available])),
-    unname(c(meta_obj$TE.random, meta_obj$lower.random, meta_obj$upper.random,
-             meta_obj$lower.predict, meta_obj$upper.predict)))
+    # [1]: an analysis asking for several CI methods stores one value each.
+    unname(c(meta_obj$TE.random[1], meta_obj$lower.random[1],
+             meta_obj$upper.random[1], meta_obj$lower.predict[1],
+             meta_obj$upper.predict[1])))
 }
 
 mk_cont_meta <- function(sm = "MD") {
@@ -360,6 +362,44 @@ test_that("a pool the refit cannot reproduce warns and still draws", {
                                            missing_df = SUBGROUP_MISSING_ROWS),
     "differs from the analysis")
   expect_s3_class(plotted, "meta")
+})
+
+# Heterogeneous enough that Mantel-Haenszel + DerSimonian-Laird gives a tau
+# metagen does not reproduce without the tau.preset retry.
+mk_mh_dl_meta <- function(...) {
+  meta::metabin(c(5, 30, 12, 40, 8, 25), rep(100, 6),
+                c(20, 25, 30, 20, 30, 22), rep(100, 6),
+                studlab = paste0("S", 1:6), sm = "RR", method = "MH",
+                method.tau = "DL", ...)
+}
+
+test_that("Mantel-Haenszel + DL is reproduced through the tau.preset retry", {
+  meta_obj <- mk_mh_dl_meta()
+  pdf(NULL); on.exit(dev.off(), add = TRUE)
+  expect_silent(plotted <- plot_forest_pubias_subgroup(
+    meta_obj, missing_df = SUBGROUP_MISSING_ROWS))
+  expect_same_pool(plotted, meta_obj)
+})
+
+test_that("a failed tau.preset retry warns instead of aborting", {
+  meta_obj <- mk_mh_dl_meta(exclude = c(FALSE, TRUE, FALSE, FALSE, FALSE, FALSE))
+  pdf(NULL); on.exit(dev.off(), add = TRUE)
+  expect_warning(
+    plotted <- plot_forest_pubias_subgroup(meta_obj,
+                                           missing_df = SUBGROUP_MISSING_ROWS),
+    "differs from the analysis")
+  expect_s3_class(plotted, "meta")
+})
+
+test_that("several requested CI methods pool with the first one", {
+  meta_obj <- meta::metabin(c(20, 18, 15, 12, 10, 8), rep(100, 6),
+                            c(20, 19, 17, 15, 13, 11), rep(100, 6),
+                            sm = "OR", method = "Inverse", method.tau = "REML",
+                            method.random.ci = c("classic", "HK"))
+  pdf(NULL); on.exit(dev.off(), add = TRUE)
+  plotted <- plot_forest_pubias_subgroup(meta_obj,
+                                         missing_df = SUBGROUP_MISSING_ROWS)
+  expect_same_pool(plotted, meta_obj)
 })
 
 test_that("the no-missing fallback returns meta_obj invisibly", {

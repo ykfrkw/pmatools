@@ -694,7 +694,8 @@ step3_pubias_server <- function(input, output, session, state,
     m_df <- state$pubias_missing %||% .pubias_missing_empty()
     da <- .display_args("pubias")
     # Adaptive canvas: 1 row per available study + 1 row per missing study
-    # plus margin for two subgroup labels and the overall pooled diamond.
+    # plus margin for two subgroup labels, the Available pooled diamond and
+    # its prediction interval row.
     k_avail <- length(obj$TE)
     k_miss  <- nrow(m_df)
     pma_render_trimmed(

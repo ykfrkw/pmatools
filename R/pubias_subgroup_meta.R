@@ -10,11 +10,13 @@
 # Reads: the analysis' `meta_obj`, the caller's `missing_df` and the
 # `auto_detect` switch. Produces: the row partition (available rows are those
 # with finite TE and seTE; missing rows are the auto-detected NA-TE rows plus
-# `missing_df`, in one canonical table), and from it a metagen object with both subgroups, carrying `n_total` (the "N"
-# column) and `results_known` (the status column, "" on available rows). It
+# `missing_df`, in one canonical table), and from it a metagen object with
+# both subgroups, carrying `n_total` (the "N" column) and `results_known` (the
+# status column, "" on available rows). It
 # checks the refit's Available pool against `meta_obj`, retries once with tau
-# preset to the analysis' tau, and warns if the two still disagree (a GLMM
-# analysis, which metagen cannot reproduce, is the known case).
+# preset to the analysis' tau, and warns if the two still disagree (GLMM and
+# three-level analyses, which metagen cannot reproduce, are the known cases).
+# The pool drawn is always the random-effects one.
 #
 # Used only by R/plot_forest_pubias_subgroup.R, which owns the drawing.
 #
@@ -56,6 +58,14 @@ PUBIAS_SUBGROUP_MISSING   <- "Missing results"
   has_subgroup_seed <- !is.null(settings$seed.predict) &&
     "seed.predict.subgroup" %in% metagen_args
   if (has_subgroup_seed) settings$seed.predict.subgroup <- settings$seed.predict
+  # An analysis can request several CI methods at once; the first is the one
+  # its TE.random / lower.random / upper.random hold, and a vector here would
+  # leave the refit's subgroup pool unnamed.
+  for (field in intersect(c("method.random.ci", "adhoc.hakn.ci",
+                            "method.predict", "adhoc.hakn.pi"),
+                          names(settings))) {
+    settings[[field]] <- settings[[field]][1]
+  }
   settings
 }
 
@@ -188,11 +198,16 @@ PUBIAS_SUBGROUP_MISSING   <- "Missing results"
 
   m_combined <- fit(refit_args)
   if (!.pubias_pool_matches(m_combined, meta_obj)) {
-    # A pooling method whose tau metagen does not reproduce may still pool
-    # the same once tau is fixed at the analysis' own value.
+    # A pooling method whose tau metagen does not reproduce (Mantel-Haenszel
+    # with DerSimonian-Laird) pools the same once tau is fixed at the
+    # analysis' own value. The retry is best-effort: {meta} rejects
+    # tau.preset together with `exclude`, and then the first fit is kept.
     tau_analysis <- as.numeric(meta_obj$tau %||% NA_real_)[1]
     if (is.finite(tau_analysis)) {
-      m_combined <- fit(c(refit_args, list(tau.preset = tau_analysis)))
+      first_fit <- m_combined
+      m_combined <- tryCatch(
+        fit(c(refit_args, list(tau.preset = tau_analysis))),
+        error = function(e) first_fit)
     }
     if (!.pubias_pool_matches(m_combined, meta_obj)) {
       rlang::warn(paste0(

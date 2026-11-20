@@ -15,7 +15,7 @@ rating changes.
   `backtransf`, `null.effect`, ...), the study CIs and `exclude`, and checks
   the drawn pool, CI and prediction interval against `meta_obj`. If they
   differ it retries with `tau.preset = meta_obj$tau`, and if they still differ
-  (a GLMM analysis) it warns and draws the refit. **The pooled CI drawn for an
+  (GLMM, three-level) it warns and draws the refit. **The pooled CI drawn for an
   HK or REML analysis changes from 0.9.2.** The pooled row is labelled from
   the method, e.g. "Random effects model (HK)".
 * **The right column prints effect [95% CI] numbers**, {meta}'s `effect.ci`,
