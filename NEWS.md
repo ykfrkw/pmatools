@@ -1,3 +1,41 @@
+# pmatools 0.10.0
+
+## Behaviour changes
+
+All of these are in `plot_forest_pubias_subgroup()`, a reference-only drawing:
+nothing it computes reaches `assess_pubias()` or `grade_meta()`, and no GRADE
+rating changes.
+
+* **The Available results pool is now the analysis' own.** The two-subgroup
+  refit used to run `meta::metagen()` on its defaults (DerSimonian-Laird,
+  classic CI), so a Hartung-Knapp or REML analysis was redrawn with a different
+  pooled CI from the one rated beside it. It now copies `meta_obj`'s model
+  settings (`method.tau`, `method.random.ci`, `adhoc.hakn.ci`,
+  `method.predict`, `adhoc.hakn.pi`, the confidence levels, `method.I2`,
+  `backtransf`, `null.effect`, ...), the study CIs and `exclude`, and checks
+  the drawn pool, CI and prediction interval against `meta_obj`. If they
+  differ it retries with `tau.preset = meta_obj$tau`, and if they still differ
+  (GLMM, three-level) it warns and draws the refit. **The pooled CI drawn for an
+  HK or REML analysis changes from 0.9.2.** The pooled row is labelled from
+  the method, e.g. "Random effects model (HK)".
+* **The right column prints effect [95% CI] numbers**, {meta}'s `effect.ci`,
+  on every available study, the pooled row and the prediction-interval row
+  (back-transformed for ratio measures), headed like `plot_forest()`
+  ("MD (95% CI)", "RoM (95% CI)"). Missing rows leave it blank. Their status
+  string moves to its own "Results known" column; `show_results_known = FALSE`
+  now omits that column instead of blanking the cell.
+* **The return value is the drawn two-subgroup meta object**, invisibly,
+  instead of `NULL`, so a caller can read the plotted pool
+  (`TE.random.w["Available results"]` etc.). With nothing missing the function
+  still draws `plot_forest()` and now returns `meta_obj` invisibly.
+
+## New features
+
+* `plot_forest_pubias_subgroup(prediction = TRUE)`. Draws and prints the
+  Available subgroup's 95% prediction interval when at least three studies
+  are pooled. No overall prediction interval is drawn either way. In the
+  no-missing fallback it is passed to `plot_forest()`.
+
 # pmatools 0.9.2
 
 ## Behaviour changes
