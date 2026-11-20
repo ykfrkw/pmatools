@@ -108,7 +108,7 @@ STEP3_INDIR_ANSWER_TO_LEVEL <- c(
 # stored value whose stamp names a different question is not offered, whatever
 # order the flush put the render and the clear/reseed observer in.
 step3_threshold_seed_key <- function(ma_obj, question) {
-  paste(class(ma_obj)[1], ma_obj$sm %||% "",
+  paste(class(ma_obj)[1], .sm_of(ma_obj) %||% "",
         pma_clinical_question(question), sep = "/")
 }
 

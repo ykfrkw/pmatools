@@ -530,11 +530,11 @@ step3_pubias_server <- function(input, output, session, state,
     k_imputed <- length(tf$TE) - length(obj$TE)
     te_orig <- obj$TE.random
     te_adj  <- tf$TE.random
-    is_log  <- !is.null(obj$sm) && obj$sm %in% c("OR", "RR", "HR", "RoM", "IRR")
+    is_log  <- !is.null(.sm_of(obj)) && .sm_of(obj) %in% c("OR", "RR", "HR", "RoM", "IRR")
 
     fmt <- function(x) {
       if (!is.finite(x)) return("NA")
-      if (is_log) sprintf("%.3f (log %s = %.3f)", exp(x), obj$sm, x)
+      if (is_log) sprintf("%.3f (log %s = %.3f)", exp(x), .sm_of(obj), x)
       else sprintf("%.3f", x)
     }
 
@@ -733,7 +733,7 @@ step3_pubias_server <- function(input, output, session, state,
       threshold_to_te_scale(
         threshold          = th$threshold,
         threshold_scale    = th$threshold_scale,
-        sm                 = obj$sm,
+        sm                 = .sm_of(obj),
         threshold_baseline = th$threshold_baseline,
         meta_obj           = obj),
       error = function(e) NULL)
@@ -777,7 +777,7 @@ step3_pubias_server <- function(input, output, session, state,
       te_adjusted  = if (is.null(tf)) NA_real_ else tf$TE.random,
       small_values = .dot_small_values(),
       k_ok         = k_ok,
-      sm           = obj$sm,
+      sm           = .sm_of(obj),
       binary       = binary,
       # Per 1,000 on screen, a proportion here. NA when the reviewer has
       # cleared the box, which is one of the ways the dot goes uncoloured
