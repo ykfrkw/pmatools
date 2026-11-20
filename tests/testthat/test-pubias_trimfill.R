@@ -108,6 +108,39 @@ test_that("the printed line names both estimates and never claims a rating", {
                "not assessable")
 })
 
+test_that("few studies or substantial heterogeneity add a caution to the line", {
+  res <- .pubias_trimfill_inflation(1.30, 1.00, small_values = "undesirable")
+  plain <- .pubias_trimfill_line(res, 1.30, 1.00)
+
+  heterogeneous <- .pubias_trimfill_line(res, 1.30, 1.00, k = 15, i2 = 0.6)
+  expect_match(heterogeneous, "I2 = 60%", fixed = TRUE)
+  expect_match(heterogeneous, "Terrin et al., Stat Med 2003", fixed = TRUE)
+  expect_match(heterogeneous, "read the adjusted estimate with caution")
+  expect_false(grepl("only 15 studies", heterogeneous, fixed = TRUE))
+
+  few <- .pubias_trimfill_line(res, 1.30, 1.00, k = 8, i2 = 0.3)
+  expect_match(few, "only 8 studies (fewer than 10)", fixed = TRUE)
+  expect_false(grepl("I2 =", few, fixed = TRUE))
+
+  both <- .pubias_trimfill_line(res, 1.30, 1.00, k = 8, i2 = 0.6)
+  expect_match(both, "only 8 studies (fewer than 10) and I2 = 60%",
+               fixed = TRUE)
+
+  # Neither condition, or neither known: the line is exactly what it was.
+  expect_identical(.pubias_trimfill_line(res, 1.30, 1.00, k = 15, i2 = 0.3),
+                   plain)
+  expect_identical(.pubias_trimfill_line(res, 1.30, 1.00, k = NA, i2 = NA),
+                   plain)
+  # The note follows the verdict; it never replaces any of it.
+  expect_true(startsWith(heterogeneous, plain))
+
+  # The cut-offs are the named constants, at their boundaries.
+  expect_match(.pubias_trimfill_caution(
+    k = 15, i2 = PMA_PUBIAS_TRIMFILL_CAUTION_I2), "I2 = 50%")
+  expect_identical(.pubias_trimfill_caution(
+    k = PMA_PUBIAS_TRIMFILL_CAUTION_K, i2 = 0.49), "")
+})
+
 test_that("format_te controls how the two estimates are printed", {
   res  <- .pubias_trimfill_inflation(0.30, 0.10, small_values = "undesirable")
   line <- .pubias_trimfill_line(res, 0.30, 0.10,

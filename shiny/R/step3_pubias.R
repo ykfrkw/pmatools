@@ -564,7 +564,8 @@ step3_pubias_server <- function(input, output, session, state,
       small_values = sv_direction)
     inflation_line <- .pubias_trimfill_line(
       inflation, te_original = te_orig, te_adjusted = te_adj,
-      format_te = fmt)
+      format_te = fmt,
+      k = .effective_pubias_k(obj), i2 = obj$I2)
 
     htmltools::div(
       style = paste0(
@@ -788,7 +789,11 @@ step3_pubias_server <- function(input, output, session, state,
       threshold_internal = .dot_threshold_internal(obj),
       # The event-rate map the Configuration tab already uses, injected
       # rather than reimplemented in the package: see R/pubias_status.R.
-      p1_from_ratio      = step3_p1_from_ratio))
+      p1_from_ratio      = step3_p1_from_ratio,
+      # Few studies or substantial heterogeneity add a caution note to the
+      # tooltip; the colour is unchanged (R/pubias_trimfill.R).
+      k                  = .effective_pubias_k(obj),
+      i2                 = obj$I2))
   })
   shiny::outputOptions(output, "pubias_dot_trimfill",
                        suspendWhenHidden = FALSE)

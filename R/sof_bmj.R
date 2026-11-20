@@ -35,6 +35,7 @@
 # BMJ spells the effect measure out ("Hazard ratio 0.78") rather than
 # abbreviating it ("HR 0.78").
 .bmj_measure_name <- function(sm) {
+  sm <- .canon_sm(sm)
   switch(
     as.character(sm %||% ""),
     "RR"  = "Risk ratio",

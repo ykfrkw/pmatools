@@ -1593,6 +1593,7 @@ assess_imprecision <- function(meta_obj,
                                   two_level_label =
                                     "TWO thresholds (important benefit and important harm)",
                                   sm = NULL) {
+  sm <- .canon_sm(sm)
   ci_ratio_src_note <- if (!is.null(sm) && !sm %in% .CI_RATIO_SOURCED_SM) {
     sprintf(paste0(" [Core GRADE 2 Fig 4 names CI-ratio cut-offs only for ",
                    "relative risk (3) and odds ratio (2.5); applying 3 to %s ",

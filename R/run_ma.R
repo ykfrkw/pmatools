@@ -14,6 +14,7 @@
 #' @param outcome_type One of `"binary"` or `"continuous"`.
 #' @param sm Effect measure. Binary: `"OR"` or `"RR"`. Continuous: `"SMD"`,
 #'   `"MD"`, or `"RoM"`. Defaults: `"OR"` for binary, `"SMD"` for continuous.
+#'   Matched case-insensitively, so the meta package's own `"ROM"` is accepted.
 #' @param method Pooling method (binary only). One of `"Inverse"`, `"MH"`,
 #'   `"Peto"`. Defaults: `"Inverse"` for OR, `"MH"` for RR.
 #' @param method.tau Heterogeneity estimator. One of `"REML"` (default),
@@ -69,7 +70,9 @@ run_ma <- function(data,
     sm <- if (outcome_type == "binary") "OR" else "SMD"
   }
 
-  # Validate sm
+  # Validate sm. {meta} spells a ratio of means "ROM"; accept any case and
+  # validate pmatools' spelling (R/sm_names.R).
+  sm <- .canon_sm(sm)
   valid_sm <- if (outcome_type == "binary") c("OR", "RR") else c("SMD", "MD", "RoM")
   if (!sm %in% valid_sm) {
     rlang::abort(sprintf(

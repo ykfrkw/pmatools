@@ -84,6 +84,11 @@
 # are "not computed" rather than a colour.
 .PUBIAS_MISSING_MIN_K <- 3L
 
+# The sentence every coloured reason closes on. Named because the note on
+# rows the direction gate set aside is inserted in front of it, which needs
+# the exact string.
+.PUBIAS_MISSING_REFERENCE_ONLY <- "Reference only - it rates nothing."
+
 # --------------------------------------------------------------------------
 # Imputing a missing study's standard error
 # --------------------------------------------------------------------------
@@ -138,21 +143,45 @@
 # Step 5: direction as a GATE, not a second scale
 # --------------------------------------------------------------------------
 # `results_known` records WHY a result is missing, which is what RoB-ME is
-# actually about, and three of its five labels also imply WHICH WAY the
-# missing effect lies. With the null at 0 (log scale for ratio measures) and
-# s = sign(TE_obs), writing u = s*delta and a = s*TE_obs = |TE_obs|:
+# actually about (Page MJ et al. Risk Of Bias due to Missing Evidence
+# (ROB-ME): a new tool for assessing risk of non-reporting biases in evidence
+# syntheses. BMJ 2023;383:e076754, doi:10.1136/bmj-2023-076754), and three of
+# its labels also imply WHICH WAY the missing effect lies. With the null at 0
+# (log scale for ratio measures) and s = sign(TE_obs), writing u = s*delta
+# and a = s*TE_obs = |TE_obs|:
 #
-#   Not measured                            no mechanism; unconstrained, but
-#                                           step 6 caps at amber
+#   Not measured                            not used by the gate
 #   Reported but data not extractable       mechanism unknown; unconstrained
 #   Measured but not reported (P > 0.05)    null-ward,   u < a
 #   Measured but not reported (P < 0.05)    further out, u > a
 #   Measured but not reported (opposite)    u < 0
 #   free text                               unconstrained
 #
-# Take the UNION across rows. One unconstrained row makes the union
-# everything and the gate never fires, which is the conservative answer and
-# the right one: an unconstrained row means no direction can be ruled out.
+# EVERY row, "Not measured" included, counts in the tipping computation
+# itself: in m and in the imputed weights W_miss. A study whose result is
+# absent from the synthesis is absent evidence whether or not it was ever
+# measured, and delta* asks how far the absent evidence would have to lie.
+#
+# The GATE asks a different question - which way do the absent results lie,
+# if they were left out for what they showed? - and a "Not measured" row has
+# no answer to it: under RoB-ME (Page et al. 2023) a result that was never
+# measured cannot have been selectively unreported. So the gate takes the
+# UNION of the suspected regions over every row EXCEPT "Not measured" ones.
+# Treating them as unconstrained, as this file used to, let one never-
+# measured row make the union everything and silence the gate for every
+# directed row beside it - the dot turned red on a table whose only directed
+# rows said the tipping value was implausible.
+#
+# Every OTHER row still votes. One unconstrained row ("data not extractable",
+# free text) makes the union everything and the gate never fires, which is
+# the conservative answer: "not significant, data not shown" hides exactly
+# there, and no direction can be ruled out. Such rows are deliberately NOT
+# defaulted to null-ward. What the dot does instead is say so: when the
+# directed rows alone would put delta* outside their suspected region, the
+# reason tells the reviewer that the undirected rows are what kept the gate
+# shut, and that recording why each result is missing would let it apply.
+# A table of "Not measured" rows alone has nothing to gate on, and the gate
+# does not fire; the cap at step 6 handles that table instead.
 #
 # The gate earns its place on cases like this one: the missing results are
 # suspected null-ward, but delta* is FURTHER from the null than the observed
@@ -181,7 +210,9 @@
   out
 }
 
-# Is u inside the union of the suspected regions? `a` is |TE_obs|.
+# Is u inside the union of the suspected regions? `a` is |TE_obs|. The
+# tipping computation never passes "not_measured" rows here; the arm that
+# treats one as unconstrained is the safe answer for any other caller.
 .pubias_missing_in_suspected <- function(mechanisms, u, a) {
   if (!length(mechanisms)) return(TRUE)
   any(vapply(mechanisms, function(m) {
@@ -198,13 +229,16 @@
 # --------------------------------------------------------------------------
 # The ordered decision
 # --------------------------------------------------------------------------
-# Returns a list, always with the same names:
-#   step        1..6, the step that decided the answer
-#   state       one of PMA_PUBIAS_DOT_STATES
-#   reason      the tooltip
-#   delta_star  the tipping point on the TE scale (NA before step 5)
-#   se_new      the pooled standard error once the m studies are added
-#   capped      TRUE when the "Not measured" cap turned a red into an amber
+# Returns a list, always with the same names on every return path:
+#   step            1..6, the step that decided the answer
+#   state           one of PMA_PUBIAS_DOT_STATES
+#   reason          the tooltip
+#   delta_star      the tipping point on the TE scale (NA before step 5)
+#   se_new          the pooled standard error once the m studies are added
+#   capped          TRUE when the "Not measured" cap turned a red into an amber
+#   n_not_measured  rows recorded as "Not measured" (counted in m and W_miss,
+#                   not used by the direction gate)
+#   n_undirected    rows whose mechanism is "unconstrained"
 #
 # `threshold_internal` is the Core GRADE threshold on the TE scale, or NULL /
 # 0 when the rating target is the null.
@@ -220,23 +254,48 @@
                                     threshold_internal = NULL,
                                     k = NA_integer_) {
 
+  n_not_measured <- 0L
+  n_undirected   <- 0L
+  gate_note      <- NULL
+
+  # The gate's note (rows it set aside, or rows that kept it shut) goes
+  # before the closing "Reference only" so that sentence stays last.
   .out <- function(step, state, reason, delta_star = NA_real_,
                    se_new = NA_real_, capped = FALSE) {
+    notes <- gate_note
+    if (length(notes)) {
+      has_tail <- endsWith(reason, .PUBIAS_MISSING_REFERENCE_ONLY)
+      body <- if (has_tail) {
+        trimws(substr(reason, 1L,
+                      nchar(reason) - nchar(.PUBIAS_MISSING_REFERENCE_ONLY)))
+      } else {
+        reason
+      }
+      reason <- paste(c(body, notes,
+                        if (has_tail) .PUBIAS_MISSING_REFERENCE_ONLY),
+                      collapse = " ")
+    }
     list(step = as.integer(step), state = state, reason = reason,
          delta_star = as.numeric(delta_star), se_new = as.numeric(se_new),
-         capped = isTRUE(capped))
+         capped = isTRUE(capped),
+         n_not_measured = as.integer(n_not_measured),
+         n_undirected = as.integer(n_undirected))
   }
   .unknown <- function(reason) .out(2L, "unknown", reason)
 
   results_known <- as.character(results_known)
   m <- length(results_known)
+  mechanisms     <- .pubias_missing_mechanism(results_known)
+  in_gate        <- mechanisms != "not_measured"
+  n_not_measured <- sum(!in_gate)
+  n_undirected   <- sum(mechanisms == "unconstrained")
 
   # ---- Step 1 -------------------------------------------------------------
   if (m == 0L) {
     return(.out(1L, "green", paste0(
       "No missing results are recorded for this outcome, so there is ",
-      "nothing that could overturn the pooled result. Reference only - it ",
-      "rates nothing.")))
+      "nothing that could overturn the pooled result. ",
+      .PUBIAS_MISSING_REFERENCE_ONLY)))
   }
 
   # ---- Step 2: is the model computable at all? ----------------------------
@@ -316,7 +375,7 @@
       "The conclusion changes on precision alone: adding the missing ",
       "studies moves the pooled interval across the decision threshold ",
       "even if every one of them reports exactly what the observed studies ",
-      "did. Reference only - it rates nothing."),
+      "did. ", .PUBIAS_MISSING_REFERENCE_ONLY),
       se_new = se_new))
   }
 
@@ -359,22 +418,32 @@
     return(.out(4L, "green", paste0(
       "The conclusion cannot be overturned: the missing studies are too ",
       "imprecise to move the pooled interval across the decision threshold, ",
-      "whatever they report. Reference only - it rates nothing."),
+      "whatever they report. ", .PUBIAS_MISSING_REFERENCE_ONLY),
       se_new = se_new))
   }
   delta_star <- candidates[which.min(abs(candidates - te_obs))]
 
   # ---- Step 5: the direction gate ----------------------------------------
-  mechanisms <- .pubias_missing_mechanism(results_known)
-  sign_obs   <- if (te_obs < 0) -1 else 1
-  if (!.pubias_missing_in_suspected(mechanisms,
-                                    u = sign_obs * delta_star,
+  sign_obs <- if (te_obs < 0) -1 else 1
+  u_star   <- sign_obs * delta_star
+  # A table of "Not measured" rows alone has nothing to gate on.
+  gate_mechanisms <- mechanisms[in_gate]
+  if (length(gate_mechanisms) &&
+      !.pubias_missing_in_suspected(gate_mechanisms, u = u_star,
                                     a = abs(te_obs))) {
+    if (n_not_measured > 0L) {
+      gate_note <- sprintf(paste0(
+        "%d missing result%s recorded as not measured %s counted in the ",
+        "tipping value but not in this direction check: RoB-ME does not ",
+        "treat a result that was never measured as selectively unreported."),
+        n_not_measured, if (n_not_measured == 1L) "" else "s",
+        if (n_not_measured == 1L) "is" else "are")
+    }
     return(.out(5L, "green", paste0(
       "The missing results are suspected of lying in one direction, and the ",
       "value that would change the conclusion lies the other way. Nothing ",
-      "they could plausibly report overturns the result. Reference only - ",
-      "it rates nothing."),
+      "they could plausibly report overturns the result. ",
+      .PUBIAS_MISSING_REFERENCE_ONLY),
       delta_star = delta_star, se_new = se_new))
   }
 
@@ -408,10 +477,24 @@
       "Only a study unlike any observed changes the conclusion: the value ",
       "that would overturn it lies outside the 95% prediction interval."))
 
+  # The gate stayed shut. If the directed rows alone would have opened it,
+  # the undirected rows are the whole reason, and the reviewer can fix that
+  # by recording why each result is missing.
+  directed <- gate_mechanisms[gate_mechanisms != "unconstrained"]
+  if (n_undirected > 0L && length(directed) &&
+      !.pubias_missing_in_suspected(directed, u = u_star, a = abs(te_obs))) {
+    gate_note <- sprintf(paste0(
+      "%d missing result%s carr%s no suspected direction, which keeps the ",
+      "direction gate from ruling the tipping value out; recording why each ",
+      "result is missing (e.g. \"assumed P > 0.05\") would let it apply."),
+      n_undirected, if (n_undirected == 1L) "" else "s",
+      if (n_undirected == 1L) "ies" else "y")
+  }
+
   # ---- The "Not measured" cap --------------------------------------------
   # An outcome that was never assessed cannot have been suppressed for what
-  # it showed, so its absence is incompleteness rather than bias, and
-  # incompleteness does not earn the strongest warning the tab can give.
+  # it showed (RoB-ME), so its absence is incompleteness rather than bias,
+  # and incompleteness does not earn the strongest warning the tab can give.
   #
   # The cap applies only when EVERY missing row is "Not measured". A single
   # row with any other label is a row whose absence could be selective, and
@@ -429,7 +512,7 @@
       "as never measured, which is incompleteness rather than suppression.")
   }
 
-  .out(6L, state, paste0(wording, " Reference only - it rates nothing."),
+  .out(6L, state, paste(wording, .PUBIAS_MISSING_REFERENCE_ONLY),
        delta_star = delta_star, se_new = se_new, capped = capped)
 }
 

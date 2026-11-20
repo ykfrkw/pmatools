@@ -1,3 +1,58 @@
+# pmatools 0.9.2
+
+## Behaviour changes
+
+None of these reach `assess_pubias()` or `grade_meta()`, and no GRADE rating
+changes: the RoB-ME dot and the trim-and-fill dot and line are reference-only
+displays (`test-pubias_status.R` and `test-pubias_trimfill.R` hold that line),
+the subgroup forest is a drawing, and every call site whose rating depends on
+`sm` already passed a canonical name in 0.9.1.
+
+* **The Missing results (RoB-ME) dot can turn green where it was red or
+  amber.** `Not measured` rows no longer take part in the direction gate,
+  because under RoB-ME (Page et al., BMJ 2023) a result that was never
+  measured cannot have been selectively unreported. They still count in the
+  tipping-point computation - in `m` and in the imputed weights. Before, one
+  such row was unconstrained and held the gate shut for every other row: an
+  outcome with one `Not measured` trial and four "Measured, result not
+  available (assumed P > 0.05)" trials, whose tipping value lay further from
+  the null than the observed effect, came out red. It is now green at step 5.
+  The all-`Not measured` amber cap is unchanged. The return list of
+  `.pubias_missing_tipping()` gains `n_not_measured` and `n_undirected`.
+* **New sentences in the RoB-ME tooltip.** When the gate fires with
+  `Not measured` rows present, the reason says how many were counted but left
+  out of the direction check. When undirected rows ("Reported but data not
+  extractable", free text) are all that keeps the gate from firing, the reason
+  says so and suggests recording why each result is missing. Undirected rows
+  stay unconstrained.
+* **The trim-and-fill dot's tooltip and the trim-and-fill line gain a caution
+  note** when I² >= 50% or k < 10, stating the actual k and I². The dot's
+  colour and the line's verdict are unchanged.
+* **`plot_forest_pubias_subgroup()` draws one pooled diamond and one
+  heterogeneity line**, for the available studies. The second "Random effects
+  model" diamond under Missing results and its duplicated heterogeneity line
+  are gone (missing rows carry no estimate, so it repeated the available
+  pool), and with them the overlap between the "Favours" labels and the x-axis
+  tick labels. The sample-size column is labelled "N" instead of "No".
+
+## New features
+
+* `plot_forest_pubias_subgroup(show_results_known = )`. `TRUE` (default) keeps
+  the status string in the missing rows' effect cell; `FALSE` leaves it blank.
+* `.pubias_trimfill_dot()` and `.pubias_trimfill_line()` take `k` and `i2`;
+  the cut-offs are `PMA_PUBIAS_TRIMFILL_CAUTION_I2` (0.50) and
+  `PMA_PUBIAS_TRIMFILL_CAUTION_K` (10). The app passes both.
+
+## Bug fixes
+
+* **Finishing 0.9.1's "ROM" fix: functions that take an `sm` argument now
+  canonicalise it on entry**, not only reads of an object's `$sm`.
+  `.effect_header()`, `.bmj_measure_name()`, `.p1()`, `.derive_rating_target()`
+  and `.classify_imprecision()` read an explicit `"ROM"` as a ratio of means,
+  and `run_ma()` accepts `sm = "ROM"` (any case) rather than rejecting {meta}'s
+  own spelling. No caller inside the package passed a non-canonical name, so
+  no output changes for existing analyses.
+
 # pmatools 0.9.1
 
 ## Bug fixes

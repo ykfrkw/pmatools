@@ -119,6 +119,7 @@ RATING_TARGET_LABELS <- c(
 #' @noRd
 .derive_rating_target <- function(te_point, threshold_internal, threshold_type,
                                   sm = NULL, threshold_kind = NULL) {
+  sm <- .canon_sm(sm)
   has_mid <- .has_mid(threshold_internal)
   te_ok   <- !is.null(te_point) && length(te_point) == 1L &&
              !is.na(te_point) && is.finite(te_point)

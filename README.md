@@ -1329,12 +1329,13 @@ funnel-asymmetry judgment and rates nothing on its own.
 
 **Available vs missing results: `plot_forest_pubias_subgroup()`.** Draws the
 RoB-ME-style two-subgroup forest (Page et al., BMJ 2023): "Available results"
-with the usual estimates and pooled diamond, stacked over "Missing results" —
-registry/protocol entries supplied via `missing_df` (columns `studlab`, `n`,
-`results_known`) plus auto-detected studies whose effect estimate is `NA`
-(e.g. all-zero events). Missing rows show a status string in place of an
-estimate and contribute nothing to pooling. Reference-only diagnostic — it
-does not drive the certainty judgment.
+with the usual estimates, one pooled diamond and its heterogeneity line,
+stacked over "Missing results" — registry/protocol entries supplied via
+`missing_df` (columns `studlab`, `n`, `results_known`) plus auto-detected
+studies whose effect estimate is `NA` (e.g. all-zero events). Missing rows show
+their sample size in the "N" column and a status string in place of an estimate
+(`show_results_known = FALSE` leaves that cell blank), and contribute nothing to
+pooling. Reference-only diagnostic — it does not drive the certainty judgment.
 
 ```r
 miss <- data.frame(

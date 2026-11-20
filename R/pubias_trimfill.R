@@ -45,6 +45,52 @@
 # prints both estimates beside it so the reader can see that is what happened.
 # --------------------------------------------------------------------------
 
+# --------------------------------------------------------------------------
+# When the adjusted estimate itself deserves caution
+#
+# Trim-and-fill can impute studies that are not missing, and mis-estimate the
+# adjustment, when the studies are few or heterogeneity is substantial: it
+# reads asymmetry that heterogeneity produced as asymmetry that suppression
+# produced (Terrin N et al. Stat Med 2003;22:2113-26; Peters JL et al. Stat
+# Med 2007;26:4544-62). The caution is a NOTE appended to the reader's text,
+# never a change of colour or verdict - the comparison above is unchanged;
+# only how much weight the adjusted number can bear is.
+#
+# The two cut-offs. Ten studies is the minimum for funnel-asymmetry methods
+# (Sterne JAC et al. BMJ 2011;343:d4002), which trim-and-fill is one of. An
+# I2 of 50% is where the Cochrane Handbook (chapter 10) says heterogeneity
+# "may represent substantial heterogeneity". I2 is a proportion here, as
+# {meta} stores `$I2`.
+PMA_PUBIAS_TRIMFILL_CAUTION_I2 <- 0.50
+PMA_PUBIAS_TRIMFILL_CAUTION_K  <- 10L
+
+# The caution sentence, or "" when neither condition holds. NA for either
+# input means "not known", which raises no caution on its own account.
+.pubias_trimfill_caution <- function(k = NA, i2 = NA) {
+  k  <- suppressWarnings(as.numeric(k)[1])
+  i2 <- suppressWarnings(as.numeric(i2)[1])
+  is_few_studies  <- isTRUE(is.finite(k) && k < PMA_PUBIAS_TRIMFILL_CAUTION_K)
+  is_heterogeneous <- isTRUE(is.finite(i2) &&
+                             i2 >= PMA_PUBIAS_TRIMFILL_CAUTION_I2)
+  if (!is_few_studies && !is_heterogeneous) return("")
+
+  conditions <- c(
+    if (is_few_studies) {
+      sprintf("only %d studies (fewer than %d)", as.integer(k),
+              PMA_PUBIAS_TRIMFILL_CAUTION_K)
+    },
+    if (is_heterogeneous) {
+      sprintf("I2 = %.0f%% (%.0f%% or more)", 100 * i2,
+              100 * PMA_PUBIAS_TRIMFILL_CAUTION_I2)
+    })
+  sprintf(paste0(
+    "Caution: this analysis has %s. Trim-and-fill can add studies that are ",
+    "not missing, or mis-estimate the adjustment, when studies are few or ",
+    "heterogeneity is substantial (Terrin et al., Stat Med 2003; Peters et ",
+    "al., Stat Med 2007), so read the adjusted estimate with caution."),
+    paste(conditions, collapse = " and "))
+}
+
 # Below this, |TE_adjusted| is treated as zero and the ratio is undefined.
 # Same guard, and the same value, as .assess_bias_direction().
 .PUBIAS_TRIMFILL_NEAR_ZERO <- 1e-9
@@ -110,9 +156,12 @@
 #
 # `format_te` turns an internal-scale effect into whatever the caller wants the
 # reader to see (exponentiated for a ratio measure, say); the default prints
-# the internal value.
+# the internal value. `k` and `i2` (a proportion) add the caution sentence of
+# .pubias_trimfill_caution() to an assessable line; they change no wording
+# before it.
 .pubias_trimfill_line <- function(inflation, te_original, te_adjusted,
-                                  format_te = function(v) sprintf("%.3f", v)) {
+                                  format_te = function(v) sprintf("%.3f", v),
+                                  k = NA, i2 = NA) {
   if (!isTRUE(inflation$assessable)) {
     return(paste0(
       "Exaggeration check not assessable: the original and adjusted pooled ",
@@ -133,8 +182,10 @@
     "the adjustment does not move the estimate away from the favourable side"
   }
 
-  sprintf(paste0(
+  line <- sprintf(paste0(
     "Exaggeration check (reference only, rates nothing): original %s vs ",
     "trim-and-fill adjusted %s - %s."),
     format_te(te_original), format_te(te_adjusted), verdict)
+  caution <- .pubias_trimfill_caution(k = k, i2 = i2)
+  if (nzchar(caution)) paste(line, caution) else line
 }

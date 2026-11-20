@@ -31,7 +31,8 @@ carry more than one outcome, which would double-count that study.}
 \item{outcome_type}{One of \code{"binary"} or \code{"continuous"}.}
 
 \item{sm}{Effect measure. Binary: \code{"OR"} or \code{"RR"}. Continuous: \code{"SMD"},
-\code{"MD"}, or \code{"RoM"}. Defaults: \code{"OR"} for binary, \code{"SMD"} for continuous.}
+\code{"MD"}, or \code{"RoM"}. Defaults: \code{"OR"} for binary, \code{"SMD"} for continuous.
+Matched case-insensitively, so the meta package's own \code{"ROM"} is accepted.}
 
 \item{method}{Pooling method (binary only). One of \code{"Inverse"}, \code{"MH"},
 \code{"Peto"}. Defaults: \code{"Inverse"} for OR, \code{"MH"} for RR.}

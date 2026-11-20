@@ -165,6 +165,36 @@ test_that("the trim-and-fill dot is the risk-of-bias direction verdict", {
   expect_match(green$reason, "rates nothing")
 })
 
+test_that("the trim-and-fill caution is a note on the reason, not a colour", {
+  dot_at <- function(te_original, ...) {
+    .pubias_trimfill_dot(
+      te_original = te_original, te_adjusted = -0.50,
+      small_values = "desirable", sm = "SMD", threshold_internal = 0.20, ...)
+  }
+  for (te_original in c(-0.55, -0.80)) {
+    plain         <- dot_at(te_original)
+    heterogeneous <- dot_at(te_original, k = 15, i2 = 0.6)
+    few           <- dot_at(te_original, k = 8, i2 = 0.3)
+    neither       <- dot_at(te_original, k = 15, i2 = 0.3)
+
+    # The state never moves.
+    expect_identical(heterogeneous$state, plain$state)
+    expect_identical(few$state, plain$state)
+    expect_identical(neither$state, plain$state)
+
+    expect_match(heterogeneous$reason, "I2 = 60%", fixed = TRUE)
+    expect_match(heterogeneous$reason, "Peters et al., Stat Med 2007",
+                 fixed = TRUE)
+    expect_match(few$reason, "only 8 studies", fixed = TRUE)
+    expect_identical(neither$reason, plain$reason)
+    expect_false(grepl("Caution", plain$reason, fixed = TRUE))
+    # "Reference only" still closes the tooltip.
+    expect_match(heterogeneous$reason, "Reference only - it rates nothing.$")
+  }
+  expect_identical(dot_at(-0.55)$state, "green")
+  expect_identical(dot_at(-0.80)$state, "amber")
+})
+
 test_that("the 20% mark is PMA_ROB_INFLATION_THRESHOLD, not a second copy", {
   # Just inside and just outside the shared threshold, with everything else
   # held equal. If this file ever grew its own constant, one of these two
