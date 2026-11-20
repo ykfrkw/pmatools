@@ -221,7 +221,7 @@ grade_table <- function(outcomes,
     # is left to be inferred from the header. A not-reported outcome has no
     # measure at all and must not make a homogeneous table look mixed.
     sms <- unique(vapply(.rated_outcomes(outcomes),
-                         function(g) as.character(g$meta$sm %||% ""),
+                         function(g) as.character(.sm_of(g$meta) %||% ""),
                          character(1)))
     sms <- sms[nzchar(sms)]
     if (length(sms) > 1L) {
@@ -239,7 +239,7 @@ grade_table <- function(outcomes,
   # otherwise. A not-reported outcome carries no effect measure, so it must not
   # be allowed to degrade the header of an otherwise homogeneous table.
   eff_hdrs <- unique(vapply(.rated_outcomes(outcomes),
-                            function(g) .effect_header(g$meta$sm),
+                            function(g) .effect_header(.sm_of(g$meta)),
                             character(1)))
   eff_hdr  <- if (length(eff_hdrs) == 1L) eff_hdrs else "Effect\n(95% CI)"
 

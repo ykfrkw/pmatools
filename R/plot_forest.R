@@ -146,7 +146,7 @@ plot_forest <- function(meta_obj,
   }
 
   k  <- meta_obj$k
-  sm <- meta_obj$sm
+  sm <- .sm_of(meta_obj)
   is_ratio <- !is.null(sm) && sm %in% c("OR", "RR", "HR", "RoM", "IRR")
 
   # Resolve arm labels (see .resolve_arm_labels() for the "Experimental"
@@ -524,7 +524,7 @@ PMA_FOREST_MIN_TICKS <- 3
 PMA_FOREST_STEP_TOLERANCE <- 1e-8
 
 .auto_xlim <- function(meta_obj) {
-  sm <- meta_obj$sm
+  sm <- .sm_of(meta_obj)
   lo <- meta_obj$lower
   hi <- meta_obj$upper
 
@@ -561,7 +561,7 @@ PMA_FOREST_STEP_TOLERANCE <- 1e-8
 # nor SMD. NULL means "skip the clamp": an unbounded axis is a worse plot,
 # never a failed one, and plot_forest() must not abort over a missing SD.
 .standardised_scale_factor <- function(meta_obj) {
-  sm <- meta_obj$sm
+  sm <- .sm_of(meta_obj)
   if (is.null(sm) || length(sm) != 1L || is.na(sm)) return(NULL)
   if (identical(as.character(sm), "SMD")) return(1)
   if (!identical(as.character(sm), "MD")) return(NULL)

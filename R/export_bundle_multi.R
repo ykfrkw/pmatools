@@ -643,7 +643,7 @@ export_bundle.pmatools_set <- function(x,
       sprintf("      certainty    : %s", g$certainty),
       sprintf("      rating target: %s", g$rating_target %||% "-"),
       sprintf("      analysis set : %s", .analysis_set_label(g)),
-      sprintf("      effect measure: %s", g$meta$sm %||% "-"),
+      sprintf("      effect measure: %s", .sm_of(g$meta) %||% "-"),
       "")
   }
 

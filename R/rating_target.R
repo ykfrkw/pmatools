@@ -253,7 +253,7 @@ RATING_TARGET_LABELS <- c(
   if (!isTRUE(require_threshold)) return(invisible(NULL))
 
   sugg <- tryCatch(suggest_threshold(meta_obj), error = function(e) NULL)
-  sm   <- meta_obj$sm %||% "this"
+  sm   <- .sm_of(meta_obj) %||% "this"
   hint <- if (!is.null(sugg) && !is.null(sugg$threshold_user)) {
     src <- sugg$source %||% "package_convention"
     provenance <- if (identical(src, "core_grade_6")) {

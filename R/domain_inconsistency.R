@@ -535,7 +535,7 @@ assess_inconsistency <- function(meta_obj,
   # one the Imprecision domain rates against.
   threshold_label <- if (M > 0) {
     sprintf("vs threshold %s (chosen threshold; same as Imprecision)",
-            .threshold_words(M, .rob_scale(meta_obj$sm)))
+            .threshold_words(M, .rob_scale(.sm_of(meta_obj))))
   } else {
     paste0("vs null = 0 (chosen threshold is the null; same as Imprecision)")
   }
@@ -594,7 +594,7 @@ assess_inconsistency <- function(meta_obj,
     if (M > 0) {
       sprintf("%d above, %d within, %d below (threshold %s, k = %d)",
               n_above, n_trivial, n_below,
-              .threshold_words(M, .rob_scale(meta_obj$sm)), n_total)
+              .threshold_words(M, .rob_scale(.sm_of(meta_obj))), n_total)
     } else {
       sprintf("%d above, %d below (threshold: the null, k = %d)",
               n_above, n_below, n_total)

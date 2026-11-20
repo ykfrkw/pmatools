@@ -198,7 +198,7 @@
                                      manual = NULL) {
   te    <- .pooled_te(meta_obj)
   M     <- if (.has_mid(threshold_chosen)) threshold_chosen else 0
-  scale <- .rob_scale(meta_obj$sm)
+  scale <- .rob_scale(.sm_of(meta_obj))
   te_txt <- if (is.finite(te)) {
     sprintf("%s %s", scale$sm_label, .rob_fact_num(scale$disp(te)))
   } else "not available"

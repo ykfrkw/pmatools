@@ -1,3 +1,20 @@
+# pmatools 0.9.1
+
+## Bug fixes
+
+* **A ratio-of-means analysis is now treated as a ratio everywhere.**
+  `run_ma(sm = "RoM")` returns a {meta} object whose `$sm` is `"ROM"` - {meta}
+  normalises the name - while pmatools compared against `"RoM"`. A RoM outcome
+  therefore fell through as a non-ratio measure: `grade_table()` and
+  `grade_report()` printed the pooled estimate, CI and threshold on the log
+  scale (eg, "RoM -0.49" instead of 0.61), `threshold_scale = "auto"` aborted,
+  and `plot_forest()`'s automatic `xlim` went negative. Every read of `$sm` now
+  goes through one case-insensitive helper (`R/sm_names.R`) that maps the name
+  to pmatools' spelling without changing what {meta} stores, so {meta}'s own
+  back-transformation and `forest()` are unaffected. The pooled RoM is also
+  back-transformed in the effect column whatever `outcome_type` the table was
+  built with, since a ratio of means has a continuous outcome.
+
 # pmatools 0.9.0
 
 ## Breaking changes

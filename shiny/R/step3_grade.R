@@ -1216,7 +1216,7 @@ step3_server <- function(input, output, session, state) {
     # above still runs, because a fresh analysis must discard the previous
     # outcome's margin whatever the question is - and, since the question is
     # part of the key, so must a change of question.
-    if (!isTRUE(step3_threshold_copy(question, obj$sm %||% "")$prefill)) {
+    if (!isTRUE(step3_threshold_copy(question, .sm_of(obj) %||% "")$prefill)) {
       return(invisible(NULL))
     }
     s <- tryCatch(suggest_threshold(obj), error = function(e) NULL)
@@ -1881,7 +1881,7 @@ step3_server <- function(input, output, session, state) {
     if (is.null(obj)) {
       return(htmltools::p("Run the analysis in Step 2 first."))
     }
-    sm <- obj$sm %||% "OR"
+    sm <- .sm_of(obj) %||% "OR"
     # Gate on the OUTCOME, not on the summary measure: a binary outcome
     # analysed as ARD, RD or HR used to fall through to the continuous
     # branch and lose the absolute-scale interface entirely.
@@ -2176,7 +2176,7 @@ step3_server <- function(input, output, session, state) {
   output$threshold_equiv <- shiny::renderUI({
     obj <- state$ma
     if (is.null(obj)) return(NULL)
-    sm <- obj$sm %||% "OR"
+    sm <- .sm_of(obj) %||% "OR"
     per <- display_per_state()
     # The reactiveVals, not input$: the boxes now carry the DISPLAYED unit
     # while step3_ard_equivalence() works per-1,000, and the mirror observers
@@ -2238,7 +2238,7 @@ step3_server <- function(input, output, session, state) {
       return(list(head = "No threshold set - run the analysis first.",
                   lines = character()))
     }
-    sm <- obj$sm %||% "OR"
+    sm <- .sm_of(obj) %||% "OR"
     per <- display_per_state()
     if (step3_is_binary_outcome(obj, input$outcome_type) &&
         identical(threshold_mode_state(), "absolute")) {
@@ -2370,7 +2370,7 @@ step3_server <- function(input, output, session, state) {
   # cannot do the conversion (control-group risk missing or out of range), so
   # pmatools' own validation and error messages still apply there.
   .threshold_grade_args <- function(obj, te_point = NULL) {
-    sm <- obj$sm %||% "OR"
+    sm <- .sm_of(obj) %||% "OR"
     if (step3_is_binary_outcome(obj, shiny::isolate(input$outcome_type)) &&
         identical(threshold_mode_state(), "absolute")) {
       ta <- threshold_abs_state()
@@ -2522,7 +2522,7 @@ step3_server <- function(input, output, session, state) {
     # within-study SD units, which makes sigma 1; prefilling the raw pooled SD
     # there squared a number that does not belong in the formula at all. MD and
     # RoM stay on the pooled SD, where the threshold is on the raw scale.
-    is_smd <- identical(obj$sm %||% "", "SMD")
+    is_smd <- identical(.sm_of(obj) %||% "", "SMD")
     val <- if (is.null(obj)) {
       NA
     } else if (is_smd) {
@@ -3083,7 +3083,7 @@ step3_server <- function(input, output, session, state) {
     # the threshold IS absolute, converted app-side - so swap the sentence
     # for one that describes what happened. A no-op if the vendored wording
     # ever changes.
-    sm_g   <- obj$sm %||% "OR"
+    sm_g   <- .sm_of(obj) %||% "OR"
     stale  <- paste0(
       " Target derived on the relative-effect scale (", sm_g,
       "); Core GRADE 2 recommends an absolute-effect threshold ",

@@ -141,7 +141,7 @@ chinn_smd_to_or <- function(smd, ci_lower = NULL, ci_upper = NULL) {
 #'
 #' @export
 suggest_threshold <- function(meta_obj) {
-  sm <- meta_obj$sm
+  sm <- .sm_of(meta_obj)
   if (is.null(sm)) return(NULL)
 
   ard_suggest <- list(threshold_user = 0.05, threshold_scale = "ard",
@@ -242,6 +242,7 @@ suggest_threshold <- function(meta_obj) {
 #' @keywords internal
 threshold_to_te_scale <- function(threshold, threshold_scale = "auto", sm = NULL,
                                   threshold_baseline = NULL, meta_obj = NULL) {
+  sm <- .canon_sm(sm)
   if (is.null(threshold) || is.na(threshold)) {
     return(list(threshold_internal = NULL, threshold_kind = NULL,
                 threshold_ard = NULL, threshold_note = NULL,
@@ -325,6 +326,7 @@ threshold_to_te_scale <- function(threshold, threshold_scale = "auto", sm = NULL
 #' @noRd
 .ard_threshold_to_ratio <- function(ard, sm, threshold_baseline = NULL,
                                     meta_obj = NULL) {
+  sm <- .canon_sm(sm)
   if (!is.finite(ard) || ard <= 0) {
     rlang::abort(paste0(
       "threshold_scale = 'ard' with sm = '", sm, "' requires a positive ",

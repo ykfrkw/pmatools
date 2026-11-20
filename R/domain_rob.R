@@ -1000,7 +1000,7 @@ assess_rob <- function(rob, meta_obj,
       low_idx             = !high_idx,
       small_values        = small_values,
       inflation_threshold = inflation_threshold,
-      sm                  = meta_obj$sm,
+      sm                  = .sm_of(meta_obj),
       threshold_internal  = threshold_internal
     )
   } else {
@@ -1010,7 +1010,7 @@ assess_rob <- function(rob, meta_obj,
       se_vec              = se_vec,
       low_idx             = !high_idx,
       inflation_threshold = inflation_threshold,
-      sm                  = meta_obj$sm,
+      sm                  = .sm_of(meta_obj),
       threshold_internal  = threshold_internal
     )
   }
@@ -1178,6 +1178,7 @@ assess_rob <- function(rob, meta_obj,
 # Measure label and display transform: ratio measures are judged on the log
 # scale and shown back-transformed.
 .rob_scale <- function(sm) {
+  sm <- .canon_sm(sm)
   log_scale <- !is.null(sm) && sm %in% c("OR", "RR", "HR", "RoM")
   list(
     log_scale = log_scale,
@@ -1220,6 +1221,7 @@ assess_rob <- function(rob, meta_obj,
 
 # The threshold sentence both readings print.
 .rob_threshold_note <- function(M, scale, sm) {
+  sm <- .canon_sm(sm)
   if (M > 0) {
     sprintf("Threshold = %s", .threshold_words(M, scale))
   } else {

@@ -990,7 +990,7 @@ grade_meta <- function(meta_obj,
   # the refitted low-RoB analysis when Core GRADE Guide Fig 7-2 calls for one.
   meta_full          <- meta_obj
   threshold_resolved <- threshold_to_te_scale(
-    threshold, threshold_scale, meta_obj$sm,
+    threshold, threshold_scale, .sm_of(meta_obj),
     threshold_baseline = threshold_baseline,
     meta_obj           = meta_obj
   )
@@ -1042,7 +1042,7 @@ grade_meta <- function(meta_obj,
     # domains judge against the right equivalent ratio.
     if (refit_done && identical(threshold_kind, "ard")) {
       threshold_resolved <- threshold_to_te_scale(
-        threshold, threshold_scale, meta_obj$sm,
+        threshold, threshold_scale, .sm_of(meta_obj),
         threshold_baseline = threshold_baseline,
         meta_obj           = meta_obj
       )
@@ -1072,7 +1072,7 @@ grade_meta <- function(meta_obj,
     te_point           = .pooled_te(meta_obj),
     threshold_internal = threshold_internal,
     threshold_type     = threshold_type,
-    sm                 = meta_obj$sm,
+    sm                 = .sm_of(meta_obj),
     threshold_kind     = threshold_kind
   )
   target_info <- .resolve_rating_target(rating_target, rating_target_rationale,
@@ -1264,10 +1264,10 @@ grade_meta <- function(meta_obj,
       flow             = TRUE,
       method           = rare_method,
       method_label     = .rare_method_label(rare_method,
-                                            meta_obj$sm %||% "OR"),
+                                            .sm_of(meta_obj) %||% "OR"),
       one_arm_total_zero = isTRUE(rare_one_arm_total_zero),
       method_statement = rare_method_statement(rare_method,
-                                               meta_obj$sm %||% "OR"),
+                                               .sm_of(meta_obj) %||% "OR"),
       # The suite's methods are correction-free by construction (see
       # R/rare_step3.R). Stated on the object because a 0.5 that was never
       # added leaves no trace anywhere else.

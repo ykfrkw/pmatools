@@ -93,11 +93,14 @@ PMA_APP_ROOT <- local({
 # on screen is the reason in the package's own abort. Sourced, not
 # re-implemented: a second reading of `small_values` in the app would be free to
 # disagree with the rating it describes.
+#
+# R/sm_names.R joined in 0.9.1: step3_grade.R reads every `$sm` through
+# .sm_of(), so {meta}'s "ROM" is read as pmatools' "RoM".
 for (.stem in c("grade_vocabulary.R", "house_style.R", "domain_row.R",
                 "meta_quantities.R", "effect_scales.R",
                 "multi_outcome.R", "data_ingest.R",
                 "not_reported.R", "rare_events.R", "rare_step3.R",
-                "domain_imprecision.R")) {
+                "domain_imprecision.R", "sm_names.R")) {
   for (.f in c(file.path(PMA_APP_ROOT, "R", "_pmatools", .stem),
                file.path(dirname(PMA_APP_ROOT), "R", .stem))) {
     if (file.exists(.f)) {

@@ -147,7 +147,7 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
   # v0.2 Chinn conversion path
   chinn_active <- FALSE
   if (isTRUE(convert_smd_to_or)) {
-    sm <- meta_obj$sm
+    sm <- .sm_of(meta_obj)
     if (is.null(sm) || !sm %in% c("SMD", "MD")) {
       rlang::abort(
         "convert_smd_to_or = TRUE requires meta_obj$sm in c('SMD','MD')."
@@ -233,7 +233,7 @@ sof_table <- function(x, style = c("gradepro", "bmj"),
     "Outcome",
     "No. of participants\n(studies)",
     .arm_headers(arm$continuous, per, label_intervention, label_control),
-    .effect_header(meta_obj$sm),
+    .effect_header(.sm_of(meta_obj)),
     "Certainty of the evidence\n(Core GRADE series)"
   )
 
@@ -706,7 +706,7 @@ sof_add_notes <- function(x, notes) {
 #'
 #' @export
 format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
-  sm  <- meta_obj$sm
+  sm  <- .sm_of(meta_obj)
   pooled <- .pooled_estimate(meta_obj)
   est <- pooled$est
   lo  <- pooled$lower
@@ -714,8 +714,12 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
 
   if (is.null(est) || is.na(est)) return("NR")
 
-  if (outcome_type == "relative" && !is.null(sm) &&
-      sm %in% c("RR", "OR", "HR", "IRR")) {
+  # A ratio of means is pooled on the log scale whatever outcome_type says
+  # (its outcome is continuous), so it is back-transformed on its own test.
+  is_log_ratio <- !is.null(sm) &&
+    ((outcome_type == "relative" && sm %in% c("RR", "OR", "HR", "IRR")) ||
+       identical(sm, "RoM"))
+  if (is_log_ratio) {
     est <- exp(est); lo <- exp(lo); hi <- exp(hi)
     effect_text <- sprintf("%s %.2f (%.2f; %.2f)", sm, est, lo, hi)
   } else {
@@ -728,8 +732,7 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
     pi_hi <- meta_obj$upper.predict
     if (!is.null(pi_lo) && !is.null(pi_hi) &&
         !is.na(pi_lo) && !is.na(pi_hi)) {
-      if (outcome_type == "relative" && !is.null(sm) &&
-          sm %in% c("RR", "OR", "HR", "IRR")) {
+      if (is_log_ratio) {
         pi_lo <- exp(pi_lo); pi_hi <- exp(pi_hi)
       }
       effect_text <- paste0(effect_text,
@@ -768,7 +771,7 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
 .format_ier <- function(meta_obj, baseline_risk, per = 1000,
                         big_mark = TRUE, ci_sep = "; ") {
   if (is.null(baseline_risk)) return("-")
-  sm <- meta_obj$sm
+  sm <- .sm_of(meta_obj)
   if (is.null(sm) || !sm %in% c("RR", "OR", "HR", "IRR")) return("-")
 
   pooled <- .pooled_estimate(meta_obj)
@@ -910,7 +913,7 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
 # presentation and prints this sentence against the row instead.
 .responder_unavailable_reason <- function(g, args,
                                           label_control = "control") {
-  sm <- as.character(g$meta$sm %||% "")
+  sm <- as.character(.sm_of(g$meta) %||% "")
   if (!sm %in% c("SMD", "MD")) {
     return(sprintf(paste0(
       "its effect measure is %s, and Chinn's formula converts a standardised ",
@@ -1144,7 +1147,7 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
 # (meta_obj$exclude) are held out here too. Returns NULL -- and the cells stay
 # empty -- when the attribute is absent or no endpoint control arm is usable.
 .control_endpoint_reference <- function(meta_obj) {
-  if (!identical(as.character(meta_obj$sm %||% ""), "MD")) return(NULL)
+  if (!identical(as.character(.sm_of(meta_obj) %||% ""), "MD")) return(NULL)
   types <- attr(meta_obj, "pmatools_score_type")
   if (is.null(types)) return(NULL)
 
@@ -1204,7 +1207,7 @@ format_effect <- function(meta_obj, outcome_type, prediction = FALSE) {
 # keys on.
 .sof_arm_cells <- function(meta_obj, baseline_risk, per = 1000,
                            big_mark = TRUE, ci_sep = "; ", digits = 2L) {
-  sm <- as.character(meta_obj$sm %||% "")
+  sm <- as.character(.sm_of(meta_obj) %||% "")
   if (sm %in% c("MD", "SMD")) {
     ref    <- .control_endpoint_reference(meta_obj)
     pooled <- .pooled_estimate(meta_obj)
