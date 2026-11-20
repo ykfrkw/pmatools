@@ -606,6 +606,7 @@ sof_add_notes <- function(x, notes) {
 
 # GRADEpro-style effect column header, by summary measure
 .effect_header <- function(sm) {
+  sm <- .canon_sm(sm)
   if (!is.null(sm) && length(sm) == 1L && !is.na(sm) &&
       sm %in% c("RR", "OR", "HR", "IRR", "RoM")) {
     "Relative effect\n(95% CI)"
@@ -1281,6 +1282,7 @@ GRADEPRO_SPLIT_COLS  <- 3:5
 
 # Compute experimental arm event rate from log-scale relative effect
 .p1 <- function(p0, log_re, sm) {
+  sm <- .canon_sm(sm)
   re <- exp(log_re)
   if (sm %in% c("RR", "HR", "IRR")) return(min(1, max(0, p0 * re)))
   if (sm == "OR") {

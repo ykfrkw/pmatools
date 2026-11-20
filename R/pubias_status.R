@@ -291,7 +291,8 @@ PMA_PUBIAS_EGGER_STRONG_ALPHA <- 0.01
                                  threshold_internal = NULL,
                                  p1_from_ratio = NULL,
                                  inflation_threshold =
-                                   PMA_ROB_INFLATION_THRESHOLD) {
+                                   PMA_ROB_INFLATION_THRESHOLD,
+                                 k = NA, i2 = NA) {
   if (!isTRUE(k_ok)) {
     return(.pubias_dot_unknown(paste0(
       "Not computed: the trim-and-fill panel needs at least 10 studies with ",
@@ -347,8 +348,12 @@ PMA_PUBIAS_EGGER_STRONG_ALPHA <- 0.01
   } else {
     ""
   }
+  # The few-studies / substantial-heterogeneity caution is a note on the
+  # reading, not a colour: the state above is already decided and stays.
+  caution <- .pubias_trimfill_caution(k = k, i2 = i2)
+  caution_note <- if (nzchar(caution)) paste0(" ", caution) else ""
   .pubias_dot(state, paste0(
     "Trim-and-fill vs the original pooled effect: ",
-    .PUBIAS_TRIMFILL_DOT_WORDING[[state]], scale_note,
+    .PUBIAS_TRIMFILL_DOT_WORDING[[state]], scale_note, caution_note,
     " Reference only - it rates nothing."))
 }

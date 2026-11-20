@@ -18,6 +18,7 @@ plot_forest_pubias_subgroup(
   show_events = FALSE,
   addrow_above = 0,
   addrow_below = NULL,
+  show_results_known = TRUE,
   ...
 )
 }
@@ -60,7 +61,8 @@ right of the x-axis (\code{label.left} / \code{label.right}).}
 
 \item{show_n}{Logical. Only honoured when \code{meta_obj} has no missing
 rows (so this function falls back to a standard one-panel forest); the
-subgroup view always shows a single combined "No" column.}
+subgroup view always shows a single combined "N" (total sample size)
+column.}
 
 \item{show_events}{Logical, fallback-only (see \code{show_n}).}
 
@@ -68,7 +70,16 @@ subgroup view always shows a single combined "No" column.}
 overall pooled effect line. \code{addrow_below = NULL} (default) is
 computed from the drawn content so the bottom heterogeneity/test text
 clears the x-axis band and any \code{label.left}/\code{label.right}
-row (see \code{.auto_addrow_below()}).}
+row (see \code{.auto_addrow_below()}). The two-subgroup view draws no
+overall summary (the Available-results pool is the only diamond), so
+\code{addrow_below} matters there only if \code{overall = TRUE} is
+passed through \code{...}.}
+
+\item{show_results_known}{Logical (default \code{TRUE}). When \code{TRUE},
+each Missing-results row shows its \code{results_known} status string in
+the effect column. When \code{FALSE}, that cell is left blank, for a
+figure that lists the missing studies without annotating why each one is
+missing.}
 
 \item{...}{Additional arguments forwarded to \code{\link[meta]{forest.meta}}.}
 }
@@ -79,8 +90,10 @@ Invisibly NULL. Side effect: draws on the active graphics device.
 Renders the supplied meta-analysis as a two-subgroup forest plot:
 \describe{
 \item{Available results}{Studies in \code{meta_obj} with a finite TE/seTE,
-drawn with their usual point estimates, weights, and the pooled
-(random-effects) diamond.}
+drawn with their usual point estimates and the pooled (random-effects)
+diamond with its heterogeneity line. This is the only pooled diamond
+on the plot: the missing rows carry no estimate, so an overall pool
+would repeat it.}
 \item{Missing results}{Two sources are merged here:
 (i) studies present in \code{meta_obj$studlab} but whose effect estimate
 is \code{NA} (e.g. all-zero events, dropped from pooling); these are

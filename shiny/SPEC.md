@@ -4,7 +4,7 @@
 
 **Public URL:** https://yuki-furukawa.shinyapps.io/pmatools/
 **Deployment:** shinyapps.io (account: `yuki-furukawa`, appId: `17697029`)
-**App version:** 3.8.1 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.7.0 → 3.8.0 is the Indirectness reason box for a "very close" surrogate and the per-answer Core GRADE examples (§3.4.12a); 3.6.1 → 3.7.0 is the Rule set dropdown, which re-runs a review under the pmatools 0.5.x rules (§3.4.12b); 3.6.0 → 3.6.1 corrects the Configuration tab's outcome-direction sentence, which still said it set the bias direction Risk of Bias checks; 3.5.0 → 3.6.0 is the Indirectness flowchart (Core GRADE Guide Fig 8-2, §3.4.12a); 3.4.0 → 3.5.0 is the Core GRADE Guide flowcharts (risk of bias Fig 7-2, publication bias Fig 9-1 and its computed first node, §3.4.12); 3.3.0 → 3.4.0 is the optional Score type mapping (§3.3.3); 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
+**App version:** 3.8.2 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.8.1 → 3.8.2 passes k and I² to the trim-and-fill dot and line, which add a caution note when studies are few or heterogeneity is substantial (pmatools 0.9.2; the RoB-ME dot's `Not measured` exclusion and the subgroup forest's single diamond arrive with the package sources, §3.4.8a); 3.7.0 → 3.8.0 is the Indirectness reason box for a "very close" surrogate and the per-answer Core GRADE examples (§3.4.12a); 3.6.1 → 3.7.0 is the Rule set dropdown, which re-runs a review under the pmatools 0.5.x rules (§3.4.12b); 3.6.0 → 3.6.1 corrects the Configuration tab's outcome-direction sentence, which still said it set the bias direction Risk of Bias checks; 3.5.0 → 3.6.0 is the Indirectness flowchart (Core GRADE Guide Fig 8-2, §3.4.12a); 3.4.0 → 3.5.0 is the Core GRADE Guide flowcharts (risk of bias Fig 7-2, publication bias Fig 9-1 and its computed first node, §3.4.12); 3.3.0 → 3.4.0 is the optional Score type mapping (§3.3.3); 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
 
 ---
 
@@ -968,10 +968,11 @@ edit of the table: the interval's width is constant, `TE_new` is linear in `δ`,
 and the crossing solves directly as
 `δ* = (W_tot*(T ± 1.96*se_new) − W_obs*TE_obs) / W_miss`. No root-finding.
 
-**Ordered decision, cheapest and most decisive first:**
+**Ordered decision, cheapest and most decisive first.** Before step 1, every
+`Not measured` row is dropped (see below); `m` counts what is left.
 
 ```
-1. m = 0                                            -> 🟢
+1. m = 0 (nothing recorded, or only Not measured)  -> 🟢
 2. no prediction interval (tau2 = 0, k < 3) or
    se imputation impossible                         -> ⚪
 3. δ = TE_obs already changes the conclusion        -> 🔴  (precision alone)
@@ -1026,16 +1027,22 @@ its five labels also imply *which way* the missing effect lies. With the null at
 
 | `results_known` | mechanism | suspected region for `δ` |
 |---|---|---|
-| Not measured | none | unconstrained, but step 6 **caps at 🟡** |
+| Not measured | none | **excluded** from the computation (from `m`, `W_miss` and the gate) |
 | Reported but data not extractable | unknown | unconstrained |
 | Measured but not reported (suspect P > 0.05) | present | null-ward, `δ*s < TE_obs*s` |
 | Measured but not reported (suspect P < 0.05) | present | further out, `δ*s > TE_obs*s` |
 | Measured but not reported (opposite direction) | present | `δ*s < 0` |
 | free text | unknown | unconstrained |
 
-Take the **union** across rows. One unconstrained row makes the union everything
-and the gate never fires, which is the conservative answer and the right one:
-an unconstrained row means no direction can be ruled out.
+Take the **union** across the remaining rows. One unconstrained row makes the
+union everything and the gate never fires, which is the conservative answer and
+the right one: an unconstrained row means no direction can be ruled out.
+Undirected rows (`Reported but data not extractable`, free text) are deliberately
+**not** defaulted to null-ward. What the dot does instead is say so: when the
+directed rows alone would put `δ*` outside their suspected region, the tooltip
+adds that *N* missing result(s) carry no suspected direction, which keeps the
+gate from ruling the tipping value out, and that recording why each result is
+missing (e.g. "assumed P > 0.05") would let it apply.
 
 The gate earns its place on cases like this one: the missing results are
 suspected null-ward, but `δ*` is further from the null than the observed effect.
@@ -1045,20 +1052,24 @@ would have said. This is the direction-of-bias step of the 0.5.x Risk of bias
 flowchart (since 0.6.0 a legacy package option the app does not use), asked of
 missing evidence instead of high-RoB evidence.
 
-**`Not measured` is capped at 🟡 and nothing else is.** An outcome that was never
-assessed cannot have been suppressed for what it showed, so its absence is
-incompleteness rather than bias, and incompleteness does not earn the strongest
-warning the tab can give. `Reported but data not extractable` — the label
-auto-seeded onto every NA-TE row, and therefore the most common one — is
-deliberately **not** capped: "not significant, data not shown" is textbook
-selective reporting and the label cannot rule it out. The default behaviour is
-therefore magnitude-driven, which is what the dot is for.
+**`Not measured` rows are excluded, not capped (0.9.2).** Under RoB-ME (Page
+et al., BMJ 2023, doi:10.1136/bmj-2023-076754) a result that was never measured
+cannot have been selectively unreported, so it is not a missing result in the
+bias sense. Such rows are dropped before the model runs — from `m`, from the
+imputed weights `W_miss` (their `n` goes with them), and from the direction
+gate. Before 0.9.2 they stayed in as unconstrained rows, so one `Not measured`
+row silenced the gate for every other row, and an all-`Not measured` table was
+capped at 🟡; the cap is gone because it can no longer be reached. A table whose
+only rows are `Not measured` is 🟢 at step 1, with a tooltip saying the only
+missing entries are outcomes never measured, which RoB-ME does not count as
+missing results. Whenever rows were excluded and the answer is not step 1, the
+tooltip says how many. `Reported but data not extractable` — the label
+auto-seeded onto every NA-TE row — stays unconstrained: "not significant, data
+not shown" is textbook selective reporting and the label cannot rule it out.
 
-The cap applies only when **every** row is `Not measured`. One row with any
-other label is a row whose absence could be selective, and capping the whole
-dot because that row shares a table with never-assessed outcomes would suppress
-exactly the warning the tab exists to give. The cap is also a ceiling and never
-a floor: it turns 🔴 into 🟡 and touches nothing else.
+`.pubias_missing_tipping()` returns `step`, `state`, `reason`, `delta_star`,
+`se_new`, `n_not_measured` (rows excluded) and `n_undirected` (remaining rows
+whose mechanism is unconstrained), with the same names on every path.
 
 #### 3.4.8b The scale the trim-and-fill comparison runs on
 
@@ -1731,6 +1742,10 @@ k <  10 : !answered(pubias_unpublished)      ? "q4" : "result"
       subset, so the 20% figure stays `PMA_ROB_INFLATION_THRESHOLD` and is not
       duplicated here. It runs on the absolute risk scale for a binary outcome —
       see §3.4.8b, which is also what makes ⚪ reachable without a baseline risk.
+      **Since 3.8.2** the app passes `k = .effective_pubias_k(obj)` and
+      `i2 = obj$I2` to the dot and to `.pubias_trimfill_line()`; at I² ≥ 50% or
+      k < 10 both gain a caution sentence stating the actual k / I² (SPEC.md
+      §5.5b). The colour and the verdict do not change.
   - The tabset is **not gated on a wizard node**. All three are computable the
     moment `state$ma` exists and all three are reference material rather than
     answers; gating them meant the funnel appeared only at `q3` and the RoB-ME

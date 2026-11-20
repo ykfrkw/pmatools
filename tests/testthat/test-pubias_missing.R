@@ -186,8 +186,9 @@ test_that("one unconstrained row makes the union everything", {
   # anything, and an unrecognised answer rules nothing out.
   expect_equal(tip(c(rep(RK_FURTHER, 29), "lost in a house move"))$step, 6L)
 
-  # And so is "Not measured", which has no mechanism at all.
-  expect_equal(tip(c(rep(RK_FURTHER, 29), RK_NOT_MEAS))$step, 6L)
+  # "Not measured" is NOT: it leaves the computation before the gate, so it
+  # cannot hold the gate shut (see the block on excluded rows below).
+  expect_equal(tip(c(rep(RK_FURTHER, 29), RK_NOT_MEAS))$step, 5L)
 })
 
 test_that("the labels are matched loosely, and anything unknown is free text", {
@@ -217,44 +218,109 @@ test_that("the labels are matched loosely, and anything unknown is free text", {
 })
 
 # ---------------------------------------------------------------------------
-# The "Not measured" cap
+# "Not measured" rows are excluded, not capped
 # ---------------------------------------------------------------------------
+# Under RoB-ME (Page et al. BMJ 2023) a result that was never measured cannot
+# have been selectively unreported, so it is not a missing result in the bias
+# sense. Such rows leave the computation before m is counted: they add no
+# weight, and they take no part in the direction gate.
 
-test_that("an all-'Not measured' table is capped at amber", {
-  # An outcome that was never assessed cannot have been suppressed for what
-  # it showed, so its absence is incompleteness rather than bias, and
-  # incompleteness does not earn the strongest warning the tab can give.
-  uncapped <- tip(rep(RK_EXTRACT, 20), te_obs = -0.20)
-  expect_equal(uncapped$state, "red")
+# An analysis whose conclusion spans the decision threshold (T = 0.5 on the
+# TE scale), so that the nearer crossing lies FURTHER from the null than the
+# observed effect: the missing studies would have to report a more
+# favourable effect to change the conclusion.
+RK_ASSUMED_NS <- "Measured, result not available (assumed P > 0.05)"
+tip_spans <- function(results_known, ...) {
+  tip(results_known, threshold_internal = 0.5, ...)
+}
 
-  capped <- tip(rep(RK_NOT_MEAS, 20), te_obs = -0.20)
-  expect_equal(capped$step, 6L)
-  expect_equal(capped$state, "amber")
-  expect_true(capped$capped)
-  expect_match(capped$reason, "never measured")
-  # Same arithmetic; only the reading changed.
-  expect_equal(capped$delta_star, uncapped$delta_star)
-})
-
-test_that("one non-'Not measured' row lifts the cap", {
-  # "Reported but data not extractable" is the label auto-seeded onto every
-  # row with no extractable estimate, and therefore the most common one. It
-  # is deliberately NOT capped: "not significant, data not shown" is textbook
-  # selective reporting and the label cannot rule it out. Capping a table
-  # because it happens to share a row with a never-measured outcome would
-  # suppress exactly the warning the tab exists to give.
-  res <- tip(c(rep(RK_NOT_MEAS, 19), RK_EXTRACT), te_obs = -0.20)
-  expect_equal(res$state, "red")
-  expect_false(res$capped)
-})
-
-test_that("the cap only ever turns a red into an amber", {
-  # A green that happens to be all "Not measured" stays green: the cap is a
-  # ceiling, not a floor, and promoting a reassuring answer would be the same
-  # mistake in the other direction.
-  res <- tip(rep(RK_NOT_MEAS, 2))
+test_that("one 'Not measured' row no longer holds the gate shut", {
+  # The absenteeism case that prompted the change: four results suspected
+  # null-ward, one never measured, and a tipping value more favourable than
+  # the observed effect. Before, the never-measured row was unconstrained and
+  # the dot came out red; nothing the four could plausibly report moves the
+  # conclusion, so the dot is green.
+  res <- tip_spans(c(RK_NOT_MEAS, rep(RK_ASSUMED_NS, 4)))
+  expect_equal(.pubias_missing_mechanism(RK_ASSUMED_NS), "null_ward")
+  expect_lt(res$delta_star, -0.40)
+  expect_equal(res$step, 5L)
   expect_equal(res$state, "green")
-  expect_false(res$capped)
+  expect_equal(res$n_not_measured, 1L)
+  expect_equal(res$n_undirected, 0L)
+  # The excluded row is mentioned, and "Reference only" still closes it.
+  expect_match(res$reason, "1 missing result recorded as not measured is left out")
+  expect_match(res$reason, "Reference only - it rates nothing.$")
+})
+
+test_that("an all-'Not measured' table is answered at step 1", {
+  res <- tip(rep(RK_NOT_MEAS, 20), te_obs = -0.20)
+  expect_equal(res$step, 1L)
+  expect_equal(res$state, "green")
+  expect_equal(res$n_not_measured, 20L)
+  expect_match(res$reason, "never measured")
+  expect_match(res$reason, "RoB-ME does not count")
+  expect_true(is.na(res$delta_star))
+})
+
+test_that("'Not measured' rows do not change the tipping point", {
+  without <- tip(rep(RK_NULLWARD, 30))
+  with_nm <- tip(c(rep(RK_NULLWARD, 30), rep(RK_NOT_MEAS, 5)))
+  expect_equal(with_nm$delta_star, without$delta_star)
+  expect_equal(with_nm$se_new, without$se_new)
+  expect_equal(with_nm$state, without$state)
+  expect_equal(with_nm$n_not_measured, 5L)
+  expect_match(with_nm$reason, "5 missing results recorded as not measured")
+  expect_false(grepl("not measured", without$reason, fixed = TRUE))
+
+  # n_missing is dropped in parallel: giving the never-measured rows a huge
+  # sample size changes nothing, because their weight is never computed.
+  big_nm <- tip(c(rep(RK_NULLWARD, 30), rep(RK_NOT_MEAS, 5)),
+                n_missing = c(rep(100, 30), rep(1e6, 5)))
+  expect_equal(big_nm$delta_star, without$delta_star)
+})
+
+test_that("undirected rows keep the gate shut, and the reason says so", {
+  # The directed rows alone would fire the gate ...
+  directed <- tip_spans(rep(RK_ASSUMED_NS, 4))
+  expect_equal(directed$step, 5L)
+
+  # ... and one undirected row keeps it shut: conservative, and unchanged.
+  # The reason now tells the reviewer that this row is the whole reason.
+  res <- tip_spans(c(rep(RK_ASSUMED_NS, 4), RK_EXTRACT))
+  expect_false(identical(res$step, 5L))
+  expect_equal(res$n_undirected, 1L)
+  expect_match(res$reason, "1 missing result carries no suspected direction")
+  expect_match(res$reason, "assumed P > 0.05", fixed = TRUE)
+  expect_match(res$reason, "Reference only - it rates nothing.$")
+
+  # No warning where the directed rows would not have fired the gate either:
+  # there the undirected row changed nothing.
+  inside <- tip(c(rep(RK_NULLWARD, 29), RK_EXTRACT))
+  expect_equal(inside$step, 6L)
+  expect_false(grepl("no suspected direction", inside$reason, fixed = TRUE))
+
+  # Nor where there is nothing directed at all.
+  all_undirected <- tip_spans(rep(RK_EXTRACT, 5))
+  expect_equal(all_undirected$n_undirected, 5L)
+  expect_false(grepl("no suspected direction", all_undirected$reason,
+                     fixed = TRUE))
+})
+
+test_that("every return path carries the same names", {
+  expected <- c("step", "state", "reason", "delta_star", "se_new",
+                "n_not_measured", "n_undirected")
+  paths <- list(
+    tip(character(0)),                                    # step 1
+    tip(rep(RK_NOT_MEAS, 3)),                             # step 1, all NM
+    tip(RK_EXTRACT, k = 2),                               # step 2
+    tip(rep(RK_EXTRACT, 20), te_obs = -0.15),             # step 3
+    tip(rep(RK_EXTRACT, 3), se_studies = rep(1e160, 10),
+        n_studies = rep(1, 10)),                          # step 4
+    tip(rep(RK_FURTHER, 30)),                             # step 5
+    tip(rep(RK_EXTRACT, 30)))                             # step 6
+  for (res in paths) expect_named(res, expected)
+  expect_equal(vapply(paths, `[[`, integer(1), "step"),
+               c(1L, 1L, 2L, 3L, 4L, 5L, 6L))
 })
 
 # ---------------------------------------------------------------------------

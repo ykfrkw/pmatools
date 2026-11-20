@@ -181,3 +181,82 @@ test_that("plot_forest_pubias_subgroup respects auto_detect = FALSE", {
   expect_silent(plot_forest_pubias_subgroup(m, missing_df = miss_df,
                                              auto_detect = FALSE))
 })
+
+# --------------------------------------------------------------------------
+# What reaches meta::forest() - checked without eyes
+# --------------------------------------------------------------------------
+# The mock records every forest() call's arguments; the first is the one the
+# function means to draw (a second only happens on its error fallback).
+capture_subgroup_forest <- function(...) {
+  forest_calls <- list()
+  local_mocked_bindings(
+    forest = function(x, ...) {
+      forest_calls[[length(forest_calls) + 1L]] <<- list(x = x, ...)
+      invisible(TRUE)
+    },
+    .package = "meta")
+  plot_forest_pubias_subgroup(...)
+  forest_calls
+}
+
+SUBGROUP_MISSING_ROWS <- data.frame(
+  studlab = c("Missing A", "Missing B"), n = c(120L, NA),
+  results_known = c("Measured but not reported (suspect P > 0.05)",
+                    "Not measured"),
+  stringsAsFactors = FALSE)
+
+test_that("the subgroup forest labels its sample-size column 'N'", {
+  forest_calls <- capture_subgroup_forest(mk_simple_meta(6),
+                                          missing_df = SUBGROUP_MISSING_ROWS)
+  expect_length(forest_calls, 1L)
+  forest_args <- forest_calls[[1]]
+  expect_identical(forest_args$leftlabs, c("Study", "N"))
+  expect_false("No" %in% forest_args$leftlabs)
+  n_column <- forest_args$x[[forest_args$leftcols[[2]]]]
+  expect_identical(as.integer(n_column), c(rep(200L, 6), 120L, NA))
+})
+
+test_that("show_results_known = FALSE blanks the missing rows' effect cell", {
+  shown <- capture_subgroup_forest(mk_simple_meta(6),
+                                   missing_df = SUBGROUP_MISSING_ROWS)[[1]]
+  expect_identical(tail(shown$x$effect_status, 2),
+                   SUBGROUP_MISSING_ROWS$results_known)
+
+  blank <- capture_subgroup_forest(mk_simple_meta(6),
+                                   missing_df = SUBGROUP_MISSING_ROWS,
+                                   show_results_known = FALSE)[[1]]
+  expect_identical(tail(blank$x$effect_status, 2), c("", ""))
+  # The available studies keep their effect text either way.
+  expect_identical(head(blank$x$effect_status, 6),
+                   head(shown$x$effect_status, 6))
+  expect_true(all(nzchar(head(blank$x$effect_status, 6))))
+})
+
+test_that("one pooled diamond and one heterogeneity line, for the available", {
+  forest_args <- capture_subgroup_forest(
+    mk_simple_meta(6), missing_df = SUBGROUP_MISSING_ROWS,
+    favors_left = "Favours intervention",
+    favors_right = "Favours control")[[1]]
+  # The Available subgroup's pool and heterogeneity line are drawn ...
+  expect_true(forest_args$random)
+  expect_true(forest_args$random.subgroup)
+  expect_true(forest_args$subgroup.hetstat)
+  # ... and the overall pool, which repeats it under the Missing list, is not.
+  expect_false(forest_args$overall)
+  expect_false(forest_args$overall.hetstat)
+  expect_false(forest_args$test.overall)
+  expect_false(forest_args$test.subgroup)
+  expect_false(forest_args$common)
+  # Missing rows carry no estimate, so the Available pool IS the overall
+  # pool: dropping the overall diamond loses no number.
+  pooled <- forest_args$x
+  expect_equal(pooled$TE.random.w[["Available results"]], pooled$TE.random)
+  expect_true(all(is.na(pooled$TE[pooled$subgroup == "Missing results"])))
+})
+
+test_that("a caller can still ask for the overall summary through ...", {
+  forest_args <- capture_subgroup_forest(
+    mk_simple_meta(6), missing_df = SUBGROUP_MISSING_ROWS,
+    overall = TRUE)[[1]]
+  expect_true(forest_args$overall)
+})

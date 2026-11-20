@@ -11,8 +11,10 @@
 #' Renders the supplied meta-analysis as a two-subgroup forest plot:
 #' \describe{
 #'   \item{Available results}{Studies in \code{meta_obj} with a finite TE/seTE,
-#'     drawn with their usual point estimates, weights, and the pooled
-#'     (random-effects) diamond.}
+#'     drawn with their usual point estimates and the pooled (random-effects)
+#'     diamond with its heterogeneity line. This is the only pooled diamond
+#'     on the plot: the missing rows carry no estimate, so an overall pool
+#'     would repeat it.}
 #'   \item{Missing results}{Two sources are merged here:
 #'     (i) studies present in \code{meta_obj$studlab} but whose effect estimate
 #'     is \code{NA} (e.g. all-zero events, dropped from pooling); these are
@@ -58,13 +60,22 @@
 #'   right of the x-axis (\code{label.left} / \code{label.right}).
 #' @param show_n Logical. Only honoured when \code{meta_obj} has no missing
 #'   rows (so this function falls back to a standard one-panel forest); the
-#'   subgroup view always shows a single combined "No" column.
+#'   subgroup view always shows a single combined "N" (total sample size)
+#'   column.
 #' @param show_events Logical, fallback-only (see \code{show_n}).
 #' @param addrow_above,addrow_below Number of blank rows above/below the
 #'   overall pooled effect line. \code{addrow_below = NULL} (default) is
 #'   computed from the drawn content so the bottom heterogeneity/test text
 #'   clears the x-axis band and any \code{label.left}/\code{label.right}
-#'   row (see \code{.auto_addrow_below()}).
+#'   row (see \code{.auto_addrow_below()}). The two-subgroup view draws no
+#'   overall summary (the Available-results pool is the only diamond), so
+#'   \code{addrow_below} matters there only if \code{overall = TRUE} is
+#'   passed through \code{...}.
+#' @param show_results_known Logical (default \code{TRUE}). When \code{TRUE},
+#'   each Missing-results row shows its \code{results_known} status string in
+#'   the effect column. When \code{FALSE}, that cell is left blank, for a
+#'   figure that lists the missing studies without annotating why each one is
+#'   missing.
 #' @param ... Additional arguments forwarded to \code{\link[meta]{forest.meta}}.
 #'
 #' @return Invisibly NULL. Side effect: draws on the active graphics device.
@@ -82,6 +93,7 @@ plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
                                         show_events  = FALSE,
                                         addrow_above = 0,
                                         addrow_below = NULL,
+                                        show_results_known = TRUE,
                                         ...) {
   if (!inherits(meta_obj, "meta")) {
     rlang::abort("plot_forest_pubias_subgroup: meta_obj must be a meta-analysis object.")
@@ -200,7 +212,12 @@ plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
       fmt_one(te[i], lower_obj[i], upper_obj[i])
     }, character(1))
   } else character(0)
-  effect_status <- c(effect_text_avail, full_missing_df$results_known)
+  missing_effect_text <- if (isTRUE(show_results_known)) {
+    full_missing_df$results_known
+  } else {
+    rep("", k_miss)
+  }
+  effect_status <- c(effect_text_avail, missing_effect_text)
 
   studlab_combined  <- c(studlab_obj[avail_idx], full_missing_df$studlab)
   n_combined        <- c(n_obj[avail_idx],       full_missing_df$n)
@@ -237,14 +254,24 @@ plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
     ))
   }
 
-  m_combined$No            <- n_combined
+  m_combined$n_total       <- n_combined
   m_combined$effect_status <- effect_status
 
   par_old <- graphics::par(mar = c(5, 4, 1, 2))
   on.exit(graphics::par(par_old), add = TRUE)
 
-  # Dynamic bottom spacing (see plot_forest.R): keep the heterogeneity/test
-  # text clear of the x-axis band and the label.left/label.right row.
+  # Dynamic bottom spacing (see plot_forest.R), kept for a caller that turns
+  # the overall summary back on through `...`. With the overall summary off
+  # (below) {meta} draws no lines under the pooled block, so this count no
+  # longer pushes the x-axis down.
+  #
+  # Why the "Favours" labels used to collide with the tick labels: {meta}
+  # puts label.left/label.right a fixed 2.5 lines below the bottom of the
+  # drawn block, but places the axis at `spacing` times that bottom, so with
+  # spacing < 1 the gap shrinks by (1 - spacing) of every line drawn below
+  # the pooled diamond. The duplicate overall diamond and heterogeneity line,
+  # plus the blank rows reserved for them, were those lines. Dropping them
+  # restores the full gap; no separate offset is needed.
   dots <- list(...)
   if (is.null(addrow_below)) {
     addrow_below <- .auto_addrow_below(
@@ -259,14 +286,25 @@ plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
   args <- list(
     x         = m_combined,
     smlab     = if (is.null(title)) "" else title,
-    leftcols  = c("studlab", "No"),
-    leftlabs  = c("Study",   "No"),
+    leftcols  = c("studlab", "n_total"),
+    leftlabs  = c("Study",   "N"),
     rightcols = "effect_status",
     rightlabs = effect_lab,
     common    = FALSE,
     random    = TRUE,
     print.subgroup.labels = TRUE,
-    test.subgroup = FALSE,
+    # ONE pooled diamond and ONE heterogeneity line. Missing rows carry NA TE,
+    # so the overall pool is the Available subgroup's pool drawn a second
+    # time, under the Missing list, where it reads as if the missing studies
+    # had been pooled. The Available subgroup's own diamond and heterogeneity
+    # line are kept, so the figure still reads "Available results" pool +
+    # "Missing results" list; the overall summary and its statistics go.
+    random.subgroup  = TRUE,
+    subgroup.hetstat = TRUE,
+    overall          = FALSE,
+    overall.hetstat  = FALSE,
+    test.overall     = FALSE,
+    test.subgroup    = FALSE,
     spacing   = 0.9,
     addrow.overall        = addrow_above > 0,
     addrows.below.overall = addrow_below

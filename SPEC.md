@@ -2,7 +2,7 @@
 
 > Authoritative specification for the pmatools R package. Implementation MUST conform to this document. UI-side concerns (Shiny wizard, educational copy, accordion layout) are specified separately in [`shiny/SPEC.md`](shiny/SPEC.md), which governs the app in this repository's `shiny/` directory.
 
-**Version target:** 0.9.1
+**Version target:** 0.9.2
 **Document history:** this file was written for v0.2.0 and has been updated in place for v0.5.0, v0.5.1, v0.5.2 and v0.6.0; section numbering is preserved so the diff stays readable. Sections that still describe v0.2 behaviour verbatim are marked **[v0.2 — superseded]** with a pointer to the section that governs.
 
 **Backward compatibility:** v0.2 introduced no breaking changes. v0.4.0 and v0.5.0 did — see `NEWS.md`, which is authoritative for the change list. The three that most affect callers:
@@ -2213,9 +2213,11 @@ The same principle as §5.5a, applied to three diagnostics rather than one. A ho
 .pubias_funnel_dot(p, feasible, k_ok, rare_flow, alpha, strong_alpha)
 .pubias_trimfill_scale(te_original, te_adjusted, sm, binary, baseline_risk,
                        threshold_abs1000, threshold_internal, p1_from_ratio)
-.pubias_trimfill_dot(...)          # the same formals, plus small_values, k_ok
+.pubias_trimfill_dot(...)          # the same formals, plus small_values, k_ok,
+                                   #   k, i2 (caution note only)
 .pubias_missing_tipping(...)       # -> list(step, state, reason, delta_star,
-.pubias_missing_dot(...)           #         se_new, capped)
+.pubias_missing_dot(...)           #         se_new, n_not_measured,
+                                   #         n_undirected)
 # every *_dot() -> list(state, reason); state is one of PMA_PUBIAS_DOT_STATES
 ```
 
@@ -2223,7 +2225,8 @@ The same principle as §5.5a, applied to three diagnostics rather than one. A ho
 - **Funnel** — Egger's p in three bands: 🟢 at `p >= alpha`, 🟡 at `strong_alpha <= p < alpha`, 🔴 at `p < strong_alpha`. `alpha` is a formal because the host already names 0.05 for the sentence it prints under the funnel; `strong_alpha` (`PMA_PUBIAS_EGGER_STRONG_ALPHA`, 0.01) exists only on the dot. `rare_flow` is checked **before** `k_ok`: below k = 10 Egger is underpowered, whereas on sparse binary data it is invalid, and letting an invalid p value paint a 🔴 is what the ordering avoids.
 - **Trim-and-fill** — `.assess_bias_direction()` (§5.1) called on the pair (original, adjusted), with the adjusted effect passed as a single-element low-RoB pool of unit standard error so that its inverse-variance mean *is* that effect. A call, not a copy: `PMA_ROB_INFLATION_THRESHOLD` and the five rules stay in one place. `not_serious` → 🟢, one level → 🟡, two levels → 🔴, `rule = NA` → ⚪.
 - **The comparison runs on a scale whose null is zero** — absolute risk difference per 1,000 for a binary outcome, the internal scale for MD / SMD / RoM. `|OR| = 2.0` and `|OR| = 0.5` are equidistant from the null in fact and four-fold apart on the raw measure, so every zone and magnitude rule would be wrong for one of them. `.pubias_trimfill_scale()` owns the decision; the event-rate map is **injected** rather than reimplemented (the host already owns one), and with none supplied a binary outcome is ⚪ rather than silently converted. No baseline risk is ⚪ for the same reason: a silent scale change is what the split exists to prevent.
-- **Missing results** — the tipping-point algorithm, fully specified in `shiny/SPEC.md` §3.4.8a. Assume the `m` missing studies share one effect `δ`, hold `tau^2` at its observed value, and solve `δ* = (W_tot*(T ± 1.96*se_new) − W_obs*TE_obs) / W_miss` in closed form. Six ordered steps, of which the order is the load-bearing part: `δ = TE_obs` changing the conclusion on precision alone is 🔴 and must be asked before the magnitude comparison, which on its own would call that case reassuring.
+- **Trim-and-fill caution (0.9.2).** `.pubias_trimfill_dot()` and `.pubias_trimfill_line()` take `k` and `i2` (I² as a proportion, as {meta} stores `$I2`). When `i2 >= PMA_PUBIAS_TRIMFILL_CAUTION_I2` (0.50; Cochrane Handbook ch. 10, "may represent substantial heterogeneity") or `k < PMA_PUBIAS_TRIMFILL_CAUTION_K` (10; the minimum for funnel-asymmetry methods, Sterne et al., BMJ 2011), a sentence stating the actual k / I² is appended: trim-and-fill can add studies that are not missing, or mis-estimate the adjustment, when studies are few or heterogeneity is substantial (Terrin et al., Stat Med 2003; Peters et al., Stat Med 2007), so the adjusted estimate is read with caution. A note only — the dot's state and the line's verdict are unchanged. Both constants live in `R/pubias_trimfill.R`.
+- **Missing results** — the tipping-point algorithm, fully specified in `shiny/SPEC.md` §3.4.8a. `Not measured` rows are excluded before the model runs (RoB-ME does not count a never-measured outcome as a missing result), so a table of only such rows is 🟢 at step 1; undirected rows stay unconstrained, and the tooltip says so when they alone keep the direction gate shut. Assume the `m` missing studies share one effect `δ`, hold `tau^2` at its observed value, and solve `δ* = (W_tot*(T ± 1.96*se_new) − W_obs*TE_obs) / W_miss` in closed form. Six ordered steps, of which the order is the load-bearing part: `δ = TE_obs` changing the conclusion on precision alone is 🔴 and must be asked before the magnitude comparison, which on its own would call that case reassuring.
 
 ### 5.5c Plain language for an equivalence or a non-inferiority question (v0.5.1)
 
