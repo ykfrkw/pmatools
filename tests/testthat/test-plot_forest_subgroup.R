@@ -216,20 +216,157 @@ test_that("the subgroup forest labels its sample-size column 'N'", {
   expect_identical(as.integer(n_column), c(rep(200L, 6), 120L, NA))
 })
 
-test_that("show_results_known = FALSE blanks the missing rows' effect cell", {
+test_that("the status text has its own 'Results known' column, or none", {
   shown <- capture_subgroup_forest(mk_simple_meta(6),
                                    missing_df = SUBGROUP_MISSING_ROWS)[[1]]
-  expect_identical(tail(shown$x$effect_status, 2),
-                   SUBGROUP_MISSING_ROWS$results_known)
+  expect_identical(shown$rightcols, c("effect.ci", "results_known"))
+  expect_identical(shown$rightlabs, c("OR (95% CI)", "Results known"))
+  expect_identical(shown$x$results_known,
+                   c(rep("", 6), SUBGROUP_MISSING_ROWS$results_known))
 
-  blank <- capture_subgroup_forest(mk_simple_meta(6),
-                                   missing_df = SUBGROUP_MISSING_ROWS,
-                                   show_results_known = FALSE)[[1]]
-  expect_identical(tail(blank$x$effect_status, 2), c("", ""))
-  # The available studies keep their effect text either way.
-  expect_identical(head(blank$x$effect_status, 6),
-                   head(shown$x$effect_status, 6))
-  expect_true(all(nzchar(head(blank$x$effect_status, 6))))
+  hidden <- capture_subgroup_forest(mk_simple_meta(6),
+                                    missing_df = SUBGROUP_MISSING_ROWS,
+                                    show_results_known = FALSE)[[1]]
+  expect_identical(hidden$rightcols, "effect.ci")
+  expect_identical(hidden$rightlabs, "OR (95% CI)")
+})
+
+test_that("missing rows carry no estimate, so their effect cell is blank", {
+  forest_args <- capture_subgroup_forest(mk_simple_meta(6),
+                                         missing_df = SUBGROUP_MISSING_ROWS)[[1]]
+  is_missing_row <- forest_args$x$subgroup == "Missing results"
+  expect_true(all(is.na(forest_args$x$TE[is_missing_row])))
+  expect_true(all(is.na(forest_args$x$lower[is_missing_row])))
+  expect_true(all(is.finite(forest_args$x$TE[!is_missing_row])))
+})
+
+# The plotted Available pool must be the analysis' own pool.
+expect_same_pool <- function(plotted, meta_obj) {
+  available <- "Available results"
+  expect_equal(
+    unname(c(plotted$TE.random.w[available], plotted$lower.random.w[available],
+             plotted$upper.random.w[available], plotted$lower.predict.w[available],
+             plotted$upper.predict.w[available])),
+    unname(c(meta_obj$TE.random, meta_obj$lower.random, meta_obj$upper.random,
+             meta_obj$lower.predict, meta_obj$upper.predict)))
+}
+
+mk_cont_meta <- function(sm = "MD") {
+  meta::metacont(
+    n.e = rep(30, 6), mean.e = c(10, 12, 9, 11, 8, 10),
+    sd.e = c(8, 9, 10, 7, 9, 8),
+    n.c = rep(30, 6), mean.c = c(15, 14, 20, 13, 18, 22),
+    sd.c = c(8, 9, 10, 7, 9, 8),
+    studlab = paste0("S", 1:6), sm = sm,
+    method.tau = "REML", method.random.ci = "HK", prediction = TRUE)
+}
+
+test_that("the plotted pool, CI and PI are the analysis' own (REML + HK)", {
+  meta_obj <- mk_cont_meta()
+  pdf(NULL); on.exit(dev.off(), add = TRUE)
+  plotted <- plot_forest_pubias_subgroup(meta_obj,
+                                         missing_df = SUBGROUP_MISSING_ROWS)
+  expect_same_pool(plotted, meta_obj)
+  expect_identical(plotted$method.random.ci, "HK")
+  expect_identical(plotted$method.tau, "REML")
+  # The defaults (DerSimonian-Laird, classic CI) would give a narrower CI.
+  plain_refit <- meta::metagen(meta_obj$TE, meta_obj$seTE, common = FALSE)
+  expect_false(isTRUE(all.equal(plain_refit$lower.random,
+                                meta_obj$lower.random)))
+})
+
+test_that("a ratio measure keeps the analysis' pool on the log scale", {
+  rom_meta <- mk_cont_meta(sm = "ROM")
+  or_meta  <- meta::metabin(c(20, 18, 15, 12, 10, 8), rep(100, 6),
+                            c(20, 19, 17, 15, 13, 11), rep(100, 6),
+                            sm = "OR", method = "MH",
+                            method.tau = "REML", method.random.ci = "HK")
+  pdf(NULL); on.exit(dev.off(), add = TRUE)
+  for (meta_obj in list(rom_meta, or_meta)) {
+    plotted <- plot_forest_pubias_subgroup(meta_obj,
+                                           missing_df = SUBGROUP_MISSING_ROWS)
+    expect_same_pool(plotted, meta_obj)
+    expect_identical(plotted$sm, meta_obj$sm)
+    expect_true(plotted$backtransf)
+  }
+})
+
+test_that("auto-detected NA-TE rows leave the pool unchanged", {
+  meta_obj <- meta::metabin(
+    event.e = c(10, 0, 20, 5, 7), n.e = c(50, 50, 70, 40, 40),
+    event.c = c(15, 0, 25, 9, 8), n.c = c(50, 50, 70, 40, 40),
+    studlab = c("S1", "Lopez2019", "S3", "S4", "S5"),
+    sm = "OR", method = "Inverse", incr = 0,
+    method.tau = "REML", method.random.ci = "HK")
+  pdf(NULL); on.exit(dev.off(), add = TRUE)
+  plotted <- plot_forest_pubias_subgroup(meta_obj)
+  expect_same_pool(plotted, meta_obj)
+  expect_identical(plotted$studlab[plotted$subgroup == "Missing results"],
+                   "Lopez2019")
+})
+
+test_that("excluded studies are drawn in Available but not pooled", {
+  meta_obj <- meta::metacont(
+    n.e = rep(30, 6), mean.e = c(10, 12, 9, 11, 8, 10),
+    sd.e = c(8, 9, 10, 7, 9, 8),
+    n.c = rep(30, 6), mean.c = c(15, 14, 20, 13, 18, 22),
+    sd.c = c(8, 9, 10, 7, 9, 8),
+    exclude = c(FALSE, TRUE, FALSE, FALSE, FALSE, FALSE),
+    method.tau = "REML", method.random.ci = "HK")
+  pdf(NULL); on.exit(dev.off(), add = TRUE)
+  plotted <- plot_forest_pubias_subgroup(meta_obj,
+                                         missing_df = SUBGROUP_MISSING_ROWS)
+  expect_same_pool(plotted, meta_obj)
+  expect_identical(plotted$exclude, c(FALSE, TRUE, rep(FALSE, 6)))
+})
+
+test_that("the subgroup PI is drawn on request, the overall one never", {
+  shown <- capture_subgroup_forest(mk_cont_meta(),
+                                   missing_df = SUBGROUP_MISSING_ROWS)[[1]]
+  expect_true(shown$prediction.subgroup)
+  expect_false(shown$prediction)
+
+  hidden <- capture_subgroup_forest(mk_cont_meta(),
+                                    missing_df = SUBGROUP_MISSING_ROWS,
+                                    prediction = FALSE)[[1]]
+  expect_false(hidden$prediction.subgroup)
+  expect_false(hidden$prediction)
+
+  # Fewer than three pooled studies: {meta} has no PI to draw.
+  two_studies <- capture_subgroup_forest(mk_simple_meta(2),
+                                         missing_df = SUBGROUP_MISSING_ROWS)[[1]]
+  expect_false(two_studies$prediction.subgroup)
+})
+
+test_that("prediction and show_results_known switches all draw silently", {
+  pdf(NULL); on.exit(dev.off(), add = TRUE)
+  for (draw_prediction in c(TRUE, FALSE)) {
+    for (show_status in c(TRUE, FALSE)) {
+      expect_silent(plot_forest_pubias_subgroup(
+        mk_cont_meta(), missing_df = SUBGROUP_MISSING_ROWS,
+        prediction = draw_prediction, show_results_known = show_status))
+    }
+  }
+})
+
+test_that("a pool the refit cannot reproduce warns and still draws", {
+  skip_if_not_installed("lme4")
+  glmm_meta <- suppressWarnings(meta::metabin(
+    c(20, 18, 15, 12, 10, 8), rep(100, 6),
+    c(20, 19, 17, 15, 13, 11), rep(100, 6), sm = "OR", method = "GLMM"))
+  pdf(NULL); on.exit(dev.off(), add = TRUE)
+  expect_warning(
+    plotted <- plot_forest_pubias_subgroup(glmm_meta,
+                                           missing_df = SUBGROUP_MISSING_ROWS),
+    "differs from the analysis")
+  expect_s3_class(plotted, "meta")
+})
+
+test_that("the no-missing fallback returns meta_obj invisibly", {
+  meta_obj <- mk_simple_meta(5)
+  pdf(NULL); on.exit(dev.off(), add = TRUE)
+  expect_invisible(returned <- plot_forest_pubias_subgroup(meta_obj))
+  expect_identical(returned, meta_obj)
 })
 
 test_that("one pooled diamond and one heterogeneity line, for the available", {

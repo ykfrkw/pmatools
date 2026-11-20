@@ -123,8 +123,10 @@ test_that("forest effect text for a ROM object is on the natural scale", {
                              results_known = "Not measured")
   plot_forest_pubias_subgroup(meta_rom, missing_df = missing_rows)
   subgroup_args <- forest_calls[[1]]
-  effect_text <- subgroup_args$x$effect_status
-  expect_identical(subgroup_args$rightlabs, "RoM (95% CI)")
-  expect_true(all(grepl("^0\\.[0-9]{2} \\(", effect_text[1:4])))
-  expect_false(any(grepl("^-", effect_text)))
+  expect_identical(subgroup_args$rightlabs[[1]], "RoM (95% CI)")
+  # {meta}'s effect.ci back-transforms only when the object keeps its own
+  # "ROM" spelling and backtransf = TRUE.
+  expect_identical(subgroup_args$rightcols[[1]], "effect.ci")
+  expect_identical(subgroup_args$x$sm, meta_rom$sm)
+  expect_true(subgroup_args$x$backtransf)
 })

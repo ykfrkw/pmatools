@@ -565,7 +565,9 @@ export_bundle.meta <- function(x,
                                                     missing_df  = m_df,
                                                     auto_detect = FALSE),
     width  = max(8, 3 + 0.3 * (k_avail + k_miss)),
-    height = max(7, 3 + 0.4 * (k_avail + k_miss + 4))
+    # + 5 rows: two subgroup labels, the pooled row, the prediction
+    # interval row and the heterogeneity line.
+    height = max(7, 3 + 0.4 * (k_avail + k_miss + 5))
   )
 }
 

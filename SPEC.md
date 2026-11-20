@@ -2,7 +2,7 @@
 
 > Authoritative specification for the pmatools R package. Implementation MUST conform to this document. UI-side concerns (Shiny wizard, educational copy, accordion layout) are specified separately in [`shiny/SPEC.md`](shiny/SPEC.md), which governs the app in this repository's `shiny/` directory.
 
-**Version target:** 0.9.2
+**Version target:** 0.10.0
 **Document history:** this file was written for v0.2.0 and has been updated in place for v0.5.0, v0.5.1, v0.5.2 and v0.6.0; section numbering is preserved so the diff stays readable. Sections that still describe v0.2 behaviour verbatim are marked **[v0.2 — superseded]** with a pointer to the section that governs.
 
 **Backward compatibility:** v0.2 introduced no breaking changes. v0.4.0 and v0.5.0 did — see `NEWS.md`, which is authoritative for the change list. The three that most affect callers:
@@ -1516,6 +1516,8 @@ Exported but not specified in detail here; see the roxygen pages. They predate t
 `run_rare_ma()`, `rare_event_diagnostics()`, `plot_rare_sensitivity_forest()`, `plot_trimfill_forest()`, `plot_forest_rob()`, `plot_forest_indirectness()`, `plot_forest_pubias_subgroup()`, `evidence_profile()`.
 
 (`combine_arms()` in `R/combine_arms.R` **is** exported — see §4.16. Revisions of this list between v0.3 and v0.5.0 wrongly called it internal.)
+
+`plot_forest_pubias_subgroup(meta_obj, missing_df, ..., show_results_known = TRUE, prediction = TRUE, ...)` [v0.10.0] draws the RoB-ME available-vs-missing forest. Its one numeric contract: **the "Available results" pool is the analysis' own.** The two-subgroup refit (`R/pubias_subgroup_meta.R`) copies every model setting of `meta_obj` that `meta::metagen()` takes (`method.tau`, `method.random.ci` / `adhoc.hakn.ci`, `method.predict` / `adhoc.hakn.pi`, the confidence levels, `method.I2`, `backtransf`, `null.effect`, …; legacy `hakn` when `method.random.ci` is absent), the study CIs and `exclude`, then checks the Available subgroup's `TE.random.w`, `lower/upper.random.w` and `lower/upper.predict.w` against `meta_obj`'s `TE.random`, `lower/upper.random` and `lower/upper.predict`. On a mismatch it refits once with `tau.preset = meta_obj$tau`; if that still differs (a GLMM analysis) it warns and draws the refit. Inverse-variance, Mantel-Haenszel and Peto `metabin`, `metacont` and `metagen` reproduce on the first fit under {meta} 8.3. The right column is {meta}'s `effect.ci` (study rows, the pooled row and the prediction-interval row; back-transformed for ratio measures; blank on missing rows, whose TE is `NA`); `show_results_known = TRUE` adds a "Results known" column holding the missing rows' status strings. The Available subgroup's prediction interval is drawn when `prediction = TRUE` and at least three studies are pooled; no overall pool, overall prediction interval or overall heterogeneity line is drawn. Returns the drawn two-subgroup object invisibly, or `meta_obj` when nothing is missing (the one-panel `plot_forest()` fallback). Reference-only: nothing it computes reaches a rating.
 
 `evidence_profile(grade, palette, study_design, other_text, other_downgrade)` renders the per-outcome GRADE evidence profile used by both bundle layouts.
 

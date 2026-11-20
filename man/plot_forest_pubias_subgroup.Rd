@@ -19,6 +19,7 @@ plot_forest_pubias_subgroup(
   addrow_above = 0,
   addrow_below = NULL,
   show_results_known = TRUE,
+  prediction = TRUE,
   ...
 )
 }
@@ -76,24 +77,41 @@ overall summary (the Available-results pool is the only diamond), so
 passed through \code{...}.}
 
 \item{show_results_known}{Logical (default \code{TRUE}). When \code{TRUE},
-each Missing-results row shows its \code{results_known} status string in
-the effect column. When \code{FALSE}, that cell is left blank, for a
-figure that lists the missing studies without annotating why each one is
-missing.}
+a second right-hand column, "Results known", shows each Missing-results
+row's \code{results_known} status string (blank on available rows).
+When \code{FALSE}, that column is omitted, for a figure that lists the
+missing studies without annotating why each one is missing.}
+
+\item{prediction}{Logical (default \code{TRUE}). When \code{TRUE} and at
+least three available studies are pooled, the Available subgroup's 95\\%
+prediction interval is drawn and printed (\code{prediction.subgroup}).
+No overall prediction interval is drawn either way. In the no-missing
+fallback it is forwarded to \code{\link{plot_forest}}.}
 
 \item{...}{Additional arguments forwarded to \code{\link[meta]{forest.meta}}.}
 }
 \value{
-Invisibly NULL. Side effect: draws on the active graphics device.
+Invisibly, the two-subgroup \code{meta} object that was drawn (its
+\code{TE.random.w["Available results"]} etc. hold the plotted pool). When
+nothing is missing, the function draws \code{\link{plot_forest}} and
+returns \code{meta_obj} invisibly. Side effect: draws on the active
+graphics device.
 }
 \description{
 Renders the supplied meta-analysis as a two-subgroup forest plot:
 \describe{
 \item{Available results}{Studies in \code{meta_obj} with a finite TE/seTE,
-drawn with their usual point estimates and the pooled (random-effects)
-diamond with its heterogeneity line. This is the only pooled diamond
-on the plot: the missing rows carry no estimate, so an overall pool
-would repeat it.}
+drawn with their effect estimates and 95\\% CIs printed in the right
+column, the pooled (random-effects) diamond and row, the 95\\%
+prediction interval (see \code{prediction}) and the heterogeneity line.
+The pool is refitted with \code{meta_obj}'s own model settings
+(\code{method.tau}, \code{method.random.ci}, \code{method.predict},
+the confidence levels, \code{exclude}, ...), so it reproduces the
+analysis' pooled estimate, CI and prediction interval; ratio measures
+are back-transformed. If the refit cannot reproduce them (e.g. a GLMM
+analysis), the function warns and draws the refit. This is the only
+pooled diamond on the plot: the missing rows carry no estimate, so an
+overall pool would repeat it.}
 \item{Missing results}{Two sources are merged here:
 (i) studies present in \code{meta_obj$studlab} but whose effect estimate
 is \code{NA} (e.g. all-zero events, dropped from pooling); these are
@@ -101,8 +119,8 @@ auto-detected and labelled
 \code{"Reported but data not extractable"} by default.
 (ii) trials supplied via \code{missing_df} (registry / protocol /
 conference abstract entries with no extractable estimate). In both
-cases the row shows only \code{studlab}, sample size, and a
-"Results known" status string in place of an effect estimate, and
+cases the row shows only \code{studlab}, sample size, a blank effect
+cell and, optionally, the "Results known" status string, and
 contributes nothing to the pooled estimate.}
 }
 }

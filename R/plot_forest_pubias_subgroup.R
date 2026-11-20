@@ -3,18 +3,40 @@
 # Reference-only diagnostic for the Reporting Bias domain (RoB-ME, Page et al.,
 # BMJ 2023, doi:10.1136/bmj-2023-076754). Mirrors the BMJ figure where two
 # subgroups ("Available results" / "Missing results") are stacked on a single
-# forest plot. Missing rows display a "Results known" status string in the
-# effect column instead of a point estimate, since their effect is unknown.
+# forest plot.
+#
+# Reads: a {meta} object and an optional missing-trials table. Produces: the
+# drawing, and invisibly the two-subgroup meta object it drew. The Available
+# block prints effect [95% CI] numbers like plot_forest() does, for every study,
+# the pooled row and the prediction interval row, all from the analysis' own
+# model settings. Missing rows have no estimate, so their effect cell is blank;
+# their status string sits in its own "Results known" column.
+#
+# The row partition, the refit and its check against the analysis live in
+# R/pubias_subgroup_meta.R; this file validates the arguments, lays out the
+# forest and falls back to plot_forest() when nothing is missing. Callers:
+# R/export_bundle.R and shiny/R/step3_pubias.R.
+#
+# A helper belongs here when it decides how the forest is laid out or which
+# {meta} display options it is drawn with; which rows it holds and what numbers
+# the meta object carries belong next door.
 
 #' Forest plot of available vs missing study results
 #'
 #' Renders the supplied meta-analysis as a two-subgroup forest plot:
 #' \describe{
 #'   \item{Available results}{Studies in \code{meta_obj} with a finite TE/seTE,
-#'     drawn with their usual point estimates and the pooled (random-effects)
-#'     diamond with its heterogeneity line. This is the only pooled diamond
-#'     on the plot: the missing rows carry no estimate, so an overall pool
-#'     would repeat it.}
+#'     drawn with their effect estimates and 95\% CIs printed in the right
+#'     column, the pooled (random-effects) diamond and row, the 95\%
+#'     prediction interval (see \code{prediction}) and the heterogeneity line.
+#'     The pool is refitted with \code{meta_obj}'s own model settings
+#'     (\code{method.tau}, \code{method.random.ci}, \code{method.predict},
+#'     the confidence levels, \code{exclude}, ...), so it reproduces the
+#'     analysis' pooled estimate, CI and prediction interval; ratio measures
+#'     are back-transformed. If the refit cannot reproduce them (e.g. a GLMM
+#'     analysis), the function warns and draws the refit. This is the only
+#'     pooled diamond on the plot: the missing rows carry no estimate, so an
+#'     overall pool would repeat it.}
 #'   \item{Missing results}{Two sources are merged here:
 #'     (i) studies present in \code{meta_obj$studlab} but whose effect estimate
 #'     is \code{NA} (e.g. all-zero events, dropped from pooling); these are
@@ -22,8 +44,8 @@
 #'     \code{"Reported but data not extractable"} by default.
 #'     (ii) trials supplied via \code{missing_df} (registry / protocol /
 #'     conference abstract entries with no extractable estimate). In both
-#'     cases the row shows only \code{studlab}, sample size, and a
-#'     "Results known" status string in place of an effect estimate, and
+#'     cases the row shows only \code{studlab}, sample size, a blank effect
+#'     cell and, optionally, the "Results known" status string, and
 #'     contributes nothing to the pooled estimate.}
 #' }
 #'
@@ -72,13 +94,22 @@
 #'   \code{addrow_below} matters there only if \code{overall = TRUE} is
 #'   passed through \code{...}.
 #' @param show_results_known Logical (default \code{TRUE}). When \code{TRUE},
-#'   each Missing-results row shows its \code{results_known} status string in
-#'   the effect column. When \code{FALSE}, that cell is left blank, for a
-#'   figure that lists the missing studies without annotating why each one is
-#'   missing.
+#'   a second right-hand column, "Results known", shows each Missing-results
+#'   row's \code{results_known} status string (blank on available rows).
+#'   When \code{FALSE}, that column is omitted, for a figure that lists the
+#'   missing studies without annotating why each one is missing.
+#' @param prediction Logical (default \code{TRUE}). When \code{TRUE} and at
+#'   least three available studies are pooled, the Available subgroup's 95\%
+#'   prediction interval is drawn and printed (\code{prediction.subgroup}).
+#'   No overall prediction interval is drawn either way. In the no-missing
+#'   fallback it is forwarded to \code{\link{plot_forest}}.
 #' @param ... Additional arguments forwarded to \code{\link[meta]{forest.meta}}.
 #'
-#' @return Invisibly NULL. Side effect: draws on the active graphics device.
+#' @return Invisibly, the two-subgroup \code{meta} object that was drawn (its
+#'   \code{TE.random.w["Available results"]} etc. hold the plotted pool). When
+#'   nothing is missing, the function draws \code{\link{plot_forest}} and
+#'   returns \code{meta_obj} invisibly. Side effect: draws on the active
+#'   graphics device.
 #'
 #' @export
 plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
@@ -94,17 +125,12 @@ plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
                                         addrow_above = 0,
                                         addrow_below = NULL,
                                         show_results_known = TRUE,
+                                        prediction   = TRUE,
                                         ...) {
   if (!inherits(meta_obj, "meta")) {
     rlang::abort("plot_forest_pubias_subgroup: meta_obj must be a meta-analysis object.")
   }
-  empty_missing <- data.frame(
-    studlab = character(0),
-    n = integer(0),
-    results_known = character(0),
-    stringsAsFactors = FALSE
-  )
-  if (is.null(missing_df)) missing_df <- empty_missing
+  if (is.null(missing_df)) missing_df <- .pubias_empty_missing()
   if (!is.data.frame(missing_df)) {
     rlang::abort("plot_forest_pubias_subgroup: missing_df must be a data.frame.")
   }
@@ -118,63 +144,14 @@ plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
     ))
   }
 
-  # ----------------------------------------------------------------
-  # Align vectors to length(meta_obj$TE) (some metabin variants keep
-  # extra rows in $studlab/$n.e/$n.c that are not in $TE).
-  # ----------------------------------------------------------------
-  k_te <- length(meta_obj$TE)
-  if (k_te == 0L) {
+  if (length(meta_obj$TE) == 0L) {
     rlang::abort("plot_forest_pubias_subgroup: meta_obj has no TE rows.")
   }
-  te        <- meta_obj$TE
-  seTE      <- meta_obj$seTE
-  lower_obj <- meta_obj$lower
-  upper_obj <- meta_obj$upper
-  sm        <- .sm_of(meta_obj) %||% ""
-  is_ratio  <- nzchar(sm) && sm %in% c("OR", "RR", "HR", "RoM", "IRR")
+  sm       <- .sm_of(meta_obj) %||% ""
+  is_ratio <- nzchar(sm) && sm %in% c("OR", "RR", "HR", "RoM", "IRR")
 
-  studlab_obj <- as.character(meta_obj$studlab)
-  if (length(studlab_obj) > k_te) studlab_obj <- studlab_obj[seq_len(k_te)]
-  if (length(studlab_obj) < k_te) {
-    studlab_obj <- c(studlab_obj,
-                     sprintf("(unnamed %d)", seq_len(k_te - length(studlab_obj))))
-  }
-  n_obj <- if (!is.null(meta_obj$n.e) && !is.null(meta_obj$n.c) &&
-               length(meta_obj$n.e) >= k_te &&
-               length(meta_obj$n.c) >= k_te) {
-    meta_obj$n.e[seq_len(k_te)] + meta_obj$n.c[seq_len(k_te)]
-  } else {
-    rep(NA_integer_, k_te)
-  }
-
-  # Partition meta_obj's studies by TE finiteness.
-  te_finite     <- is.finite(te) & is.finite(seTE)
-  avail_idx     <- which(te_finite)
-  auto_miss_idx <- which(!te_finite)
-
-  # Auto-detected missing rows from meta_obj (NA TE). Skipped when the
-  # caller manages the missing list themselves (e.g. an interactive
-  # editor that has already imported the auto rows into missing_df).
-  auto_miss_df <- if (isTRUE(auto_detect) && length(auto_miss_idx) > 0L) {
-    data.frame(
-      studlab = studlab_obj[auto_miss_idx],
-      n = suppressWarnings(as.integer(n_obj[auto_miss_idx])),
-      results_known = "Reported but data not extractable",
-      stringsAsFactors = FALSE
-    )
-  } else empty_missing
-
-  # User-supplied missing rows are coerced to the canonical schema.
-  user_miss_df <- if (nrow(missing_df) > 0L) {
-    data.frame(
-      studlab = as.character(missing_df$studlab),
-      n = suppressWarnings(as.integer(missing_df$n)),
-      results_known = as.character(missing_df$results_known),
-      stringsAsFactors = FALSE
-    )
-  } else empty_missing
-
-  full_missing_df <- rbind(auto_miss_df, user_miss_df)
+  rows <- .pubias_subgroup_rows(meta_obj, missing_df, auto_detect)
+  full_missing_df <- rows$missing_rows
 
   # If there are no missing trials at all and TE is fully populated, fall
   # back to the standard one-panel forest. Display options are passed
@@ -192,70 +169,17 @@ plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
                 show_events  = isTRUE(show_events),
                 addrow_above = addrow_above,
                 addrow_below = addrow_below,
+                prediction   = isTRUE(prediction),
                 ...)
-    return(invisible(NULL))
+    return(invisible(meta_obj))
   }
 
-  # ----------------------------------------------------------------
-  # Build a synthetic two-subgroup metagen.
-  # ----------------------------------------------------------------
-  k_avail <- length(avail_idx)
-  k_miss  <- nrow(full_missing_df)
+  m_combined <- .pubias_subgroup_meta(meta_obj, rows)
 
-  fmt_one <- function(t, lo, up) {
-    if (any(is.na(c(t, lo, up)))) return("")
-    if (is_ratio) sprintf("%.2f (%.2f to %.2f)", exp(t), exp(lo), exp(up))
-    else          sprintf("%.2f (%.2f to %.2f)",     t,      lo,      up)
-  }
-  effect_text_avail <- if (k_avail > 0L) {
-    vapply(avail_idx, function(i) {
-      fmt_one(te[i], lower_obj[i], upper_obj[i])
-    }, character(1))
-  } else character(0)
-  missing_effect_text <- if (isTRUE(show_results_known)) {
-    full_missing_df$results_known
-  } else {
-    rep("", k_miss)
-  }
-  effect_status <- c(effect_text_avail, missing_effect_text)
-
-  studlab_combined  <- c(studlab_obj[avail_idx], full_missing_df$studlab)
-  n_combined        <- c(n_obj[avail_idx],       full_missing_df$n)
-  subgroup_combined <- factor(
-    c(rep("Available results", k_avail),
-      rep("Missing results",   k_miss)),
-    levels = c("Available results", "Missing results")
-  )
-  TE_combined   <- c(te[avail_idx],   rep(NA_real_, k_miss))
-  seTE_combined <- c(seTE[avail_idx], rep(NA_real_, k_miss))
-
-  # De-duplicate study labels (meta::metagen rejects exact duplicates).
-  studlab_combined <- make.unique(studlab_combined, sep = " #")
-
-  m_err <- NULL
-  m_combined <- tryCatch(
-    suppressWarnings(meta::metagen(
-      TE            = TE_combined,
-      seTE          = seTE_combined,
-      studlab       = studlab_combined,
-      subgroup      = subgroup_combined,
-      subgroup.name = "",
-      sm            = if (nzchar(sm)) sm else "MD",
-      common        = FALSE,
-      random        = TRUE
-    )),
-    error = function(e) { m_err <<- conditionMessage(e); NULL }
-  )
-
-  if (is.null(m_combined)) {
-    rlang::abort(sprintf(
-      "plot_forest_pubias_subgroup: failed to build combined meta object: %s",
-      m_err %||% "unknown error"
-    ))
-  }
-
-  m_combined$n_total       <- n_combined
-  m_combined$effect_status <- effect_status
+  # {meta} computes a prediction interval from three pooled studies upward.
+  k_pooled <- sum(m_combined$subgroup == PUBIAS_SUBGROUP_AVAILABLE &
+                    !m_combined$exclude, na.rm = TRUE)
+  draw_prediction <- isTRUE(prediction) && k_pooled >= 3L
 
   par_old <- graphics::par(mar = c(5, 4, 1, 2))
   on.exit(graphics::par(par_old), add = TRUE)
@@ -281,15 +205,23 @@ plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
     )
   }
 
-  effect_lab <- if (is_ratio) sprintf("%s (95%% CI)", sm) else "Effect (95% CI)"
+  # Same header as plot_forest(). {meta}'s effect.ci prints nothing for the
+  # missing rows, whose TE is NA, so their effect cell stays blank.
+  effect_lab <- if (nzchar(sm)) paste0(sm, " (95% CI)") else "Effect (95% CI)"
+  right_cols <- "effect.ci"
+  right_labs <- effect_lab
+  if (isTRUE(show_results_known)) {
+    right_cols <- c(right_cols, "results_known")
+    right_labs <- c(right_labs, "Results known")
+  }
 
   args <- list(
     x         = m_combined,
     smlab     = if (is.null(title)) "" else title,
     leftcols  = c("studlab", "n_total"),
     leftlabs  = c("Study",   "N"),
-    rightcols = "effect_status",
-    rightlabs = effect_lab,
+    rightcols = right_cols,
+    rightlabs = right_labs,
     common    = FALSE,
     random    = TRUE,
     print.subgroup.labels = TRUE,
@@ -299,7 +231,9 @@ plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
     # had been pooled. The Available subgroup's own diamond and heterogeneity
     # line are kept, so the figure still reads "Available results" pool +
     # "Missing results" list; the overall summary and its statistics go.
-    random.subgroup  = TRUE,
+    random.subgroup     = TRUE,
+    prediction          = FALSE,
+    prediction.subgroup = draw_prediction,
     subgroup.hetstat = TRUE,
     overall          = FALSE,
     overall.hetstat  = FALSE,
@@ -323,20 +257,19 @@ plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
       args$at   <- .nice_lin_ticks(xlim)
     }
   }
-  extra <- list(...)
-  args[names(extra)] <- extra
+  args[names(dots)] <- dots
 
   res <- tryCatch(
     do.call(meta::forest, args),
     error = function(e) NULL
   )
   if (is.null(res)) {
-    args$leftcols  <- "studlab"
-    args$leftlabs  <- "Study"
-    args$rightcols <- "effect_status"
-    args$rightlabs <- effect_lab
+    # A narrower layout for a {meta} that rejects the N column; the effect and
+    # status columns are kept.
+    args$leftcols <- "studlab"
+    args$leftlabs <- "Study"
     tryCatch(do.call(meta::forest, args), error = function(e) NULL)
   }
 
-  invisible(NULL)
+  invisible(m_combined)
 }
