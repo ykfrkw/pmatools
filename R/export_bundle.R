@@ -728,7 +728,7 @@ export_bundle.meta <- function(x,
   .check_grade_arg_names(grade_args)
 
   outcome_type_ma <- if (!is.null(ma$event.e)) "binary" else "continuous"
-  sm <- ma$sm %||% (if (outcome_type_ma == "binary") "OR" else "SMD")
+  sm <- .sm_of(ma) %||% (if (outcome_type_ma == "binary") "OR" else "SMD")
 
   values <- list(
     timestamp        = format(Sys.time()),

@@ -49,8 +49,8 @@ plot_trimfill_forest <- function(x, ...) {
   k_filled <- if (!is.null(tf$k0)) tf$k0 else 0L
   te_orig  <- meta_obj$TE.random
   te_adj   <- tf$TE.random
-  is_ratio <- !is.null(meta_obj$sm) &&
-              meta_obj$sm %in% c("OR", "RR", "HR", "RoM", "IRR")
+  is_ratio <- !is.null(.sm_of(meta_obj)) &&
+              .sm_of(meta_obj) %in% c("OR", "RR", "HR", "RoM", "IRR")
   fmt_te <- function(v) {
     if (is.null(v) || is.na(v)) return("NA")
     if (is_ratio) sprintf("%.3f", exp(v)) else sprintf("%.3f", v)
@@ -58,7 +58,7 @@ plot_trimfill_forest <- function(x, ...) {
   sub_label <- sprintf(
     "Trim-and-fill: %d imputed stud%s; pooled %s = %s -> %s after adjustment.",
     k_filled, if (k_filled == 1L) "y" else "ies",
-    if (!is.null(meta_obj$sm)) meta_obj$sm else "TE",
+    if (!is.null(.sm_of(meta_obj))) .sm_of(meta_obj) else "TE",
     fmt_te(te_orig), fmt_te(te_adj)
   )
 

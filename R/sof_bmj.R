@@ -51,15 +51,17 @@
 
 # "Hazard ratio 0.78 (0.69 to 0.89)" — spelled-out measure, "to" separator.
 .format_effect_bmj <- function(meta_obj, outcome_type, prediction = FALSE) {
-  sm     <- meta_obj$sm
+  sm     <- .sm_of(meta_obj)
   pooled <- .pooled_estimate(meta_obj)
   est <- pooled$est
   lo  <- pooled$lower
   hi  <- pooled$upper
   if (is.null(est) || is.na(est)) return("NR")
 
-  ratio <- identical(outcome_type, "relative") && !is.null(sm) &&
-    sm %in% c("RR", "OR", "HR", "IRR")
+  # RoM is on the log scale whatever outcome_type says; see format_effect().
+  ratio <- !is.null(sm) &&
+    ((identical(outcome_type, "relative") && sm %in% c("RR", "OR", "HR", "IRR")) ||
+       identical(sm, "RoM"))
   if (ratio) {
     est <- exp(est); lo <- exp(lo); hi <- exp(hi)
   }
@@ -208,7 +210,7 @@
   hi  <- pooled$upper
   if (is.null(est) || length(est) != 1L || !is.finite(est)) return("-")
 
-  sm <- meta_obj$sm %||% ""
+  sm <- .sm_of(meta_obj) %||% ""
   # Same denominator label as the control/intervention columns (no separator).
   per_str <- .per_label(per, big_mark = FALSE)
 
@@ -352,7 +354,7 @@
   # and only on the unconverted presentation: a responder row's Effect cell
   # carries the derived odds ratio, which must ride under the pooled estimate
   # it was derived from (see below).
-  md_effect_dup <- identical(as.character(meta_obj$sm %||% ""), "MD") &&
+  md_effect_dup <- identical(as.character(.sm_of(meta_obj) %||% ""), "MD") &&
     nzchar(diff_cell) && !identical(diff_cell, "-")
   effect_own  <- if (md_effect_dup) "" else effect_cell
   cer_cell    <- cer_str %||% arm$cer
@@ -615,7 +617,7 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
   )
 
   has_plain <- !is.null(vals$plain)
-  hdrs <- .bmj_headers(meta_obj$sm, has_plain,
+  hdrs <- .bmj_headers(.sm_of(meta_obj), has_plain,
                        label_intervention, label_control)
 
   cell_sets <- .bmj_row_cell_sets(vals, has_plain)
@@ -745,7 +747,7 @@ BMJ_ABSOLUTE_EFFECT_COLS <- 4:6
   # Rated outcomes only: a not-reported outcome has no effect measure, so it
   # must not turn a single-measure header into the generic one.
   sms <- unique(vapply(.rated_outcomes(outcomes),
-                       function(g) as.character(g$meta$sm %||% ""),
+                       function(g) as.character(.sm_of(g$meta) %||% ""),
                        character(1)))
   hdrs  <- .bmj_headers(if (length(sms) == 1L) sms else NULL, has_plain,
                         label_intervention, label_control)

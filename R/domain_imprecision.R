@@ -633,7 +633,7 @@ assess_imprecision <- function(meta_obj,
   # The summary measure and the pooled effect are wanted twice: here, to decide
   # which way the modest RRR moves the OIS alternative rate, and below for
   # Fig 4's large-effect check. Computed once.
-  sm       <- meta_obj$sm
+  sm       <- .sm_of(meta_obj)
   te_point <- .pooled_te(meta_obj)
 
   # Derive the OIS inputs that were not supplied explicitly.
@@ -1387,6 +1387,7 @@ assess_imprecision <- function(meta_obj,
 }
 
 .is_implausibly_large <- function(te, sm, sd_pooled = NULL) {
+  sm <- .canon_sm(sm)
   none <- list(large = FALSE, level = NA_character_,
                note = "effect moderate")
   if (is.null(te) || length(te) != 1L || is.na(te) || !is.finite(te)) {
@@ -1450,6 +1451,7 @@ assess_imprecision <- function(meta_obj,
 # and the CI-ratio branch of Fig 4 never fires for them.
 # --------------------------------------------------------------------------
 .ci_ratio <- function(lower, upper, sm) {
+  sm <- .canon_sm(sm)
   if (is.null(sm) || !sm %in% c("OR", "RR", "HR", "RoM", "IRR")) return(NA_real_)
   if (!is.finite(lower) || !is.finite(upper)) return(NA_real_)
   exp(upper - lower)
@@ -1463,6 +1465,7 @@ assess_imprecision <- function(meta_obj,
 # a comparable scale. The domain notes state it whenever the cut-off decides a
 # two-level downgrade.
 .ci_ratio_cut <- function(sm) {
+  sm <- .canon_sm(sm)
   if (is.null(sm)) return(NA_real_)
   switch(sm, "OR" = 2.5, "RR" = 3, "HR" = 3, "IRR" = 3, "RoM" = 3, NA_real_)
 }
@@ -1536,7 +1539,7 @@ assess_imprecision <- function(meta_obj,
 # Core GRADE 2's.
 .is_binary_outcome <- function(meta_obj) {
   if (!is.null(meta_obj$event.e) && length(meta_obj$event.e) > 0) return(TRUE)
-  sm <- meta_obj$sm
+  sm <- .sm_of(meta_obj)
   if (!is.null(sm) && sm %in% c("OR", "RR", "HR", "IRR", "RD", "ARD")) return(TRUE)
   FALSE
 }

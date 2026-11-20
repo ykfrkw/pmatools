@@ -118,7 +118,7 @@ plot_forest_pubias_subgroup <- function(meta_obj, missing_df = NULL,
   seTE      <- meta_obj$seTE
   lower_obj <- meta_obj$lower
   upper_obj <- meta_obj$upper
-  sm        <- meta_obj$sm %||% ""
+  sm        <- .sm_of(meta_obj) %||% ""
   is_ratio  <- nzchar(sm) && sm %in% c("OR", "RR", "HR", "RoM", "IRR")
 
   studlab_obj <- as.character(meta_obj$studlab)

@@ -186,7 +186,7 @@ PMA_PUBIAS_EGGER_STRONG_ALPHA <- 0.01
       "whose null is not zero for a ratio measure.")))
   }
 
-  sm_chr <- if (is.null(sm)) "" else as.character(sm)[1]
+  sm_chr <- if (is.null(sm)) "" else .canon_sm(as.character(sm)[1])
   to_ard1000 <- if (sm_chr %in% .PUBIAS_ABSOLUTE_SM) {
     # Already an absolute risk difference; per 1,000 is a change of unit and
     # needs no baseline risk at all. p0 is still required above, because the
