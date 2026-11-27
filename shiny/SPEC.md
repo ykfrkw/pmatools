@@ -4,7 +4,7 @@
 
 **Public URL:** https://yuki-furukawa.shinyapps.io/pmatools/
 **Deployment:** shinyapps.io (account: `yuki-furukawa`, appId: `17697029`)
-**App version:** 3.8.3 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.8.2 → 3.8.3 carries pmatools 0.10.0, whose RoB-ME available-vs-missing forest draws the analysis' own pooled estimate, CI and 95% prediction interval and prints effect [95% CI] numbers on the study, pooled and prediction-interval rows, with the missing rows' status in its own "Results known" column (package SPEC §4.12); 3.8.1 → 3.8.2 passes k and I² to the trim-and-fill dot and line, which add a caution note when studies are few or heterogeneity is substantial (pmatools 0.9.2; the RoB-ME gate ignoring `Not measured` rows and the subgroup forest's single diamond arrive with the package sources, §3.4.8a); 3.7.0 → 3.8.0 is the Indirectness reason box for a "very close" surrogate and the per-answer Core GRADE examples (§3.4.12a); 3.6.1 → 3.7.0 is the Rule set dropdown, which re-runs a review under the pmatools 0.5.x rules (§3.4.12b); 3.6.0 → 3.6.1 corrects the Configuration tab's outcome-direction sentence, which still said it set the bias direction Risk of Bias checks; 3.5.0 → 3.6.0 is the Indirectness flowchart (Core GRADE Guide Fig 8-2, §3.4.12a); 3.4.0 → 3.5.0 is the Core GRADE Guide flowcharts (risk of bias Fig 7-2, publication bias Fig 9-1 and its computed first node, §3.4.12); 3.3.0 → 3.4.0 is the optional Score type mapping (§3.3.3); 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
+**App version:** 3.9.0 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.8.3 → 3.9.0 carries pmatools 0.11.0 and exposes its Imprecision arguments on the Imprecision tab: the reviewer's answer at Fig 4's "large effect?" node with its required reason, `ois_rrr = "threshold"`, and the CI-ratio rule's two settings (§3.4.7a); 3.8.2 → 3.8.3 carries pmatools 0.10.0, whose RoB-ME available-vs-missing forest draws the analysis' own pooled estimate, CI and 95% prediction interval and prints effect [95% CI] numbers on the study, pooled and prediction-interval rows, with the missing rows' status in its own "Results known" column (package SPEC §4.12); 3.8.1 → 3.8.2 passes k and I² to the trim-and-fill dot and line, which add a caution note when studies are few or heterogeneity is substantial (pmatools 0.9.2; the RoB-ME gate ignoring `Not measured` rows and the subgroup forest's single diamond arrive with the package sources, §3.4.8a); 3.7.0 → 3.8.0 is the Indirectness reason box for a "very close" surrogate and the per-answer Core GRADE examples (§3.4.12a); 3.6.1 → 3.7.0 is the Rule set dropdown, which re-runs a review under the pmatools 0.5.x rules (§3.4.12b); 3.6.0 → 3.6.1 corrects the Configuration tab's outcome-direction sentence, which still said it set the bias direction Risk of Bias checks; 3.5.0 → 3.6.0 is the Indirectness flowchart (Core GRADE Guide Fig 8-2, §3.4.12a); 3.4.0 → 3.5.0 is the Core GRADE Guide flowcharts (risk of bias Fig 7-2, publication bias Fig 9-1 and its computed first node, §3.4.12); 3.3.0 → 3.4.0 is the optional Score type mapping (§3.3.3); 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
 
 ---
 
@@ -81,6 +81,7 @@ shiny/
 │   ├── step3_grade.R              # GRADE module (domain tabs)
 │   ├── step3_pubias.R             # publication-bias wizard server half (bare ids, no NS)
 │   ├── step3_threshold.R          # decision-threshold + presentation helpers
+│   ├── step3_imprecision.R        # Imprecision judgment inputs -> grade_meta() args (pure)
 │   ├── step4_export.R             # export/download module
 │   ├── ui_helpers.R               # shadcn-style chrome only (card, banner, stepper)
 │   ├── outcome_bank.R             # multi-outcome bank: uid, upsert, export set, modals
@@ -891,6 +892,47 @@ Resulting judgment: {{judgment}}
 - `numericInput("ois_events", "Override OIS — target events", value = NA, min = 0)` *(binary only)*
 - `numericInput("ois_n", "Override OIS — target N", value = NA, min = 0)` *(continuous only)*
 - `selectInput("imprecision_override", "Override Imprecision judgment", same options)`
+
+#### 3.4.7a Imprecision judgment inputs (pmatools 0.11.0) [3.9.0]
+
+Four widgets in the tab's *Inputs for this domain* block, mapped to `grade_meta()`
+arguments by the pure helpers in `R/step3_imprecision.R`. All are registered in
+`PMA_OUTCOME_INPUT_IDS$imprecision` (cleared per outcome, restored after a Step 3
+rebuild), and their grade_meta() names are in `PMA_GRADE_ARGS_EXPORTED`.
+
+- **`radioButtons("large_effect")`**, first in the block, all outcome types:
+  *Automatic: the magnitude rule (default)* = `"auto"`, *Plausible* =
+  `"plausible"`, *Implausible* = `"implausible"` (`STEP3_LARGE_EFFECT_CHOICES`).
+  The help line quotes Core GRADE 2 ("the sample size and number of events …
+  are limited") and cites GRADE guidance 34 §4.1. A non-auto answer reveals
+  `textAreaInput("large_effect_rationale")`.
+  - `step3_large_effect_args()` sends nothing for `"auto"`, and **nothing for a
+    judgment whose reason is blank** — grade_meta() would abort, and an aborted
+    rating takes every domain with it. While blocked, `output$large_effect_rationale_msg`
+    says so inline under the textarea (amber, `PMA_ALERT_BG` / `PMA_ALERT_FG`),
+    and a notification fires, the same way a rationale-less override is ignored.
+  - The package records a `large_effect` fact when the reviewer answered.
+    `output$impre_evaluation` pins it first (`step3_facts_pinned_first()`),
+    because it is the eighth Imprecision fact and `pma_facts_list()` shows six.
+- **`ois_rrr`** gains *Match the threshold* = `"threshold"`, which
+  `step3_ois_rrr_value()` passes through as the string. On a question that sets no
+  threshold (superiority) `step3_ois_rrr_for_grade()` sends `0.20` instead, since
+  the package aborts there, and `output$ois_rrr_equiv` says so. Otherwise the echo
+  says the OIS is powered against the Configuration threshold and, once rated,
+  prints the control-group risk and the alternative rate read off the package's
+  `ois_target_rate` fact (never re-derived app-side).
+- **`radioButtons("ci_ratio_shortcut")`** and **`radioButtons("ci_ratio_scale")`**,
+  binary only, in a closed *CI-ratio rule (advanced)* `<details>` under the OIS
+  inputs. Each offers **Rule-set default** (`"rule_set_default"`, selected) plus the
+  package values (`when_ois_unavailable` / `always`; `rr` / `fitted`).
+  `step3_ci_ratio_args()` forwards only an explicit package value, and only for a
+  binary fit: grade_meta() reads `missing()` on both, so under the 0.5.x rule set an
+  omitted pair resolves to `"always"` / `"fitted"` and under the Guide to the 0.11.0
+  defaults. `output$ci_ratio_settings_line` reads what the rating actually used off
+  `g$imprecision_settings`.
+- **Export.** An omitted argument is absent from the specs; the single-outcome
+  template then writes the resolved value from `$imprecision_settings`, and the
+  multi-outcome `per_outcome` list replays it through `rule_set`.
 
 **The verdict now depends on which clinical question is being rated (v0.5.1).** The algorithm above is unchanged — `.classify_imprecision()`'s nine Fig 4 branches are not modified at all (`SPEC.md` §4.5.1b) — but two of its *inputs* now come from §3.4.10b's radio: **which** threshold it is handed (`threshold_type`, and a pinned rating target on the two margin questions) and **which sides** of that threshold it tests (`threshold_sides`). So the same interval and the same number can earn a different downgrade under a different question, legitimately, and the tab has to say which question it answered.
 

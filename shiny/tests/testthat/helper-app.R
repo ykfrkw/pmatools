@@ -114,7 +114,7 @@ rm(.stem)
 for (.f in c("R/ui_helpers.R", "R/outcome_bank.R", "R/outcome_provenance.R",
              "R/judgment_display.R", "R/plot_panels.R", "R/column_roles.R",
              "R/sof_display.R", "R/educational_copy.R", "R/step3_threshold.R",
-             "R/step3_pubias.R", "R/step2_ma.R", "R/step3_grade.R")) {
+             "R/step3_imprecision.R", "R/step3_pubias.R", "R/step2_ma.R", "R/step3_grade.R")) {
   source(file.path(PMA_APP_ROOT, .f))
 }
 rm(.f)

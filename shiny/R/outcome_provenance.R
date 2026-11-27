@@ -242,8 +242,11 @@ PMA_OUTCOME_INPUT_IDS <- list(
                    "indir_outcome", "indir_outcome_rationale",
                    "indirectness", "indir_rationale",
                    "indir_confirm_na"),
-  # Step 3 - Imprecision
-  imprecision = c("ois_rrr", "ois_sd", "ois_events_override",
+  # Step 3 - Imprecision. The large-effect judgment and its reason, and the
+  # CI-ratio rule's two settings, are pmatools 0.11.0's.
+  imprecision = c("large_effect", "large_effect_rationale",
+                  "ois_rrr", "ci_ratio_shortcut", "ci_ratio_scale",
+                  "ois_sd", "ois_events_override",
                   "ois_n_override", "impre_override",
                   "impre_override_rationale", "impre_confirm_na"),
   # Step 3 - Publication bias
@@ -428,7 +431,13 @@ PMA_GRADE_ARGS_EXPORTED <- c(
   # The rule set (pmatools 0.8). The 0.5.x set skips publication-bias Q0 and
   # turns on the direction-of-bias check, so a per_outcome list without it
   # re-rates a legacy outcome under the Guide.
-  "rule_set"
+  "rule_set",
+  # The Imprecision judgment settings (pmatools 0.11.0), after rule_set as in
+  # grade_meta()'s signature. Emitted only when the reviewer set them: an
+  # omitted CI-ratio pair is how the 0.5.x rule set keeps its own defaults, and
+  # the single-outcome template reads the resolved values off the rating.
+  "large_effect", "large_effect_rationale",
+  "ci_ratio_shortcut", "ci_ratio_scale"
 )
 
 # Only the arguments the app actually set are emitted. Before pmatools 0.5.1
