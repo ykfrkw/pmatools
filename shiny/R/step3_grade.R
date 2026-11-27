@@ -4,7 +4,10 @@
 # pooled control-group risk, and the presentation pieces that only read their
 # arguments) live in R/step3_threshold.R. The publication-bias wizard's server
 # half - reactive, so it could not follow that file's no-session rule - lives
-# in R/step3_pubias.R and is called from step3_server() below.
+# in R/step3_pubias.R and is called from step3_server() below. The Imprecision
+# tab's judgment inputs (large effect, threshold-powered OIS, the CI-ratio
+# rule's settings) are mapped to grade_meta() arguments by the pure helpers in
+# R/step3_imprecision.R.
 
 # --------------------------------------------------------------------------
 # Indirectness subdomains (Core GRADE Guide Fig 8-2 / indirectness_subdomains)
@@ -740,21 +743,73 @@ step3_ui <- function(state = NULL) {
           # (shiny/SPEC.md 3.4.14).
           shiny::uiOutput("impre_rare_sensitivity"),
           .inputs_details(open = TRUE, title = "Inputs for this domain",
+            # Core GRADE 2 Fig 4's "large effect?" node (pmatools 0.11.0).
+            # Both papers frame it as a judgment, so the reviewer may answer
+            # it in place of the magnitude rule, with a written reason. The
+            # mapping to grade_meta() is step3_large_effect_args()
+            # (R/step3_imprecision.R).
+            shiny::radioButtons("large_effect",
+              "Is the effect implausibly large for the evidence behind it?",
+              choices = STEP3_LARGE_EFFECT_CHOICES, selected = "auto"),
+            htmltools::p(class = "pma-card-subtitle",
+              paste0("Asked only when the CI does not cross the threshold. ",
+                     "Core GRADE 2 says to consider rating down when the ",
+                     "effect is implausibly large and \"the sample size and ",
+                     "number of events ... are limited\"; GRADE guidance 34 ",
+                     "(section 4.1) applies the OIS when the authors consider ",
+                     "the results implausible. Automatic reads a relative ",
+                     "risk reduction above 30% (or d of 0.8 or more) as ",
+                     "large.")),
+            shiny::conditionalPanel(
+              "(input.large_effect || 'auto') != 'auto'",
+              shiny::textAreaInput("large_effect_rationale",
+                "Reason for this judgment (required)",
+                rows = 2, width = "100%",
+                placeholder = paste0("For example, a mechanism that makes the ",
+                                     "effect credible, or a sample that is ",
+                                     "not limited.")),
+              shiny::uiOutput("large_effect_rationale_msg")
+            ),
             shiny::conditionalPanel(
               "input.outcome_type == 'binary'",
               shiny::uiOutput("ois_p0_ui"),
               # Core GRADE 2 parameterises the BINARY OIS by a modest
               # relative risk reduction, not by the threshold, and names two
-              # values. Both are offered; the absolute-scale equivalent is
-              # shown alongside so the target can be read in the same units
-              # as the threshold.
+              # values. Both are offered, plus the threshold itself (pmatools
+              # 0.11.0); the absolute-scale equivalent is shown alongside so
+              # the target can be read in the same units as the threshold.
               shiny::radioButtons("ois_rrr",
                 paste0("Modest relative risk reduction the OIS is powered to ",
                        "detect (Core GRADE 2 names 20% and 25%)"),
                 choices = c("20 percent (default)" = "0.20",
-                            "25 percent"           = "0.25"),
+                            "25 percent"           = "0.25",
+                            "Match the threshold"  = PMA_OIS_RRR_FROM_THRESHOLD),
                 selected = "0.20", inline = TRUE),
-              shiny::uiOutput("ois_rrr_equiv")
+              shiny::uiOutput("ois_rrr_equiv"),
+              # The CI-ratio rule's two settings. Advanced and closed: the
+              # defaults follow GRADE guidance 34, and the rule-set default
+              # choice sends nothing so the 0.5.x rule set keeps its own.
+              htmltools::tags$details(
+                htmltools::tags$summary("CI-ratio rule (advanced)"),
+                shiny::radioButtons("ci_ratio_shortcut",
+                  "When to consult the CI-ratio rule",
+                  choices = STEP3_CI_RATIO_SHORTCUT_CHOICES,
+                  selected = STEP3_RULE_SET_DEFAULT_CHOICE),
+                htmltools::p(class = "pma-card-subtitle",
+                  paste0("GRADE guidance 34 (section 4.2) offers the ratio ",
+                         "rule so authors need not calculate the OIS; when ",
+                         "it can be calculated, the OIS decides by default.")),
+                shiny::radioButtons("ci_ratio_scale",
+                  "Which ratio, for an odds ratio fit",
+                  choices = STEP3_CI_RATIO_SCALE_CHOICES,
+                  selected = STEP3_RULE_SET_DEFAULT_CHOICE),
+                htmltools::p(class = "pma-card-subtitle",
+                  paste0("The risk ratio refit reads the CI ratio from the ",
+                         "same analysis refitted as an RR and compares it ",
+                         "with 3; the fitted scale compares the OR ratio ",
+                         "with 2.5.")),
+                shiny::uiOutput("ci_ratio_settings_line")
+              )
             ),
             shiny::conditionalPanel(
               "input.outcome_type == 'continuous'",
@@ -2453,11 +2508,47 @@ step3_server <- function(input, output, session, state) {
 
   # The modest relative risk reduction the binary OIS is powered to detect.
   # Core GRADE 2 names 20 percent and 25 percent; the radio offers both and
-  # 0.20 is pmatools' default.
-  ois_rrr_value <- shiny::reactive({
-    v <- suppressWarnings(as.numeric(input$ois_rrr %||% "0.20"))
-    if (!is.finite(v) || v <= 0 || v >= 1) 0.20 else v
-  })
+  # 0.20 is pmatools' default. "threshold" (pmatools 0.11.0) passes through as
+  # the string; see step3_ois_rrr_value() in R/step3_imprecision.R.
+  ois_rrr_value <- shiny::reactive(step3_ois_rrr_value(input$ois_rrr))
+
+  # The threshold-powered OIS, read back. The alternative rate is the
+  # package's own (the `ois_target_rate` fact of the rating), never a second
+  # derivation here: the ARD / ratio / odds cases are the package's to tell
+  # apart.
+  .ois_rrr_threshold_equiv <- function() {
+    note <- function(...) {
+      htmltools::p(class = "pma-card-subtitle", style = "margin: 0.25rem 0;",
+                   paste0(...))
+    }
+    if (is.null(.threshold_grade_args(state$ma)$threshold)) {
+      return(note("This question sets no threshold, so the OIS is powered ",
+                  "against the 20 percent modest relative risk reduction ",
+                  "instead."))
+    }
+    g     <- grade_obj()
+    facts <- if (is.null(g)) NULL else g$domain_facts[["Imprecision"]]
+    rate  <- if (is.data.frame(facts)) {
+      facts$numeric[facts$key %in% "ois_target_rate"]
+    } else numeric(0)
+    tb  <- threshold_baseline_state()
+    per <- display_per_state()
+    htmltools::div(
+      style = "padding: 0.15rem 0 0.35rem; margin: 0.25rem 0 0.5rem; font-size: 0.85rem;",
+      htmltools::p(style = "margin: 0;", htmltools::strong(paste0(
+        "Powered against the Threshold set on the Configuration tab, in the ",
+        "direction of benefit, instead of a fixed relative risk reduction."))),
+      if (length(rate) == 1L && is.finite(rate) && is.finite(tb)) {
+        htmltools::p(style = "margin: 0.25rem 0 0;", sprintf(
+          "Control-group risk %s -> alternative rate %s, as rated.",
+          step3_per_label(tb, per), step3_per_label(1000 * rate, per)))
+      } else {
+        htmltools::p(style = "margin: 0.25rem 0 0;", paste0(
+          "The alternative rate appears here once the domain is rated. ",
+          "Core GRADE 2's own default input remains the modest RRR."))
+      }
+    )
+  }
 
   # The RRR read on the absolute scale, so the OIS target can be compared
   # with the Configuration threshold in the same units. The control-group
@@ -2465,6 +2556,9 @@ step3_server <- function(input, output, session, state) {
   # here.
   output$ois_rrr_equiv <- shiny::renderUI({
     rrr <- ois_rrr_value()
+    if (identical(rrr, PMA_OIS_RRR_FROM_THRESHOLD)) {
+      return(.ois_rrr_threshold_equiv())
+    }
     tb  <- threshold_baseline_state()
     if (!is.finite(tb) || tb <= 0 || tb >= 1000) {
       return(htmltools::p(
@@ -2514,6 +2608,36 @@ step3_server <- function(input, output, session, state) {
     )
   })
   shiny::outputOptions(output, "ois_rrr_equiv", suspendWhenHidden = FALSE)
+
+  # Inline, under the textarea it is about: the notification alone vanishes
+  # after six seconds, and the rating meanwhile reads as though the judgment
+  # had been accepted.
+  output$large_effect_rationale_msg <- shiny::renderUI({
+    res <- step3_large_effect_args(input$large_effect,
+                                   input$large_effect_rationale)
+    if (!isTRUE(res$blocked)) return(NULL)
+    htmltools::div(
+      class = "pma-large-effect-blocked",
+      style = paste0("padding: 0.5rem 0.75rem; margin: 0.25rem 0 0.5rem; ",
+                     "background: ", PMA_ALERT_BG, "; color: ", PMA_ALERT_FG,
+                     "; border-radius: 4px; font-size: 0.85rem;"),
+      step3_large_effect_blocked_message(input$large_effect))
+  })
+  shiny::outputOptions(output, "large_effect_rationale_msg",
+                       suspendWhenHidden = FALSE)
+
+  # What the CI-ratio radios resolved to, read off the rating, so "Rule-set
+  # default" is never a setting the reviewer has to look up.
+  output$ci_ratio_settings_line <- shiny::renderUI({
+    g <- grade_obj()
+    if (is.null(g)) return(NULL)
+    line <- step3_ci_ratio_settings_sentence(g$imprecision_settings)
+    if (is.null(line)) return(NULL)
+    htmltools::p(class = "pma-card-subtitle", style = "margin: 0.25rem 0;",
+                 line)
+  })
+  shiny::outputOptions(output, "ci_ratio_settings_line",
+                       suspendWhenHidden = FALSE)
 
   output$ois_sd_ui <- shiny::renderUI({
     obj <- state$ma
@@ -2908,7 +3032,8 @@ step3_server <- function(input, output, session, state) {
   # formula. Both are read off the fitted object rather than off the Step 2
   # radio, so they belong together.
   .ois_grade_args <- function(obj) {
-    list(
+    is_binary <- step3_is_binary_outcome(obj, state$outcome_type)
+    c(list(
       # Derived from the fitted object, not from input$outcome_type. The Step 2
       # radio is rebuilt on every step change and, before state$outcome_type
       # existed, reported "binary" again on every 3 -> 2 -> 3 round trip; a
@@ -2918,22 +3043,44 @@ step3_server <- function(input, output, session, state) {
       # the class and the arm-level counts first and only falls back to the
       # radio, and it is what .threshold_grade_args() and config_status
       # already use.
-      outcome_type = if (step3_is_binary_outcome(obj, state$outcome_type)) {
-        "relative"
-      } else {
-        "absolute"
-      },
+      outcome_type = if (is_binary) "relative" else "absolute",
       # Same control-group risk the Configuration tab shows, not a second
       # crude computation of its own.
       ois_p0       = ois_p0_value(),
       # Core GRADE 2 parameterises the binary OIS by a modest relative risk
       # reduction ("typically 20% or 25%"), not by the threshold. Reviewer
-      # choice between the two values the paper names.
-      ois_rrr      = ois_rrr_value(),
+      # choice between the two values the paper names, or "threshold"
+      # (pmatools 0.11.0), which falls back to the default RRR on a question
+      # that sets no threshold, because grade_meta() would abort there.
+      ois_rrr      = step3_ois_rrr_for_grade(
+        ois_rrr_value(),
+        has_threshold = !is.null(.threshold_grade_args(obj)$threshold)),
       ois_sd       = .na_null(input$ois_sd),
       ois_events   = .na_null(input$ois_events_override),
       ois_n        = .na_null(input$ois_n_override)
-    )
+    ),
+    # The CI-ratio rule's settings (pmatools 0.11.0), binary only and only
+    # when set explicitly: an omitted pair lets rule_set pick its own
+    # defaults. See step3_ci_ratio_args().
+    step3_ci_ratio_args(input$ci_ratio_shortcut, input$ci_ratio_scale,
+                        is_binary = is_binary))
+  }
+
+  # --- Imprecision: the reviewer's answer at Fig 4's "large effect?" node
+  # (pmatools 0.11.0). A judgment without its reason is not sent - grade_meta()
+  # would abort - and the tab says so, inline and in a notification, the same
+  # way a rationale-less override is ignored.
+  .large_effect_grade_args <- function() {
+    res <- step3_large_effect_args(input$large_effect,
+                                   input$large_effect_rationale)
+    if (isTRUE(res$blocked)) {
+      shiny::showNotification(
+        paste0("Imprecision: ",
+               step3_large_effect_blocked_message(input$large_effect)),
+        id = "large_effect_rationale_missing", type = "warning",
+        duration = 6)
+    }
+    res$args
   }
 
   # --- Publication bias ---
@@ -3264,6 +3411,7 @@ step3_server <- function(input, output, session, state) {
     incon  <- .incon_grade_args()
     indir  <- .indir_grade_args()
     impre  <- .impre_grade_args()
+    large  <- .large_effect_grade_args()
     pubias <- .pubias_grade_args()
 
     th_args <- .threshold_grade_args(obj)
@@ -3294,7 +3442,10 @@ step3_server <- function(input, output, session, state) {
       list(outcome_name = state$outcome_name %||% "Outcome",
            # Last, as in grade_meta()'s signature. Review-wide; see
            # .rule_set_setting().
-           rule_set     = .rule_set_setting())
+           rule_set     = .rule_set_setting()),
+      # After rule_set, as in grade_meta()'s signature (pmatools 0.11.0).
+      # Empty for the automatic magnitude rule.
+      large
     )
 
     rated   <- .run_grade_with_refit(obj, args, th_args)
@@ -3723,7 +3874,8 @@ step3_server <- function(input, output, session, state) {
   # bias is the one: its chart is a progress indicator above the wizard, drawn
   # from the first node onwards, and repeating it under the verdict would put
   # the same figure on the tab twice.
-  .domain_evaluation <- function(domain, keys = NULL, flowchart = TRUE) {
+  .domain_evaluation <- function(domain, keys = NULL, flowchart = TRUE,
+                                 pinned = NULL) {
     if (is.null(grade_obj())) {
       return(htmltools::tagList(
         htmltools::h5("Evaluation"),
@@ -3737,7 +3889,8 @@ step3_server <- function(input, output, session, state) {
         htmltools::h5("Evaluation"),
         pma_domain_verdict(domain_judgment(domain) %||% "not_serious",
                            domain_downgrade(domain)),
-        pma_facts_list(facts, keys = keys),
+        # `pinned` facts go first so the six-row list cannot cut them off.
+        pma_facts_list(step3_facts_pinned_first(facts, pinned), keys = keys),
         # The picture of the decision, with the branch this analysis took lit
         # up, directly under the verdict it explains. NULL for Indirectness,
         # which has no flowchart to draw (Core GRADE 5 Table 2 is a gradient).
@@ -3780,8 +3933,11 @@ step3_server <- function(input, output, session, state) {
                        keys = c("i2_assessable", "rare_flow",
                                 "zone_decision", "zone_counts", "i2", "tau2",
                                 "q_pvalue")))
+  # The reviewer's large-effect judgment (pmatools 0.11.0) is the eighth
+  # Imprecision fact, past the list's six rows; pinned so it is on screen
+  # beside the verdict it changed.
   output$impre_evaluation  <- shiny::renderUI(
-    .domain_evaluation("Imprecision"))
+    .domain_evaluation("Imprecision", pinned = "large_effect"))
   output$pubias_evaluation <- shiny::renderUI(
     .domain_evaluation("Publication bias", flowchart = FALSE))
   for (.id in c("rob_evaluation", "incon_evaluation", "impre_evaluation",
