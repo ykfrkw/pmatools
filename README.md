@@ -1196,6 +1196,29 @@ No  -> effect moderate       -> do not rate down                   (0)
                        N <  OIS         -> rate down one level    (−1)
 ```
 
+**Since 0.11.0 the binary CI-ratio rule stands in for the OIS only when the
+OIS cannot be calculated** (`ci_ratio_shortcut = "when_ois_unavailable"`,
+the default; GRADE guidance 34 §4.2 derives the rule as a way of not having to
+calculate the OIS). When pmatools can calculate it, the OIS decides, and the
+CI ratio is reported for information. An OR fit's ratio is read from an RR
+refit of the same analysis and compared with 3 (`ci_ratio_scale = "rr"`).
+`ci_ratio_shortcut = "always", ci_ratio_scale = "fitted"` restores the earlier
+behaviour, and `rule_set = "core_grade_bmj_2025"` uses it by default.
+
+Whether an effect is "implausibly large" is a judgment in Core GRADE 2, and
+the reviewer can make it in place of the magnitude rule:
+
+```r
+grade_meta(m, small_values = "desirable", threshold = 1.25,
+           large_effect = "plausible",
+           large_effect_rationale = "Consistent dose-response; mechanism well established.")
+```
+
+`large_effect = "implausible"` enters the OIS approach even for a moderate
+effect. Either needs `large_effect_rationale`, which the notes quote.
+`ois_rrr = "threshold"` powers the binary OIS against the imprecision
+threshold instead of a fixed 20% relative risk reduction.
+
 **The two-level branch applies on the null-threshold path too (v0.5).**
 Core GRADE 2: "The two considerations also apply to imprecision judgments when
 Core GRADE users choose the null as the threshold of interest. For example,

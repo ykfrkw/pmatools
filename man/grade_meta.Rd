@@ -58,7 +58,11 @@ grade_meta(
   rare_flow = FALSE,
   rare_one_arm_total_zero = FALSE,
   rare_method = NULL,
-  rule_set = c("core_grade_guide", "core_grade_bmj_2025")
+  rule_set = c("core_grade_guide", "core_grade_bmj_2025"),
+  large_effect = c("auto", "plausible", "implausible"),
+  large_effect_rationale = NULL,
+  ci_ratio_shortcut = c("when_ois_unavailable", "always"),
+  ci_ratio_scale = c("rr", "fitted")
 )
 }
 \arguments{
@@ -603,7 +607,16 @@ names. Ignored when \code{ois_p1}, \code{ois_events} or \code{ois_n} is
 supplied, and ignored for continuous outcomes, where the same paragraph
 directs users to the MID instead (\code{ois_delta}).
 \strong{Behaviour change (v0.5)}: \code{ois_p1} was previously derived
-from the MID for binary outcomes too.}
+from the MID for binary outcomes too.
+
+\code{ois_rrr = "threshold"} (v0.11.0) powers the OIS against the
+imprecision threshold instead of a fixed RRR, in the same benefit
+direction: an ARD threshold gives \eqn{p_1 = p_0 \pm ARD}; a ratio
+threshold \eqn{T} gives \eqn{p_1 = p_0 T^{\pm 1}} for RR-type measures and
+\eqn{odds(p_1) = odds(p_0) T^{\pm 1}} for an OR fit. It needs a threshold
+(aborts otherwise) and aborts when \eqn{p_1} falls outside (0, 1). An
+explicit \code{ois_p1} still wins, and the notes say where \eqn{p_1} came
+from. Core GRADE 2's own default input remains the modest RRR.}
 
 \item{ois_delta}{For continuous outcomes: minimally important difference for OIS
 calculation. Used with \code{ois_sd}.}
@@ -716,10 +729,68 @@ not asked, the \code{important_effect} fact records
 \code{pubias_important_effect} with this rule set aborts, because the
 answer would be ignored.
 }
-Indirectness, Inconsistency and Imprecision rate identically under both
-sets. The flowcharts in \code{\link{grade_flowcharts}} stay the Guide's;
-the legacy set lights the nodes the 0.5.x rules walked. Versions before
-0.5 are not reproduced.}
+\itemize{
+\item \code{ci_ratio_shortcut} defaults to \code{"always"} and
+\code{ci_ratio_scale} to \code{"fitted"} (v0.11.0), the Imprecision
+behaviour of every release before 0.11.0. Either argument passed
+explicitly wins over the rule set.
+}
+Indirectness and Inconsistency rate identically under both sets, and so
+does Imprecision apart from those two defaults. The flowcharts in
+\code{\link{grade_flowcharts}} stay the Guide's; the legacy set lights
+the nodes the 0.5.x rules walked. Versions before 0.5 are not reproduced.}
+
+\item{large_effect}{(v0.11.0) Who answers Core GRADE 2 Fig 4's "large
+effect?" node on the path where the CI does not cross the threshold.
+Core GRADE 2 says to \emph{consider} rating down when effects are
+"implausibly large (certainly relative risk reduction >40\\%,
+possibly >30\\%)" and "the sample size and number of events \ldots are
+limited";
+GRADE guidance 34 (Zeng 2022, section 4.1) applies the OIS when the
+effect is large enough "that the authors consider the results
+implausible". Both are judgments. One of:
+\itemize{
+\item \code{"auto"} (default): the magnitude rule (RRR > 30\\% for ratio
+measures; standardized effect \eqn{\geq} 0.8 for continuous outcomes,
+a pmatools convention). Unchanged from earlier releases.
+\item \code{"plausible"}: the reviewer judges the large effect credible,
+or the sample not limited. Fig 4 takes the "moderate effect" edge, the
+domain is not rated down, and the OIS is reported for information
+only. The notes quote the rationale beside what the magnitude rule
+would have said.
+\item \code{"implausible"}: enter the OIS approach even when the
+magnitude rule reads the effect as moderate.
+}
+Not consulted when the CI crosses the threshold (Fig 4's "Yes" branch).}
+
+\item{large_effect_rationale}{Free-text justification, required (a
+non-empty string) whenever \code{large_effect} is not \code{"auto"}.
+Quoted in the Imprecision notes and in the \code{large_effect} fact.}
+
+\item{ci_ratio_shortcut}{(v0.11.0) When Fig 4's binary two-level rule
+("relative risk CI ratio \eqn{\geq} 3 or odds ratio CI ratio
+\eqn{\geq} 2.5") is consulted on the OIS path.
+\code{"when_ois_unavailable"} (default) consults it only when the OIS
+could not be calculated: GRADE guidance 34 (section 4.2) derives the rule
+as a sign that the sample is "very far from meeting the OIS", so that
+authors "would not need to calculate the OIS". When the OIS was
+calculated, its answer decides (met: do not rate down; not met: rate down
+one level) and the CI ratio is reported for information.
+\code{"always"} consults the rule first, as every release before 0.11.0
+did. \strong{Behaviour change (v0.11.0)}: a large binary effect whose CI
+ratio passes the cut-off but whose OIS could be calculated is now rated
+\code{"serious"} (or \code{"not_serious"} when the OIS is met) rather than
+\code{"very_serious"}.}
+
+\item{ci_ratio_scale}{(v0.11.0) Which scale the binary CI ratio is read on
+when the fit is an odds ratio. \code{"rr"} (default) refits the same
+analysis as a risk ratio (\code{update()} with \code{sm = "RR"}, every
+other setting kept) when arm-level event counts are available, and
+compares the relative-risk CI ratio with 3; when the refit is not
+possible the fitted OR ratio and its cut-off of 2.5 are used and the notes
+say so. \code{"fitted"} reads the ratio on the fitted scale with its own
+cut-off, as before 0.11.0. Other measures are unaffected.
+\strong{Behaviour change (v0.11.0)} for OR fits on the CI-ratio path.}
 }
 \value{
 An S3 object of class \code{pmatools} containing:
@@ -757,6 +828,10 @@ interval the rating was actually made on. \code{NULL} when the domain
 recorded no facts (the scalar \code{imprecision} override) or when no
 threshold zone applied; the plain-language column that reads it is
 then dropped rather than guessed.}
+\item{imprecision_settings}{(v0.11.0) A list of \code{large_effect},
+\code{large_effect_rationale}, \code{ci_ratio_shortcut} and
+\code{ci_ratio_scale} as resolved, so that
+\code{\link{export_bundle}} replays them.}
 \item{plain_language_frame}{(v0.5.1) \code{NULL},
 \code{"equivalence"} or \code{"non_inferiority"} — which
 plain-language family the Summary of Findings sentence is drawn from.
