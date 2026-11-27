@@ -261,3 +261,123 @@ test_that("ois_rrr = 'threshold' reaches grade_meta() and its echo renders", {
     expect_match(echo, "alternative rate", fixed = TRUE)
   })
 })
+
+# ---------------------------------------------------------------------------
+# "Match the threshold" whose OIS rate leaves (0, 1): re-run at 0.20
+# ---------------------------------------------------------------------------
+
+# The classed condition grade_meta() raises (pmatools 0.11.1), built by hand
+# so the pure helpers can be pinned without a fit.
+.out_of_range_cnd <- function(p0 = 0.156, p1 = 1.056,
+                              how = "p0 + the ARD threshold 0.9000") {
+  rlang::catch_cnd(rlang::abort(
+    "not a probability", class = PMA_OIS_THRESHOLD_OUT_OF_RANGE_CLASS,
+    p0 = p0, p1 = p1, how = how))
+}
+
+test_that("only the classed abort under 'threshold' is retried, at 0.20", {
+  cnd  <- .out_of_range_cnd()
+  args <- list(meta_obj = "fit", ois_rrr = "threshold", ois_p0 = 0.156)
+  retry <- step3_ois_threshold_retry_args(args, cnd)
+  expect_identical(retry$ois_rrr, STEP3_OIS_RRR_DEFAULT)
+  expect_identical(retry$ois_p0, 0.156)
+  # A number the reviewer chose is never replaced.
+  expect_null(step3_ois_threshold_retry_args(
+    modifyList(args, list(ois_rrr = 0.25)), cnd))
+  # Any other abort stays an error.
+  expect_null(step3_ois_threshold_retry_args(
+    args, simpleError("grade_meta() needs a threshold")))
+  expect_null(step3_ois_threshold_retry_args(args, NULL))
+})
+
+test_that("the fallback message names both rates in the display unit", {
+  info <- step3_ois_threshold_fallback_info(.out_of_range_cnd())
+  expect_identical(info, list(p0 = 0.156, p1 = 1.056,
+                              how = "p0 + the ARD threshold 0.9000"))
+  msg <- step3_ois_threshold_fallback_message(info, per = 1000)
+  expect_match(msg, "alternative rate of 1,056 per 1,000", fixed = TRUE)
+  expect_match(msg, "control-group risk of 156 per 1,000", fixed = TRUE)
+  expect_match(msg, "20 percent modest relative risk reduction instead",
+               fixed = TRUE)
+  expect_match(msg, "Choose 20 or 25 percent, or change the Threshold.",
+               fixed = TRUE)
+  expect_match(step3_ois_threshold_fallback_message(info, per = 100),
+               "106 per 100", fixed = TRUE)
+  note <- step3_ois_threshold_fallback_note(info)
+  expect_match(note, "ois_rrr = 0.20 instead", fixed = TRUE)
+  expect_match(note, "1.0560", fixed = TRUE)
+  # A condition missing its fields still words a message, not an error.
+  bare <- step3_ois_threshold_fallback_info(simpleError("x"))
+  expect_true(is.na(bare$p0) && is.na(bare$p1) && is.na(bare$how))
+  expect_match(step3_ois_threshold_fallback_message(bare), "not set",
+               fixed = TRUE)
+})
+
+test_that("a threshold that pushes the OIS rate past 1 still rates the outcome", {
+  skip_if_not_installed("meta")
+  # A risk ratio fit whose desirable events are more frequent on treatment,
+  # so the benefit direction is an increase. An odds ratio fit could not get
+  # here: a ratio applied to the odds never leaves (0, 1).
+  fit <- meta::metabin(
+    event.e = c(20, 25, 18), n.e = c(100, 110, 90),
+    event.c = c(10, 12, 9), n.c = c(100, 110, 90),
+    sm = "RR", random = TRUE, common = FALSE)
+  built <- pma_impre_app(fit)
+  # Every grade_meta() call's ois_rrr, and every notification, recorded from
+  # inside the server's own lookup path. The vendored environment is
+  # memoised, so the real grade_meta() is put back on exit.
+  pkg <- pma_vendored_pkg()
+  real_grade_meta <- get("grade_meta", envir = pkg)
+  sent <- list()
+  notified <- character()
+  assign("grade_meta", function(...) {
+    sent[[length(sent) + 1L]] <<- list(...)$ois_rrr
+    real_grade_meta(...)
+  }, envir = pkg)
+  on.exit(assign("grade_meta", real_grade_meta, envir = pkg), add = TRUE)
+  testthat::local_mocked_bindings(
+    showNotification = function(ui, ...) {
+      notified <<- c(notified, paste(as.character(ui), collapse = ""))
+      invisible(NULL)
+    },
+    .package = "shiny")
+
+  shiny::testServer(built$app, {
+    # Control-group risk about 100 per 1,000; a relative threshold of RR 20
+    # asks for an alternative rate of about 2,000 per 1,000.
+    pma_impre_open(session, ois_rrr = "threshold")
+    session$setInputs(threshold_mode = "relative", threshold_ratio = 20)
+    g <- built$handle$state$grade
+
+    expect_false(is.null(g))
+    expect_identical(nrow(g$domain_assessments), 5L)
+    expect_true(any(vapply(sent, identical, logical(1), "threshold")))
+    expect_identical(sent[[length(sent)]], STEP3_OIS_RRR_DEFAULT)
+    expect_false(any(grepl("grade_meta error", notified, fixed = TRUE)))
+
+    fallback <- attr(g, STEP3_OIS_FALLBACK_ATTR, exact = TRUE)
+    expect_false(is.null(fallback))
+    expect_gte(fallback$p1, 1)
+    # The export replays the call that was rated, not the one that aborted.
+    expect_identical(.rated_specs(g)[["ois_rrr"]]$value, STEP3_OIS_RRR_DEFAULT)
+    impre_note <- g$domain_assessments$notes[
+      g$domain_assessments$domain == "Imprecision"]
+    expect_match(impre_note, "ois_rrr = 'threshold' was not used",
+                 fixed = TRUE)
+
+    echo <- .html(session$getOutput("ois_rrr_equiv")$html)
+    expect_match(echo, "pma-ois-threshold-fallback", fixed = TRUE)
+    expect_match(echo, PMA_ALERT_BG, fixed = TRUE)
+    expect_match(echo, "which is not a probability", fixed = TRUE)
+    expect_false(grepl("Powered against the Threshold", echo, fixed = TRUE))
+
+    # Back to a threshold that gives a probability: no fallback, no warning.
+    session$setInputs(threshold_ratio = 1.5)
+    g <- built$handle$state$grade
+    expect_null(attr(g, STEP3_OIS_FALLBACK_ATTR, exact = TRUE))
+    expect_identical(.rated_specs(g)[["ois_rrr"]]$value, "threshold")
+    expect_false(grepl("pma-ois-threshold-fallback",
+                       .html(session$getOutput("ois_rrr_equiv")$html),
+                       fixed = TRUE))
+  })
+})

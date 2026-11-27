@@ -1,3 +1,16 @@
+# pmatools 0.11.1
+
+## Minor improvements
+
+* The abort `ois_rrr = "threshold"` raises when the derived OIS alternative
+  rate leaves (0, 1) now has the condition class
+  `"pma_ois_threshold_out_of_range"` (`PMA_OIS_THRESHOLD_OUT_OF_RANGE_CLASS`)
+  and carries `p0`, `p1` and `how` (the control-group risk, the derived rate
+  and how it was derived). The message and the decision to abort rather than
+  clamp are unchanged; a caller can now recognise this one abort without
+  parsing its message. The Shiny app uses it to fall back to the 20 percent
+  modest RRR and say so on the Imprecision tab.
+
 # pmatools 0.11.0
 
 ## Breaking changes / Behaviour changes

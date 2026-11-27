@@ -361,6 +361,11 @@ PMA_CI_RATIO_SCALE_CHOICES    <- c("rr", "fitted")
 # threshold rather than against a fixed modest relative risk reduction.
 PMA_OIS_RRR_FROM_THRESHOLD <- "threshold"
 
+# The condition class of the abort .ois_p1_from_threshold() raises when that
+# derived rate leaves (0, 1) (v0.11.1). The condition also carries `p0`, `p1`
+# and `how`, the control-group risk, the derived rate and the derivation.
+PMA_OIS_THRESHOLD_OUT_OF_RANGE_CLASS <- "pma_ois_threshold_out_of_range"
+
 # The three positions an interval can hold relative to the threshold it is
 # being tested against, as a machine-readable vocabulary. Emitted as the
 # "threshold_zone" fact so that a caller choosing wording by zone -- the
@@ -633,11 +638,16 @@ PMA_NO_MARGIN_PLACEHOLDER <- paste0(
                    if (sign > 0) "x" else "/", exp(abs(threshold_internal)))
   }
   if (!is.finite(p1) || p1 <= 0 || p1 >= 1) {
+    # Classed, with the three numbers attached, so a caller that offered the
+    # option (the Shiny app) can tell this abort from every other one and say
+    # in its own words which rate left (0, 1) - rather than parse the message.
     rlang::abort(sprintf(paste0(
       "ois_rrr = 'threshold' derives the OIS alternative event rate from the ",
       "imprecision threshold (%s), which at a control-group risk of %.4f ",
       "gives %.4f -- not a probability. Supply ois_p1 directly, or use a ",
-      "numeric ois_rrr."), how, p0, p1))
+      "numeric ois_rrr."), how, p0, p1),
+      class = PMA_OIS_THRESHOLD_OUT_OF_RANGE_CLASS,
+      p0 = p0, p1 = p1, how = how)
   }
   list(p1 = p1, how = how)
 }

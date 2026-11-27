@@ -4,7 +4,7 @@
 
 **Public URL:** https://yuki-furukawa.shinyapps.io/pmatools/
 **Deployment:** shinyapps.io (account: `yuki-furukawa`, appId: `17697029`)
-**App version:** 3.9.0 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.8.3 → 3.9.0 carries pmatools 0.11.0 and exposes its Imprecision arguments on the Imprecision tab: the reviewer's answer at Fig 4's "large effect?" node with its required reason, `ois_rrr = "threshold"`, and the CI-ratio rule's two settings (§3.4.7a); 3.8.2 → 3.8.3 carries pmatools 0.10.0, whose RoB-ME available-vs-missing forest draws the analysis' own pooled estimate, CI and 95% prediction interval and prints effect [95% CI] numbers on the study, pooled and prediction-interval rows, with the missing rows' status in its own "Results known" column (package SPEC §4.12); 3.8.1 → 3.8.2 passes k and I² to the trim-and-fill dot and line, which add a caution note when studies are few or heterogeneity is substantial (pmatools 0.9.2; the RoB-ME gate ignoring `Not measured` rows and the subgroup forest's single diamond arrive with the package sources, §3.4.8a); 3.7.0 → 3.8.0 is the Indirectness reason box for a "very close" surrogate and the per-answer Core GRADE examples (§3.4.12a); 3.6.1 → 3.7.0 is the Rule set dropdown, which re-runs a review under the pmatools 0.5.x rules (§3.4.12b); 3.6.0 → 3.6.1 corrects the Configuration tab's outcome-direction sentence, which still said it set the bias direction Risk of Bias checks; 3.5.0 → 3.6.0 is the Indirectness flowchart (Core GRADE Guide Fig 8-2, §3.4.12a); 3.4.0 → 3.5.0 is the Core GRADE Guide flowcharts (risk of bias Fig 7-2, publication bias Fig 9-1 and its computed first node, §3.4.12); 3.3.0 → 3.4.0 is the optional Score type mapping (§3.3.3); 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
+**App version:** 3.9.1 — the `Version:` field of `shiny/DESCRIPTION`, which is the app's own and tracks separately from the package version in `../DESCRIPTION` (§9). 3.9.0 → 3.9.1 carries pmatools 0.11.1: a *Match the threshold* OIS whose alternative rate leaves (0, 1) no longer aborts the whole rating; the outcome is re-rated at the 20 percent modest RRR and the Imprecision tab says so inline (§3.4.7a); 3.8.3 → 3.9.0 carries pmatools 0.11.0 and exposes its Imprecision arguments on the Imprecision tab: the reviewer's answer at Fig 4's "large effect?" node with its required reason, `ois_rrr = "threshold"`, and the CI-ratio rule's two settings (§3.4.7a); 3.8.2 → 3.8.3 carries pmatools 0.10.0, whose RoB-ME available-vs-missing forest draws the analysis' own pooled estimate, CI and 95% prediction interval and prints effect [95% CI] numbers on the study, pooled and prediction-interval rows, with the missing rows' status in its own "Results known" column (package SPEC §4.12); 3.8.1 → 3.8.2 passes k and I² to the trim-and-fill dot and line, which add a caution note when studies are few or heterogeneity is substantial (pmatools 0.9.2; the RoB-ME gate ignoring `Not measured` rows and the subgroup forest's single diamond arrive with the package sources, §3.4.8a); 3.7.0 → 3.8.0 is the Indirectness reason box for a "very close" surrogate and the per-answer Core GRADE examples (§3.4.12a); 3.6.1 → 3.7.0 is the Rule set dropdown, which re-runs a review under the pmatools 0.5.x rules (§3.4.12b); 3.6.0 → 3.6.1 corrects the Configuration tab's outcome-direction sentence, which still said it set the bias direction Risk of Bias checks; 3.5.0 → 3.6.0 is the Indirectness flowchart (Core GRADE Guide Fig 8-2, §3.4.12a); 3.4.0 → 3.5.0 is the Core GRADE Guide flowcharts (risk of bias Fig 7-2, publication bias Fig 9-1 and its computed first node, §3.4.12); 3.3.0 → 3.4.0 is the optional Score type mapping (§3.3.3); 3.2.0 → 3.3.0 is the four clinical questions (§3.4.10b)
 
 ---
 
@@ -921,6 +921,28 @@ rebuild), and their grade_meta() names are in `PMA_GRADE_ARGS_EXPORTED`.
   says the OIS is powered against the Configuration threshold and, once rated,
   prints the control-group risk and the alternative rate read off the package's
   `ois_target_rate` fact (never re-derived app-side).
+  - **A threshold-derived rate outside (0, 1) [3.9.1].** The package aborts
+    rather than clamp (`SPEC.md` §5.5), with the condition class
+    `pma_ois_threshold_out_of_range` (pmatools 0.11.1) carrying `p0`, `p1` and
+    `how`. Only that abort, and only when the app sent `"threshold"`
+    (`step3_ois_threshold_retry_args()`), makes `.run_grade_with_refit()` re-run
+    `grade_meta()` once with `ois_rrr = STEP3_OIS_RRR_DEFAULT` (0.20), so all
+    five domains are still rated and no `grade_meta error` notification fires;
+    any other abort is still the generic error. The rating carries the
+    attribute `STEP3_OIS_FALLBACK_ATTR` (`list(p0, p1, how)`), the Imprecision
+    notes gain one sentence saying `ois_rrr = 'threshold'` was not used, and the
+    exported call records `ois_rrr = 0.20`, the value that was rated. In place of
+    the echo, `output$ois_rrr_equiv` shows an amber box (`PMA_ALERT_BG` /
+    `PMA_ALERT_FG`, as `output$large_effect_rationale_msg`): *"The Threshold gives
+    an alternative rate of X at a control-group risk of Y, which is not a
+    probability, so the OIS was powered against the 20 percent modest relative
+    risk reduction instead. Choose 20 or 25 percent, or change the Threshold."*,
+    in the display unit. It can only happen on a ratio scale applied to the risk
+    (an RR fit): a relative threshold of at least 1 / control-group risk, or an
+    absolute threshold converted on the side opposite the benefit direction
+    (non-inferiority's worse side, or an effect that runs against benefit). An
+    odds ratio fit cannot reach it, since a ratio applied to the odds never
+    leaves (0, 1).
 - **`radioButtons("ci_ratio_shortcut")`** and **`radioButtons("ci_ratio_scale")`**,
   binary only, in a closed *CI-ratio rule (advanced)* `<details>` under the OIS
   inputs. Each offers **Rule-set default** (`"rule_set_default"`, selected) plus the

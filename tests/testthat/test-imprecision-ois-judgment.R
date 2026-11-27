@@ -311,3 +311,27 @@ test_that("ois_rrr = 'threshold' aborts when p1 leaves (0, 1)", {
       threshold_internal = log(2), ois_p0 = 0.60, ois_rrr = "threshold")),
     regexp = "not a probability")
 })
+
+test_that("the out-of-range abort is classed and carries p0, p1 and how", {
+  m <- moderate_rr_meta()
+  cnd <- tryCatch(
+    suppressWarnings(assess_imprecision(
+      m, outcome_type = "relative", small_values = "undesirable",
+      threshold_internal = log(2), ois_p0 = 0.60, ois_rrr = "threshold")),
+    error = function(e) e)
+  expect_s3_class(cnd, "pma_ois_threshold_out_of_range")
+  expect_identical(PMA_OIS_THRESHOLD_OUT_OF_RANGE_CLASS,
+                   "pma_ois_threshold_out_of_range")
+  expect_equal(cnd$p0, 0.60)
+  expect_equal(cnd$p1, 1.20)
+  expect_match(cnd$how, "ratio threshold 2.0000", fixed = TRUE)
+})
+
+test_that("grade_meta() lets the classed abort through unwrapped", {
+  m <- moderate_rr_meta()
+  expect_error(
+    suppressWarnings(grade_meta(
+      m, threshold = 2, threshold_scale = "ratio",
+      small_values = "undesirable", ois_p0 = 0.60, ois_rrr = "threshold")),
+    class = "pma_ois_threshold_out_of_range")
+})
