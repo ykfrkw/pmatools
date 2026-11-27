@@ -917,6 +917,31 @@ export_bundle.meta <- function(x,
     ),
     ois_p1_arg       = .arg_lit(grade_args[["ois_p1", exact = TRUE]],     fallback = "NULL"),
     ois_rrr_arg      = .arg_lit(grade_args[["ois_rrr", exact = TRUE]],    fallback = "0.2"),
+    # The Imprecision large-effect settings (v0.11.0). The fallbacks read the
+    # RATED OBJECT; an object made before 0.11.0 carries no settings and was
+    # rated under "auto" / "always" / "fitted", so those are what a replay of
+    # it must use -- the 0.11.0 defaults would rate it differently.
+    large_effect_arg = .arg_lit(
+      grade_args[["large_effect", exact = TRUE]],
+      fallback = shQuote(grade$imprecision_settings$large_effect %||% "auto")),
+    large_effect_rationale_arg = .arg_lit(
+      grade_args[["large_effect_rationale", exact = TRUE]],
+      fallback = {
+        r <- grade$imprecision_settings$large_effect_rationale
+        if (is.character(r) && length(r) == 1L && !is.na(r)) {
+          paste(deparse(r, width.cutoff = 500L), collapse = "")
+        } else {
+          "NULL"
+        }
+      }),
+    ci_ratio_shortcut_arg = .arg_lit(
+      grade_args[["ci_ratio_shortcut", exact = TRUE]],
+      fallback = shQuote(grade$imprecision_settings$ci_ratio_shortcut %||%
+                           "always")),
+    ci_ratio_scale_arg = .arg_lit(
+      grade_args[["ci_ratio_scale", exact = TRUE]],
+      fallback = shQuote(grade$imprecision_settings$ci_ratio_scale %||%
+                           "fitted")),
     ois_delta_arg    = .arg_lit(grade_args[["ois_delta", exact = TRUE]],  fallback = "NULL"),
     ois_sd_arg       = .arg_lit(grade_args[["ois_sd", exact = TRUE]],     fallback = "NULL"),
     baseline_risk_arg = .arg_lit(

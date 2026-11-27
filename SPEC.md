@@ -2,7 +2,7 @@
 
 > Authoritative specification for the pmatools R package. Implementation MUST conform to this document. UI-side concerns (Shiny wizard, educational copy, accordion layout) are specified separately in [`shiny/SPEC.md`](shiny/SPEC.md), which governs the app in this repository's `shiny/` directory.
 
-**Version target:** 0.10.0
+**Version target:** 0.11.0
 **Document history:** this file was written for v0.2.0 and has been updated in place for v0.5.0, v0.5.1, v0.5.2 and v0.6.0; section numbering is preserved so the diff stays readable. Sections that still describe v0.2 behaviour verbatim are marked **[v0.2 — superseded]** with a pointer to the section that governs.
 
 **Backward compatibility:** v0.2 introduced no breaking changes. v0.4.0 and v0.5.0 did — see `NEWS.md`, which is authoritative for the change list. The three that most affect callers:
@@ -879,7 +879,7 @@ In `assess_imprecision()`, when no explicit `ois_*` is provided:
 
 **Comparison unit (v0.5.0): participants, not events.** Core GRADE 2 Fig 4 caption: "N=number of participants; OIS=optimal information size"; body: "If the total sample size of all the studies included in a meta-analysis exceeds the OIS, one does not rate down". The auto-computed binary OIS is therefore a target **N** compared against `sum(n.e) + sum(n.c)`; the implied event count is reported in the notes for information. Supplying `ois_events` explicitly still selects an event-based comparison (backward compatible).
 
-If both `threshold` and `ois_*` supplied, `ois_*` wins (`ois_p1` also wins over `ois_rrr`). Notes string indicates source.
+If both `threshold` and `ois_*` supplied, `ois_*` wins (`ois_p1` also wins over `ois_rrr`). Notes string indicates source. Since v0.11.0 `ois_rrr = "threshold"` sends the binary case to the threshold after all, by explicit request (§5.5, "OIS inputs").
 
 `threshold` and `threshold_scale` are the **single source of truth** — RoB, Inconsistency, and Imprecision derive their boundary from them. Inconsistency and Imprecision additionally share the *chosen* threshold resolved by the rating target (Core GRADE 3 Fig 2: "Evaluate point estimates of studies **in relation to chosen threshold**"), so a `non_null_effect` target puts both domains on the null.
 
@@ -2143,7 +2143,24 @@ Does the CI cross the chosen threshold?
                otherwise, calculate OIS:
                  N >= OIS               -> do not rate down         [-0]
                  N <  OIS               -> rate down one level      [-1]
+             (v0.11.0 default: the CI-ratio rule is consulted only when
+              the OIS cannot be calculated -- see "Reviewer judgment and
+              the CI-ratio shortcut (v0.11.0)" below.)
 ```
+
+#### Reviewer judgment and the CI-ratio shortcut (v0.11.0)
+
+Three arguments of `assess_imprecision()`, each forwarded by `grade_meta()`, change how the "No" branch is walked. Sources: Core GRADE 2 (BMJ 2025;389:e081904) and GRADE guidance 34 (Zeng 2022, J Clin Epidemiol 150:216–224).
+
+**`large_effect` = `"auto"` (default) / `"plausible"` / `"implausible"`, with `large_effect_rationale`.** Core GRADE 2 says to *consider* rating down when binary effects are "implausibly large (certainly relative risk reduction >40%, possibly >30%)" and "the sample size and number of events … are limited"; guidance 34 §4.1 applies the OIS when the effect is large enough "that the authors consider the results implausible". Both are judgments. `"auto"` is the magnitude rule above, unchanged. `"plausible"` takes Fig 4's moderate-effect edge (`pma-impre-edge-large-no`): not rated down, OIS reported for information only. `"implausible"` enters the OIS approach (`pma-impre-edge-large-yes`) even when the magnitude rule reads the effect as moderate. Either non-default value requires a non-empty `large_effect_rationale` (abort otherwise); the Fig 4 path and the `large_effect` fact quote it beside what the magnitude rule would have said ("magnitude rule: …; reviewer judged …: <rationale>"). Not consulted on the "Yes" branch. A bad value aborts.
+
+**`ci_ratio_shortcut` = `"when_ois_unavailable"` (default) / `"always"`. Behaviour change.** Guidance 34 §4.2 derives the binary CI-ratio rule from NMA simulations: a ratio past the cut-off means the sample is "very far from meeting the OIS. Therefore, authors would not need to calculate the OIS". The rule is a stand-in for the calculation. Under the default, when the OIS percentage could be computed the calculation decides directly — met → `not_serious`, not met → `serious` (−1) — and the path says the shortcut was not used, reporting the CI ratio for information. The CI-ratio two-level rule fires only when the OIS could not be computed, and the path then says so. Guidance 34's binary Box 5 has no "N < 30% of OIS" two-level rule (that rule is continuous only), and pmatools adds none. `"always"` is the pre-0.11 behaviour exactly.
+
+**`ci_ratio_scale` = `"rr"` (default) / `"fitted"`. Behaviour change.** When the fit is an OR and arm-level event counts exist, the ratio is read from an RR refit of the same analysis (`update()` with `sm = "RR"`, every other setting kept; the route `.refit_low_rob()` takes) and compared with 3, Fig 4's relative-risk cut-off. The refit is used for nothing else. When no refit is possible (no arm data, a method that only fits ORs, a failed refit) the fitted OR ratio and 2.5 are used and the note says so. Other measures are unaffected. `"fitted"` is the pre-0.11 behaviour.
+
+`grade_meta(rule_set = "core_grade_bmj_2025")` defaults the two CI-ratio arguments to `"always"` / `"fitted"`, so a 0.5.x rating replays as it was made; arguments passed explicitly win. The resolved values are recorded as `$imprecision_settings` and `export_bundle()` writes them into the bundled `analysis.R`; an object without the field (made before 0.11.0) replays under `"auto"` / `"always"` / `"fitted"`.
+
+Not automated: guidance 34 §4.3's advice to be "more restrained in rating down" when the baseline risk is very low. Record that with the scalar `imprecision` override.
 
 **What changed from v0.2/v0.4 (breaking).** Previously the "N ≤ 30% of OIS" rule forced a two-level rate-down regardless of where the CI sat. Under Fig 4 the OIS branch is reached only when the CI is clear of the threshold *and* the effect is implausibly large, so an analysis with a moderate effect, a CI clear of the threshold and a small sample size no longer rates down at all.
 
@@ -2165,6 +2182,8 @@ There is no third row. Up to v0.5.0 `small_values = NULL` meant "use the paper's
 **The declared direction decides, not the observed effect.** The OIS is an a-priori power calculation for the smallest effect worth not missing, which is a property of the question — a modest *benefit* — and `small_values` is what states which way that runs. Letting the pooled estimate pick the side would make the target partly data-driven and would collapse `"desirable"` and `"undesirable"` onto the same answer whenever the estimate sits above the null. The pooled effect is nevertheless read and reported: the note says whether it agrees, and when it does not (the evidence describes a harm on this outcome) it says so explicitly rather than silently powering against the other tail.
 
 `ois_p1` is clamped into (0, 1) — `ois_p0 * (1 + ois_rrr)` can exceed 1 on a high control-group risk — and the note says so when it clamps. An explicitly supplied `ois_p1` still takes precedence and no direction is applied to it.
+
+**`ois_rrr = "threshold"` (v0.11.0).** Instead of a fixed modest RRR, `ois_p1` is derived from the imprecision threshold — the MID (`threshold_internal`, or `threshold_ard` when the threshold arrived as an ARD), never the null — in the same benefit direction as the table above. ARD threshold: `ois_p1 = ois_p0 ± ARD`. Ratio threshold `T` (positive on the log scale): `ois_p1 = ois_p0 · exp(±T)` for RR / HR / IRR / RoM, `odds(ois_p1) = odds(ois_p0) · exp(±T)` for an OR fit. No threshold → abort (naming the alternatives); a `ois_p1` outside (0, 1) → abort (no clamping, unlike the RRR path, because the power calculation would then be against a rate nobody chose). An explicit `ois_p1` still wins. The note and the `ois_target_rate` fact say the rate came from the threshold. Core GRADE 2's own default input remains the modest RRR, and `ois_rrr = 0.20` stays the default.
 
 **Auto-derived `ois_sd` (continuous).** `.calc_ois()` needs both `ois_delta` and `ois_sd`. `ois_delta` has always fallen back to the Threshold; `ois_sd` had no fallback, so a continuous outcome with no reviewer-supplied SD reached Fig 4's large-effect path, found no OIS and landed on "do not rate down" with no explanation. `ois_sd` now falls back to `compute_pooled_sd(meta_obj)`, and the notes and the `ois_sd_source` fact record that it was derived rather than supplied.
 
@@ -2487,6 +2506,7 @@ instead.
 |---|---|
 | test-rating_target.R | Core GRADE 2 Fig 2 target derivation, manual override + mandatory rationale, `threshold_type` entry gate; §4.5.2: the placeholder-offering gate is **not** reached with a pinned `rating_target` or `threshold_sides = "worse_only"`, and neither of the two surviving aborts contains a number |
 | test-imprecision.R | Fig 4 paths (§5.5), CI-ratio rules, OIS branch reachability; §4.5.1b `threshold_sides`: **golden invariance** (`"both"` is `identical()` to the argument omitted, over a grid of CIs × `sm` × `small_values`), **monotonicity** (`downgrade(worse_only) >= downgrade(both)` over the same grid wherever `worse_only` still crosses the threshold — the test that rules out the rejected one-sided `−2` — together with the two named OIS-branch exceptions to the global form), the boolean table on both signs, both `.check_threshold_sides()` aborts, and `threshold_zone` exhaustive and mutually exclusive |
+| test-imprecision-ois-judgment.R | §5.5 v0.11.0: `large_effect` (plausible / implausible, rationale required, enum gate, flow edge taken), `ci_ratio_shortcut` (a calculated OIS decides; the legacy rule set and `"always"` + `"fitted"` reproduce the old `very_serious`), `ci_ratio_scale` (RR refit read against 3 when the OIS is unavailable; fallback without arm data), `ois_rrr = "threshold"` (ratio RR / OR, ARD, abort without a threshold or outside (0, 1), `ois_p1` precedence) |
 | test-rob_flowchart.R | Core GRADE 4 Fig 2 (§5.1): dominance gate, the 5 zone rules, `analysis_set`, refit propagation, and Step 2b's rule → leaf mapping (each rule's leaf and `flow_path`, the direction gate reading a shift as "similar", rule 5 leaking no depth, the departure disclosure on both leaves) |
 | test-domain_rob.R | inflation threshold boundaries, `rob_some_concerns`, `rob_overrides`, the `small_values` direction gate deciding rule 2 vs rule 3 (§4.5.1a) |
 | test-indirectness_subdomains.R | PICO table normalisation, worst-case rollup, scalar override |

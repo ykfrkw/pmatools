@@ -1,3 +1,45 @@
+# pmatools 0.11.0
+
+## Breaking changes / Behaviour changes
+
+Both are on Core GRADE 2 Fig 4's large-effect path for **binary** outcomes
+(the CI does not cross the threshold and the effect is implausibly large), and
+both **change ratings** made with the defaults. `ci_ratio_shortcut = "always",
+ci_ratio_scale = "fitted"` restores the 0.10.0 ratings exactly, and
+`grade_meta(rule_set = "core_grade_bmj_2025")` now defaults to that pair.
+
+* **New `ci_ratio_shortcut`, default `"when_ois_unavailable"`.** The CI-ratio
+  two-level rule ("relative risk CI ratio >= 3 or odds ratio CI ratio
+  >= 2.5") is consulted only when the OIS could not be calculated. GRADE
+  guidance 34 (Zeng 2022, section 4.2) derives it as a way of not having to
+  calculate the OIS; when pmatools could calculate it, the OIS now decides
+  (met: not rated down; not met: rated down one level) and the CI ratio is
+  reported for information. **A large binary effect whose CI ratio passes the
+  cut-off and whose OIS is not met now rates `serious` (-1) instead of
+  `very_serious` (-2)**, and `not_serious` when the OIS is met.
+* **New `ci_ratio_scale`, default `"rr"`.** When the fit is an odds ratio and
+  arm-level event counts exist, the CI ratio is read from an RR refit of the
+  same analysis (`update()` with `sm = "RR"`) and compared with 3, instead of
+  the OR ratio against 2.5. When no refit is possible the fitted OR ratio is
+  used and the notes say so. This matters only where the CI-ratio rule is
+  consulted (by default, when the OIS cannot be calculated).
+
+## New features
+
+* **`large_effect` and `large_effect_rationale`** on `grade_meta()` and
+  `assess_imprecision()`. `"auto"` (default) keeps the magnitude rule.
+  `"plausible"` records the reviewer's judgment that a large effect is
+  credible or the sample not limited, so Fig 4 takes the moderate-effect edge;
+  `"implausible"` enters the OIS approach whatever the magnitude. Either
+  requires a rationale, which the notes and a new `large_effect` fact quote
+  beside what the magnitude rule would have said.
+* **`ois_rrr = "threshold"`** powers the binary OIS against the imprecision
+  threshold (`p0 +/- ARD`, or the ratio threshold applied to the risk, or to
+  the odds for an OR fit) instead of a fixed modest RRR. Numeric `ois_rrr` is
+  unchanged and `0.20` stays the default; an explicit `ois_p1` still wins.
+* The resolved settings are recorded as `$imprecision_settings` and written
+  into the `export_bundle()` `analysis.R`.
+
 # pmatools 0.10.0
 
 ## Behaviour changes

@@ -26,6 +26,10 @@
 #     GRADE Guidance 34: update on rating imprecision using a minimally
 #     contextualised approach. BMJ. 2025;389:e083087. (companion methodology
 #     paper)
+#   Zeng L, Brignardello-Petersen R, Hultcrantz M, et al.
+#     GRADE Guidance 34: update on rating imprecision using a minimally
+#     contextualized approach. J Clin Epidemiol. 2022;150:216-224.
+#     (sections 4.1-4.3, cited by the v0.11.0 knobs below)
 #   Guyatt GH, Oxman AD, Kunz R, et al. GRADE guidelines 6.
 #     Rating the quality of evidence — imprecision (Optimal Information
 #     Size). J Clin Epidemiol. 2011;64(12):1283-1293.
@@ -59,6 +63,9 @@
 #              otherwise -> Calculate OIS
 #                              N >= OIS -> Do not rate down       [-0]
 #                              N <  OIS -> Rate down one level    [-1]
+#              (Since 0.11.0 the CI-ratio rule is consulted only when the
+#              OIS cannot be calculated, and an OR fit's ratio is read on the
+#              RR scale; see "CI-RATIO SHORTCUT" below.)
 #
 #   The two-level downgrade for crossing BOTH MIDs applies on the null-threshold
 #   path as well, not only where a MID was the chosen threshold. Body text, p6,
@@ -280,6 +287,55 @@
 #      downgrade, per the governing rule - and says in those words that the
 #      domain was not assessed. The reviewer's own confirmation is what carries
 #      the decision from there.
+#
+# REVIEWER JUDGMENT, CI-RATIO SHORTCUT, THRESHOLD-POWERED OIS (v0.11.0)
+# ---------------------------------------------------------------------
+# Three knobs on Fig 4's "No" branch, each forwarded by grade_meta().
+#
+#   1. `large_effect` ("auto" / "plausible" / "implausible") with
+#      `large_effect_rationale`. Core GRADE 2 says to CONSIDER rating down
+#      when an effect is implausibly large and "the sample size and number of
+#      events ... are limited", and GRADE guidance 34 (Zeng 2022, 4.1) enters
+#      the OIS when "the authors consider the results implausible". Both are
+#      judgments, so "auto" (the magnitude rule above, the default) can be
+#      replaced by the reviewer's answer. "plausible" takes the moderate edge;
+#      "implausible" enters the OIS approach whatever the magnitude. Either
+#      needs a rationale, and the notes quote it beside what the magnitude
+#      rule would have said. The answer replaces `large` before the
+#      classifier sees it, so the flow ids follow the edge actually taken.
+#
+#   2. `ci_ratio_shortcut` ("when_ois_unavailable" default / "always") and
+#      `ci_ratio_scale` ("rr" default / "fitted"). GRADE guidance 34 (4.2)
+#      derives the binary CI-ratio rule from NMA simulations as a sign that
+#      the sample is "very far from meeting the OIS", so that authors "would
+#      not need to calculate the OIS". It is a stand-in for the calculation.
+#      pmatools calculates the OIS whenever it can, so by default the
+#      calculation decides (met -> 0, not met -> -1) and the rule fires only
+#      when the OIS could not be computed. Guidance 34's binary Box 5 has no
+#      "< 30% of OIS" two-level rule (that rule is continuous only), and none
+#      is added. The ratio of an OR fit is read from an RR refit
+#      (update.meta(), every other setting kept) and compared with 3, Fig 4's
+#      relative-risk cut-off; when no refit is possible the fitted OR ratio
+#      and 2.5 are used and the note says so. "always" + "fitted" is the
+#      pre-0.11 behaviour exactly, and grade_meta(rule_set =
+#      "core_grade_bmj_2025") defaults to it.
+#
+#   3. `ois_rrr = "threshold"`. Instead of Core GRADE 2's "modest relative
+#      risk reduction", ois_p1 is derived from the imprecision threshold
+#      (threshold_internal / threshold_ard: the MID, never the null) in the
+#      benefit direction .ois_target_increase() resolves: p0 +/- ARD for an
+#      ARD threshold, odds(p0) times or divided by exp(T) for an OR fit, and
+#      p0 times or divided by exp(T) otherwise. No threshold, or a p1 outside
+#      (0, 1), aborts. An explicit ois_p1 still wins. See
+#      .ois_p1_from_threshold().
+#
+#   Not done here, and on purpose: guidance 34 (4.3) asks for restraint in
+#   rating down when the baseline risk is very low. That is a judgment the
+#   reviewer records with the scalar `imprecision` override.
+#
+# A new helper belongs with these when it changes WHO answers a Fig 4 node or
+# WHICH number a node reads; a rule Core GRADE 2 does not state does not
+# belong in this file at all.
 
 # The judgment recorded when a domain could not be assessed at all. NOT a
 # verdict of "no concern": it is the absence of one, and the note beside it
@@ -290,6 +346,20 @@ PMA_NOT_ASSESSABLE_JUDGMENT <- "not_serious"
 # Which sides of the chosen threshold the Fig 4 crossing test asks about. See
 # the "WHICH SIDES OF THE THRESHOLD" section of the file header.
 THRESHOLD_SIDES <- c("both", "worse_only")
+
+# Who answers Fig 4's "implausibly large?" node (v0.11.0). See the
+# "REVIEWER JUDGMENT, CI-RATIO SHORTCUT, THRESHOLD-POWERED OIS" section of the
+# file header. "auto" is the magnitude rule and the pre-0.11 behaviour.
+PMA_LARGE_EFFECT_CHOICES <- c("auto", "plausible", "implausible")
+
+# When the binary CI-ratio two-level rule is consulted, and on which scale its
+# ratio is read (v0.11.0). The first value of each is the default.
+PMA_CI_RATIO_SHORTCUT_CHOICES <- c("when_ois_unavailable", "always")
+PMA_CI_RATIO_SCALE_CHOICES    <- c("rr", "fitted")
+
+# The value of `ois_rrr` that powers the binary OIS against the imprecision
+# threshold rather than against a fixed modest relative risk reduction.
+PMA_OIS_RRR_FROM_THRESHOLD <- "threshold"
 
 # The three positions an interval can hold relative to the threshold it is
 # being tested against, as a machine-readable vocabulary. Emitted as the
@@ -403,6 +473,175 @@ PMA_NO_MARGIN_PLACEHOLDER <- paste0(
   invisible(sides)
 }
 
+# Resolve a single choice from a small vocabulary, or abort explaining it.
+# The formal default of each argument is the full vector (match.arg() style),
+# and a caller forwarding it untouched means "take the first".
+.check_impre_choice <- function(x, choices, arg, explanation) {
+  value <- if (identical(x, choices)) choices[1] else x
+  ok <- is.character(value) && length(value) == 1L && !is.na(value) &&
+        value %in% choices
+  if (!ok) {
+    rlang::abort(sprintf(
+      "%s must be one of %s (received %s). %s", arg,
+      paste0("'", choices, "'", collapse = ", "),
+      paste(deparse(x, width.cutoff = 500L), collapse = ""), explanation))
+  }
+  value
+}
+
+# The `large_effect` gate. Returns list(value, rationale). A reviewer who
+# answers Fig 4's "implausibly large?" node in place of the magnitude rule
+# must say why, because the answer can move the rating by up to two levels
+# and nothing in the data records the reasoning otherwise.
+.check_large_effect <- function(large_effect, large_effect_rationale) {
+  value <- .check_impre_choice(
+    large_effect, PMA_LARGE_EFFECT_CHOICES, "large_effect",
+    paste0("'auto' applies the magnitude rule (Core GRADE 2: relative risk ",
+           "reduction > 30%; Cohen's d >= 0.8 for continuous outcomes, a ",
+           "pmatools convention). 'plausible' records the reviewer's judgment ",
+           "that a large effect is credible or that the sample is not ",
+           "limited, so the OIS approach is not entered. 'implausible' ",
+           "enters the OIS approach whatever the magnitude rule says."))
+  if (identical(value, "auto")) {
+    return(list(value = value, rationale = NULL))
+  }
+  has_rationale <- is.character(large_effect_rationale) &&
+                   length(large_effect_rationale) == 1L &&
+                   !is.na(large_effect_rationale) &&
+                   nzchar(trimws(large_effect_rationale))
+  if (!has_rationale) {
+    rlang::abort(sprintf(paste0(
+      "large_effect = '%s' replaces the automated magnitude rule at Core ",
+      "GRADE 2 Fig 4's 'implausibly large effect?' node with your own ",
+      "judgment, and needs large_effect_rationale: a non-empty sentence ",
+      "saying why (for example, a mechanism that makes the effect credible, ",
+      "or a sample that is not limited). It is quoted in the Imprecision ",
+      "notes."), value))
+  }
+  list(value = value, rationale = trimws(large_effect_rationale))
+}
+
+# The 95% CI of the pooled estimate a rating reads: the random-effects
+# interval when the fit is random-effects, the common-effect one otherwise,
+# and the other one when the preferred interval is missing or not finite.
+# Returns c(lower, upper), possibly NULL / NA entries when neither exists.
+.pooled_ci <- function(meta_obj) {
+  if (isTRUE(meta_obj$random)) {
+    lower <- meta_obj$lower.random
+    upper <- meta_obj$upper.random
+  } else {
+    lower <- meta_obj$lower.common
+    upper <- meta_obj$upper.common
+  }
+  if (is.null(lower) || is.null(upper) ||
+      length(lower) == 0L || length(upper) == 0L ||
+      !is.finite(lower) || !is.finite(upper)) {
+    if (isTRUE(meta_obj$random)) {
+      lower <- meta_obj$lower.common
+      upper <- meta_obj$upper.common
+    } else {
+      lower <- meta_obj$lower.random
+      upper <- meta_obj$upper.random
+    }
+  }
+  list(lower = lower, upper = upper)
+}
+
+# The CI ratio Fig 4's binary two-level rule reads, on the scale
+# `ci_ratio_scale` asks for. Returns list(ratio, cut, sm, note).
+#
+# Fig 4 states the rule twice, as "relative risk CI ratio >= 3 or odds ratio
+# CI ratio >= 2.5". With ci_ratio_scale = "rr" an OR fit with arm-level event
+# counts is refitted as an RR with every other setting of the original call
+# kept (update.meta(), the same route .refit_low_rob() takes), and the RR
+# ratio is compared with 3. The refit exists only to read this ratio; nothing
+# else in the rating uses it. When it cannot be done the fitted OR ratio and
+# its own cut-off of 2.5 are used, and the note says so.
+.ci_ratio_on_scale <- function(meta_obj, lower, upper, sm, ci_ratio_scale) {
+  fitted <- list(ratio = .ci_ratio(lower, upper, sm),
+                 cut   = .ci_ratio_cut(sm),
+                 sm    = .canon_sm(sm),
+                 note  = "")
+  if (!identical(ci_ratio_scale, "rr") || !identical(.canon_sm(sm), "OR")) {
+    return(fitted)
+  }
+  fall_back <- function(reason) {
+    fitted$note <- sprintf(paste0(
+      " [ci_ratio_scale = 'rr' requested, but %s; the CI ratio is read on ",
+      "the fitted odds-ratio scale against its own cut-off of 2.5]"), reason)
+    fitted
+  }
+  has_arms <- all(vapply(c("event.e", "n.e", "event.c", "n.c"), function(nm) {
+    v <- meta_obj[[nm]]
+    !is.null(v) && length(v) > 0L
+  }, logical(1)))
+  if (!has_arms) {
+    return(fall_back("the analysis carries no arm-level event counts to refit"))
+  }
+  refit <- tryCatch(suppressWarnings(stats::update(meta_obj, sm = "RR")),
+                    error = function(e) e)
+  if (inherits(refit, "condition") || !inherits(refit, "meta")) {
+    reason <- if (inherits(refit, "condition")) conditionMessage(refit) else
+      "the refit returned no meta object"
+    return(fall_back(paste0("the RR refit failed (", reason, ")")))
+  }
+  refit_ci <- .pooled_ci(refit)
+  rr_ratio <- if (is.null(refit_ci$lower) || is.null(refit_ci$upper)) {
+    NA_real_
+  } else {
+    .ci_ratio(refit_ci$lower, refit_ci$upper, "RR")
+  }
+  if (is.na(rr_ratio)) {
+    return(fall_back("the RR refit produced no finite confidence interval"))
+  }
+  list(ratio = rr_ratio,
+       cut   = .ci_ratio_cut("RR"),
+       sm    = "RR",
+       note  = sprintf(paste0(
+         " [relative risk CI ratio from an RR refit of the same analysis, ",
+         "RR CI %.2f to %.2f; the fitted odds-ratio CI ratio is %.2f against ",
+         "its own cut-off of 2.5]"),
+         exp(refit_ci$lower), exp(refit_ci$upper), fitted$ratio))
+}
+
+# ois_p1 derived from the imprecision threshold rather than from a fixed
+# modest RRR (`ois_rrr = "threshold"`). Returns list(p1, how).
+#
+# An ARD threshold is used as an ARD: p1 = p0 +/- ARD. Otherwise the
+# ratio-scale threshold (a positive log value) moves p0 multiplicatively, on
+# the odds for an OR fit and on the risk for every other ratio measure. The
+# direction is the benefit direction .ois_target_increase() resolved. A rate
+# that leaves (0, 1) aborts rather than clamps: the power calculation would
+# then be against a number nobody chose.
+.ois_p1_from_threshold <- function(p0, increase, threshold_internal,
+                                   threshold_ard, sm) {
+  sign <- if (isTRUE(increase)) 1 else -1
+  has_ard <- !is.null(threshold_ard) && length(threshold_ard) == 1L &&
+             is.finite(threshold_ard) && threshold_ard > 0
+  if (has_ard) {
+    p1  <- p0 + sign * threshold_ard
+    how <- sprintf("p0 %s the ARD threshold %.4f", if (sign > 0) "+" else "-",
+                   threshold_ard)
+  } else if (identical(.canon_sm(sm), "OR")) {
+    odds1 <- (p0 / (1 - p0)) * exp(sign * abs(threshold_internal))
+    p1    <- odds1 / (1 + odds1)
+    how   <- sprintf("odds(p0) %s OR threshold %.4f",
+                     if (sign > 0) "x" else "/", exp(abs(threshold_internal)))
+  } else {
+    p1  <- p0 * exp(sign * abs(threshold_internal))
+    how <- sprintf("p0 %s ratio threshold %.4f",
+                   if (sign > 0) "x" else "/", exp(abs(threshold_internal)))
+  }
+  if (!is.finite(p1) || p1 <= 0 || p1 >= 1) {
+    rlang::abort(sprintf(paste0(
+      "ois_rrr = 'threshold' derives the OIS alternative event rate from the ",
+      "imprecision threshold (%s), which at a control-group risk of %.4f ",
+      "gives %.4f -- not a probability. Supply ois_p1 directly, or use a ",
+      "numeric ois_rrr."), how, p0, p1))
+  }
+  list(p1 = p1, how = how)
+}
+
 assess_imprecision <- function(meta_obj,
                                outcome_type       = "relative",
                                ois_events         = NULL,
@@ -446,7 +685,18 @@ assess_imprecision <- function(meta_obj,
                                # analysis that never met the rare-event
                                # workflow.
                                rare_flow          = FALSE,
-                               rare_one_arm_total_zero = FALSE) {
+                               rare_one_arm_total_zero = FALSE,
+                               # Reviewer answer to Fig 4's "implausibly
+                               # large?" node, and the CI-ratio shortcut's
+                               # scope and scale (v0.11.0); see the file
+                               # header. "auto" is the pre-0.11 rule; the two
+                               # CI-ratio defaults change ratings.
+                               large_effect       = c("auto", "plausible",
+                                                      "implausible"),
+                               large_effect_rationale = NULL,
+                               ci_ratio_shortcut  = c("when_ois_unavailable",
+                                                      "always"),
+                               ci_ratio_scale     = c("rr", "fitted")) {
   # Validated here as well as at grade_meta()'s entry gate: an assessor called
   # directly is a caller too, and a lenient one would re-open the guessing hole
   # the gate exists to close. The formal carries no default so that the
@@ -462,6 +712,22 @@ assess_imprecision <- function(meta_obj,
   threshold_sides <- .check_threshold_sides(threshold_sides)
   one_sided       <- identical(threshold_sides, "worse_only")
   worse_sign      <- .threshold_worse_sign(small_values)
+
+  large_choice      <- .check_large_effect(large_effect, large_effect_rationale)
+  ci_ratio_shortcut <- .check_impre_choice(
+    ci_ratio_shortcut, PMA_CI_RATIO_SHORTCUT_CHOICES, "ci_ratio_shortcut",
+    paste0("'when_ois_unavailable' consults Fig 4's binary CI-ratio rule only ",
+           "when the OIS could not be calculated (GRADE guidance 34 4.2: the ",
+           "rule spares authors the OIS calculation). 'always' consults it ",
+           "first, as pmatools did before 0.11.0."))
+  ci_ratio_scale    <- .check_impre_choice(
+    ci_ratio_scale, PMA_CI_RATIO_SCALE_CHOICES, "ci_ratio_scale",
+    paste0("'rr' reads the CI ratio of an OR fit from an RR refit and ",
+           "compares it with 3; 'fitted' reads it on the fitted OR scale ",
+           "against 2.5, as pmatools did before 0.11.0."))
+  # Validated before any data is read, so a bad value aborts on every path.
+  ois_rrr <- .check_ois_rrr(ois_rrr)
+  ois_from_threshold <- identical(ois_rrr, PMA_OIS_RRR_FROM_THRESHOLD)
 
   # One arm with no events at all: Fig 4 has nothing to evaluate. Returned
   # before the CI is even read, because the interval that exists in such a fit
@@ -489,24 +755,9 @@ assess_imprecision <- function(meta_obj,
     ))
   }
 
-  if (isTRUE(meta_obj$random)) {
-    lower <- meta_obj$lower.random
-    upper <- meta_obj$upper.random
-  } else {
-    lower <- meta_obj$lower.common
-    upper <- meta_obj$upper.common
-  }
-  if (is.null(lower) || is.null(upper) ||
-      length(lower) == 0L || length(upper) == 0L ||
-      !is.finite(lower) || !is.finite(upper)) {
-    if (isTRUE(meta_obj$random)) {
-      lower <- meta_obj$lower.common
-      upper <- meta_obj$upper.common
-    } else {
-      lower <- meta_obj$lower.random
-      upper <- meta_obj$upper.random
-    }
-  }
+  pooled_ci <- .pooled_ci(meta_obj)
+  lower <- pooled_ci$lower
+  upper <- pooled_ci$upper
 
   if (is.null(lower) || is.null(upper) || is.na(lower) || is.na(upper)) {
     return(make_domain_row(
@@ -652,6 +903,17 @@ assess_imprecision <- function(meta_obj,
                      threshold_internal != 0
   if (is.null(ois_events) && is.null(ois_n)) {
     if (outcome_type == "relative") {
+      # Refused here rather than skipped: "power the OIS against the
+      # threshold" with no threshold would otherwise fall silently back to no
+      # OIS at all, which reads as a property of the evidence.
+      if (ois_from_threshold && is.null(ois_p1) && !has_mid_for_ois) {
+        rlang::abort(paste0(
+          "ois_rrr = 'threshold' powers the binary OIS against the ",
+          "imprecision threshold, and this rating has none: supply a ",
+          "threshold (with threshold_scale), or a numeric ois_rrr such as ",
+          "0.20 (Core GRADE 2: 'a modest relative risk reduction, typically ",
+          "20% or 25%'), or ois_p1 directly."))
+      }
       # ARD Threshold converted to the ratio scale: anchor ois_p0 to the same
       # baseline risk that was used for the conversion, for consistency.
       if (is.null(ois_p0) && has_mid_for_ois && !is.null(threshold_ard) &&
@@ -674,7 +936,25 @@ assess_imprecision <- function(meta_obj,
           )
         }
       }
-      if (is.null(ois_p1) && !is.null(ois_p0)) {
+      if (is.null(ois_p1) && !is.null(ois_p0) && ois_from_threshold) {
+        # Not Core GRADE 2's default input: the paper names a modest RRR.
+        # Offered because a reviewer whose threshold IS the smallest effect
+        # worth detecting may want the OIS powered against exactly that.
+        from_thr <- .ois_p1_from_threshold(
+          p0                 = ois_p0,
+          increase           = ois_direction$increase,
+          threshold_internal = threshold_internal,
+          threshold_ard      = threshold_ard,
+          sm                 = sm)
+        ois_p1 <- from_thr$p1
+        ois_p1_derived <- TRUE
+        threshold_used_note <- paste0(threshold_used_note, sprintf(
+          paste0(" (ois_p1 from the imprecision threshold, ois_rrr = ",
+                 "'threshold': %s -> ois_p1 = %.4f; direction: %s; Core ",
+                 "GRADE 2's default input is a modest relative risk ",
+                 "reduction of 20%% or 25%%)"),
+          from_thr$how, ois_p1, ois_direction$reason))
+      } else if (is.null(ois_p1) && !is.null(ois_p0)) {
         # Core GRADE 2 (p6): binary OIS uses "a modest relative risk reduction,
         # typically 20% or 25%" -- NOT the MID. The MID is reserved for the
         # continuous branch, which the same paragraph writes out separately.
@@ -818,11 +1098,39 @@ assess_imprecision <- function(meta_obj,
   # --- Core GRADE 2 Fig 4 -------------------------------------------------
   # `sm` and `te_point` were computed above, before the OIS derivation.
   is_binary <- .is_binary_outcome(meta_obj)
-  large     <- .is_implausibly_large(te_point, sm,
-                                     sd_pooled = if (is_binary) NULL
-                                                 else compute_pooled_sd(meta_obj))
-  ci_ratio     <- .ci_ratio(lower, upper, sm)
-  ci_ratio_cut <- .ci_ratio_cut(sm)
+  large_auto <- .is_implausibly_large(te_point, sm,
+                                      sd_pooled = if (is_binary) NULL
+                                                  else compute_pooled_sd(meta_obj))
+  # The reviewer's answer replaces the rule's at the node, and the rule's own
+  # reading stays in the note beside it, so a reader can see both.
+  large <- switch(
+    large_choice$value,
+    auto = large_auto,
+    plausible = list(
+      large = FALSE, level = NA_character_,
+      note  = sprintf(paste0(
+        "magnitude rule: %s; reviewer judged the effect plausible and the ",
+        "OIS approach not needed (large_effect = 'plausible'): %s"),
+        large_auto$note, large_choice$rationale)),
+    implausible = list(
+      large = TRUE, level = "reviewer",
+      note  = sprintf(paste0(
+        "magnitude rule: %s; reviewer judged the effect implausibly large ",
+        "(large_effect = 'implausible'): %s"),
+        large_auto$note, large_choice$rationale))
+  )
+  # The CI ratio matters only on the binary OIS path, and reading it on the
+  # RR scale may need a refit, so it is computed only when that path is taken.
+  on_binary_ois_path <- is_binary && !isTRUE(crosses_threshold) &&
+                        isTRUE(large$large)
+  ci_ratio_info <- if (on_binary_ois_path) {
+    .ci_ratio_on_scale(meta_obj, lower, upper, sm, ci_ratio_scale)
+  } else {
+    list(ratio = .ci_ratio(lower, upper, sm), cut = .ci_ratio_cut(sm),
+         sm = .canon_sm(sm), note = "")
+  }
+  ci_ratio     <- ci_ratio_info$ratio
+  ci_ratio_cut <- ci_ratio_info$cut
   n_total      <- .total_n_strict(meta_obj)
 
   fig4 <- .classify_imprecision(
@@ -835,6 +1143,9 @@ assess_imprecision <- function(meta_obj,
     n_total                 = n_total,
     ci_ratio                = ci_ratio,
     ci_ratio_cut            = ci_ratio_cut,
+    ci_ratio_sm             = ci_ratio_info$sm,
+    ci_ratio_note           = ci_ratio_info$note,
+    ci_ratio_shortcut       = ci_ratio_shortcut,
     ois_missing_reason      = ois_missing_reason,
     # These two are rendered into the Fig 4 path string a reviewer reads, so
     # they say "Threshold" -- pmatools' own term for the band, and the word on
@@ -1101,15 +1412,28 @@ assess_imprecision <- function(meta_obj,
     } else NULL,
     if (ois_p1_derived) {
       .fact("ois_target_rate", "OIS alternative event rate",
-            sprintf("%.4f (%s on a control-group risk of %.4f) -- %s",
+            sprintf("%.4f (%s on a control-group risk of %.4f%s) -- %s",
                     ois_p1,
                     if (isTRUE(ois_direction$increase)) "an increase"
                     else "a reduction",
-                    ois_p0, ois_direction$reason),
+                    ois_p0,
+                    if (ois_from_threshold) {
+                      ", derived from the imprecision threshold"
+                    } else "",
+                    ois_direction$reason),
             ois_p1)
     } else NULL,
     if (ois_sd_derived) {
       .fact("ois_sd_source", "OIS standard deviation", ois_sd_source, ois_sd)
+    } else NULL,
+    # Who answered Fig 4's "implausibly large?" node. Recorded only when the
+    # reviewer did, so a rating made under the default reads as before.
+    if (!identical(large_choice$value, "auto")) {
+      .fact("large_effect", "Implausibly large effect",
+            sprintf(paste0("reviewer judgment: %s (the magnitude rule alone ",
+                           "would read: %s) -- %s"),
+                    large_choice$value, large_auto$note,
+                    large_choice$rationale))
     } else NULL,
     .fact("fig4_path", "Core GRADE 2 Fig 4 path",
           sub("^Fig 4 path: ", "", fig4$path)),
@@ -1140,14 +1464,18 @@ assess_imprecision <- function(meta_obj,
 # --------------------------------------------------------------------------
 
 # Validate the modest relative risk reduction used for the binary OIS
-# (Core GRADE 2: "a modest relative risk reduction, typically 20% or 25%").
+# (Core GRADE 2: "a modest relative risk reduction, typically 20% or 25%"),
+# or the string "threshold" (v0.11.0), which derives ois_p1 from the
+# imprecision threshold instead. Returns the number, or "threshold".
 .check_ois_rrr <- function(x) {
+  if (identical(x, PMA_OIS_RRR_FROM_THRESHOLD)) return(x)
   if (is.null(x) || length(x) != 1L || is.na(x) || !is.numeric(x) ||
       !is.finite(x) || x <= 0 || x >= 1) {
     rlang::abort(paste0(
       "ois_rrr must be a single relative risk reduction in (0, 1), e.g. 0.20 ",
       "for a 20% RRR (Core GRADE 2: 'a modest relative risk reduction, ",
-      "typically 20% or 25%')."
+      "typically 20% or 25%'), or the string 'threshold' to power the OIS ",
+      "against the imprecision threshold instead."
     ))
   }
   as.numeric(x)
@@ -1589,15 +1917,27 @@ assess_imprecision <- function(meta_obj,
                                   ci_ratio,
                                   ci_ratio_cut,
                                   ois_missing_reason = NULL,
+                                  # Which measure the CI ratio was read on (an
+                                  # RR refit of an OR fit reads "RR"), and a
+                                  # note saying how it was obtained.
+                                  ci_ratio_sm = sm,
+                                  ci_ratio_note = "",
+                                  # "when_ois_unavailable" (default): the
+                                  # CI-ratio rule stands in for an OIS that
+                                  # could not be calculated. "always": it is
+                                  # consulted first (pre-0.11 behaviour).
+                                  ci_ratio_shortcut = "when_ois_unavailable",
                                   threshold_label = "the Threshold",
                                   two_level_label =
                                     "TWO thresholds (important benefit and important harm)",
                                   sm = NULL) {
   sm <- .canon_sm(sm)
-  ci_ratio_src_note <- if (!is.null(sm) && !sm %in% .CI_RATIO_SOURCED_SM) {
+  ci_ratio_sm <- .canon_sm(ci_ratio_sm)
+  ci_ratio_src_note <- if (!is.null(ci_ratio_sm) &&
+                           !ci_ratio_sm %in% .CI_RATIO_SOURCED_SM) {
     sprintf(paste0(" [Core GRADE 2 Fig 4 names CI-ratio cut-offs only for ",
                    "relative risk (3) and odds ratio (2.5); applying 3 to %s ",
-                   "is a pmatools extrapolation]"), sm)
+                   "is a pmatools extrapolation]"), ci_ratio_sm)
   } else ""
   out <- function(judgment, path, ois_used = FALSE, flow = character(0)) {
     list(judgment = judgment,
@@ -1636,13 +1976,49 @@ assess_imprecision <- function(meta_obj,
                     threshold_label, large$note)
 
   if (is_binary) {
-    if (!is.na(ci_ratio) && !is.na(ci_ratio_cut) && ci_ratio >= ci_ratio_cut) {
+    ratio_known <- !is.na(ci_ratio) && !is.na(ci_ratio_cut)
+    ratio_fires <- ratio_known && ci_ratio >= ci_ratio_cut
+    # GRADE guidance 34 4.2: a CI ratio past the cut-off means the sample is
+    # "very far from meeting the OIS", so authors "would not need to
+    # calculate the OIS". The rule is a stand-in for the calculation; when
+    # the calculation was done, its answer decides.
+    use_shortcut <- !identical(ci_ratio_shortcut, "when_ois_unavailable") ||
+                    is.na(ois_met)
+    if (use_shortcut && ratio_fires) {
       return(out("very_serious", sprintf(paste0(
         "%s (binary): CI ratio %.2f >= %.1f -> consider rating down two ",
-        "levels%s"), prefix, ci_ratio, ci_ratio_cut, ci_ratio_src_note),
+        "levels%s%s%s"), prefix, ci_ratio, ci_ratio_cut, ci_ratio_note,
+        ci_ratio_src_note,
+        if (is.na(ois_met) && !identical(ci_ratio_shortcut, "always")) {
+          paste0(" [CI-ratio shortcut used because the OIS could not be ",
+                 "calculated]")
+        } else ""),
         ois_used = TRUE,
         flow = c(.IMPRE_FLOW_OIS, "pma-impre-edge-ois-down2",
                  "pma-impre-leaf-down2-ois")))
+    }
+    if (!use_shortcut) {
+      skipped <- paste0(
+        " [CI-ratio shortcut not used: the OIS was calculated directly, and ",
+        "GRADE guidance 34 treats the CI-ratio rule as a stand-in for that ",
+        "calculation",
+        if (ratio_known) {
+          sprintf("; for information, CI ratio %.2f %s %.1f%s", ci_ratio,
+                  if (ratio_fires) ">=" else "<", ci_ratio_cut, ci_ratio_note)
+        } else "",
+        "]")
+      if (isTRUE(ois_met)) {
+        return(out("not_serious", sprintf(
+          "%s (binary): N >= OIS -> do not rate down%s", prefix, skipped),
+          ois_used = TRUE,
+          flow = c(.IMPRE_FLOW_OIS, "pma-impre-edge-ois-nodown",
+                   "pma-impre-leaf-nodown-ois")))
+      }
+      return(out("serious", sprintf(
+        "%s (binary): N < OIS -> rate down one level%s", prefix, skipped),
+        ois_used = TRUE,
+        flow = c(.IMPRE_FLOW_OIS, "pma-impre-edge-ois-down1",
+                 "pma-impre-leaf-down1-ois")))
     }
   } else {
     # Continuous rule of thumb: 400 patients per group (total sample size 800).
@@ -1656,9 +2032,15 @@ assess_imprecision <- function(meta_obj,
   }
 
   if (is.na(ois_met)) {
+    # On the binary branch the CI-ratio rule was consulted above and did not
+    # fire; say what it read, since it was the only test that could have.
+    ratio_checked <- if (is_binary && !is.na(ci_ratio) && !is.na(ci_ratio_cut)) {
+      sprintf(" (binary: CI ratio %.2f < %.1f%s)", ci_ratio, ci_ratio_cut,
+              ci_ratio_note)
+    } else ""
     return(out("not_serious", sprintf(
-      "%s: OIS could not be computed (%s) -> do not rate down",
-      prefix,
+      "%s%s: OIS could not be computed (%s) -> do not rate down",
+      prefix, ratio_checked,
       if (is.null(ois_missing_reason)) "inputs unavailable"
       else ois_missing_reason),
       ois_used = TRUE,

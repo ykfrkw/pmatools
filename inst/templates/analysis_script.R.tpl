@@ -79,6 +79,10 @@ g <- grade_meta(
   rare_flow               = {{rare_flow_arg}},
   rare_one_arm_total_zero = {{rare_one_arm_zero_arg}},
   rare_method             = {{rare_method_arg}},
+  large_effect            = {{large_effect_arg}},
+  large_effect_rationale  = {{large_effect_rationale_arg}},
+  ci_ratio_shortcut       = {{ci_ratio_shortcut_arg}},
+  ci_ratio_scale          = {{ci_ratio_scale_arg}},
   outcome_name            = "{{outcome_name}}"
 )
 

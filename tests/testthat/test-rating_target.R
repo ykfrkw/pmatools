@@ -328,14 +328,26 @@ test_that("(d) continuous: CI does not cross, effect large, N < OIS -> rate down
 })
 
 test_that("(e) binary: CI ratio >= 3 -> consider rating down two levels", {
+  # Pinned to the pre-0.11 shortcut: with ois_events supplied the OIS is
+  # calculable, and since 0.11.0 the calculation decides by default.
   g <- suppressWarnings(grade_meta(meta_large_rr(), threshold = 1.2,
                                    small_values = "desirable",
                                    threshold_scale = "ratio",
-                                   ois_events = 40))
+                                   ois_events = 40,
+                                   ci_ratio_shortcut = "always"))
   row <- impre(g)
   expect_equal(row$judgment, "very_serious")
   expect_match(row$notes, "consider rating down two levels", fixed = TRUE)
   expect_match(row$notes, "CI ratio", fixed = TRUE)
+
+  # 0.11.0 default: the OIS (met here) decides, the ratio is for information.
+  g_new <- suppressWarnings(grade_meta(meta_large_rr(), threshold = 1.2,
+                                       small_values = "desirable",
+                                       threshold_scale = "ratio",
+                                       ois_events = 40))
+  row_new <- impre(g_new)
+  expect_equal(row_new$judgment, "not_serious")
+  expect_match(row_new$notes, "CI-ratio shortcut not used", fixed = TRUE)
 })
 
 test_that("continuous rule of thumb: total N >= 800 does not rate down", {
