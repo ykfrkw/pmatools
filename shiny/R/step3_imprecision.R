@@ -8,11 +8,12 @@
 # arguments and decides when a combination must not reach grade_meta() at all.
 #
 # What it reads: the raw values of the tab's radios and textarea, whether a
-# threshold is in force, and the staged package constants that name the legal
-# values (PMA_LARGE_EFFECT_CHOICES, PMA_CI_RATIO_SHORTCUT_CHOICES,
-# PMA_CI_RATIO_SCALE_CHOICES, PMA_OIS_RRR_FROM_THRESHOLD in
-# R/domain_imprecision.R), so the app can never offer a value the package
-# would refuse. What it produces: named argument lists for grade_obj() in
+# threshold is in force, the condition of an aborted grade_meta() call, and
+# the staged package constants that name the legal values
+# (PMA_LARGE_EFFECT_CHOICES, PMA_CI_RATIO_SHORTCUT_CHOICES,
+# PMA_CI_RATIO_SCALE_CHOICES, PMA_OIS_RRR_FROM_THRESHOLD and
+# PMA_OIS_THRESHOLD_OUT_OF_RANGE_CLASS in R/domain_imprecision.R), so the app
+# can never offer a value the package would refuse. What it produces: named argument lists for grade_obj() in
 # R/step3_grade.R to splice, the widgets' choice vectors, and the sentences the
 # tab prints. Every function is pure - no `input`, `output`, `session` or
 # `state` - so tests/testthat/test-step3-imprecision-args.R can call them
@@ -25,6 +26,16 @@
 # the radios carry a "rule-set default" choice that sends nothing, and an
 # explicit NULL is never sent either (the package aborts on it). The same rule
 # keeps an untouched `large_effect = "auto"` out of the exported analysis.R.
+#
+# WHY A "MATCH THE THRESHOLD" RATING CAN BE RE-RUN AT 0.20. The threshold can
+# put the OIS alternative rate outside (0, 1) - a control-group risk of 156
+# per 1,000 and an absolute threshold of 900 per 1,000 ask for 1,056 per
+# 1,000 - and grade_meta() then aborts with the classed condition
+# PMA_OIS_THRESHOLD_OUT_OF_RANGE_CLASS (pmatools 0.11.1). An abort takes all
+# five domains down with it, for an input that only ever chose the OIS
+# target. So step3_ois_threshold_retry_args() lets grade_obj() re-run once at
+# STEP3_OIS_RRR_DEFAULT, the rating carries STEP3_OIS_FALLBACK_ATTR, and the
+# tab says inline what happened and how to choose differently.
 #
 # THE RULE FOR A NEW HELPER: it belongs here when it maps one of the
 # Imprecision tab's reviewer answers to a grade_meta() argument, or words what
@@ -39,6 +50,11 @@ STEP3_RULE_SET_DEFAULT_CHOICE <- "rule_set_default"
 # Core GRADE 2's default modest relative risk reduction. The radio's other
 # numeric value is 0.25, the second one the paper names.
 STEP3_OIS_RRR_DEFAULT <- 0.20
+
+# The attribute a rating carries when "Match the threshold" was replaced by
+# STEP3_OIS_RRR_DEFAULT because the threshold-derived rate left (0, 1). Its
+# value is list(p0, p1, how), as the package's condition reported them.
+STEP3_OIS_FALLBACK_ATTR <- "pma_ois_threshold_fallback"
 
 STEP3_LARGE_EFFECT_CHOICES <- c(
   "Automatic: the magnitude rule (default)"           = "auto",
@@ -179,4 +195,58 @@ step3_facts_pinned_first <- function(facts, pinned) {
   }
   first <- facts$key %in% pinned
   facts[c(which(first), which(!first)), , drop = FALSE]
+}
+
+# The retry decision for a grade_meta() call that aborted. Returns the
+# arguments to re-run with (`ois_rrr` replaced by STEP3_OIS_RRR_DEFAULT) when
+# the abort is the classed out-of-range one AND the app had sent "threshold";
+# NULL for every other condition, which stays an error. Both halves are
+# checked: replacing a number the reviewer chose is not this helper's
+# business, whatever the condition says.
+step3_ois_threshold_retry_args <- function(args, cnd) {
+  if (!inherits(cnd, PMA_OIS_THRESHOLD_OUT_OF_RANGE_CLASS)) return(NULL)
+  if (!identical(args$ois_rrr, PMA_OIS_RRR_FROM_THRESHOLD)) return(NULL)
+  args$ois_rrr <- STEP3_OIS_RRR_DEFAULT
+  args
+}
+
+# What the fallback records, read off the package's condition: the
+# control-group risk and the derived rate as proportions, and how the rate
+# was derived. A missing field stays NA rather than failing the rating.
+step3_ois_threshold_fallback_info <- function(cnd) {
+  num <- function(x) {
+    x <- suppressWarnings(as.numeric(x))
+    if (length(x) == 1L && !is.na(x)) x else NA_real_
+  }
+  how <- cnd$how
+  list(p0  = num(cnd$p0),
+       p1  = num(cnd$p1),
+       how = if (is.character(how) && length(how) == 1L) how else
+         NA_character_)
+}
+
+# The inline warning under the ois_rrr radio after a fallback, in the
+# reviewer's display unit. `info` is step3_ois_threshold_fallback_info().
+step3_ois_threshold_fallback_message <- function(info,
+                                                 per = STEP3_PER_DEFAULT) {
+  sprintf(paste0(
+    "The Threshold gives an alternative rate of %s at a control-group risk ",
+    "of %s, which is not a probability, so the OIS was powered against the ",
+    "%.0f percent modest relative risk reduction instead. Choose 20 or 25 ",
+    "percent, or change the Threshold."),
+    step3_per_label(1000 * info$p1, per),
+    step3_per_label(1000 * info$p0, per),
+    100 * STEP3_OIS_RRR_DEFAULT)
+}
+
+# The same fact for the Imprecision domain's notes, which are read away from
+# the tab (Evidence Profile, export), so it names the argument and the
+# package's own derivation rather than a display unit.
+step3_ois_threshold_fallback_note <- function(info) {
+  sprintf(paste0(
+    "ois_rrr = 'threshold' was not used: the imprecision threshold (%s) ",
+    "gives an OIS alternative rate of %.4f at a control-group risk of %.4f, ",
+    "which is not a probability, so the OIS was powered against ",
+    "ois_rrr = %.2f instead."),
+    info$how, info$p1, info$p0, STEP3_OIS_RRR_DEFAULT)
 }

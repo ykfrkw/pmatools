@@ -2527,6 +2527,20 @@ step3_server <- function(input, output, session, state) {
                   "instead."))
     }
     g     <- grade_obj()
+    # The threshold asked for a rate outside (0, 1) and the rating was re-run
+    # at the default RRR. Amber, like output$large_effect_rationale_msg: the
+    # reviewer's choice is not in force and has to be answered.
+    fallback <- if (is.null(g)) NULL else
+      attr(g, STEP3_OIS_FALLBACK_ATTR, exact = TRUE)
+    if (!is.null(fallback)) {
+      return(htmltools::div(
+        class = "pma-ois-threshold-fallback",
+        style = paste0("padding: 0.5rem 0.75rem; margin: 0.25rem 0 0.5rem; ",
+                       "background: ", PMA_ALERT_BG, "; color: ",
+                       PMA_ALERT_FG, "; border-radius: 4px; ",
+                       "font-size: 0.85rem;"),
+        step3_ois_threshold_fallback_message(fallback, display_per_state())))
+    }
     facts <- if (is.null(g)) NULL else g$domain_facts[["Imprecision"]]
     rate  <- if (is.data.frame(facts)) {
       facts$numeric[facts$key %in% "ois_target_rate"]
@@ -3170,14 +3184,35 @@ step3_server <- function(input, output, session, state) {
       args$threshold          <- th$threshold
       args$threshold_scale    <- th$threshold_scale
       args$threshold_baseline <- th$threshold_baseline
-      tryCatch(
-        suppressWarnings(do.call(grade_meta, args)),
-        error = function(e) {
-          shiny::showNotification(
-            paste("grade_meta error:", conditionMessage(e)), type = "error")
-          NULL
+      .attempt <- function(a) {
+        tryCatch(
+          list(g = suppressWarnings(do.call(grade_meta, a)), cnd = NULL),
+          error = function(e) list(g = NULL, cnd = e))
+      }
+      res <- .attempt(args)
+
+      # "Match the threshold" whose derived OIS rate left (0, 1): rate the
+      # outcome at the default modest RRR rather than lose all five domains,
+      # and record why, for the inline warning under the ois_rrr radio and
+      # for the Imprecision notes. step3_ois_threshold_retry_args() in
+      # R/step3_imprecision.R decides; every other abort stays an error.
+      retry <- step3_ois_threshold_retry_args(args, res$cnd)
+      if (!is.null(retry)) {
+        info <- step3_ois_threshold_fallback_info(res$cnd)
+        res  <- .attempt(retry)
+        if (!is.null(res$g)) {
+          res$g$domain_assessments <- step3_append_domain_note(
+            res$g$domain_assessments, "Imprecision",
+            step3_ois_threshold_fallback_note(info))
+          attr(res$g, STEP3_OIS_FALLBACK_ATTR) <- info
         }
-      )
+      }
+      if (is.null(res$g)) {
+        shiny::showNotification(
+          paste("grade_meta error:", conditionMessage(res$cnd)),
+          type = "error")
+      }
+      res$g
     }
     g <- .run_grade(th_args)
 
@@ -3453,6 +3488,12 @@ step3_server <- function(input, output, session, state) {
     # From here on th_args is the one the rating was actually made against:
     # the refit inside .run_grade_with_refit() can have re-converted it.
     th_args <- rated$th_args
+    # A rating re-run at the default RRR (see .run_grade_with_refit()) was
+    # made with 0.20, so that is what the exported analysis.R must replay;
+    # "threshold" there would abort exactly as it did here.
+    if (!is.null(attr(g, STEP3_OIS_FALLBACK_ATTR, exact = TRUE))) {
+      args$ois_rrr <- STEP3_OIS_RRR_DEFAULT
+    }
 
     g <- .apply_threshold_note(g, obj, th_args)
     g <- .append_rare_crossing_note(g)
